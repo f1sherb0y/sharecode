@@ -1,6 +1,19 @@
 import type { User, Room, AuthResponse } from '../types'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const resolveApiUrl = (): string => {
+    const envUrl = import.meta.env.VITE_API_URL as string | undefined
+    if (envUrl) {
+        return envUrl
+    }
+
+    if (typeof window !== 'undefined') {
+        return window.location.origin
+    }
+
+    return 'http://localhost:3001'
+}
+
+const API_URL = resolveApiUrl()
 
 class ApiClient {
     private getAuthHeader(): HeadersInit {

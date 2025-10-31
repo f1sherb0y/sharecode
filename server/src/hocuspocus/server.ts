@@ -1,13 +1,12 @@
 import { Server } from '@hocuspocus/server'
+import type { Server as HttpServer, IncomingMessage } from 'http'
+import type { Duplex } from 'stream'
+import type { WebSocket } from 'ws'
 import { databaseExtension } from './extensions/database'
 import { prisma } from '../utils/db'
 import { verifyToken } from '../utils/jwt'
 
-const WS_PORT = parseInt(process.env.WS_PORT || '1234')
-
 export const hocuspocusServer = new Server({
-    port: WS_PORT,
-
     extensions: [databaseExtension],
 
     async onAuthenticate(data) {
@@ -119,7 +118,34 @@ export const hocuspocusServer = new Server({
     },
 })
 
-export function startHocuspocusServer() {
-    hocuspocusServer.listen()
-    console.log(`🚀 Hocuspocus WebSocket server running on port ${WS_PORT}`)
+export function startHocuspocusServer(httpServer: HttpServer) {
+    const rawPath = process.env.WS_PATH || '/ws'
+    const normalizedPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`
+
+    const handleUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+        const { url } = request
+        if (!url) return
+
+        let pathname = ''
+        try {
+            const host = request.headers.host || 'localhost'
+            pathname = new URL(url, `http://${host}`).pathname
+        } catch (error) {
+            console.error('Invalid WebSocket request URL:', url, error)
+            socket.destroy()
+            return
+        }
+
+        if (pathname !== normalizedPath) {
+            return
+        }
+
+        hocuspocusServer.webSocketServer.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+            hocuspocusServer.webSocketServer.emit('connection', ws, request)
+        })
+    }
+
+    httpServer.on('upgrade', handleUpgrade)
+
+    console.log(`🚀 Hocuspocus WebSocket server attached at path ${normalizedPath}`)
 }

@@ -20,6 +20,31 @@ import { ConnectedIcon, DisconnectedIcon, SyncedIcon, SyncingIcon } from './Stat
 import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
 
+interface UserColorScheme {
+    color: string
+    colorLight: string
+}
+
+const generateUserColorScheme = (identifier: string | number | undefined): UserColorScheme => {
+    const key = String(identifier ?? 'anonymous')
+    let hash = 0
+
+    for (let i = 0; i < key.length; i += 1) {
+        hash = (hash << 5) - hash + key.charCodeAt(i)
+        hash |= 0
+    }
+
+    const hue = Math.abs(hash) % 360
+    const saturation = 78
+    const baseLightness = 52
+    const highlightLightness = Math.min(baseLightness + 20, 88)
+
+    return {
+        color: `hsl(${hue}, ${saturation}%, ${baseLightness}%)`,
+        colorLight: `hsla(${hue}, ${saturation}%, ${highlightLightness}%, 0.35)`,
+    }
+}
+
 const LANGUAGES: Language[] = [
     'javascript',
     'typescript',
@@ -52,6 +77,9 @@ export function Editor() {
     const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
     const [followingUser, setFollowingUser] = useState<number | null>(null)
     const [isChangingLanguage, setIsChangingLanguage] = useState(false)
+    const [localUserColors, setLocalUserColors] = useState<UserColorScheme>(() =>
+        generateUserColorScheme(user?.id)
+    )
     const editorRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const ySyncConfigRef = useRef<YSyncConfig | null>(null)
@@ -78,23 +106,31 @@ export function Editor() {
         token || ''
     )
 
+    useEffect(() => {
+        if (!provider?.awareness) return
+
+        const identifier = user?.id ?? provider.awareness.clientID
+        const colors = generateUserColorScheme(identifier)
+
+        provider.awareness.setLocalStateField('user', {
+            id: user?.id ?? provider.awareness.clientID,
+            name: user?.username || 'Anonymous',
+            color: colors.color,
+            colorLight: colors.colorLight,
+        })
+
+        setLocalUserColors((prev) =>
+            prev.color === colors.color && prev.colorLight === colors.colorLight ? prev : colors
+        )
+    }, [provider, user?.id, user?.username])
+
     // Set up CodeMirror editor
     useEffect(() => {
         if (!editorRef.current || !provider || !room) return
 
-        const userColor = user?.color || '#30bced'
-        const userColorLight = userColor + '33'
-
         // Create YSyncConfig for position conversion
         const ySyncConfig = new YSyncConfig(ytext, provider.awareness)
         ySyncConfigRef.current = ySyncConfig
-
-        // Set awareness state
-        provider.awareness?.setLocalStateField('user', {
-            name: user?.username || 'Anonymous',
-            color: userColor,
-            colorLight: userColorLight,
-        })
 
         const languageExt = languageExtensions[room.language] || javascript()
         const themeExt = theme === 'dark' ? [oneDark] : []
@@ -121,7 +157,7 @@ export function Editor() {
         return () => {
             view.destroy()
         }
-    }, [provider, room, ytext, user, theme])
+    }, [provider, room, ytext, theme])
 
     // Track remote users via awareness
     useEffect(() => {
@@ -132,11 +168,17 @@ export function Editor() {
             const users: RemoteUser[] = []
             provider.awareness.getStates().forEach((state: any, clientId: number) => {
                 if (provider.awareness && clientId !== provider.awareness.clientID && state.user) {
+                    const identifier = state.user.id ?? state.user.name ?? clientId
+                    const colors =
+                        state.user.color && state.user.colorLight
+                            ? { color: state.user.color, colorLight: state.user.colorLight }
+                            : generateUserColorScheme(identifier)
+
                     users.push({
                         clientId,
                         username: state.user.name,
-                        color: state.user.color,
-                        colorLight: state.user.colorLight,
+                        color: colors.color,
+                        colorLight: colors.colorLight,
                         cursor: state.cursor,
                     })
                 }
@@ -253,7 +295,7 @@ export function Editor() {
             if (!provider.awareness) return
 
             // Find the owner's awareness state
-            provider.awareness.getStates().forEach((state: any, clientId: number) => {
+            provider.awareness.getStates().forEach((state: any) => {
                 if (state.user && state.roomLanguage && state.roomLanguage !== room.language) {
                     // Owner changed the language
                     console.log(`Language changed to ${state.roomLanguage} by owner`)
@@ -283,12 +325,13 @@ export function Editor() {
             {/* Header */}
             <div className="editor-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <button onClick={() => navigate('/rooms')} style={{ padding: '0.25rem 0.5rem' }}>
+                    <button className="toolbar-button" onClick={() => navigate('/rooms')}>
                         ← Back
                     </button>
                     <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
                     {isOwner ? (
                         <select
+                            className="toolbar-select"
                             value={room.language}
                             onChange={(e) => handleLanguageChange(e.target.value as Language)}
                             disabled={isChangingLanguage}
@@ -331,9 +374,15 @@ export function Editor() {
                 </span>
                 <div className="user-list-inline">
                     {/* Current user */}
-                    <div className="user-badge" style={{ border: '1px solid var(--accent)' }}>
-                        <div className="user-dot" style={{ backgroundColor: user?.color }} />
-                        <span style={{ fontWeight: 600 }}>{user?.username}</span>
+                    <div
+                        className="user-badge"
+                        style={{
+                            border: `1px solid ${localUserColors.color}`,
+                            backgroundColor: localUserColors.colorLight,
+                        }}
+                    >
+                        <div className="user-dot" style={{ backgroundColor: localUserColors.color }} />
+                        <span style={{ fontWeight: 600 }}>{user?.username || 'You'}</span>
                     </div>
 
                     {/* Remote users */}
@@ -343,7 +392,16 @@ export function Editor() {
                             className="user-badge"
                             style={{
                                 cursor: 'pointer',
-                                backgroundColor: followingUser === remoteUser.clientId ? 'var(--bg-hover)' : 'transparent',
+                                border: `1px solid ${remoteUser.color}`,
+                                backgroundColor:
+                                    followingUser === remoteUser.clientId
+                                        ? remoteUser.color
+                                        : remoteUser.colorLight,
+                                boxShadow:
+                                    followingUser === remoteUser.clientId
+                                        ? `0 0 0 2px ${remoteUser.colorLight}`
+                                        : 'none',
+                                color: followingUser === remoteUser.clientId ? '#ffffff' : 'var(--text-primary)',
                             }}
                             onClick={() =>
                                 setFollowingUser(

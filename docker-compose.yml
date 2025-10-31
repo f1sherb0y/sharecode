@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sharecode
+      POSTGRES_USER: sharecode_app
+      POSTGRES_PASSWORD: sharecode
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sharecode_app -d sharecode"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sharecode_app:sharecode@postgres:5432/sharecode?schema=public
+      JWT_SECRET: change-me-in-production
+      PORT: 3001
+      WS_PATH: /ws
+      FRONTEND_URL: http://localhost:4173
+    expose:
+      - "3001"
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "4173:80"
+
+volumes:
+  pgdata:

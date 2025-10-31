@@ -2,7 +2,33 @@ import { useEffect, useState, useRef } from 'react'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import * as Y from 'yjs'
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:1234'
+const resolveWebSocketUrl = (): string => {
+    const explicit = import.meta.env.VITE_WS_URL
+    if (explicit) {
+        return explicit as string
+    }
+
+    const apiUrl = import.meta.env.VITE_API_URL as string | undefined
+    if (apiUrl) {
+        try {
+            const url = new URL(apiUrl)
+            url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+            url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`
+            return url.toString()
+        } catch (err) {
+            console.warn('Invalid VITE_API_URL, falling back to window location for WebSocket URL.', err)
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        return `${protocol}//${window.location.host}/ws`
+    }
+
+    return 'ws://localhost:3001/ws'
+}
+
+const WS_URL = resolveWebSocketUrl()
 
 export function useYjsProvider(documentName: string, token: string) {
     const [provider, setProvider] = useState<HocuspocusProvider | null>(null)

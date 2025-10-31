@@ -1,4 +1,5 @@
 import express, { type Request, type Response } from 'express'
+import { createServer } from 'http'
 import cors from 'cors'
 import { startHocuspocusServer } from './hocuspocus/server'
 import { register, login, getProfile } from './api/auth'
@@ -17,8 +18,20 @@ const app = express()
 const PORT = parseInt(process.env.PORT || '3001')
 
 // Middleware
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.FRONTEND_URL,
+].filter(Boolean)
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true)
+        } else {
+            callback(new Error('Not allowed by CORS'))
+        }
+    },
     credentials: true,
 }))
 app.use(express.json())
@@ -42,9 +55,13 @@ app.delete('/api/rooms/:roomId', authMiddleware, deleteRoom)
 app.post('/api/rooms/:roomId/join', authMiddleware, joinRoom)
 app.post('/api/rooms/:roomId/leave', authMiddleware, leaveRoom)
 
-// Start servers
-app.listen(PORT, () => {
-    console.log(`🚀 API server running on port ${PORT}`)
-})
+// Create HTTP server and integrate Hocuspocus
+const httpServer = createServer(app)
+startHocuspocusServer(httpServer)
 
-startHocuspocusServer()
+// Start unified server
+httpServer.listen(PORT, () => {
+    console.log(`🚀 Unified server (REST + WebSocket) running on port ${PORT}`)
+    console.log(`   REST API: http://localhost:${PORT}`)
+    console.log(`   WebSocket: ws://localhost:${PORT}/ws`)
+})

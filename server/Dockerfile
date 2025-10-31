@@ -26,6 +26,5 @@ COPY src ./src
 COPY index.ts ./index.ts
 
 EXPOSE 3001
-EXPOSE 1234
 
 CMD ["sh", "-c", "bunx prisma migrate deploy && bunx prisma generate && bun run src/index.ts"]
