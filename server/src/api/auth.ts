@@ -22,19 +22,28 @@ export async function register(req: Request, res: Response) {
     try {
         const { email, username, password } = req.body
 
-        if (!email || !username || !password) {
-            return res.status(400).json({ error: 'Missing required fields' })
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' })
         }
 
-        // Check if user already exists
-        const existingUser = await prisma.user.findFirst({
-            where: {
-                OR: [{ email }, { username }],
-            },
+        // Check if username already exists
+        const existingUser = await prisma.user.findUnique({
+            where: { username },
         })
 
         if (existingUser) {
-            return res.status(400).json({ error: 'User already exists' })
+            return res.status(400).json({ error: 'Username already taken' })
+        }
+
+        // Check if email already exists (if provided)
+        if (email) {
+            const existingEmail = await prisma.user.findUnique({
+                where: { email },
+            })
+
+            if (existingEmail) {
+                return res.status(400).json({ error: 'Email already in use' })
+            }
         }
 
         // Hash password
@@ -76,15 +85,15 @@ export async function register(req: Request, res: Response) {
 
 export async function login(req: Request, res: Response) {
     try {
-        const { email, password } = req.body
+        const { username, password } = req.body
 
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Missing required fields' })
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' })
         }
 
-        // Find user
+        // Find user by username
         const user = await prisma.user.findUnique({
-            where: { email },
+            where: { username },
         })
 
         if (!user) {

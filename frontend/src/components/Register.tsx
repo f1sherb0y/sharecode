@@ -18,7 +18,7 @@ export function Register() {
         setIsLoading(true)
 
         try {
-            await register(email, username, password)
+            await register(username, password, email || undefined)
             navigate('/rooms')
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Registration failed')
@@ -36,16 +36,6 @@ export function Register() {
                 </div>
                 <form className="auth-form" onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label className="form-label">Email</label>
-                        <input
-                            type="email"
-                            placeholder="Enter your email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-                    </div>
-                    <div className="form-group">
                         <label className="form-label">Username</label>
                         <input
                             type="text"
@@ -53,6 +43,15 @@ export function Register() {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Email (optional)</label>
+                        <input
+                            type="email"
+                            placeholder="Enter your email (optional)"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                         />
                     </div>
                     <div className="form-group">

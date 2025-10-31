@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
 
 export function Login() {
-    const [email, setEmail] = useState('')
+    const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -17,7 +17,7 @@ export function Login() {
         setIsLoading(true)
 
         try {
-            await login(email, password)
+            await login(username, password)
             navigate('/rooms')
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Login failed')
@@ -35,12 +35,12 @@ export function Login() {
                 </div>
                 <form className="auth-form" onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label className="form-label">Email</label>
+                        <label className="form-label">Username</label>
                         <input
-                            type="email"
-                            placeholder="Enter your email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            type="text"
+                            placeholder="Enter your username"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
                             required
                         />
                     </div>

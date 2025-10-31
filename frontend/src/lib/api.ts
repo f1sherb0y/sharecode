@@ -43,17 +43,17 @@ class ApiClient {
     }
 
     // Auth endpoints
-    async register(email: string, username: string, password: string): Promise<AuthResponse> {
+    async register(username: string, password: string, email?: string): Promise<AuthResponse> {
         return this.request<AuthResponse>('/api/auth/register', {
             method: 'POST',
-            body: JSON.stringify({ email, username, password }),
+            body: JSON.stringify({ username, password, email }),
         })
     }
 
-    async login(email: string, password: string): Promise<AuthResponse> {
+    async login(username: string, password: string): Promise<AuthResponse> {
         return this.request<AuthResponse>('/api/auth/login', {
             method: 'POST',
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ username, password }),
         })
     }
 
