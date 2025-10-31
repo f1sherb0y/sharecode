@@ -13,6 +13,11 @@ export function useYjsProvider(documentName: string, token: string) {
     const providerRef = useRef<HocuspocusProvider | null>(null)
 
     useEffect(() => {
+        // Don't connect if we don't have a valid documentName or token yet
+        if (!documentName || !token) {
+            return
+        }
+
         const hocuspocusProvider = new HocuspocusProvider({
             url: WS_URL,
             name: documentName,

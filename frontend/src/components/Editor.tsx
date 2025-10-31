@@ -38,12 +38,7 @@ export function Editor() {
     const editorRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
 
-    const { provider, ytext, isConnected, isSynced } = useYjsProvider(
-        room?.documentId || '',
-        token || ''
-    )
-
-    // Load room details
+    // Load room details first
     useEffect(() => {
         if (!roomId) return
 
@@ -58,6 +53,12 @@ export function Editor() {
 
         loadRoom()
     }, [roomId])
+
+    // Only create provider once we have the room data
+    const { provider, ytext, isConnected, isSynced } = useYjsProvider(
+        room?.documentId || '',
+        token || ''
+    )
 
     // Set up CodeMirror editor
     useEffect(() => {
