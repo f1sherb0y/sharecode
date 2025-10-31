@@ -279,18 +279,19 @@ export function Editor() {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <div className="editor-container">
             {/* Header */}
-            <div style={{ padding: '10px', borderBottom: '1px solid #ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <button onClick={() => navigate('/rooms')}>← Back to Rooms</button>
-                    <span style={{ marginLeft: '20px', fontWeight: 'bold' }}>{room.name}</span>
+            <div className="editor-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <button onClick={() => navigate('/rooms')} style={{ padding: '0.25rem 0.5rem' }}>
+                        ← Back
+                    </button>
+                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
                     {isOwner ? (
                         <select
                             value={room.language}
                             onChange={(e) => handleLanguageChange(e.target.value as Language)}
                             disabled={isChangingLanguage}
-                            style={{ marginLeft: '10px' }}
                         >
                             {LANGUAGES.map((lang) => (
                                 <option key={lang} value={lang}>
@@ -299,25 +300,18 @@ export function Editor() {
                             ))}
                         </select>
                     ) : (
-                        <span style={{ marginLeft: '10px', color: '#666' }}>({room.language})</span>
+                        <span className="language-badge">{room.language}</span>
                     )}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <div
                         className="status-badge"
-                        style={{
-                            color: isConnected ? 'var(--success)' : 'var(--danger)',
-                        }}
+                        style={{ color: isConnected ? 'var(--success)' : 'var(--danger)' }}
                     >
                         {isConnected ? <ConnectedIcon /> : <DisconnectedIcon />}
                         <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
                     </div>
-                    <div
-                        className="status-badge"
-                        style={{
-                            color: 'var(--accent)',
-                        }}
-                    >
+                    <div className="status-badge" style={{ color: 'var(--accent)' }}>
                         {isSynced ? <SyncedIcon /> : <SyncingIcon />}
                         <span>{isSynced ? 'Synced' : 'Syncing...'}</span>
                     </div>
@@ -325,61 +319,47 @@ export function Editor() {
                 </div>
             </div>
 
-            {/* Main content */}
-            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                {/* Editor */}
-                <div style={{ flex: 1, overflow: 'auto' }}>
-                    <div ref={editorRef} style={{ height: '100%' }} />
-                </div>
+            {/* Editor */}
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+                <div ref={editorRef} style={{ height: '100%' }} />
+            </div>
 
-                {/* Users sidebar */}
-                <div style={{ width: '200px', borderLeft: '1px solid #ccc', padding: '10px', overflowY: 'auto' }}>
-                    <h3>Users ({remoteUsers.length + 1})</h3>
-
+            {/* Bottom Status Bar with Users */}
+            <div className="status-bar">
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    Users ({remoteUsers.length + 1}):
+                </span>
+                <div className="user-list-inline">
                     {/* Current user */}
-                    <div style={{ marginBottom: '10px', padding: '5px', backgroundColor: '#f0f0f0' }}>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                            <div
-                                style={{
-                                    width: '12px',
-                                    height: '12px',
-                                    backgroundColor: user?.color,
-                                    marginRight: '5px',
-                                }}
-                            />
-                            <span>{user?.username} (You)</span>
-                        </div>
+                    <div className="user-badge" style={{ border: '1px solid var(--accent)' }}>
+                        <div className="user-dot" style={{ backgroundColor: user?.color }} />
+                        <span style={{ fontWeight: 600 }}>{user?.username}</span>
                     </div>
 
                     {/* Remote users */}
                     {remoteUsers.map((remoteUser) => (
-                        <div key={remoteUser.clientId} style={{ marginBottom: '10px', padding: '5px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                    <div
-                                        style={{
-                                            width: '12px',
-                                            height: '12px',
-                                            backgroundColor: remoteUser.color,
-                                            marginRight: '5px',
-                                        }}
-                                    />
-                                    <span>{remoteUser.username}</span>
-                                </div>
-                                <button
-                                    onClick={() =>
-                                        setFollowingUser(
-                                            followingUser === remoteUser.clientId ? null : remoteUser.clientId
-                                        )
-                                    }
-                                    style={{
-                                        fontSize: '10px',
-                                        padding: '2px 5px',
-                                    }}
-                                >
-                                    {followingUser === remoteUser.clientId ? 'Unfollow' : 'Follow'}
-                                </button>
-                            </div>
+                        <div
+                            key={remoteUser.clientId}
+                            className="user-badge"
+                            style={{
+                                cursor: 'pointer',
+                                backgroundColor: followingUser === remoteUser.clientId ? 'var(--bg-hover)' : 'transparent',
+                            }}
+                            onClick={() =>
+                                setFollowingUser(
+                                    followingUser === remoteUser.clientId ? null : remoteUser.clientId
+                                )
+                            }
+                            title={`Click to ${followingUser === remoteUser.clientId ? 'stop following' : 'follow'} ${remoteUser.username}`}
+                        >
+                            <div className="user-dot" style={{ backgroundColor: remoteUser.color }} />
+                            <span
+                                style={{
+                                    fontWeight: followingUser === remoteUser.clientId ? 600 : 400,
+                                }}
+                            >
+                                {remoteUser.username}
+                            </span>
                         </div>
                     ))}
                 </div>
