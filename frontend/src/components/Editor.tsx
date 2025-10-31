@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState } from '@codemirror/state'
+import { EditorState, StateEffect } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
@@ -196,22 +196,72 @@ export function Editor() {
         )
     }
 
+    // Reconfigure editor with new language extension
+    const reconfigureLanguage = (newLanguage: Language) => {
+        if (!viewRef.current || !provider) return
+
+        const languageExt = languageExtensions[newLanguage] || javascript()
+
+        viewRef.current.dispatch({
+            effects: StateEffect.reconfigure.of([
+                keymap.of([...yUndoManagerKeymap]),
+                basicSetup,
+                languageExt,
+                EditorView.lineWrapping,
+                yCollab(ytext, provider.awareness),
+            ]),
+        })
+    }
+
     const handleLanguageChange = async (newLanguage: Language) => {
-        if (!roomId || !room) return
+        if (!roomId || !room || !provider) return
 
         setIsChangingLanguage(true)
         try {
+            // Update database
             await api.updateRoom(roomId, { language: newLanguage })
+
             // Update local room state
             setRoom({ ...room, language: newLanguage })
-            // Reload to apply new language extension
-            window.location.reload()
+
+            // Broadcast language change via awareness
+            provider.awareness?.setLocalStateField('roomLanguage', newLanguage)
+
+            // Reconfigure local editor (no reload needed!)
+            reconfigureLanguage(newLanguage)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to change language')
         } finally {
             setIsChangingLanguage(false)
         }
     }
+
+    // Listen for language changes from owner via awareness
+    useEffect(() => {
+        if (!provider?.awareness || !room) return
+
+        const handleLanguageUpdate = () => {
+            if (!provider.awareness) return
+
+            // Find the owner's awareness state
+            provider.awareness.getStates().forEach((state: any, clientId: number) => {
+                if (state.user && state.roomLanguage && state.roomLanguage !== room.language) {
+                    // Owner changed the language
+                    console.log(`Language changed to ${state.roomLanguage} by owner`)
+                    setRoom({ ...room, language: state.roomLanguage })
+                    reconfigureLanguage(state.roomLanguage)
+                }
+            })
+        }
+
+        provider.awareness.on('change', handleLanguageUpdate)
+
+        return () => {
+            if (provider.awareness) {
+                provider.awareness.off('change', handleLanguageUpdate)
+            }
+        }
+    }, [provider, room])
 
     const isOwner = room?.ownerId === user?.id
 
