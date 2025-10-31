@@ -31,6 +31,9 @@ export const hocuspocusServer = new Server({
             }
 
             // Check if user has access to this document
+            console.log('Looking for room with documentId:', documentName)
+            console.log('User ID:', user.id)
+
             const room = await prisma.room.findFirst({
                 where: {
                     documentId: documentName,
@@ -44,8 +47,18 @@ export const hocuspocusServer = new Server({
                 },
             })
 
+            console.log('Found room:', room ? room.id : 'null')
+
             if (!room) {
-                throw new Error('No access to this document')
+                // Check if the room exists at all
+                const anyRoom = await prisma.room.findUnique({
+                    where: { documentId: documentName }
+                })
+                if (!anyRoom) {
+                    throw new Error(`Document ${documentName} does not exist`)
+                } else {
+                    throw new Error(`User ${user.username} does not have access to document ${documentName}`)
+                }
             }
 
             // TODO: Implement read-only mode when Hocuspocus API supports it

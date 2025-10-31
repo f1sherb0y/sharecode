@@ -38,11 +38,6 @@ export async function createRoom(req: Request, res: Response) {
                 language,
                 documentId,
                 ownerId: userId,
-                document: {
-                    create: {
-                        name: documentId,
-                    },
-                },
             },
             include: {
                 owner: {
