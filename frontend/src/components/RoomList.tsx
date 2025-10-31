@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { ThemeToggle } from './ThemeToggle'
 import { api } from '../lib/api'
 import type { Room, Language } from '../types'
 
@@ -62,107 +63,109 @@ export function RoomList() {
     }
 
     return (
-        <div style={{ padding: '20px' }}>
-            <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h1>ShareCode - Rooms</h1>
-                <div>
-                    <span>Welcome, {user?.username}</span>
-                    <button onClick={logout} style={{ marginLeft: '10px' }}>Logout</button>
+        <div className="container" style={{ paddingTop: '20px', paddingBottom: '20px' }}>
+            <div className="header">
+                <h1 className="header-title">ShareCode</h1>
+                <div className="header-actions">
+                    <span style={{ color: 'var(--text-secondary)' }}>Welcome, {user?.username}</span>
+                    <button onClick={logout}>Logout</button>
+                    <ThemeToggle />
                 </div>
             </div>
 
-            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+            {error && <div className="error-message" style={{ marginTop: '1rem' }}>{error}</div>}
 
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginTop: '2rem', marginBottom: '1rem' }}>
                 <button onClick={() => setShowCreate(!showCreate)}>
-                    {showCreate ? 'Cancel' : 'Create New Room'}
+                    {showCreate ? 'Cancel' : '+ Create New Room'}
                 </button>
             </div>
 
             {showCreate && (
-                <form onSubmit={handleCreateRoom} style={{ marginBottom: '20px', border: '1px solid #ccc', padding: '10px' }}>
+                <div className="card" style={{ marginBottom: '2rem' }}>
                     <h3>Create New Room</h3>
-                    <div>
-                        <input
-                            type="text"
-                            placeholder="Room Name"
-                            value={newRoomName}
-                            onChange={(e) => setNewRoomName(e.target.value)}
-                            required
-                            style={{ marginRight: '10px' }}
-                        />
-                        <select
-                            value={newRoomLanguage}
-                            onChange={(e) => setNewRoomLanguage(e.target.value as Language)}
-                            style={{ marginRight: '10px' }}
-                        >
-                            {LANGUAGES.map((lang) => (
-                                <option key={lang} value={lang}>
-                                    {lang}
-                                </option>
-                            ))}
-                        </select>
+                    <form className="auth-form" onSubmit={handleCreateRoom} style={{ marginTop: '1rem' }}>
+                        <div className="form-group">
+                            <label className="form-label">Room Name</label>
+                            <input
+                                type="text"
+                                placeholder="Enter room name"
+                                value={newRoomName}
+                                onChange={(e) => setNewRoomName(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Language</label>
+                            <select
+                                value={newRoomLanguage}
+                                onChange={(e) => setNewRoomLanguage(e.target.value as Language)}
+                            >
+                                {LANGUAGES.map((lang) => (
+                                    <option key={lang} value={lang}>
+                                        {lang}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <button type="submit" disabled={isCreating}>
-                            {isCreating ? 'Creating...' : 'Create'}
+                            {isCreating ? 'Creating...' : 'Create Room'}
                         </button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             )}
 
             {isLoading ? (
-                <div>Loading rooms...</div>
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                    Loading rooms...
+                </div>
             ) : rooms.length === 0 ? (
-                <div>No rooms yet. Create one to get started!</div>
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                    No rooms yet. Create one to get started!
+                </div>
             ) : (
                 <div>
-                    <h2>Your Rooms</h2>
-                    {rooms.map((room: any) => (
-                        <div
-                            key={room.id}
-                            style={{
-                                border: '1px solid #ccc',
-                                padding: '10px',
-                                marginBottom: '10px',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            <div
-                                style={{ flex: 1 }}
-                                onClick={() => handleJoinRoom(room.id)}
-                            >
-                                <h3>
-                                    {room.name} {room.isOwner && '(Your Room)'}
-                                </h3>
-                                <div>Language: {room.language}</div>
-                                <div>Owner: {room.owner.username}</div>
-                                <div>Created: {new Date(room.createdAt).toLocaleDateString()}</div>
-                                {room.participants && room.participants.length > 0 && (
-                                    <div>Participants: {room.participants.length + 1}</div>
-                                )}
+                    <h2>All Rooms</h2>
+                    <div className="room-grid">
+                        {rooms.map((room: any) => (
+                            <div key={room.id} className="room-card" onClick={() => handleJoinRoom(room.id)}>
+                                <div className="room-header">
+                                    <div>
+                                        <h3 className="room-title">
+                                            {room.name} {room.isOwner && <span style={{ color: 'var(--accent)' }}>(Owned)</span>}
+                                        </h3>
+                                        <div className="language-badge">{room.language}</div>
+                                    </div>
+                                    {room.isOwner && (
+                                        <button
+                                            className="btn-danger"
+                                            onClick={async (e) => {
+                                                e.stopPropagation()
+                                                if (confirm(`Delete room "${room.name}"?`)) {
+                                                    try {
+                                                        await api.deleteRoom(room.id)
+                                                        loadRooms()
+                                                    } catch (err) {
+                                                        setError(err instanceof Error ? err.message : 'Failed to delete room')
+                                                    }
+                                                }
+                                            }}
+                                            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="room-meta">
+                                    <div>Owner: {room.owner.username}</div>
+                                    <div>Created: {new Date(room.createdAt).toLocaleDateString()}</div>
+                                    {room.participants && room.participants.length > 0 && (
+                                        <div>{room.participants.length + 1} participants</div>
+                                    )}
+                                </div>
                             </div>
-                            {room.isOwner && (
-                                <button
-                                    onClick={async (e) => {
-                                        e.stopPropagation()
-                                        if (confirm(`Delete room "${room.name}"?`)) {
-                                            try {
-                                                await api.deleteRoom(room.id)
-                                                loadRooms() // Refresh the list
-                                            } catch (err) {
-                                                setError(err instanceof Error ? err.message : 'Failed to delete room')
-                                            }
-                                        }
-                                    }}
-                                    style={{ padding: '5px 10px', backgroundColor: '#ff4444', color: 'white', border: 'none' }}
-                                >
-                                    Delete
-                                </button>
-                            )}
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

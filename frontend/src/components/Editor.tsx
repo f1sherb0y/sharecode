@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
 import { ThemeToggle } from './ThemeToggle'
+import { ConnectedIcon, DisconnectedIcon, SyncedIcon, SyncingIcon } from './StatusIcons'
 import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
 
@@ -302,12 +303,24 @@ export function Editor() {
                     )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ marginRight: '10px' }}>
-                        {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-                    </span>
-                    <span style={{ marginRight: '10px' }}>
-                        {isSynced ? '✓ Synced' : '⟳ Syncing...'}
-                    </span>
+                    <div
+                        className="status-badge"
+                        style={{
+                            color: isConnected ? 'var(--success)' : 'var(--danger)',
+                        }}
+                    >
+                        {isConnected ? <ConnectedIcon /> : <DisconnectedIcon />}
+                        <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+                    </div>
+                    <div
+                        className="status-badge"
+                        style={{
+                            color: 'var(--accent)',
+                        }}
+                    >
+                        {isSynced ? <SyncedIcon /> : <SyncingIcon />}
+                        <span>{isSynced ? 'Synced' : 'Syncing...'}</span>
+                    </div>
                     <ThemeToggle />
                 </div>
             </div>
