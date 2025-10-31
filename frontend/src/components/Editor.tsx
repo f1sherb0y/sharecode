@@ -147,7 +147,7 @@ export function Editor() {
         }
     }, [provider])
 
-    // Follow user feature
+    // Follow user feature with smart scrolling
     useEffect(() => {
         if (!followingUser || !provider?.awareness || !viewRef.current || !ySyncConfigRef.current) return
 
@@ -159,10 +159,25 @@ export function Editor() {
                 try {
                     // Convert Yjs relative position to absolute position
                     const absolutePos = ySyncConfigRef.current.fromYPos(state.cursor.head)
+                    const view = viewRef.current
+                    const pos = absolutePos.pos
 
-                    // Scroll to the followed user's cursor
-                    viewRef.current.dispatch({
-                        effects: EditorView.scrollIntoView(absolutePos.pos, { y: 'center' }),
+                    // Get current viewport
+                    const viewport = view.viewport
+
+                    // Check if cursor is already visible in viewport
+                    if (pos >= viewport.from && pos <= viewport.to) {
+                        // Cursor is visible, no need to scroll
+                        return
+                    }
+
+                    // Cursor is outside viewport, scroll with minimal distance
+                    // This will scroll just enough to bring the cursor into view
+                    view.dispatch({
+                        effects: EditorView.scrollIntoView(pos, {
+                            y: 'nearest',  // Scroll minimum distance
+                            yMargin: 50     // Keep some padding
+                        }),
                     })
                 } catch (err) {
                     console.error('Error following user:', err)
