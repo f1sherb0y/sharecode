@@ -55,6 +55,7 @@ export async function register(req: Request, res: Response) {
             userId: user.id,
             email: user.email,
             username: user.username,
+            role: user.role,
         })
 
         res.status(201).json({
@@ -63,6 +64,7 @@ export async function register(req: Request, res: Response) {
                 email: user.email,
                 username: user.username,
                 color: user.color,
+                role: user.role,
             },
             token,
         })
@@ -101,6 +103,7 @@ export async function login(req: Request, res: Response) {
             userId: user.id,
             email: user.email,
             username: user.username,
+            role: user.role,
         })
 
         res.json({
@@ -109,6 +112,7 @@ export async function login(req: Request, res: Response) {
                 email: user.email,
                 username: user.username,
                 color: user.color,
+                role: user.role,
             },
             token,
         })
@@ -129,6 +133,7 @@ export async function getProfile(req: Request, res: Response) {
                 email: true,
                 username: true,
                 color: true,
+                role: true,
                 createdAt: true,
             },
         })

@@ -3,6 +3,7 @@ export interface User {
     email: string
     username: string
     color: string
+    role?: string
 }
 
 export interface Room {
@@ -12,6 +13,11 @@ export interface Room {
     documentId: string
     ownerId: string
     allowEdit: boolean
+    isDeleted?: boolean
+    scheduledTime?: string
+    duration?: number
+    isEnded?: boolean
+    endedAt?: string
     createdAt: string
     updatedAt: string
     owner: {
@@ -26,6 +32,9 @@ export interface Room {
             color: string
         }
     }>
+    isExpired?: boolean
+    isMember?: boolean
+    isOwner?: boolean
 }
 
 export interface AuthResponse {

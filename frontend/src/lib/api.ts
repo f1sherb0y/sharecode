@@ -62,10 +62,15 @@ class ApiClient {
     }
 
     // Room endpoints
-    async createRoom(name: string, language: string): Promise<{ room: Room }> {
+    async createRoom(
+        name: string,
+        language: string,
+        scheduledTime?: string,
+        duration?: number
+    ): Promise<{ room: Room }> {
         return this.request<{ room: Room }>('/api/rooms', {
             method: 'POST',
-            body: JSON.stringify({ name, language }),
+            body: JSON.stringify({ name, language, scheduledTime, duration }),
         })
     }
 
@@ -103,6 +108,48 @@ class ApiClient {
         return this.request<{ message: string }>(`/api/rooms/${roomId}/leave`, {
             method: 'POST',
         })
+    }
+
+    async endRoom(roomId: string): Promise<{ room: Room }> {
+        return this.request<{ room: Room }>(`/api/rooms/${roomId}/end`, {
+            method: 'POST',
+        })
+    }
+
+    // Admin endpoints
+    async getAllUsers(): Promise<{ users: User[] }> {
+        return this.request<{ users: User[] }>('/api/admin/users')
+    }
+
+    async deleteUser(userId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/api/admin/users/${userId}`, {
+            method: 'DELETE',
+        })
+    }
+
+    async getAllRoomsAdmin(): Promise<{ rooms: Room[] }> {
+        return this.request<{ rooms: Room[] }>('/api/admin/rooms')
+    }
+
+    async deleteRoomAdmin(roomId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/api/admin/rooms/${roomId}`, {
+            method: 'DELETE',
+        })
+    }
+
+    // Playback endpoints
+    async getPlaybackUpdates(roomId: string): Promise<{
+        updates: Array<{
+            id: string
+            timestamp: string
+            update: string
+            userId: string | null
+        }>
+        startTime: string | null
+        endTime: string | null
+        duration: number
+    }> {
+        return this.request(`/api/rooms/${roomId}/playback/updates`)
     }
 }
 

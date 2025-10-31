@@ -20,7 +20,7 @@ function generateDocumentId(): string {
 export async function createRoom(req: Request, res: Response) {
     try {
         const userId = (req as any).userId
-        const { name, language = 'javascript' } = req.body
+        const { name, language = 'javascript', scheduledTime, duration } = req.body
 
         if (!name) {
             return res.status(400).json({ error: 'Room name is required' })
@@ -32,13 +32,22 @@ export async function createRoom(req: Request, res: Response) {
 
         const documentId = generateDocumentId()
 
+        const roomData: any = {
+            name,
+            language,
+            documentId,
+            ownerId: userId,
+        }
+
+        if (scheduledTime) {
+            roomData.scheduledTime = new Date(scheduledTime)
+        }
+        if (duration) {
+            roomData.duration = parseInt(duration)
+        }
+
         const room = await prisma.room.create({
-            data: {
-                name,
-                language,
-                documentId,
-                ownerId: userId,
-            },
+            data: roomData,
             include: {
                 owner: {
                     select: {
@@ -61,8 +70,11 @@ export async function getRooms(req: Request, res: Response) {
     try {
         const userId = (req as any).userId
 
-        // Get all rooms - users can see and join any room
+        // Get all non-deleted rooms - users can see and join any room
         const rooms = await prisma.room.findMany({
+            where: {
+                isDeleted: false,
+            },
             include: {
                 owner: {
                     select: {
@@ -88,12 +100,22 @@ export async function getRooms(req: Request, res: Response) {
             },
         })
 
-        // Mark which rooms the user is part of
-        const roomsWithMembership = rooms.map(room => ({
-            ...room,
-            isMember: room.ownerId === userId || room.participants.some(p => p.userId === userId),
-            isOwner: room.ownerId === userId,
-        }))
+        // Mark which rooms the user is part of and check expiration
+        const now = new Date()
+        const roomsWithMembership = rooms.map(room => {
+            let isExpired = false
+            if (room.scheduledTime && room.duration) {
+                const endTime = new Date(room.scheduledTime.getTime() + room.duration * 60000)
+                isExpired = endTime < now
+            }
+
+            return {
+                ...room,
+                isMember: room.ownerId === userId || room.participants.some(p => p.userId === userId),
+                isOwner: room.ownerId === userId,
+                isExpired,
+            }
+        })
 
         res.json({ rooms: roomsWithMembership })
     } catch (error) {
@@ -291,6 +313,39 @@ export async function leaveRoom(req: Request, res: Response) {
         res.json({ message: 'Left room successfully' })
     } catch (error) {
         console.error('Leave room error:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+}
+
+export async function endRoom(req: Request, res: Response) {
+    try {
+        const userId = (req as any).userId
+        const { roomId } = req.params
+
+        // Check if user is owner
+        const room = await prisma.room.findFirst({
+            where: {
+                id: roomId,
+                ownerId: userId,
+            },
+        })
+
+        if (!room) {
+            return res.status(403).json({ error: 'Not authorized' })
+        }
+
+        // End the room
+        const updatedRoom = await prisma.room.update({
+            where: { id: roomId },
+            data: {
+                isEnded: true,
+                endedAt: new Date(),
+            },
+        })
+
+        res.json({ room: updatedRoom })
+    } catch (error) {
+        console.error('End room error:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 }

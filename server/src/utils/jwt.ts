@@ -6,6 +6,7 @@ export interface JWTPayload {
     userId: string
     email: string
     username: string
+    role: string
 }
 
 export function generateToken(payload: JWTPayload): string {

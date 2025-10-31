@@ -16,6 +16,8 @@ model User {
   username  String   @unique
   password  String
   color     String   @default("#30bced")
+  role      String   @default("user") // "user" | "admin"
+  isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())
   lastSeen  DateTime @default(now())
 
@@ -27,14 +29,19 @@ model User {
 }
 
 model Room {
-  id         String   @id @default(uuid())
-  name       String
-  language   String   @default("javascript")
-  documentId String
-  ownerId    String
-  allowEdit  Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String    @id @default(uuid())
+  name          String
+  language      String    @default("javascript")
+  documentId    String
+  ownerId       String
+  allowEdit     Boolean   @default(true)
+  isDeleted     Boolean   @default(false)
+  scheduledTime DateTime?
+  duration      Int? // minutes
+  isEnded       Boolean   @default(false)
+  endedAt       DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   owner        User              @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   participants RoomParticipant[]
@@ -64,4 +71,14 @@ model Document {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+}
+
+model DocumentUpdate {
+  id         String   @id @default(uuid())
+  documentId String
+  update     Bytes
+  timestamp  DateTime @default(now())
+  userId     String?
+
+  @@index([documentId, timestamp])
 }

@@ -347,6 +347,24 @@ export function Editor() {
                     )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {isOwner && !room.isEnded && (
+                        <button
+                            className="toolbar-button"
+                            onClick={async () => {
+                                if (confirm('End this room? You can view playback afterwards.')) {
+                                    try {
+                                        await api.endRoom(roomId!)
+                                        navigate('/rooms')
+                                    } catch (err) {
+                                        setError(err instanceof Error ? err.message : 'Failed to end room')
+                                    }
+                                }
+                            }}
+                            style={{ backgroundColor: 'var(--error)', color: '#fff' }}
+                        >
+                            End Room
+                        </button>
+                    )}
                     <div
                         className="status-badge"
                         style={{ color: isConnected ? 'var(--success)' : 'var(--danger)' }}

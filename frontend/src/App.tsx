@@ -5,6 +5,8 @@ import { Login } from './components/Login'
 import { Register } from './components/Register'
 import { RoomList } from './components/RoomList'
 import { Editor } from './components/Editor'
+import { Admin } from './components/Admin'
+import { RoomPlayback } from './components/RoomPlayback'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
@@ -58,6 +60,22 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <Editor />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <PrivateRoute>
+            <Admin />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/playback/:roomId"
+        element={
+          <PrivateRoute>
+            <RoomPlayback />
           </PrivateRoute>
         }
       />

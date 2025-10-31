@@ -11,8 +11,12 @@ import {
     deleteRoom,
     joinRoom,
     leaveRoom,
+    endRoom,
 } from './api/rooms'
 import { authMiddleware } from './middleware/auth'
+import { adminMiddleware } from './middleware/admin'
+import { getAllUsers, deleteUser, getAllRooms as adminGetAllRooms, deleteRoom as adminDeleteRoom } from './api/admin'
+import { getPlaybackUpdates } from './api/playback'
 
 const app = express()
 const PORT = parseInt(process.env.PORT || '3001')
@@ -54,6 +58,16 @@ app.put('/api/rooms/:roomId', authMiddleware, updateRoom)
 app.delete('/api/rooms/:roomId', authMiddleware, deleteRoom)
 app.post('/api/rooms/:roomId/join', authMiddleware, joinRoom)
 app.post('/api/rooms/:roomId/leave', authMiddleware, leaveRoom)
+app.post('/api/rooms/:roomId/end', authMiddleware, endRoom)
+
+// Admin routes
+app.get('/api/admin/users', adminMiddleware, getAllUsers)
+app.delete('/api/admin/users/:id', adminMiddleware, deleteUser)
+app.get('/api/admin/rooms', adminMiddleware, adminGetAllRooms)
+app.delete('/api/admin/rooms/:id', adminMiddleware, adminDeleteRoom)
+
+// Playback routes
+app.get('/api/rooms/:roomId/playback/updates', authMiddleware, getPlaybackUpdates)
 
 // Create HTTP server and integrate Hocuspocus
 const httpServer = createServer(app)

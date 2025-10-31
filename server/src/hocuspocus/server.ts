@@ -3,11 +3,12 @@ import type { Server as HttpServer, IncomingMessage } from 'http'
 import type { Duplex } from 'stream'
 import type { WebSocket } from 'ws'
 import { databaseExtension } from './extensions/database'
+import { updatesExtension } from './extensions/updates'
 import { prisma } from '../utils/db'
 import { verifyToken } from '../utils/jwt'
 
 export const hocuspocusServer = new Server({
-    extensions: [databaseExtension],
+    extensions: [databaseExtension, updatesExtension],
 
     async onAuthenticate(data) {
         const { token, documentName } = data
