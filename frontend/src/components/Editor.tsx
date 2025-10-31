@@ -10,7 +10,7 @@ import { cpp } from '@codemirror/lang-cpp'
 import { rust } from '@codemirror/lang-rust'
 import { go } from '@codemirror/lang-go'
 import { php } from '@codemirror/lang-php'
-import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
+import { yCollab, yUndoManagerKeymap, YSyncConfig } from 'y-codemirror.next'
 import { useAuth } from '../contexts/AuthContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
 import { api } from '../lib/api'
@@ -49,6 +49,7 @@ export function Editor() {
     const [isChangingLanguage, setIsChangingLanguage] = useState(false)
     const editorRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
+    const ySyncConfigRef = useRef<YSyncConfig | null>(null)
 
     // Load room details first
     useEffect(() => {
@@ -78,6 +79,10 @@ export function Editor() {
 
         const userColor = user?.color || '#30bced'
         const userColorLight = userColor + '33'
+
+        // Create YSyncConfig for position conversion
+        const ySyncConfig = new YSyncConfig(ytext, provider.awareness)
+        ySyncConfigRef.current = ySyncConfig
 
         // Set awareness state
         provider.awareness?.setLocalStateField('user', {
@@ -144,23 +149,31 @@ export function Editor() {
 
     // Follow user feature
     useEffect(() => {
-        if (!followingUser || !provider?.awareness || !viewRef.current) return
+        if (!followingUser || !provider?.awareness || !viewRef.current || !ySyncConfigRef.current) return
 
         const handleAwarenessChange = () => {
-            if (!provider.awareness) return
+            if (!provider.awareness || !viewRef.current || !ySyncConfigRef.current) return
+
             const state = provider.awareness.getStates().get(followingUser)
-            if (state?.cursor && viewRef.current) {
-                // Scroll to followed user's cursor position
-                const view = viewRef.current
-                const pos = state.cursor.head?.pos || 0
-                if (typeof pos === 'number') {
-                    view.dispatch({
-                        effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+            if (state?.cursor?.head) {
+                try {
+                    // Convert Yjs relative position to absolute position
+                    const absolutePos = ySyncConfigRef.current.fromYPos(state.cursor.head)
+
+                    // Scroll to the followed user's cursor
+                    viewRef.current.dispatch({
+                        effects: EditorView.scrollIntoView(absolutePos.pos, { y: 'center' }),
                     })
+                } catch (err) {
+                    console.error('Error following user:', err)
                 }
             }
         }
 
+        // Trigger immediately on follow
+        handleAwarenessChange()
+
+        // Then listen for changes
         provider.awareness.on('change', handleAwarenessChange)
 
         return () => {
