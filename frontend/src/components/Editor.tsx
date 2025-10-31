@@ -11,8 +11,11 @@ import { rust } from '@codemirror/lang-rust'
 import { go } from '@codemirror/lang-go'
 import { php } from '@codemirror/lang-php'
 import { yCollab, yUndoManagerKeymap, YSyncConfig } from 'y-codemirror.next'
+import { oneDark } from '@codemirror/theme-one-dark'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme } from '../contexts/ThemeContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
+import { ThemeToggle } from './ThemeToggle'
 import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
 
@@ -41,6 +44,7 @@ const languageExtensions: Record<string, any> = {
 export function Editor() {
     const { roomId } = useParams<{ roomId: string }>()
     const { user, token } = useAuth()
+    const { theme } = useTheme()
     const navigate = useNavigate()
     const [room, setRoom] = useState<Room | null>(null)
     const [error, setError] = useState('')
@@ -92,6 +96,7 @@ export function Editor() {
         })
 
         const languageExt = languageExtensions[room.language] || javascript()
+        const themeExt = theme === 'dark' ? [oneDark] : []
 
         const state = EditorState.create({
             doc: ytext.toString(),
@@ -99,6 +104,7 @@ export function Editor() {
                 keymap.of([...yUndoManagerKeymap]),
                 basicSetup,
                 languageExt,
+                ...themeExt,
                 EditorView.lineWrapping,
                 yCollab(ytext, provider.awareness),
             ],
@@ -114,7 +120,7 @@ export function Editor() {
         return () => {
             view.destroy()
         }
-    }, [provider, room, ytext, user])
+    }, [provider, room, ytext, user, theme])
 
     // Track remote users via awareness
     useEffect(() => {
@@ -201,12 +207,14 @@ export function Editor() {
         if (!viewRef.current || !provider) return
 
         const languageExt = languageExtensions[newLanguage] || javascript()
+        const themeExt = theme === 'dark' ? [oneDark] : []
 
         viewRef.current.dispatch({
             effects: StateEffect.reconfigure.of([
                 keymap.of([...yUndoManagerKeymap]),
                 basicSetup,
                 languageExt,
+                ...themeExt,
                 EditorView.lineWrapping,
                 yCollab(ytext, provider.awareness),
             ]),
@@ -293,13 +301,14 @@ export function Editor() {
                         <span style={{ marginLeft: '10px', color: '#666' }}>({room.language})</span>
                     )}
                 </div>
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ marginRight: '10px' }}>
                         {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
                     </span>
                     <span style={{ marginRight: '10px' }}>
                         {isSynced ? '✓ Synced' : '⟳ Syncing...'}
                     </span>
+                    <ThemeToggle />
                 </div>
             </div>
 
