@@ -31,9 +31,6 @@ export const databaseExtension = new Database({
                 create: {
                     name: documentName,
                     data: Buffer.from(state),
-                    room: {
-                        connect: { documentId: documentName },
-                    },
                 },
             })
         } catch (error) {
