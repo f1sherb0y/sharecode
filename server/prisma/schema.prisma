@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  color     String   @default("#30bced")
+  createdAt DateTime @default(now())
+  lastSeen  DateTime @default(now())
+
+  ownedRooms Room[]            @relation("RoomOwner")
+  rooms      RoomParticipant[]
+
+  @@index([email])
+  @@index([username])
+}
+
+model Room {
+  id         String   @id @default(uuid())
+  name       String
+  language   String   @default("javascript")
+  documentId String   @unique
+  ownerId    String
+  allowEdit  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  owner        User              @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  document     Document?
+  participants RoomParticipant[]
+
+  @@index([ownerId])
+  @@index([documentId])
+}
+
+model RoomParticipant {
+  id       String   @id @default(uuid())
+  roomId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model Document {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  roomId    String   @unique
+  data      Bytes?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([name])
+}

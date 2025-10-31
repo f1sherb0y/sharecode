@@ -1,0 +1,96 @@
+import type { User, Room, AuthResponse } from '../types'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+class ApiClient {
+    private getAuthHeader(): HeadersInit {
+        const token = localStorage.getItem('token')
+        return token ? { Authorization: `Bearer ${token}` } : {}
+    }
+
+    private async request<T>(
+        endpoint: string,
+        options: RequestInit = {}
+    ): Promise<T> {
+        const response = await fetch(`${API_URL}${endpoint}`, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...this.getAuthHeader(),
+                ...options.headers,
+            },
+        })
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Request failed' }))
+            throw new Error(error.error || 'Request failed')
+        }
+
+        return response.json()
+    }
+
+    // Auth endpoints
+    async register(email: string, username: string, password: string): Promise<AuthResponse> {
+        return this.request<AuthResponse>('/api/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ email, username, password }),
+        })
+    }
+
+    async login(email: string, password: string): Promise<AuthResponse> {
+        return this.request<AuthResponse>('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password }),
+        })
+    }
+
+    async getProfile(): Promise<{ user: User }> {
+        return this.request<{ user: User }>('/api/auth/profile')
+    }
+
+    // Room endpoints
+    async createRoom(name: string, language: string): Promise<{ room: Room }> {
+        return this.request<{ room: Room }>('/api/rooms', {
+            method: 'POST',
+            body: JSON.stringify({ name, language }),
+        })
+    }
+
+    async getRooms(): Promise<{ rooms: Room[] }> {
+        return this.request<{ rooms: Room[] }>('/api/rooms')
+    }
+
+    async getRoom(roomId: string): Promise<{ room: Room }> {
+        return this.request<{ room: Room }>(`/api/rooms/${roomId}`)
+    }
+
+    async updateRoom(
+        roomId: string,
+        data: { name?: string; language?: string }
+    ): Promise<{ room: Room }> {
+        return this.request<{ room: Room }>(`/api/rooms/${roomId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        })
+    }
+
+    async deleteRoom(roomId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/api/rooms/${roomId}`, {
+            method: 'DELETE',
+        })
+    }
+
+    async joinRoom(roomId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+        })
+    }
+
+    async leaveRoom(roomId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/api/rooms/${roomId}/leave`, {
+            method: 'POST',
+        })
+    }
+}
+
+export const api = new ApiClient()
