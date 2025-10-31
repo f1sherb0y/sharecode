@@ -30,25 +30,36 @@ export const hocuspocusServer = new Server({
                 throw new Error('User not found')
             }
 
-            // Check if user has access to this document
-            console.log('Looking for room with documentId:', documentName)
-            console.log('User ID:', user.id)
-
+            // Find room by documentId - any authenticated user can join
             const room = await prisma.room.findFirst({
-                where: {
-                    documentId: documentName,
-                    OR: [
-                        { ownerId: user.id },
-                        { participants: { some: { userId: user.id } } },
-                    ],
-                },
-                include: {
-                    owner: true,
-                },
+                where: { documentId: documentName },
+                include: { owner: true },
             })
 
             if (!room) {
-                throw new Error(`No access to document ${documentName}`)
+                throw new Error(`Room with document ${documentName} not found`)
+            }
+
+            // Auto-add user as participant if they're not already
+            if (room.ownerId !== user.id) {
+                const existingParticipant = await prisma.roomParticipant.findUnique({
+                    where: {
+                        roomId_userId: {
+                            roomId: room.id,
+                            userId: user.id,
+                        },
+                    },
+                })
+
+                if (!existingParticipant) {
+                    await prisma.roomParticipant.create({
+                        data: {
+                            roomId: room.id,
+                            userId: user.id,
+                        },
+                    })
+                    console.log(`✨ Auto-added ${user.username} as participant to ${room.name}`)
+                }
             }
 
             // TODO: Implement read-only mode when Hocuspocus API supports it

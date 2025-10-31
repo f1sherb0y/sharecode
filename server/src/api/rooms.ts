@@ -61,13 +61,8 @@ export async function getRooms(req: Request, res: Response) {
     try {
         const userId = (req as any).userId
 
+        // Get all rooms - users can see and join any room
         const rooms = await prisma.room.findMany({
-            where: {
-                OR: [
-                    { ownerId: userId },
-                    { participants: { some: { userId } } },
-                ],
-            },
             include: {
                 owner: {
                     select: {
@@ -93,7 +88,14 @@ export async function getRooms(req: Request, res: Response) {
             },
         })
 
-        res.json({ rooms })
+        // Mark which rooms the user is part of
+        const roomsWithMembership = rooms.map(room => ({
+            ...room,
+            isMember: room.ownerId === userId || room.participants.some(p => p.userId === userId),
+            isOwner: room.ownerId === userId,
+        }))
+
+        res.json({ rooms: roomsWithMembership })
     } catch (error) {
         console.error('Get rooms error:', error)
         res.status(500).json({ error: 'Internal server error' })
@@ -105,14 +107,9 @@ export async function getRoom(req: Request, res: Response) {
         const userId = (req as any).userId
         const { roomId } = req.params
 
-        const room = await prisma.room.findFirst({
-            where: {
-                id: roomId,
-                OR: [
-                    { ownerId: userId },
-                    { participants: { some: { userId } } },
-                ],
-            },
+        // Allow any authenticated user to view any room
+        const room = await prisma.room.findUnique({
+            where: { id: roomId },
             include: {
                 owner: {
                     select: {

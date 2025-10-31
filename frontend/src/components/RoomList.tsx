@@ -116,23 +116,46 @@ export function RoomList() {
             ) : (
                 <div>
                     <h2>Your Rooms</h2>
-                    {rooms.map((room) => (
+                    {rooms.map((room: any) => (
                         <div
                             key={room.id}
                             style={{
                                 border: '1px solid #ccc',
                                 padding: '10px',
                                 marginBottom: '10px',
-                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
                             }}
-                            onClick={() => handleJoinRoom(room.id)}
                         >
-                            <h3>{room.name}</h3>
-                            <div>Language: {room.language}</div>
-                            <div>Owner: {room.owner.username}</div>
-                            <div>Created: {new Date(room.createdAt).toLocaleDateString()}</div>
-                            {room.participants && room.participants.length > 0 && (
-                                <div>Participants: {room.participants.length}</div>
+                            <div
+                                style={{ flex: 1, cursor: room.isMember ? 'pointer' : 'default' }}
+                                onClick={() => room.isMember && handleJoinRoom(room.id)}
+                            >
+                                <h3>
+                                    {room.name} {room.isOwner && '(Your Room)'}
+                                </h3>
+                                <div>Language: {room.language}</div>
+                                <div>Owner: {room.owner.username}</div>
+                                <div>Created: {new Date(room.createdAt).toLocaleDateString()}</div>
+                                {room.participants && room.participants.length > 0 && (
+                                    <div>Participants: {room.participants.length + 1}</div>
+                                )}
+                            </div>
+                            {!room.isMember && (
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            await api.joinRoom(room.id)
+                                            loadRooms() // Refresh the list
+                                        } catch (err) {
+                                            setError(err instanceof Error ? err.message : 'Failed to join room')
+                                        }
+                                    }}
+                                    style={{ padding: '5px 10px' }}
+                                >
+                                    Join Room
+                                </button>
                             )}
                         </div>
                     ))}
