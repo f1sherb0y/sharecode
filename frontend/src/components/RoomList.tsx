@@ -126,11 +126,12 @@ export function RoomList() {
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
+                                cursor: 'pointer',
                             }}
                         >
                             <div
-                                style={{ flex: 1, cursor: room.isMember ? 'pointer' : 'default' }}
-                                onClick={() => room.isMember && handleJoinRoom(room.id)}
+                                style={{ flex: 1 }}
+                                onClick={() => handleJoinRoom(room.id)}
                             >
                                 <h3>
                                     {room.name} {room.isOwner && '(Your Room)'}
@@ -142,19 +143,22 @@ export function RoomList() {
                                     <div>Participants: {room.participants.length + 1}</div>
                                 )}
                             </div>
-                            {!room.isMember && (
+                            {room.isOwner && (
                                 <button
-                                    onClick={async () => {
-                                        try {
-                                            await api.joinRoom(room.id)
-                                            loadRooms() // Refresh the list
-                                        } catch (err) {
-                                            setError(err instanceof Error ? err.message : 'Failed to join room')
+                                    onClick={async (e) => {
+                                        e.stopPropagation()
+                                        if (confirm(`Delete room "${room.name}"?`)) {
+                                            try {
+                                                await api.deleteRoom(room.id)
+                                                loadRooms() // Refresh the list
+                                            } catch (err) {
+                                                setError(err instanceof Error ? err.message : 'Failed to delete room')
+                                            }
                                         }
                                     }}
-                                    style={{ padding: '5px 10px' }}
+                                    style={{ padding: '5px 10px', backgroundColor: '#ff4444', color: 'white', border: 'none' }}
                                 >
-                                    Join Room
+                                    Delete
                                 </button>
                             )}
                         </div>

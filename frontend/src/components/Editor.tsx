@@ -14,7 +14,18 @@ import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
 import { useAuth } from '../contexts/AuthContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
 import { api } from '../lib/api'
-import type { Room, RemoteUser } from '../types'
+import type { Room, RemoteUser, Language } from '../types'
+
+const LANGUAGES: Language[] = [
+    'javascript',
+    'typescript',
+    'python',
+    'java',
+    'cpp',
+    'rust',
+    'go',
+    'php',
+]
 
 const languageExtensions: Record<string, any> = {
     javascript: javascript(),
@@ -35,6 +46,7 @@ export function Editor() {
     const [error, setError] = useState('')
     const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
     const [followingUser, setFollowingUser] = useState<number | null>(null)
+    const [isChangingLanguage, setIsChangingLanguage] = useState(false)
     const editorRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
 
@@ -171,6 +183,25 @@ export function Editor() {
         )
     }
 
+    const handleLanguageChange = async (newLanguage: Language) => {
+        if (!roomId || !room) return
+
+        setIsChangingLanguage(true)
+        try {
+            await api.updateRoom(roomId, { language: newLanguage })
+            // Update local room state
+            setRoom({ ...room, language: newLanguage })
+            // Reload to apply new language extension
+            window.location.reload()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to change language')
+        } finally {
+            setIsChangingLanguage(false)
+        }
+    }
+
+    const isOwner = room?.ownerId === user?.id
+
     if (!room) {
         return <div style={{ padding: '20px' }}>Loading room...</div>
     }
@@ -179,10 +210,25 @@ export function Editor() {
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
             {/* Header */}
             <div style={{ padding: '10px', borderBottom: '1px solid #ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
                     <button onClick={() => navigate('/rooms')}>← Back to Rooms</button>
                     <span style={{ marginLeft: '20px', fontWeight: 'bold' }}>{room.name}</span>
-                    <span style={{ marginLeft: '10px', color: '#666' }}>({room.language})</span>
+                    {isOwner ? (
+                        <select
+                            value={room.language}
+                            onChange={(e) => handleLanguageChange(e.target.value as Language)}
+                            disabled={isChangingLanguage}
+                            style={{ marginLeft: '10px' }}
+                        >
+                            {LANGUAGES.map((lang) => (
+                                <option key={lang} value={lang}>
+                                    {lang}
+                                </option>
+                            ))}
+                        </select>
+                    ) : (
+                        <span style={{ marginLeft: '10px', color: '#666' }}>({room.language})</span>
+                    )}
                 </div>
                 <div>
                     <span style={{ marginRight: '10px' }}>
