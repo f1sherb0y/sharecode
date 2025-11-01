@@ -28,16 +28,35 @@ const PORT = parseInt(process.env.PORT || '3001')
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
+    'http://localhost:4173',
     process.env.FRONTEND_URL,
-].filter(Boolean)
+].filter(Boolean) as string[]
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin) {
             callback(null, true)
-        } else {
-            callback(new Error('Not allowed by CORS'))
+            return
         }
+
+        // Check if origin is in allowed list
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true)
+            return
+        }
+
+        // For production with reverse proxy, also check if origin matches domain
+        const domain = process.env.DOMAIN
+        if (domain && (origin === `https://${domain}` || origin === `http://${domain}`)) {
+            callback(null, true)
+            return
+        }
+
+        logger.warn(`CORS blocked origin: ${origin}`)
+        logger.warn(`Allowed origins: ${allowedOrigins.join(', ')}`)
+        if (domain) logger.warn(`Domain: ${domain}`)
+        callback(new Error('Not allowed by CORS'))
     },
     credentials: true,
 }))
