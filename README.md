@@ -34,11 +34,84 @@ A real-time collaborative code editing platform built with React, CodeMirror, Yj
 
 ## Prerequisites
 
+### For Local Development
 - Bun installed
 - PostgreSQL database running
 - Node.js 18+ (for some dependencies)
 
+### For Docker Deployment
+- Docker and Docker Compose installed
+
 ## Setup
+
+### Option 1: Docker Deployment (Recommended)
+
+The easiest way to run ShareCode is using Docker Compose:
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd sharecode
+
+# Start all services (PostgreSQL, server, frontend)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop all services
+docker compose down
+```
+
+The application will be available at http://localhost:4173
+
+**Default Admin Credentials:**
+- Username: `admin`
+- Password: `admin123`
+- Email: `admin@sharecode.local`
+
+**⚠️ IMPORTANT:** Change these credentials in `docker-compose.yml` before deploying to production!
+
+#### Docker Environment Configuration
+
+Edit `docker-compose.yml` to customize the server environment:
+
+```yaml
+environment:
+  DATABASE_URL: postgresql://sharecode_app:sharecode@postgres:5432/sharecode?schema=public
+  JWT_SECRET: change-me-in-production  # ⚠️ Change this!
+  PORT: 3001
+  FRONTEND_URL: http://localhost:4173
+  LOG_LEVEL: info  # Options: debug, info, warn, error
+  
+  # Admin credentials - CHANGE THESE IN PRODUCTION
+  ADMIN_USERNAME: admin
+  ADMIN_PASSWORD: admin123
+  ADMIN_EMAIL: admin@sharecode.local
+  # ADMIN_UPDATE_PASSWORD: true  # Uncomment to update password on restart
+```
+
+#### Rebuild Docker Images
+
+After code changes, rebuild the images:
+
+```bash
+# Rebuild and restart all services
+docker compose up -d --build
+
+# Rebuild only specific service
+docker compose build server
+docker compose up -d server
+```
+
+#### Access Database
+
+```bash
+# Enter PostgreSQL container
+docker compose exec postgres psql -U sharecode_app -d sharecode
+```
+
+### Option 2: Local Development
 
 ### 1. Database Setup
 
@@ -87,19 +160,41 @@ The frontend will be available at http://localhost:5173
 ## Environment Variables
 
 ### Server (.env)
+
+For local development, create `server/.env` based on `server/.env.example`:
+
 ```env
-DATABASE_URL="postgresql://postgres:password@localhost:5432/sharecode?schema=public"
+# Database
+DATABASE_URL="postgresql://sharecode_app:sharecode@localhost:5432/sharecode?schema=public"
+
+# JWT Secret - CHANGE THIS IN PRODUCTION
 JWT_SECRET="your-super-secret-jwt-key-change-in-production"
+
+# Server
 PORT=3001
-WS_PORT=1234
+
+# Frontend URL (for CORS)
 FRONTEND_URL="http://localhost:5173"
+
+# Logging - Options: debug, info, warn, error (default: info)
+LOG_LEVEL="info"
+
+# Admin credentials - CHANGE THESE IN PRODUCTION
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="admin123"
+ADMIN_EMAIL="admin@sharecode.local"
+# Set to 'true' to update admin password on restart (optional)
+# ADMIN_UPDATE_PASSWORD="false"
 ```
 
 ### Frontend (.env)
+
 ```env
 VITE_API_URL=http://localhost:3001
-VITE_WS_URL=ws://localhost:1234
+VITE_WS_URL=ws://localhost:3001/ws
 ```
+
+**Note:** The WebSocket server runs on the same port as the REST API at path `/ws`.
 
 ## API Endpoints
 
