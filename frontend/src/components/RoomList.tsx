@@ -75,12 +75,8 @@ export function RoomList() {
         setError('')
 
         try {
-            // Convert YYYY-MM-DD HH:MM to ISO 8601 format for the API
-            let formattedScheduledTime: string | undefined = undefined
-            if (scheduledTime) {
-                // Replace space with 'T' to create ISO 8601 format
-                formattedScheduledTime = scheduledTime.replace(' ', 'T') + ':00'
-            }
+            // Convert datetime-local to ISO 8601 format for the API
+            const formattedScheduledTime = scheduledTime ? new Date(scheduledTime).toISOString() : undefined
 
             const { room } = await api.createRoom(
                 newRoomName,
@@ -160,12 +156,10 @@ export function RoomList() {
                             <div className="form-group">
                                 <label className="form-label">{t('rooms.create.scheduledTime')}</label>
                                 <input
-                                    type="text"
-                                    placeholder={t('rooms.create.scheduledTimePlaceholder')}
+                                    type="datetime-local"
                                     value={scheduledTime}
                                     onChange={(e) => setScheduledTime(e.target.value)}
-                                    pattern="\d{4}-\d{2}-\d{2} \d{2}:\d{2}"
-                                    title={t('rooms.create.scheduledTimeHint')}
+                                    min={new Date().toISOString().slice(0, 16)}
                                 />
                                 <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
                                     {t('rooms.create.scheduledTimeHint')}
