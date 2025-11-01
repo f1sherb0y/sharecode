@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import './LanguageSwitcher.css'
 
 export function LanguageSwitcher() {
-    const { i18n } = useTranslation()
+    const { i18n, t } = useTranslation()
 
     const toggleLanguage = () => {
         const newLang = i18n.language.startsWith('zh') ? 'en' : 'zh'
@@ -18,7 +18,7 @@ export function LanguageSwitcher() {
             className="language-switcher"
             title={i18n.language.startsWith('zh') ? 'Switch to English' : '切换到中文'}
         >
-            <Globe size={20} />
+            <Globe size={16} />
             <span>{currentLang}</span>
         </button>
     )

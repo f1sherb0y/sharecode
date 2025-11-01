@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, StateEffect } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
@@ -72,6 +73,7 @@ export function Editor() {
     const { roomId } = useParams<{ roomId: string }>()
     const { user, token } = useAuth()
     const { theme } = useTheme()
+    const { t } = useTranslation()
     const navigate = useNavigate()
     const [room, setRoom] = useState<Room | null>(null)
     const [error, setError] = useState('')
@@ -261,7 +263,7 @@ export function Editor() {
         return (
             <div style={{ padding: '20px' }}>
                 <div style={{ color: 'red' }}>{error}</div>
-                <button onClick={() => navigate('/rooms')}>Back to Rooms</button>
+                <button onClick={() => navigate('/rooms')}>{t('common.back')}</button>
             </div>
         )
     }
@@ -338,7 +340,7 @@ export function Editor() {
     const isOwner = room?.ownerId === user?.id
 
     if (!room) {
-        return <div style={{ padding: '20px' }}>Loading room...</div>
+        return <div style={{ padding: '20px' }}>{t('common.loading')}</div>
     }
 
     return (
@@ -347,7 +349,7 @@ export function Editor() {
             <div className="editor-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <button className="toolbar-button" onClick={() => navigate('/rooms')}>
-                        ← Back
+                        ← {t('common.back')}
                     </button>
                     <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
                     {isOwner ? (
@@ -373,7 +375,7 @@ export function Editor() {
                             className="btn-danger"
                             onClick={async (e) => {
                                 e.preventDefault()
-                                if (confirm('End this room? You can view playback afterwards.')) {
+                                if (confirm(t('editor.toolbar.endRoom') + '?')) {
                                     try {
                                         await api.endRoom(roomId!)
                                         navigate('/rooms')
@@ -383,7 +385,7 @@ export function Editor() {
                                 }
                             }}
                         >
-                            End Room
+                            {t('editor.toolbar.endRoom')}
                         </button>
                     )}
                     <div
@@ -391,11 +393,11 @@ export function Editor() {
                         style={{ color: isConnected ? 'var(--success)' : 'var(--danger)' }}
                     >
                         {isConnected ? <ConnectedIcon /> : <DisconnectedIcon />}
-                        <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+                        <span>{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
                     </div>
                     <div className="status-badge" style={{ color: 'var(--accent)' }}>
                         {isSynced ? <SyncedIcon /> : <SyncingIcon />}
-                        <span>{isSynced ? 'Synced' : 'Syncing...'}</span>
+                        <span>{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
                     </div>
                     <LanguageSwitcher />
                     <ThemeToggle />
@@ -410,7 +412,7 @@ export function Editor() {
             {/* Bottom Status Bar with Users */}
             <div className="status-bar">
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                    Users ({remoteUsers.length + 1}):
+                    {t('editor.toolbar.users')} ({remoteUsers.length + 1}):
                 </span>
                 <div className="user-list-inline">
                     {/* Current user */}
@@ -448,7 +450,7 @@ export function Editor() {
                                     followingUser === remoteUser.clientId ? null : remoteUser.clientId
                                 )
                             }
-                            title={`Click to ${followingUser === remoteUser.clientId ? 'stop following' : 'follow'} ${remoteUser.username}`}
+                            title={followingUser === remoteUser.clientId ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
                         >
                             <div className="user-dot" style={{ backgroundColor: remoteUser.color }} />
                             <span
