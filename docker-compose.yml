@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: sharecode
       POSTGRES_USER: sharecode_app
-      POSTGRES_PASSWORD: sharecode
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sharecode}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,6 +15,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
   server:
     build:
@@ -24,20 +26,18 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://sharecode_app:sharecode@postgres:5432/sharecode?schema=public
-      JWT_SECRET: change-me-in-production
+      DATABASE_URL: postgresql://sharecode_app:${POSTGRES_PASSWORD:-sharecode}@postgres:5432/sharecode?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       PORT: 3001
-      FRONTEND_URL: http://localhost:4173
-      # Logging - Options: debug, info, warn, error
-      LOG_LEVEL: info
-      # Admin credentials - CHANGE THESE IN PRODUCTION
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: admin123
-      ADMIN_EMAIL: admin@sharecode.local
-      # Set to 'true' to update admin password on restart
-      # ADMIN_UPDATE_PASSWORD: false
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:4173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sharecode.local}
     expose:
       - "3001"
+    networks:
+      - backend
 
   frontend:
     build:
@@ -45,8 +45,36 @@ services:
     restart: unless-stopped
     depends_on:
       - server
+    expose:
+      - "80"
+    networks:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3 support
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - server
+    networks:
+      - backend
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
+
+
+networks:
+  backend:
+    driver: bridge
