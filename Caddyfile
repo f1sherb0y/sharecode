@@ -2,7 +2,7 @@
 	# Automatic HTTPS with Let's Encrypt
 	# Caddy will automatically obtain and renew SSL certificates
 	
-	# Logging (optional)
+	# Logging
 	log {
 		output file /data/access.log
 		format json
@@ -23,6 +23,84 @@
 		X-XSS-Protection "1; mode=block"
 		# Remove Server header
 		-Server
+	}
+
+	# Block malicious bots and scanners
+	@blocked_bots {
+		header User-Agent *bot*
+		header User-Agent *crawl*
+		header User-Agent *spider*
+		header User-Agent *scrape*
+		header User-Agent *nikto*
+		header User-Agent *nmap*
+		header User-Agent *sqlmap*
+		header User-Agent *masscan*
+		header User-Agent *metasploit*
+		header User-Agent *nessus*
+		header User-Agent *openvas*
+		header User-Agent *acunetix*
+		header User-Agent *burp*
+		header User-Agent *zap*
+		header User-Agent *w3af*
+		header User-Agent *havij*
+		header User-Agent *bilbo*
+		header User-Agent *directory*
+		header User-Agent *scanner*
+	}
+	respond @blocked_bots 403 {
+		body "Access Denied"
+		close
+	}
+
+	# Block common exploit paths
+	@blocked_paths {
+		path /.env*
+		path /.git*
+		path /wp-admin*
+		path /phpmyadmin*
+		path /admin.php*
+		path /config.php*
+		path /.well-known/security.txt
+		path /xmlrpc.php*
+		path /eval-stdin.php*
+		path /shell.php*
+		path /c99.php*
+		path /r57.php*
+		path *.sql
+		path *.bak
+		path *.old
+		path *.backup
+		path */..
+	}
+	respond @blocked_paths 404
+
+	# Block suspicious query strings
+	@blocked_queries {
+		query *union*select*
+		query *base64_decode*
+		query *eval(*
+		query *system(*
+		query *exec(*
+		query *passthru(*
+		query *shell_exec*
+		query *<script*
+		query *javascript:*
+		query *onerror=*
+		query *onload=*
+	}
+	respond @blocked_queries 403 {
+		body "Invalid Request"
+		close
+	}
+
+	# Rate limiting for API endpoints (prevents DDoS and brute force)
+	@api_routes {
+		path /api/*
+	}
+	
+	# Limit request body size (prevents large payload attacks)
+	request_body {
+		max_size 10MB
 	}
 
 	# WebSocket endpoint for collaborative editing
