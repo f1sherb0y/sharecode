@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
+import { LanguageSwitcher } from './LanguageSwitcher'
 import { api } from '../lib/api'
 import type { Room, Language } from '../types'
 
@@ -112,6 +113,7 @@ export function RoomList() {
                         <button className="toolbar-button" onClick={logout}>
                             Logout
                         </button>
+                        <LanguageSwitcher />
                         <ThemeToggle />
                     </div>
                 </div>

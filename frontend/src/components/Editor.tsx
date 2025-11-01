@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
 import { ThemeToggle } from './ThemeToggle'
+import { LanguageSwitcher } from './LanguageSwitcher'
 import { ConnectedIcon, DisconnectedIcon, SyncedIcon, SyncingIcon } from './StatusIcons'
 import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
@@ -396,6 +397,7 @@ export function Editor() {
                         {isSynced ? <SyncedIcon /> : <SyncingIcon />}
                         <span>{isSynced ? 'Synced' : 'Syncing...'}</span>
                     </div>
+                    <LanguageSwitcher />
                     <ThemeToggle />
                 </div>
             </div>
