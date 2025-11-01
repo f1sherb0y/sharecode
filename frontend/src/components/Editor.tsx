@@ -124,9 +124,9 @@ export function Editor() {
         )
     }, [provider, user?.id, user?.username])
 
-    // Set up CodeMirror editor
+    // Set up CodeMirror editor (only once)
     useEffect(() => {
-        if (!editorRef.current || !provider || !room) return
+        if (!editorRef.current || !provider || !room || viewRef.current) return
 
         // Create YSyncConfig for position conversion
         const ySyncConfig = new YSyncConfig(ytext, provider.awareness)
@@ -156,8 +156,28 @@ export function Editor() {
 
         return () => {
             view.destroy()
+            viewRef.current = null
         }
-    }, [provider, room, ytext, theme])
+    }, [provider, room, ytext])
+
+    // Update theme when it changes (using reconfigure, not recreating editor)
+    useEffect(() => {
+        if (!viewRef.current || !room || !provider) return
+
+        const languageExt = languageExtensions[room.language] || javascript()
+        const themeExt = theme === 'dark' ? [oneDark] : []
+
+        viewRef.current.dispatch({
+            effects: StateEffect.reconfigure.of([
+                keymap.of([...yUndoManagerKeymap]),
+                basicSetup,
+                languageExt,
+                ...themeExt,
+                EditorView.lineWrapping,
+                yCollab(ytext, provider.awareness),
+            ]),
+        })
+    }, [theme])
 
     // Track remote users via awareness
     useEffect(() => {
@@ -349,8 +369,9 @@ export function Editor() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     {isOwner && !room.isEnded && (
                         <button
-                            className="toolbar-button"
-                            onClick={async () => {
+                            className="btn-danger"
+                            onClick={async (e) => {
+                                e.preventDefault()
                                 if (confirm('End this room? You can view playback afterwards.')) {
                                     try {
                                         await api.endRoom(roomId!)
@@ -360,7 +381,6 @@ export function Editor() {
                                     }
                                 }
                             }}
-                            style={{ backgroundColor: 'var(--error)', color: '#fff' }}
                         >
                             End Room
                         </button>
