@@ -46,7 +46,7 @@ services:
     depends_on:
       - server
     ports:
-      - "4173:80"
+      - "80:80"
 
 volumes:
   pgdata:

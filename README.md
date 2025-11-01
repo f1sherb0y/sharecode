@@ -63,7 +63,13 @@ docker compose logs -f
 docker compose down
 ```
 
-The application will be available at http://localhost:4173
+The application will be available at **http://localhost**
+
+**Architecture:** 
+- All requests go through nginx reverse proxy on port 80
+- nginx routes `/api/*` requests to the backend server (port 3001)
+- nginx serves frontend static files for other paths
+- WebSocket connections use `/api/ws`
 
 **Default Admin Credentials:**
 - Username: `admin`
@@ -81,7 +87,6 @@ environment:
   DATABASE_URL: postgresql://sharecode_app:sharecode@postgres:5432/sharecode?schema=public
   JWT_SECRET: change-me-in-production  # ⚠️ Change this!
   PORT: 3001
-  FRONTEND_URL: http://localhost:4173
   LOG_LEVEL: info  # Options: debug, info, warn, error
   
   # Admin credentials - CHANGE THESE IN PRODUCTION
@@ -139,9 +144,9 @@ bun run db:migrate
 bun run dev
 ```
 
-The server will start:
-- REST API on port 3001
-- WebSocket server on port 1234
+The server will start on port 3001:
+- REST API at `/api/*`
+- WebSocket server at `/api/ws`
 
 ### 3. Frontend Setup
 
@@ -190,11 +195,16 @@ ADMIN_EMAIL="admin@sharecode.local"
 ### Frontend (.env)
 
 ```env
+# For local development without Docker (separate ports)
 VITE_API_URL=http://localhost:3001
-VITE_WS_URL=ws://localhost:3001/ws
+VITE_WS_URL=ws://localhost:3001/api/ws
+
+# For Docker deployment - comment out the above and nginx will handle routing
+# VITE_API_URL=
+# VITE_WS_URL=
 ```
 
-**Note:** The WebSocket server runs on the same port as the REST API at path `/ws`.
+**Note:** The WebSocket server runs on the same port as the REST API at path `/api/ws`.
 
 ## API Endpoints
 

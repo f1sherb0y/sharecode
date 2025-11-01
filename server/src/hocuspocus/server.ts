@@ -121,7 +121,7 @@ export const hocuspocusServer = new Server({
 })
 
 export function startHocuspocusServer(httpServer: HttpServer) {
-    const wsPath = '/ws'
+    const wsPath = '/api/ws'
 
     const handleUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
         const { url } = request

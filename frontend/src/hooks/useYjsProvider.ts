@@ -13,7 +13,7 @@ const resolveWebSocketUrl = (): string => {
         try {
             const url = new URL(apiUrl)
             url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-            url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`
+            url.pathname = `${url.pathname.replace(/\/$/, '')}/api/ws`
             return url.toString()
         } catch (err) {
             console.warn('Invalid VITE_API_URL, falling back to window location for WebSocket URL.', err)
@@ -22,10 +22,10 @@ const resolveWebSocketUrl = (): string => {
 
     if (typeof window !== 'undefined') {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        return `${protocol}//${window.location.host}/ws`
+        return `${protocol}//${window.location.host}/api/ws`
     }
 
-    return 'ws://localhost:3001/ws'
+    return 'ws://localhost:3001/api/ws'
 }
 
 const WS_URL = resolveWebSocketUrl()
