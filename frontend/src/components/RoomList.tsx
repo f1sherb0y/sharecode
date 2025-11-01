@@ -72,10 +72,17 @@ export function RoomList() {
         setError('')
 
         try {
+            // Convert YYYY-MM-DD HH:MM to ISO 8601 format for the API
+            let formattedScheduledTime: string | undefined = undefined
+            if (scheduledTime) {
+                // Replace space with 'T' to create ISO 8601 format
+                formattedScheduledTime = scheduledTime.replace(' ', 'T') + ':00'
+            }
+
             const { room } = await api.createRoom(
                 newRoomName,
                 newRoomLanguage,
-                scheduledTime || undefined,
+                formattedScheduledTime,
                 duration ? parseInt(duration) : undefined
             )
             navigate(`/editor/${room.id}`)
@@ -149,10 +156,16 @@ export function RoomList() {
                             <div className="form-group">
                                 <label className="form-label">Scheduled Time (optional)</label>
                                 <input
-                                    type="datetime-local"
+                                    type="text"
+                                    placeholder="YYYY-MM-DD HH:MM"
                                     value={scheduledTime}
                                     onChange={(e) => setScheduledTime(e.target.value)}
+                                    pattern="\d{4}-\d{2}-\d{2} \d{2}:\d{2}"
+                                    title="Format: YYYY-MM-DD HH:MM (24-hour)"
                                 />
+                                <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                    Format: YYYY-MM-DD HH:MM (e.g., 2024-12-31 14:30)
+                                </small>
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Duration (minutes, optional)</label>
