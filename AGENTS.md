@@ -68,6 +68,15 @@
 - **Persistent preference**: Language stored in localStorage
 - **Auto-detection**: Falls back to browser language on first visit
 
+### 7. Responsive Design
+- **Desktop-first approach**: Desktop layout (>1024px) preserved unchanged
+- **Tablet optimization**: 768px-1024px with moderate spacing adjustments
+- **Mobile optimization**: <768px with aggressive space saving
+- **Touch-friendly**: Minimum 44px tap targets for buttons
+- **Adaptive layouts**: Topbar stacks on mobile, full-width room cards
+- **Horizontal scrolling**: User badges scroll horizontally on mobile
+- **Compact UI**: Smaller fonts, reduced padding, icon-only badges on very small screens
+
 ## Architecture Highlights
 
 ### Unified Server Architecture
