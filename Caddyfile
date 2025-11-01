@@ -74,30 +74,6 @@
 	}
 	respond @blocked_paths 404
 
-	# Block suspicious query strings
-	@blocked_queries {
-		query *union*select*
-		query *base64_decode*
-		query *eval(*
-		query *system(*
-		query *exec(*
-		query *passthru(*
-		query *shell_exec*
-		query *<script*
-		query *javascript:*
-		query *onerror=*
-		query *onload=*
-	}
-	respond @blocked_queries 403 {
-		body "Invalid Request"
-		close
-	}
-
-	# Rate limiting for API endpoints (prevents DDoS and brute force)
-	@api_routes {
-		path /api/*
-	}
-	
 	# Limit request body size (prevents large payload attacks)
 	request_body {
 		max_size 10MB
