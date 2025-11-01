@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, StateEffect } from '@codemirror/state'
@@ -71,9 +71,11 @@ export function RoomPlayback() {
     const [currentTimestamp, setCurrentTimestamp] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
     const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
-    const [editorView, setEditorView] = useState<EditorView | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState('')
+    const editorRef = useRef<HTMLDivElement | null>(null)
+    const viewRef = useRef<EditorView | null>(null)
+    const [editorVersion, setEditorVersion] = useState(0)
 
     // Load room and updates
     useEffect(() => {
@@ -121,20 +123,15 @@ export function RoomPlayback() {
 
     // Initialize CodeMirror (only once when room is loaded)
     useEffect(() => {
-        if (!room || editorView) return
-
-        const container = document.getElementById('playback-editor')
-        if (!container) return
+        if (!room?.id || viewRef.current || !editorRef.current) return
 
         const languageExt = languageExtensions[room.language as Language] || javascript()
-        const themeExt = theme === 'dark' ? [oneDark] : []
 
         const state = EditorState.create({
             doc: '',
             extensions: [
                 basicSetup,
                 languageExt,
-                ...themeExt,
                 EditorState.readOnly.of(true),
                 EditorView.editable.of(false),
             ],
@@ -142,25 +139,26 @@ export function RoomPlayback() {
 
         const view = new EditorView({
             state,
-            parent: container,
+            parent: editorRef.current,
         })
 
-        setEditorView(view)
+        viewRef.current = view
+        setEditorVersion((version) => version + 1)
 
         return () => {
             view.destroy()
-            setEditorView(null)
+            viewRef.current = null
         }
     }, [room])
 
     // Update theme when it changes (using reconfigure, not recreating editor)
     useEffect(() => {
-        if (!editorView || !room) return
+        if (!viewRef.current || !room) return
 
         const languageExt = languageExtensions[room.language as Language] || javascript()
         const themeExt = theme === 'dark' ? [oneDark] : []
 
-        editorView.dispatch({
+        viewRef.current.dispatch({
             effects: StateEffect.reconfigure.of([
                 basicSetup,
                 languageExt,
@@ -169,11 +167,11 @@ export function RoomPlayback() {
                 EditorView.editable.of(false),
             ]),
         })
-    }, [theme, editorView, room])
+    }, [theme, room, editorVersion])
 
     // Reconstruct document at current timestamp
     useEffect(() => {
-        if (updates.length === 0 || !editorView) return
+        if (updates.length === 0 || !viewRef.current) return
 
         const relevantUpdates = updates.filter((u) => u.timestampMs <= currentTimestamp)
 
@@ -192,14 +190,14 @@ export function RoomPlayback() {
         const content = ytext.toString()
 
         // Update editor content
-        editorView.dispatch({
+        viewRef.current.dispatch({
             changes: {
                 from: 0,
-                to: editorView.state.doc.length,
+                to: viewRef.current.state.doc.length,
                 insert: content,
             },
         })
-    }, [currentTimestamp, updates, editorView])
+    }, [currentTimestamp, updates, editorVersion])
 
     // Auto-play logic
     useEffect(() => {
@@ -254,7 +252,7 @@ export function RoomPlayback() {
 
             {/* Editor */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div id="playback-editor" style={{ height: '100%' }} />
+                <div ref={editorRef} style={{ height: '100%' }} />
             </div>
 
             {/* Playback Controls */}

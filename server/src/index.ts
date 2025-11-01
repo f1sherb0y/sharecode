@@ -2,6 +2,9 @@ import express, { type Request, type Response } from 'express'
 import { createServer } from 'http'
 import cors from 'cors'
 import { startHocuspocusServer } from './hocuspocus/server'
+import { initializeAdmin } from './utils/initAdmin'
+import { logger } from './utils/logger'
+import { requestLogger } from './middleware/requestLogger'
 import { register, login, getProfile } from './api/auth'
 import {
     createRoom,
@@ -39,6 +42,7 @@ app.use(cors({
     credentials: true,
 }))
 app.use(express.json())
+app.use(requestLogger)
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {
@@ -73,9 +77,16 @@ app.get('/api/rooms/:roomId/playback/updates', authMiddleware, getPlaybackUpdate
 const httpServer = createServer(app)
 startHocuspocusServer(httpServer)
 
-// Start unified server
-httpServer.listen(PORT, () => {
-    console.log(`🚀 Unified server (REST + WebSocket) running on port ${PORT}`)
-    console.log(`   REST API: http://localhost:${PORT}`)
-    console.log(`   WebSocket: ws://localhost:${PORT}/ws`)
-})
+// Initialize admin user and start unified server
+async function startServer() {
+    await initializeAdmin()
+
+    httpServer.listen(PORT, () => {
+        logger.heading('Unified server (REST + WebSocket) running on port ' + PORT)
+        logger.info(`   REST API: http://localhost:${PORT}`)
+        logger.info(`   WebSocket: ws://localhost:${PORT}/ws`)
+        logger.info(`   Log Level: ${process.env.LOG_LEVEL || 'info'}`)
+    })
+}
+
+startServer()

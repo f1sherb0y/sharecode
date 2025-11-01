@@ -1,6 +1,52 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
-.DS_Store
-npm-debug.log
-tmp
+.vite
+
+# Logs
 logs
+*.log
+npm-debug.log*
+
+# Environment files (security - never copy to image)
+.env
+.env.local
+.env.*.local
+.env.example
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development files
+README.md
+*.md
+.editorconfig
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Test files
+*.test.ts
+*.test.tsx
+*.test.js
+*.spec.ts
+*.spec.tsx
+*.spec.js
+__tests__
+coverage
