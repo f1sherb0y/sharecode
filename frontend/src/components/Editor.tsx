@@ -388,17 +388,6 @@ export function Editor() {
                             {t('editor.toolbar.endRoom')}
                         </button>
                     )}
-                    <div
-                        className="status-badge"
-                        style={{ color: isConnected ? 'var(--success)' : 'var(--danger)' }}
-                    >
-                        {isConnected ? <ConnectedIcon /> : <DisconnectedIcon />}
-                        <span>{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
-                    </div>
-                    <div className="status-badge" style={{ color: 'var(--accent)' }}>
-                        {isSynced ? <SyncedIcon /> : <SyncingIcon />}
-                        <span>{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
-                    </div>
                     <LanguageSwitcher />
                     <ThemeToggle />
                 </div>
@@ -411,57 +400,76 @@ export function Editor() {
 
             {/* Bottom Status Bar with Users */}
             <div className="status-bar">
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                    {t('editor.toolbar.users')} ({remoteUsers.length + 1}):
-                </span>
-                <div className="user-list-inline">
-                    {/* Current user */}
-                    <div
-                        className="user-badge"
-                        style={{
-                            border: `1px solid ${localUserColors.color}`,
-                            backgroundColor: localUserColors.colorLight,
-                        }}
-                    >
-                        <div className="user-dot" style={{ backgroundColor: localUserColors.color }} />
-                        <span style={{ fontWeight: 600 }}>{user?.username || 'You'}</span>
-                    </div>
-
-                    {/* Remote users */}
-                    {remoteUsers.map((remoteUser) => (
+                <div className="status-users">
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                        {t('editor.toolbar.users')} ({remoteUsers.length + 1}):
+                    </span>
+                    <div className="user-list-inline">
+                        {/* Current user */}
                         <div
-                            key={remoteUser.clientId}
                             className="user-badge"
                             style={{
-                                cursor: 'pointer',
-                                border: `1px solid ${remoteUser.color}`,
-                                backgroundColor:
-                                    followingUser === remoteUser.clientId
-                                        ? remoteUser.color
-                                        : remoteUser.colorLight,
-                                boxShadow:
-                                    followingUser === remoteUser.clientId
-                                        ? `0 0 0 2px ${remoteUser.colorLight}`
-                                        : 'none',
-                                color: followingUser === remoteUser.clientId ? '#ffffff' : 'var(--text-primary)',
+                                border: `1px solid ${localUserColors.color}`,
+                                backgroundColor: localUserColors.colorLight,
                             }}
-                            onClick={() =>
-                                setFollowingUser(
-                                    followingUser === remoteUser.clientId ? null : remoteUser.clientId
-                                )
-                            }
-                            title={followingUser === remoteUser.clientId ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
                         >
-                            <div className="user-dot" style={{ backgroundColor: remoteUser.color }} />
-                            <span
-                                style={{
-                                    fontWeight: followingUser === remoteUser.clientId ? 600 : 400,
-                                }}
-                            >
-                                {remoteUser.username}
-                            </span>
+                            <div className="user-dot" style={{ backgroundColor: localUserColors.color }} />
+                            <span style={{ fontWeight: 600 }}>{user?.username || 'You'}</span>
                         </div>
-                    ))}
+
+                        {/* Remote users */}
+                        {remoteUsers.map((remoteUser) => (
+                            <div
+                                key={remoteUser.clientId}
+                                className="user-badge"
+                                style={{
+                                    cursor: 'pointer',
+                                    border: `1px solid ${remoteUser.color}`,
+                                    backgroundColor:
+                                        followingUser === remoteUser.clientId
+                                            ? remoteUser.color
+                                            : remoteUser.colorLight,
+                                    boxShadow:
+                                        followingUser === remoteUser.clientId
+                                            ? `0 0 0 2px ${remoteUser.colorLight}`
+                                            : 'none',
+                                    color: followingUser === remoteUser.clientId ? '#ffffff' : 'var(--text-primary)',
+                                }}
+                                onClick={() =>
+                                    setFollowingUser(
+                                        followingUser === remoteUser.clientId ? null : remoteUser.clientId
+                                    )
+                                }
+                                title={
+                                    followingUser === remoteUser.clientId
+                                        ? t('editor.toolbar.following')
+                                        : t('editor.toolbar.follow')
+                                }
+                            >
+                                <div className="user-dot" style={{ backgroundColor: remoteUser.color }} />
+                                <span
+                                    style={{
+                                        fontWeight: followingUser === remoteUser.clientId ? 600 : 400,
+                                    }}
+                                >
+                                    {remoteUser.username}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="status-indicators">
+                    <div
+                        className="status-badge"
+                        style={{ color: isConnected ? 'var(--success)' : 'var(--danger)' }}
+                    >
+                        {isConnected ? <ConnectedIcon /> : <DisconnectedIcon />}
+                        <span>{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
+                    </div>
+                    <div className="status-badge" style={{ color: 'var(--accent)' }}>
+                        {isSynced ? <SyncedIcon /> : <SyncingIcon />}
+                        <span>{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
+                    </div>
                 </div>
             </div>
         </div>
