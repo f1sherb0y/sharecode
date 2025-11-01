@@ -1,0 +1,28 @@
+.language-switcher {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.language-switcher:hover {
+    background: var(--hover);
+    border-color: var(--accent);
+}
+
+.language-switcher svg {
+    flex-shrink: 0;
+}
+
+.language-switcher span {
+    min-width: 2rem;
+    text-align: center;
+}

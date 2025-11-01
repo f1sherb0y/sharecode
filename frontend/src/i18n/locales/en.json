@@ -1,0 +1,124 @@
+{
+  "auth": {
+    "login": {
+      "title": "Login",
+      "username": "Username",
+      "usernamePlaceholder": "Enter your username",
+      "password": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "button": "Login",
+      "loggingIn": "Logging in...",
+      "noAccount": "Don't have an account?",
+      "registerLink": "Register"
+    },
+    "register": {
+      "title": "Register",
+      "username": "Username",
+      "usernamePlaceholder": "Choose a username",
+      "email": "Email (optional)",
+      "emailPlaceholder": "Enter your email",
+      "password": "Password",
+      "passwordPlaceholder": "Choose a password",
+      "button": "Register",
+      "registering": "Creating account...",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Login"
+    }
+  },
+  "rooms": {
+    "title": "All Rooms",
+    "welcome": "Welcome",
+    "createButton": "Create New Room",
+    "cancel": "Cancel",
+    "create": {
+      "title": "Create New Room",
+      "name": "Room Name",
+      "namePlaceholder": "Enter room name",
+      "language": "Language",
+      "scheduledTime": "Scheduled Time (optional)",
+      "scheduledTimePlaceholder": "YYYY-MM-DD HH:MM",
+      "scheduledTimeHint": "Format: YYYY-MM-DD HH:MM (e.g., 2024-12-31 14:30)",
+      "duration": "Duration (minutes, optional)",
+      "durationPlaceholder": "e.g., 60",
+      "button": "Create Room",
+      "creating": "Creating..."
+    },
+    "list": {
+      "loading": "Loading rooms...",
+      "empty": "No rooms yet. Create one to get started!",
+      "owner": "Owner",
+      "created": "Created",
+      "scheduled": "Scheduled",
+      "duration": "Duration",
+      "durationUnit": "min",
+      "participants": "participants",
+      "owned": "(Owned)",
+      "ended": "[Ended]",
+      "expired": "[Expired]",
+      "delete": "Delete",
+      "deleteConfirm": "Delete room \"{{name}}\"?",
+      "viewPlayback": "View Playback"
+    }
+  },
+  "editor": {
+    "toolbar": {
+      "follow": "Follow",
+      "following": "Following",
+      "endRoom": "End Room",
+      "users": "Users"
+    },
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "synced": "Synced",
+      "syncing": "Syncing..."
+    }
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "users": {
+      "title": "Users",
+      "username": "Username",
+      "email": "Email",
+      "role": "Role",
+      "created": "Created",
+      "lastSeen": "Last Seen",
+      "actions": "Actions",
+      "delete": "Delete",
+      "deleteConfirm": "Delete user \"{{username}}\"?"
+    },
+    "rooms": {
+      "title": "All Rooms",
+      "name": "Name",
+      "owner": "Owner",
+      "language": "Language",
+      "created": "Created",
+      "participants": "Participants",
+      "actions": "Actions",
+      "delete": "Delete",
+      "deleteConfirm": "Delete room \"{{name}}\"?"
+    }
+  },
+  "playback": {
+    "title": "Playback",
+    "play": "Play",
+    "pause": "Pause",
+    "speed": "Speed",
+    "progress": "Progress",
+    "duration": "Duration",
+    "noUpdates": "No playback data available"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "logout": "Logout",
+    "admin": "Admin",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success"
+  }
+}

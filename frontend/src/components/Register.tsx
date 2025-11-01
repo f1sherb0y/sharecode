@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from './ThemeToggle'
+import { LanguageSwitcher } from './LanguageSwitcher'
 
 export function Register() {
     const [email, setEmail] = useState('')
@@ -11,6 +13,7 @@ export function Register() {
     const [isLoading, setIsLoading] = useState(false)
     const { register } = useAuth()
     const navigate = useNavigate()
+    const { t } = useTranslation()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -31,34 +34,37 @@ export function Register() {
         <div className="auth-container">
             <div className="auth-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <h2>Register</h2>
-                    <ThemeToggle />
+                    <h2>{t('auth.register.title')}</h2>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <LanguageSwitcher />
+                        <ThemeToggle />
+                    </div>
                 </div>
                 <form className="auth-form" onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label className="form-label">Username</label>
+                        <label className="form-label">{t('auth.register.username')}</label>
                         <input
                             type="text"
-                            placeholder="Choose a username"
+                            placeholder={t('auth.register.usernamePlaceholder')}
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
                         />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Email (optional)</label>
+                        <label className="form-label">{t('auth.register.email')}</label>
                         <input
                             type="email"
-                            placeholder="Enter your email (optional)"
+                            placeholder={t('auth.register.emailPlaceholder')}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                         />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Password</label>
+                        <label className="form-label">{t('auth.register.password')}</label>
                         <input
                             type="password"
-                            placeholder="Create a password"
+                            placeholder={t('auth.register.passwordPlaceholder')}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
@@ -66,13 +72,13 @@ export function Register() {
                     </div>
                     {error && <div className="error-message">{error}</div>}
                     <button type="submit" disabled={isLoading}>
-                        {isLoading ? 'Registering...' : 'Register'}
+                        {isLoading ? t('auth.register.registering') : t('auth.register.button')}
                     </button>
                 </form>
                 <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--text-secondary)' }}>
-                    Already have an account?{' '}
+                    {t('auth.register.hasAccount')}{' '}
                     <a href="/login" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-                        Login
+                        {t('auth.register.loginLink')}
                     </a>
                 </p>
             </div>

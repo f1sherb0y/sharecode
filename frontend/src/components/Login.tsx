@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from './ThemeToggle'
+import { LanguageSwitcher } from './LanguageSwitcher'
 
 export function Login() {
     const [username, setUsername] = useState('')
@@ -10,6 +12,7 @@ export function Login() {
     const [isLoading, setIsLoading] = useState(false)
     const { login } = useAuth()
     const navigate = useNavigate()
+    const { t } = useTranslation()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -30,25 +33,28 @@ export function Login() {
         <div className="auth-container">
             <div className="auth-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <h2>Login</h2>
-                    <ThemeToggle />
+                    <h2>{t('auth.login.title')}</h2>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <LanguageSwitcher />
+                        <ThemeToggle />
+                    </div>
                 </div>
                 <form className="auth-form" onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label className="form-label">Username</label>
+                        <label className="form-label">{t('auth.login.username')}</label>
                         <input
                             type="text"
-                            placeholder="Enter your username"
+                            placeholder={t('auth.login.usernamePlaceholder')}
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
                         />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Password</label>
+                        <label className="form-label">{t('auth.login.password')}</label>
                         <input
                             type="password"
-                            placeholder="Enter your password"
+                            placeholder={t('auth.login.passwordPlaceholder')}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
@@ -56,13 +62,13 @@ export function Login() {
                     </div>
                     {error && <div className="error-message">{error}</div>}
                     <button type="submit" disabled={isLoading}>
-                        {isLoading ? 'Logging in...' : 'Login'}
+                        {isLoading ? t('auth.login.loggingIn') : t('auth.login.button')}
                     </button>
                 </form>
                 <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--text-secondary)' }}>
-                    Don't have an account?{' '}
+                    {t('auth.login.noAccount')}{' '}
                     <a href="/register" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-                        Register
+                        {t('auth.login.registerLink')}
                     </a>
                 </p>
             </div>
