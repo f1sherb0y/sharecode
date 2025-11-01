@@ -37,7 +37,28 @@ export function RoomList() {
         try {
             setIsLoading(true)
             const { rooms } = await api.getRooms()
-            setRooms(rooms)
+
+            // Smart sorting: expired last, others by scheduledTime (earliest first)
+            const sortedRooms = rooms.sort((a: any, b: any) => {
+                // 1. Expired rooms go to the end
+                if (a.isExpired && !b.isExpired) return 1
+                if (!a.isExpired && b.isExpired) return -1
+
+                // 2. Both expired or both not expired
+                // If both have scheduledTime, sort by it (earliest first)
+                if (a.scheduledTime && b.scheduledTime) {
+                    return new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
+                }
+
+                // 3. Rooms with scheduledTime come before rooms without
+                if (a.scheduledTime && !b.scheduledTime) return -1
+                if (!a.scheduledTime && b.scheduledTime) return 1
+
+                // 4. If neither has scheduledTime, sort by createdAt (newest first)
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            })
+
+            setRooms(sortedRooms)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load rooms')
         } finally {

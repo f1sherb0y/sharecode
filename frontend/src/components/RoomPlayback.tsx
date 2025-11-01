@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState } from '@codemirror/state'
+import { EditorState, StateEffect } from '@codemirror/state'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import { java } from '@codemirror/lang-java'
@@ -14,6 +14,7 @@ import * as Y from 'yjs'
 import pako from 'pako'
 import { api } from '../lib/api'
 import { ThemeToggle } from './ThemeToggle'
+import { PlayIcon, PauseIcon, SkipBackIcon, SkipForwardIcon } from './PlaybackIcons'
 import { useTheme } from '../contexts/ThemeContext'
 import type { Language } from '../types'
 
@@ -42,10 +43,12 @@ function decompressUpdate(compressedBase64: string): Uint8Array {
     return pako.ungzip(compressed)
 }
 
-function formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+function formatTime(timestamp: number): string {
+    const date = new Date(timestamp)
+    const hours = date.getHours().toString().padStart(2, '0')
+    const minutes = date.getMinutes().toString().padStart(2, '0')
+    const seconds = date.getSeconds().toString().padStart(2, '0')
+    return `${hours}:${minutes}:${seconds}`
 }
 
 interface Update {
@@ -64,11 +67,10 @@ export function RoomPlayback() {
     const [room, setRoom] = useState<any>(null)
     const [updates, setUpdates] = useState<Update[]>([])
     const [startMs, setStartMs] = useState(0)
-    const [duration, setDuration] = useState(0)
-    const [currentTime, setCurrentTime] = useState(0)
+    const [endMs, setEndMs] = useState(0)
+    const [currentTimestamp, setCurrentTimestamp] = useState(0)
     const [isPlaying, setIsPlaying] = useState(false)
     const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
-    const [documentContent, setDocumentContent] = useState('')
     const [editorView, setEditorView] = useState<EditorView | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState('')
@@ -102,8 +104,11 @@ export function RoomPlayback() {
                 }))
 
                 setUpdates(processedUpdates)
-                setStartMs(processedUpdates[0].timestampMs)
-                setDuration(updatesData.duration)
+                const start = processedUpdates[0].timestampMs
+                const end = processedUpdates[processedUpdates.length - 1].timestampMs
+                setStartMs(start)
+                setEndMs(end)
+                setCurrentTimestamp(start)
                 setIsLoading(false)
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load playback data')
@@ -114,59 +119,7 @@ export function RoomPlayback() {
         load()
     }, [roomId])
 
-    // Reconstruct document at current time
-    useEffect(() => {
-        if (updates.length === 0 || !room) return
-
-        const targetMs = startMs + currentTime * 1000
-        const relevantUpdates = updates.filter((u) => u.timestampMs <= targetMs)
-
-        // Reconstruct Y.Doc
-        const tempDoc = new Y.Doc()
-        const ytext = tempDoc.getText('codemirror')
-
-        relevantUpdates.forEach((u) => {
-            try {
-                Y.applyUpdate(tempDoc, u.update)
-            } catch (err) {
-                console.error('Error applying update:', err)
-            }
-        })
-
-        const content = ytext.toString()
-        setDocumentContent(content)
-
-        // Update editor if it exists
-        if (editorView) {
-            editorView.dispatch({
-                changes: {
-                    from: 0,
-                    to: editorView.state.doc.length,
-                    insert: content,
-                },
-            })
-        }
-    }, [currentTime, updates, startMs, room, editorView])
-
-    // Auto-play logic
-    useEffect(() => {
-        if (!isPlaying || duration === 0) return
-
-        const interval = setInterval(() => {
-            setCurrentTime((t) => {
-                const next = t + 0.1 * playbackSpeed
-                if (next >= duration) {
-                    setIsPlaying(false)
-                    return duration
-                }
-                return next
-            })
-        }, 100)
-
-        return () => clearInterval(interval)
-    }, [isPlaying, playbackSpeed, duration])
-
-    // Initialize CodeMirror
+    // Initialize CodeMirror (only once when room is loaded)
     useEffect(() => {
         if (!room || editorView) return
 
@@ -177,7 +130,7 @@ export function RoomPlayback() {
         const themeExt = theme === 'dark' ? [oneDark] : []
 
         const state = EditorState.create({
-            doc: documentContent,
+            doc: '',
             extensions: [
                 basicSetup,
                 languageExt,
@@ -198,7 +151,73 @@ export function RoomPlayback() {
             view.destroy()
             setEditorView(null)
         }
-    }, [room, theme])
+    }, [room])
+
+    // Update theme when it changes (using reconfigure, not recreating editor)
+    useEffect(() => {
+        if (!editorView || !room) return
+
+        const languageExt = languageExtensions[room.language as Language] || javascript()
+        const themeExt = theme === 'dark' ? [oneDark] : []
+
+        editorView.dispatch({
+            effects: StateEffect.reconfigure.of([
+                basicSetup,
+                languageExt,
+                ...themeExt,
+                EditorState.readOnly.of(true),
+                EditorView.editable.of(false),
+            ]),
+        })
+    }, [theme, editorView, room])
+
+    // Reconstruct document at current timestamp
+    useEffect(() => {
+        if (updates.length === 0 || !editorView) return
+
+        const relevantUpdates = updates.filter((u) => u.timestampMs <= currentTimestamp)
+
+        // Reconstruct Y.Doc
+        const tempDoc = new Y.Doc()
+        const ytext = tempDoc.getText('codemirror')
+
+        relevantUpdates.forEach((u) => {
+            try {
+                Y.applyUpdate(tempDoc, u.update)
+            } catch (err) {
+                console.error('Error applying update:', err)
+            }
+        })
+
+        const content = ytext.toString()
+
+        // Update editor content
+        editorView.dispatch({
+            changes: {
+                from: 0,
+                to: editorView.state.doc.length,
+                insert: content,
+            },
+        })
+    }, [currentTimestamp, updates, editorView])
+
+    // Auto-play logic
+    useEffect(() => {
+        if (!isPlaying || endMs === 0) return
+
+        const interval = setInterval(() => {
+            setCurrentTimestamp((t) => {
+                const next = t + 100 * playbackSpeed
+                if (next >= endMs) {
+                    setIsPlaying(false)
+                    return endMs
+                }
+                return next
+            })
+        }, 100)
+
+        return () => clearInterval(interval)
+    }, [isPlaying, playbackSpeed, endMs])
 
     if (isLoading) {
         return (
@@ -218,45 +237,37 @@ export function RoomPlayback() {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-            {/* Toolbar */}
-            <div className="toolbar">
-                <div className="toolbar-left">
+        <div className="editor-container">
+            {/* Header */}
+            <div className="editor-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <button className="toolbar-button" onClick={() => navigate('/rooms')}>
                         ← Back
                     </button>
-                    <span className="toolbar-text">Playback: {room?.name}</span>
+                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>Playback: {room?.name}</span>
+                    <span className="language-badge">{room?.language}</span>
                 </div>
-                <div className="toolbar-right">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <ThemeToggle />
                 </div>
             </div>
 
             {/* Editor */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
                 <div id="playback-editor" style={{ height: '100%' }} />
             </div>
 
             {/* Playback Controls */}
-            <div
-                style={{
-                    borderTop: '1px solid var(--border)',
-                    padding: '1rem',
-                    backgroundColor: 'var(--surface)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                }}
-            >
+            <div className="status-bar" style={{ flexDirection: 'column', gap: '0.5rem', padding: '1rem' }}>
                 {/* Timeline */}
                 <input
                     type="range"
-                    min={0}
-                    max={duration}
-                    step={0.1}
-                    value={currentTime}
+                    min={startMs}
+                    max={endMs}
+                    step={100}
+                    value={currentTimestamp}
                     onChange={(e) => {
-                        setCurrentTime(Number(e.target.value))
+                        setCurrentTimestamp(Number(e.target.value))
                         setIsPlaying(false)
                     }}
                     style={{
@@ -266,51 +277,55 @@ export function RoomPlayback() {
                 />
 
                 {/* Controls Row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'space-between', width: '100%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {/* Play/Pause */}
-                        <button
-                            onClick={() => setIsPlaying(!isPlaying)}
-                            style={{ width: '2.5rem' }}
-                        >
-                            {isPlaying ? '⏸' : '⏵'}
-                        </button>
-
                         {/* Skip to start */}
                         <button
+                            className="toolbar-button"
                             onClick={() => {
-                                setCurrentTime(0)
+                                setCurrentTimestamp(startMs)
                                 setIsPlaying(false)
                             }}
-                            style={{ width: '2.5rem' }}
+                            style={{ width: '2rem', height: '2rem', padding: '0.25rem' }}
                         >
-                            ⏮
+                            <SkipBackIcon />
+                        </button>
+
+                        {/* Play/Pause */}
+                        <button
+                            className="toolbar-button"
+                            onClick={() => setIsPlaying(!isPlaying)}
+                            style={{ width: '2rem', height: '2rem', padding: '0.25rem' }}
+                        >
+                            {isPlaying ? <PlayIcon /> : <PauseIcon />}
                         </button>
 
                         {/* Skip to end */}
                         <button
+                            className="toolbar-button"
                             onClick={() => {
-                                setCurrentTime(duration)
+                                setCurrentTimestamp(endMs)
                                 setIsPlaying(false)
                             }}
-                            style={{ width: '2.5rem' }}
+                            style={{ width: '2rem', height: '2rem', padding: '0.25rem' }}
                         >
-                            ⏭
+                            <SkipForwardIcon />
                         </button>
 
                         {/* Time display */}
-                        <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
-                            {formatTime(currentTime)} / {formatTime(duration)}
+                        <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                            {formatTime(currentTimestamp)} / {formatTime(endMs)}
                         </span>
                     </div>
 
                     {/* Speed control */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Speed:</span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Speed:</span>
                         <select
+                            className="toolbar-select"
                             value={playbackSpeed}
                             onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                            style={{ padding: '0.25rem 0.5rem' }}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
                         >
                             <option value={0.5}>0.5x</option>
                             <option value={1}>1x</option>
