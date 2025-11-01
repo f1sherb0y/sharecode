@@ -13,6 +13,7 @@
 - **Collaboration**: Yjs + y-codemirror.next
 - **Routing**: React Router v6
 - **Styling**: CSS Variables (Light/Dark themes)
+- **Internationalization**: react-i18next (English & Chinese)
 - **HTTP Client**: Fetch API
 - **Compression**: pako (gzip)
 
@@ -59,6 +60,13 @@
 - **User management**: View all users, soft delete non-admin users
 - **Room management**: View all rooms with details, delete any room
 - **Protected routes**: Admin-only access with middleware verification
+
+### 6. Internationalization (i18n)
+- **Multi-language support**: English and Chinese translations
+- **Language switcher**: Toggle button in toolbar (🌐 EN / 🌐 中文)
+- **Comprehensive coverage**: All UI text translatable
+- **Persistent preference**: Language stored in localStorage
+- **Auto-detection**: Falls back to browser language on first visit
 
 ## Architecture Highlights
 
@@ -132,6 +140,15 @@ Document (Y.js persistence)
 - Instant theme changes
 - Preserves editor state and history
 - No performance impact
+
+#### 5. Internationalization Architecture
+**Decision**: react-i18next with separate JSON locale files
+**Reason**:
+- Industry-standard i18n library for React
+- Easy to add new languages (just add JSON file)
+- Browser language detection built-in
+- Translation keys organized by feature (auth, rooms, editor, etc.)
+- No performance overhead (translations loaded once)
 
 ## Development Workflow
 
@@ -365,6 +382,13 @@ VITE_WS_URL=ws://localhost:3001/ws
    - Room sorting optimization
    - Username-based authentication
 
+5. **Phase 5**: Internationalization (Day 3)
+   - i18n infrastructure setup with react-i18next
+   - English and Chinese translations for all UI text
+   - Language switcher component with consistent styling
+   - Translation coverage for Editor, RoomList, and other components
+   - Removed unnecessary UI animations for cleaner experience
+
 ## Lessons Learned
 
 1. **Y.js Integration**: Understanding CRDT principles is crucial for debugging sync issues
@@ -394,5 +418,5 @@ Built with assistance from AI (Cline/Claude), leveraging:
 ---
 
 **Last Updated**: November 1, 2025
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Status**: Production Ready
