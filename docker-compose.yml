@@ -11,7 +11,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sharecode_app -d sharecode"]
+      test: [ "CMD-SHELL", "pg_isready -U sharecode_app -d sharecode" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,8 +27,15 @@ services:
       DATABASE_URL: postgresql://sharecode_app:sharecode@postgres:5432/sharecode?schema=public
       JWT_SECRET: change-me-in-production
       PORT: 3001
-      WS_PATH: /ws
       FRONTEND_URL: http://localhost:4173
+      # Logging - Options: debug, info, warn, error
+      LOG_LEVEL: info
+      # Admin credentials - CHANGE THESE IN PRODUCTION
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      ADMIN_EMAIL: admin@sharecode.local
+      # Set to 'true' to update admin password on restart
+      # ADMIN_UPDATE_PASSWORD: false
     expose:
       - "3001"
 

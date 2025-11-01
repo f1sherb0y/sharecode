@@ -6,6 +6,7 @@ import { databaseExtension } from './extensions/database'
 import { updatesExtension } from './extensions/updates'
 import { prisma } from '../utils/db'
 import { verifyToken } from '../utils/jwt'
+import { logger } from '../utils/logger'
 
 export const hocuspocusServer = new Server({
     extensions: [databaseExtension, updatesExtension],
@@ -58,7 +59,7 @@ export const hocuspocusServer = new Server({
                             userId: user.id,
                         },
                     })
-                    console.log(`✨ Auto-added ${user.username} as participant to ${room.name}`)
+                    logger.debug(`Auto-added ${user.username} as participant to ${room.name}`)
                 }
             }
 
@@ -88,7 +89,7 @@ export const hocuspocusServer = new Server({
                 },
             }
         } catch (error) {
-            console.error('Authentication error:', error)
+            logger.error('Authentication error:', error)
             throw new Error('Authentication failed: ' + (error as Error).message)
         }
     },
@@ -96,32 +97,31 @@ export const hocuspocusServer = new Server({
     async onConnect(data) {
         const { context, documentName } = data
         if (context?.user) {
-            console.log(`✅ ${context.user.username} connected to ${documentName}`)
+            logger.websocket(`${context.user.username} connected to ${documentName}`)
         }
     },
 
     async onDisconnect(data) {
         const { context, documentName } = data
         if (context?.user) {
-            console.log(`❌ ${context.user.username} disconnected from ${documentName}`)
+            logger.websocket(`${context.user.username} disconnected from ${documentName}`)
         }
     },
 
     async onDestroy(data) {
-        console.log(`🗑️  Document destroyed (no active connections)`)
+        logger.debug(`Document destroyed (no active connections)`)
     },
 
     async onChange(data) {
         const { documentName, context } = data
         if (context?.user) {
-            console.log(`📝 Document ${documentName} changed by ${context.user.username}`)
+            logger.debug(`Document ${documentName} changed by ${context.user.username}`)
         }
     },
 })
 
 export function startHocuspocusServer(httpServer: HttpServer) {
-    const rawPath = process.env.WS_PATH || '/ws'
-    const normalizedPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`
+    const wsPath = '/ws'
 
     const handleUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
         const { url } = request
@@ -132,12 +132,12 @@ export function startHocuspocusServer(httpServer: HttpServer) {
             const host = request.headers.host || 'localhost'
             pathname = new URL(url, `http://${host}`).pathname
         } catch (error) {
-            console.error('Invalid WebSocket request URL:', url, error)
+            logger.error('Invalid WebSocket request URL:', url, error)
             socket.destroy()
             return
         }
 
-        if (pathname !== normalizedPath) {
+        if (pathname !== wsPath) {
             return
         }
 
@@ -148,5 +148,5 @@ export function startHocuspocusServer(httpServer: HttpServer) {
 
     httpServer.on('upgrade', handleUpgrade)
 
-    console.log(`🚀 Hocuspocus WebSocket server attached at path ${normalizedPath}`)
+    logger.success(`Hocuspocus WebSocket server attached at path ${wsPath}`)
 }
