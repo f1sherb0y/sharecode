@@ -27,9 +27,6 @@ build/
 .DS_Store
 Thumbs.db
 
-# Prisma
-server/prisma/migrations/
-
 # Reference documentation (not part of our project)
 tiptap-docs/
 y-codemirror/
