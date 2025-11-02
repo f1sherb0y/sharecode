@@ -257,22 +257,49 @@ export function RoomPlayback() {
 
             {/* Playback Controls */}
             <div className="status-bar" style={{ flexDirection: 'column', gap: '0.5rem', padding: '1rem' }}>
-                {/* Timeline */}
-                <input
-                    type="range"
-                    min={startMs}
-                    max={endMs}
-                    step={100}
-                    value={currentTimestamp}
-                    onChange={(e) => {
-                        setCurrentTimestamp(Number(e.target.value))
-                        setIsPlaying(false)
-                    }}
-                    style={{
-                        width: '100%',
-                        cursor: 'pointer',
-                    }}
-                />
+                {/* Timeline with markers */}
+                <div style={{ position: 'relative', width: '100%' }}>
+                    <input
+                        type="range"
+                        min={startMs}
+                        max={endMs}
+                        step={100}
+                        value={currentTimestamp}
+                        onChange={(e) => {
+                            setCurrentTimestamp(Number(e.target.value))
+                            setIsPlaying(false)
+                        }}
+                        style={{
+                            width: '100%',
+                            cursor: 'pointer',
+                            margin: 0,
+                            padding: 0
+                        }}
+                    />
+                    {/* Render markers for each update */}
+                    {updates.map((update) => {
+                        const position = ((update.timestampMs - startMs) / (endMs - startMs)) * 100
+                        return (
+                            <div
+                                key={update.id}
+                                title={formatTime(update.timestampMs)}
+                                style={{
+                                    position: 'absolute',
+                                    left: `${position}%`,
+                                    top: 0,
+                                    bottom: 0,
+                                    margin: 'auto',
+                                    transform: 'translateX(-50%)',
+                                    width: '2px',
+                                    height: '16px',
+                                    backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.4)',
+                                    pointerEvents: 'none',
+                                    zIndex: 0,
+                                }}
+                            />
+                        )
+                    })}
+                </div>
 
                 {/* Controls Row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'space-between', width: '100%' }}>
