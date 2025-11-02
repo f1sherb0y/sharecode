@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { Login } from './components/Login'
@@ -8,6 +8,13 @@ import { Editor } from './components/Editor'
 import { Admin } from './components/Admin'
 import { RoomPlayback } from './components/RoomPlayback'
 import { Settings } from './components/Settings'
+
+// Detect if running in Tauri desktop environment
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const Router = isTauri ? HashRouter : BrowserRouter
+
+// Check if registration is allowed (build-time environment variable)
+const ALLOW_REGISTRATION = import.meta.env.VITE_ALLOW_REGISTRATION !== 'false'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
@@ -40,14 +47,16 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
-      <Route
-        path="/register"
-        element={
-          <PublicRoute>
-            <Register />
-          </PublicRoute>
-        }
-      />
+      {ALLOW_REGISTRATION && (
+        <Route
+          path="/register"
+          element={
+            <PublicRoute>
+              <Register />
+            </PublicRoute>
+          }
+        />
+      )}
       <Route
         path="/rooms"
         element={
@@ -91,13 +100,13 @@ function AppRoutes() {
 
 function App() {
   return (
-    <HashRouter>
+    <Router>
       <ThemeProvider>
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>
       </ThemeProvider>
-    </HashRouter>
+    </Router>
   )
 }
 

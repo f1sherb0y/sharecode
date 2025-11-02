@@ -18,6 +18,9 @@ export function Login() {
     // Check if running in Tauri desktop environment
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
+    // Check if registration is allowed (build-time environment variable)
+    const ALLOW_REGISTRATION = import.meta.env.VITE_ALLOW_REGISTRATION !== 'false'
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
@@ -79,12 +82,26 @@ export function Login() {
                         {isLoading ? t('auth.login.loggingIn') : t('auth.login.button')}
                     </button>
                 </form>
-                <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--text-secondary)' }}>
-                    {t('auth.login.noAccount')}{' '}
-                    <a href="/register" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-                        {t('auth.login.registerLink')}
-                    </a>
-                </p>
+                {ALLOW_REGISTRATION && (
+                    <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--text-secondary)' }}>
+                        {t('auth.login.noAccount')}{' '}
+                        <button
+                            type="button"
+                            onClick={() => navigate('/register')}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--accent)',
+                                textDecoration: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                font: 'inherit'
+                            }}
+                        >
+                            {t('auth.login.registerLink')}
+                        </button>
+                    </p>
+                )}
             </div>
         </div>
     )
