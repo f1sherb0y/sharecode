@@ -108,6 +108,34 @@
     "duration": "时长",
     "noUpdates": "无可用回放数据"
   },
+  "settings": {
+    "title": "服务器设置",
+    "backToLogin": "返回登录",
+    "serverUrl": {
+      "label": "服务器 URL (HTTP)",
+      "placeholder": "http://localhost:3000",
+      "hint": "API 请求的 HTTP 端点"
+    },
+    "websocketUrl": {
+      "label": "WebSocket URL",
+      "placeholder": "ws://localhost:3000",
+      "hint": "实时协作的 WebSocket 端点"
+    },
+    "testConnection": "测试连接",
+    "testing": "测试中...",
+    "connectionSuccess": "连接成功！服务器可访问。",
+    "connectionFailed": "连接失败：{{error}}",
+    "serverStatus": "服务器响应状态：{{status}}",
+    "saveSettings": "保存设置",
+    "resetToDefault": "重置为默认",
+    "quickPresets": "快速预设",
+    "presets": {
+      "local": {
+        "title": "本地开发",
+        "url": "http://localhost:3000"
+      }
+    }
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",
@@ -117,6 +145,7 @@
     "back": "返回",
     "logout": "登出",
     "admin": "管理",
+    "settings": "设置",
     "loading": "加载中...",
     "error": "错误",
     "success": "成功"

@@ -1083,8 +1083,8 @@ select:focus {
     filter: none;
 }
 
-/* Chrome 120+ exposes ::picker for popup styling */
-@supports selector(input::picker) {
+/* Chrome 120+ exposes ::picker for popup styling - commented out due to build issues */
+/* @supports selector(input::picker) {
     [data-theme="dark"] input[type="datetime-local"]::picker {
         border: 1px solid var(--border-hover);
         border-radius: 8px;
@@ -1092,4 +1092,4 @@ select:focus {
         color: var(--text-primary);
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.45);
     }
-}
+} */

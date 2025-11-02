@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { Login } from './components/Login'
@@ -7,6 +7,7 @@ import { RoomList } from './components/RoomList'
 import { Editor } from './components/Editor'
 import { Admin } from './components/Admin'
 import { RoomPlayback } from './components/RoomPlayback'
+import { Settings } from './components/Settings'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
@@ -79,6 +80,10 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/settings"
+        element={<Settings />}
+      />
       <Route path="/" element={<Navigate to="/rooms" />} />
     </Routes>
   )
@@ -86,13 +91,13 @@ function AppRoutes() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ThemeProvider>
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>
       </ThemeProvider>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
 

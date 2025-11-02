@@ -32,6 +32,9 @@ export function RoomList() {
     const { user, logout } = useAuth()
     const navigate = useNavigate()
 
+    // Check if running in Tauri desktop environment
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
     useEffect(() => {
         loadRooms()
     }, [])
@@ -106,6 +109,11 @@ export function RoomList() {
                         {user?.role === 'admin' && (
                             <button className="toolbar-button" onClick={() => navigate('/admin')}>
                                 {t('common.admin')}
+                            </button>
+                        )}
+                        {isTauri && (
+                            <button className="toolbar-button" onClick={() => navigate('/settings')}>
+                                {t('common.settings')}
                             </button>
                         )}
                         <button className="toolbar-button" onClick={logout}>

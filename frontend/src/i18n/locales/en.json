@@ -108,6 +108,34 @@
     "duration": "Duration",
     "noUpdates": "No playback data available"
   },
+  "settings": {
+    "title": "Server Settings",
+    "backToLogin": "Back to Login",
+    "serverUrl": {
+      "label": "Server URL (HTTP)",
+      "placeholder": "http://localhost:3000",
+      "hint": "The HTTP endpoint for API requests"
+    },
+    "websocketUrl": {
+      "label": "WebSocket URL",
+      "placeholder": "ws://localhost:3000",
+      "hint": "The WebSocket endpoint for real-time collaboration"
+    },
+    "testConnection": "Test Connection",
+    "testing": "Testing...",
+    "connectionSuccess": "Connection successful! Server is reachable.",
+    "connectionFailed": "Connection failed: {{error}}",
+    "serverStatus": "Server responded with status: {{status}}",
+    "saveSettings": "Save Settings",
+    "resetToDefault": "Reset to Default",
+    "quickPresets": "Quick Presets",
+    "presets": {
+      "local": {
+        "title": "Local Development",
+        "url": "http://localhost:3000"
+      }
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -117,6 +145,7 @@
     "back": "Back",
     "logout": "Logout",
     "admin": "Admin",
+    "settings": "Settings",
     "loading": "Loading...",
     "error": "Error",
     "success": "Success"

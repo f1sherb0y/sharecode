@@ -1,16 +1,61 @@
 import type { User, Room, AuthResponse } from '../types'
 
 const resolveApiUrl = (): string => {
+    // First check localStorage for user-configured settings
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('sharecode_settings')
+        if (saved) {
+            try {
+                const settings = JSON.parse(saved)
+                if (settings.serverUrl) {
+                    return settings.serverUrl
+                }
+            } catch (e) {
+                console.error('Failed to load settings from localStorage', e)
+            }
+        }
+    }
+
+    // Fall back to environment variable
     const envUrl = import.meta.env.VITE_API_URL as string | undefined
     if (envUrl) {
         return envUrl
     }
 
+    // Fall back to window origin (for web)
     if (typeof window !== 'undefined') {
         return window.location.origin
     }
 
-    return 'http://localhost:3001'
+    // Final fallback
+    return 'http://localhost:3000'
+}
+
+export const getWebSocketUrl = (): string => {
+    // First check localStorage for user-configured settings
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('sharecode_settings')
+        if (saved) {
+            try {
+                const settings = JSON.parse(saved)
+                if (settings.wsUrl) {
+                    return settings.wsUrl
+                }
+            } catch (e) {
+                console.error('Failed to load settings from localStorage', e)
+            }
+        }
+    }
+
+    // Fall back to environment variable
+    const envWsUrl = import.meta.env.VITE_WS_URL as string | undefined
+    if (envWsUrl) {
+        return envWsUrl
+    }
+
+    // Fall back to converting HTTP URL to WS URL
+    const apiUrl = resolveApiUrl()
+    return apiUrl.replace(/^http/, 'ws')
 }
 
 const API_URL = resolveApiUrl()

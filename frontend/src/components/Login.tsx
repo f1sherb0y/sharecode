@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Settings } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitcher } from './LanguageSwitcher'
 
@@ -13,6 +14,9 @@ export function Login() {
     const { login } = useAuth()
     const navigate = useNavigate()
     const { t } = useTranslation()
+
+    // Check if running in Tauri desktop environment
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -35,6 +39,16 @@ export function Login() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                     <h2>{t('auth.login.title')}</h2>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {isTauri && (
+                            <button
+                                type="button"
+                                onClick={() => navigate('/settings')}
+                                className="theme-toggle"
+                                title="Settings"
+                            >
+                                <Settings size={24} strokeWidth={2} />
+                            </button>
+                        )}
                         <LanguageSwitcher />
                         <ThemeToggle />
                     </div>
