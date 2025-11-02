@@ -31,6 +31,7 @@ services:
       PORT: 3001
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:4173}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sharecode.local}
@@ -42,6 +43,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
     restart: unless-stopped
     depends_on:
       - server
