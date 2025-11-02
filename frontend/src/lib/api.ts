@@ -106,16 +106,25 @@ class ApiClient {
         return this.request<{ user: User }>('/api/auth/profile')
     }
 
+    async getRegistrationStatus(): Promise<{ allowRegistration: boolean }> {
+        return this.request<{ allowRegistration: boolean }>('/api/config/registration')
+    }
+
     // Room endpoints
+    async getAllUsersForRoomCreation(): Promise<{ users: User[] }> {
+        return this.request<{ users: User[] }>('/api/users')
+    }
+
     async createRoom(
         name: string,
         language: string,
         scheduledTime?: string,
-        duration?: number
+        duration?: number,
+        allowedUsers?: Array<{ userId: string; canEdit: boolean }>
     ): Promise<{ room: Room }> {
         return this.request<{ room: Room }>('/api/rooms', {
             method: 'POST',
-            body: JSON.stringify({ name, language, scheduledTime, duration }),
+            body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers }),
         })
     }
 

@@ -5,7 +5,7 @@ import { startHocuspocusServer } from './hocuspocus/server'
 import { initializeAdmin } from './utils/initAdmin'
 import { logger } from './utils/logger'
 import { requestLogger } from './middleware/requestLogger'
-import { register, login, getProfile } from './api/auth'
+import { register, login, getProfile, getRegistrationStatus } from './api/auth'
 import {
     createRoom,
     getRooms,
@@ -15,6 +15,7 @@ import {
     joinRoom,
     leaveRoom,
     endRoom,
+    getAllUsersForRoomCreation,
 } from './api/rooms'
 import { authMiddleware } from './middleware/auth'
 import { adminMiddleware } from './middleware/admin'
@@ -72,8 +73,10 @@ app.get('/health', (req: Request, res: Response) => {
 app.post('/api/auth/register', register)
 app.post('/api/auth/login', login)
 app.get('/api/auth/profile', authMiddleware, getProfile)
+app.get('/api/config/registration', getRegistrationStatus)
 
 // Room routes
+app.get('/api/users', authMiddleware, getAllUsersForRoomCreation)
 app.post('/api/rooms', authMiddleware, createRoom)
 app.get('/api/rooms', authMiddleware, getRooms)
 app.get('/api/rooms/:roomId', authMiddleware, getRoom)

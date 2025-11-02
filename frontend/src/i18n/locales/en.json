@@ -22,7 +22,8 @@
       "button": "Register",
       "registering": "Creating account...",
       "hasAccount": "Already have an account?",
-      "loginLink": "Login"
+      "loginLink": "Login",
+      "disabled": "Registration is currently disabled. Please contact an administrator for access."
     }
   },
   "rooms": {
@@ -40,6 +41,23 @@
       "scheduledTimeHint": "Format: YYYY-MM-DD HH:MM (e.g., 2024-12-31 14:30)",
       "duration": "Duration (minutes, optional)",
       "durationPlaceholder": "e.g., 60",
+      "allowedUsers": "Allowed Users (optional)",
+      "allowedUsersHint": "Select users who can access this room",
+      "canEdit": "Edit",
+      "selectedUsers": "{{count}} user(s) selected",
+      "addUser": "Add user",
+      "noAllowedUsers": "No additional users selected. Only you can access this room.",
+      "removeUser": "Remove",
+      "unknownUser": "Unknown",
+      "selectUsersTitle": "Select allowed users",
+      "selectUsersDescription": "Choose participants and toggle whether they can edit or just view.",
+      "username": "Username",
+      "canView": "View",
+      "searchPlaceholder": "Search by username...",
+      "searchIntro": "Start typing a username to find people to invite.",
+      "searchNoResults": "No users match \"{{query}}\".",
+      "modalCancel": "Cancel",
+      "modalConfirm": "Save selection",
       "button": "Create Room",
       "creating": "Creating..."
     },
@@ -145,6 +163,7 @@
     "back": "Back",
     "logout": "Logout",
     "admin": "Admin",
+    "observer": "Observer",
     "settings": "Settings",
     "loading": "Loading...",
     "error": "Error",

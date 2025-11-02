@@ -20,6 +20,11 @@ function getRandomColor() {
 
 export async function register(req: Request, res: Response) {
     try {
+        // Check if registration is enabled
+        if (process.env.ALLOW_REGISTRATION === 'false') {
+            return res.status(403).json({ error: 'Registration is currently disabled' })
+        }
+
         const { email, username, password } = req.body
 
         if (!username || !password) {
@@ -154,6 +159,16 @@ export async function getProfile(req: Request, res: Response) {
         res.json({ user })
     } catch (error) {
         console.error('Get profile error:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+}
+
+export async function getRegistrationStatus(req: Request, res: Response) {
+    try {
+        const allowRegistration = process.env.ALLOW_REGISTRATION !== 'false'
+        res.json({ allowRegistration })
+    } catch (error) {
+        console.error('Get registration status error:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 }

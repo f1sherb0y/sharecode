@@ -144,7 +144,7 @@ button:disabled,
 }
 
 /* Input Styles */
-input {
+input:not([type='checkbox']):not([type='radio']) {
     width: 100%;
     padding: 0.5rem;
     border: none;
@@ -155,11 +155,11 @@ input {
     outline: none;
 }
 
-input:focus {
+input:not([type='checkbox']):not([type='radio']):focus {
     border-bottom-color: var(--accent);
 }
 
-input::placeholder {
+input:not([type='checkbox']):not([type='radio'])::placeholder {
     color: var(--text-secondary);
 }
 
@@ -969,7 +969,7 @@ select:focus {
         font-size: 0.8125rem;
     }
 
-    input {
+    input:not([type='checkbox']):not([type='radio']) {
         font-size: 0.8125rem;
         padding: 0.4375rem;
     }
@@ -1029,6 +1029,65 @@ select:focus {
     .editor-header button span,
     .editor-header .language-switcher span {
         font-size: 0.6875rem;
+    }
+}
+
+/* Modal Responsive Styles */
+@media (max-width: 768px) {
+    .modal-overlay {
+        padding: 0.75rem !important;
+    }
+
+    .modal-content {
+        maxWidth: '100%' !important;
+        maxHeight: '90vh' !important;
+        borderRadius: '6px' !important;
+    }
+
+    .modal-content>div:first-child {
+        padding: 0.75rem !important;
+    }
+
+    .modal-content>div:nth-child(2) {
+        padding: 0.75rem !important;
+        gap: 0.625rem !important;
+    }
+
+    .modal-content>div:last-child {
+        padding: 0.625rem 0.75rem !important;
+        gap: 0.5rem !important;
+    }
+
+    .modal-content h4 {
+        fontSize: '0.875rem' !important;
+    }
+
+    .modal-content p {
+        fontSize: '0.75rem' !important;
+    }
+
+    .modal-content input[type="text"] {
+        fontSize: '0.875rem' !important;
+        padding: '0.5rem' !important;
+    }
+
+    .modal-content select {
+        fontSize: '0.6875rem' !important;
+        padding: '0.25rem 0.3125rem' !important;
+        minWidth: '75px' !important;
+    }
+
+    .modal-content button {
+        fontSize: '0.875rem' !important;
+        padding: '0.5rem 0.75rem' !important;
+        minHeight: '44px' !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-content select {
+        fontSize: '0.625rem' !important;
+        minWidth: '70px' !important;
     }
 }
 

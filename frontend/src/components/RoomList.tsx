@@ -4,8 +4,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { createPortal } from 'react-dom'
 import { api } from '../lib/api'
-import type { Room, Language } from '../types'
+import type { Room, Language, User } from '../types'
 
 const LANGUAGES: Language[] = [
     'javascript',
@@ -29,6 +30,11 @@ export function RoomList() {
     const [scheduledTime, setScheduledTime] = useState('')
     const [duration, setDuration] = useState('')
     const [isCreating, setIsCreating] = useState(false)
+    const [availableUsers, setAvailableUsers] = useState<User[]>([])
+    const [selectedUsers, setSelectedUsers] = useState<{ userId: string; canEdit: boolean }[]>([])
+    const [isUserModalOpen, setIsUserModalOpen] = useState(false)
+    const [pendingUserSelection, setPendingUserSelection] = useState<{ userId: string; canEdit: boolean }[]>([])
+    const [userSearchTerm, setUserSearchTerm] = useState('')
     const { user, logout } = useAuth()
     const navigate = useNavigate()
 
@@ -37,7 +43,18 @@ export function RoomList() {
 
     useEffect(() => {
         loadRooms()
+        loadUsers()
     }, [])
+
+    const loadUsers = async () => {
+        try {
+            const { users } = await api.getAllUsersForRoomCreation()
+            // Filter out current user
+            setAvailableUsers(users.filter(u => u.id !== user?.id))
+        } catch (err) {
+            console.error('Failed to load users:', err)
+        }
+    }
 
     const loadRooms = async () => {
         try {
@@ -85,8 +102,18 @@ export function RoomList() {
                 newRoomName,
                 newRoomLanguage,
                 formattedScheduledTime,
-                duration ? parseInt(duration) : undefined
+                duration ? parseInt(duration) : undefined,
+                selectedUsers.length > 0 ? selectedUsers : undefined
             )
+
+            // Reset form
+            setNewRoomName('')
+            setNewRoomLanguage('javascript')
+            setScheduledTime('')
+            setDuration('')
+            setSelectedUsers([])
+            setShowCreate(false)
+
             navigate(`/editor/${room.id}`)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create room')
@@ -94,6 +121,71 @@ export function RoomList() {
             setIsCreating(false)
         }
     }
+
+    const toggleUserSelection = (userId: string) => {
+        setSelectedUsers(prev => {
+            const existing = prev.find(u => u.userId === userId)
+            if (existing) {
+                return prev.filter(u => u.userId !== userId)
+            }
+            return [...prev, { userId, canEdit: true }]
+        })
+    }
+
+    const toggleUserEditPermission = (userId: string) => {
+        setSelectedUsers(prev =>
+            prev.map(u => u.userId === userId ? { ...u, canEdit: !u.canEdit } : u)
+        )
+    }
+
+    const openUserSelectionModal = () => {
+        setPendingUserSelection(selectedUsers.map(userSelection => ({ ...userSelection })))
+        setUserSearchTerm('')
+        setIsUserModalOpen(true)
+    }
+
+    const closeUserSelectionModal = () => {
+        setUserSearchTerm('')
+        setIsUserModalOpen(false)
+    }
+
+    const togglePendingUserSelection = (userId: string) => {
+        setPendingUserSelection(prev => {
+            const existing = prev.find(u => u.userId === userId)
+            if (existing) {
+                return prev.filter(u => u.userId !== userId)
+            }
+            return [...prev, { userId, canEdit: true }]
+        })
+    }
+
+    const togglePendingUserEditPermission = (userId: string) => {
+        setPendingUserSelection(prev =>
+            prev.map(u => u.userId === userId ? { ...u, canEdit: !u.canEdit } : u)
+        )
+    }
+
+    const confirmPendingSelection = () => {
+        setSelectedUsers(pendingUserSelection)
+        setIsUserModalOpen(false)
+    }
+
+    const normalizedSearch = userSearchTerm.trim().toLowerCase()
+    const filteredUsers = normalizedSearch
+        ? availableUsers.filter(u => u.username.toLowerCase().includes(normalizedSearch))
+        : []
+
+    useEffect(() => {
+        if (typeof document === 'undefined') return
+        const previousOverflow = document.body.style.overflow
+        if (isUserModalOpen) {
+            document.body.style.overflow = 'hidden'
+            return () => {
+                document.body.style.overflow = previousOverflow
+            }
+        }
+        document.body.style.overflow = previousOverflow
+    }, [isUserModalOpen])
 
     const handleJoinRoom = (roomId: string) => {
         navigate(`/editor/${roomId}`)
@@ -183,6 +275,98 @@ export function RoomList() {
                                     onChange={(e) => setDuration(e.target.value)}
                                 />
                             </div>
+
+                            {availableUsers.length > 0 && (
+                                <div className="form-group">
+                                    <label className="form-label">{t('rooms.create.allowedUsers')}</label>
+                                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+                                        {t('rooms.create.allowedUsersHint')}
+                                    </small>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {selectedUsers.map(selection => {
+                                            const userInfo = availableUsers.find(u => u.id === selection.userId)
+                                            return (
+                                                <div
+                                                    key={selection.userId}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.375rem',
+                                                        padding: '0.375rem 0.5rem',
+                                                        border: '1px solid var(--border)',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: 'var(--bg-secondary)',
+                                                        fontSize: '0.875rem'
+                                                    }}
+                                                >
+                                                    <span style={{ fontWeight: 600 }}>{userInfo?.username ?? t('rooms.create.unknownUser')}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleUserEditPermission(selection.userId)}
+                                                        style={{
+                                                            border: `1px solid ${selection.canEdit ? 'var(--accent)' : 'var(--border)'}`,
+                                                            background: selection.canEdit ? 'var(--accent-muted)' : 'var(--bg-hover)',
+                                                            color: selection.canEdit ? 'var(--accent-text)' : 'var(--text-secondary)',
+                                                            padding: '0.1875rem 0.5rem',
+                                                            borderRadius: '6px',
+                                                            cursor: 'pointer',
+                                                            fontSize: '0.75rem',
+                                                            lineHeight: 1.1,
+                                                        }}
+                                                    >
+                                                        {selection.canEdit ? t('rooms.create.canEdit') : t('rooms.create.canView')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleUserSelection(selection.userId)}
+                                                        style={{
+                                                            border: 'none',
+                                                            background: 'transparent',
+                                                            color: 'var(--text-secondary)',
+                                                            cursor: 'pointer',
+                                                            fontSize: '1rem',
+                                                            lineHeight: 1,
+                                                        }}
+                                                        aria-label={t('rooms.create.removeUser')}
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            )
+                                        })}
+                                        <button
+                                            type="button"
+                                            onClick={openUserSelectionModal}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '0.25rem',
+                                                padding: '0.5rem 0.75rem',
+                                                borderRadius: '6px',
+                                                border: '1px dashed var(--border)',
+                                                background: 'transparent',
+                                                cursor: 'pointer',
+                                                color: 'var(--text-secondary)',
+                                                fontSize: '0.875rem'
+                                            }}
+                                        >
+                                            + {t('rooms.create.addUser')}
+                                        </button>
+                                    </div>
+                                    {selectedUsers.length === 0 && (
+                                        <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.5rem', display: 'block' }}>
+                                            {t('rooms.create.noAllowedUsers')}
+                                        </small>
+                                    )}
+                                    {selectedUsers.length > 0 && (
+                                        <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.5rem', display: 'block' }}>
+                                            {t('rooms.create.selectedUsers', { count: selectedUsers.length })}
+                                        </small>
+                                    )}
+                                </div>
+                            )}
+
                             <button type="submit" disabled={isCreating}>
                                 {isCreating ? t('rooms.create.creating') : t('rooms.create.button')}
                             </button>
@@ -270,6 +454,185 @@ export function RoomList() {
                     </div>
                 )}
             </div>
+
+            {isUserModalOpen && typeof document !== 'undefined' && createPortal(
+                <div
+                    className="modal-overlay"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10000,
+                        padding: '1rem',
+                    }}
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) {
+                            closeUserSelectionModal()
+                        }
+                    }}
+                >
+                    <div
+                        className="modal-content"
+                        style={{
+                            background: 'var(--bg-card)',
+                            color: 'var(--text-primary)',
+                            borderRadius: '6px',
+                            width: '100%',
+                            maxWidth: '480px',
+                            maxHeight: '80vh',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                            border: '1px solid var(--border)',
+                            position: 'relative',
+                            zIndex: 10001,
+                        }}
+                    >
+                        <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid var(--border)' }}>
+                            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>{t('rooms.create.selectUsersTitle')}</h4>
+                            <p style={{ marginTop: '0.375rem', marginBottom: 0, color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+                                {t('rooms.create.selectUsersDescription')}
+                            </p>
+                        </div>
+                        <div style={{ padding: '0.75rem 1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1 }}>
+                            <input
+                                type="text"
+                                value={userSearchTerm}
+                                onChange={(e) => setUserSearchTerm(e.target.value)}
+                                placeholder={t('rooms.create.searchPlaceholder')}
+                                autoFocus
+                                style={{
+                                    width: '100%',
+                                    padding: '0.5rem 0.625rem',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border)',
+                                    background: 'var(--bg-secondary)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '0.8125rem',
+                                }}
+                            />
+                            {normalizedSearch === '' ? (
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', padding: '0.25rem 0' }}>
+                                    {t('rooms.create.searchIntro')}
+                                </div>
+                            ) : filteredUsers.length === 0 ? (
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', padding: '0.25rem 0' }}>
+                                    {t('rooms.create.searchNoResults', { query: userSearchTerm })}
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                    {filteredUsers.map(u => {
+                                        const isSelected = pendingUserSelection.some(su => su.userId === u.id)
+                                        const userPerm = pendingUserSelection.find(su => su.userId === u.id)
+
+                                        return (
+                                            <div
+                                                key={u.id}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.5rem 0.625rem',
+                                                    background: isSelected ? 'var(--bg-hover)' : 'transparent',
+                                                    border: '1px solid var(--border)',
+                                                    borderRadius: '4px',
+                                                    minHeight: '40px',
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => togglePendingUserSelection(u.id)}
+                                                    style={{
+                                                        cursor: 'pointer',
+                                                        minWidth: '16px',
+                                                        minHeight: '16px',
+                                                        margin: 0,
+                                                        flexShrink: 0,
+                                                    }}
+                                                />
+                                                <div style={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                    <span style={{ fontWeight: 500 }}>{u.username}</span>
+                                                    {u.role === 'observer' && (
+                                                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>
+                                                            ({t('common.observer')})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {isSelected && (
+                                                    <select
+                                                        value={userPerm?.canEdit ? 'editor' : 'viewer'}
+                                                        onChange={(e) => {
+                                                            const newCanEdit = e.target.value === 'editor'
+                                                            setPendingUserSelection(prev =>
+                                                                prev.map(user =>
+                                                                    user.userId === u.id
+                                                                        ? { ...user, canEdit: newCanEdit }
+                                                                        : user
+                                                                )
+                                                            )
+                                                        }}
+                                                        style={{
+                                                            padding: '0.25rem 0.375rem',
+                                                            fontSize: '0.75rem',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid var(--border)',
+                                                            background: 'var(--bg-card)',
+                                                            color: 'var(--text-primary)',
+                                                            cursor: 'pointer',
+                                                            minWidth: '75px',
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        <option value="viewer">{t('rooms.create.canView')}</option>
+                                                        <option value="editor">{t('rooms.create.canEdit')}</option>
+                                                    </select>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '0.625rem' }}>
+                            <button
+                                type="button"
+                                onClick={closeUserSelectionModal}
+                                style={{
+                                    border: '1px solid var(--border)',
+                                    background: 'transparent',
+                                    color: 'var(--text-secondary)',
+                                    padding: '0.5rem 0.875rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8125rem',
+                                    minHeight: '36px',
+                                }}
+                            >
+                                {t('rooms.create.modalCancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmPendingSelection}
+                                style={{
+                                    padding: '0.5rem 0.875rem',
+                                    fontSize: '0.8125rem',
+                                    minHeight: '36px',
+                                }}
+                            >
+                                {t('rooms.create.modalConfirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     )
 }

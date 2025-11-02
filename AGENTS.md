@@ -11,11 +11,12 @@
 - **Language**: TypeScript
 - **Editor**: CodeMirror 6
 - **Collaboration**: Yjs + y-codemirror.next
-- **Routing**: React Router v6
+- **Routing**: React Router v6 (HashRouter for desktop)
 - **Styling**: CSS Variables (Light/Dark themes)
 - **Internationalization**: react-i18next (English & Chinese)
 - **HTTP Client**: Fetch API
 - **Compression**: pako (gzip)
+- **Desktop**: Tauri 2.0 (Rust backend)
 
 ### Backend
 - **Runtime**: Bun
@@ -76,6 +77,15 @@
 - **Adaptive layouts**: Topbar stacks on mobile, full-width room cards
 - **Horizontal scrolling**: User badges scroll horizontally on mobile
 - **Compact UI**: Smaller fonts, reduced padding, icon-only badges on very small screens
+
+### 8. Desktop Application (Tauri)
+- **Cross-platform packaging**: Native desktop apps for Linux, Windows, and macOS
+- **Server configuration**: Configurable HTTP and WebSocket endpoints
+- **Connection testing**: Test server connectivity before login
+- **Persistent settings**: Server URLs stored in localStorage
+- **Conditional features**: Settings page only accessible in desktop environment
+- **Native performance**: Rust-based Tauri backend for optimal performance
+- **Auto-updates ready**: Infrastructure for seamless app updates
 
 ## Architecture Highlights
 
@@ -224,7 +234,39 @@ useEffect(() => {
 }, [theme])  // Only theme
 ```
 
-### 3. Session Playback Reconstruction
+### 3. Tauri Desktop Environment Detection
+```typescript
+// Check if running in Tauri desktop app
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+// Conditionally render desktop-only features
+{isTauri && (
+  <button onClick={() => navigate('/settings')}>
+    {t('common.settings')}
+  </button>
+)}
+```
+
+### 4. Settings Page with Server Configuration
+```typescript
+// Load and save server settings
+const DEFAULT_SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const DEFAULT_WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000'
+
+// Test server connectivity
+const testConnection = async () => {
+  const response = await fetch(`${serverUrl}/api/rooms`)
+  // 401 = server reachable but not authenticated (success!)
+  if (response.ok || response.status === 401) {
+    setTestResult({ success: true, message: t('settings.connectionSuccess') })
+  }
+}
+
+// Persist to localStorage
+localStorage.setItem('sharecode_settings', JSON.stringify({ serverUrl, wsUrl }))
+```
+
+### 5. Session Playback Reconstruction
 ```typescript
 // Load compressed updates from server
 const updates = data.updates.map(u => ({
@@ -263,6 +305,14 @@ const content = ytext.toString()
 ### Challenge 5: Room/Document Schema Complexity
 **Problem**: Foreign key conflicts during room creation
 **Solution**: Simplified to independent document storage by documentId
+
+### Challenge 6: Desktop App Settings UX
+**Problem**: Settings button showing in web app, causing confusion
+**Solution**: Tauri environment detection with conditional rendering
+
+### Challenge 7: Settings Navigation Context
+**Problem**: "Back to Login" button incorrect when accessed from Rooms
+**Solution**: Use `navigate(-1)` for smart browser history-based navigation
 
 ## Best Practices Applied
 
@@ -313,12 +363,30 @@ bun install
 bun dev
 ```
 
-### Production
+### Production (Web)
 ```bash
 # Build and run all services
 docker-compose up --build
 
 # Access application at http://localhost:4173
+```
+
+### Desktop Application
+```bash
+# Install Tauri CLI
+cargo install tauri-cli
+
+# Development mode
+cd frontend
+bun tauri dev
+
+# Build for production
+bun tauri build
+
+# Outputs:
+# - Linux: .deb and .rpm packages in src-tauri/target/release/bundle/
+# - Windows: .msi and .exe installers
+# - macOS: .dmg and .app bundles
 ```
 
 ### Environment Variables
@@ -398,6 +466,16 @@ VITE_WS_URL=ws://localhost:3001/ws
    - Translation coverage for Editor, RoomList, and other components
    - Removed unnecessary UI animations for cleaner experience
 
+6. **Phase 6**: Desktop Application (Day 4)
+   - Tauri 2.0 integration with Rust backend
+   - HashRouter for desktop app compatibility
+   - Settings page for server configuration
+   - Connection testing functionality
+   - Tauri environment detection
+   - Conditional feature rendering (desktop-only)
+   - Built packages for Linux (.deb and .rpm)
+   - i18n support for Settings page
+
 ## Lessons Learned
 
 1. **Y.js Integration**: Understanding CRDT principles is crucial for debugging sync issues
@@ -406,6 +484,10 @@ VITE_WS_URL=ws://localhost:3001/ws
 4. **Theme Switching**: Use reconfigure instead of recreation for complex components
 5. **Database Design**: Event sourcing patterns work well for collaborative systems
 6. **Compression**: Always consider data transfer size for real-time applications
+7. **Desktop Packaging**: Tauri provides excellent DX for turning React apps into native desktop apps
+8. **Environment Detection**: Runtime feature flags enable seamless web/desktop code sharing
+9. **HashRouter**: Required for desktop apps; navigate(-1) provides smart back navigation
+10. **i18n**: Comprehensive translation coverage from the start prevents technical debt
 
 ## Credits
 
@@ -426,6 +508,6 @@ Built with assistance from AI (Cline/Claude), leveraging:
 
 ---
 
-**Last Updated**: November 1, 2025
-**Version**: 1.1.0
-**Status**: Production Ready
+**Last Updated**: November 2, 2025
+**Version**: 1.2.0 (Desktop App Release)
+**Status**: Production Ready (Web + Desktop)

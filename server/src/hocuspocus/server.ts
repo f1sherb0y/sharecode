@@ -31,42 +31,41 @@ export const hocuspocusServer = new Server({
                 throw new Error('User not found')
             }
 
-            // Find room by documentId - any authenticated user can join
+            // Find room by documentId with participants
             const room = await prisma.room.findFirst({
                 where: { documentId: documentName },
-                include: { owner: true },
+                include: {
+                    owner: true,
+                    participants: true,
+                },
             })
 
             if (!room) {
                 throw new Error(`Room with document ${documentName} not found`)
             }
 
-            // Auto-add user as participant if they're not already
-            if (room.ownerId !== user.id) {
-                const existingParticipant = await prisma.roomParticipant.findUnique({
-                    where: {
-                        roomId_userId: {
-                            roomId: room.id,
-                            userId: user.id,
-                        },
-                    },
-                })
+            // Check access: admin and observer can access any room
+            // Regular users need to be owner or participant
+            const isOwner = room.ownerId === user.id
+            const participant = room.participants.find(p => p.userId === user.id)
+            const hasAccess = user.role === 'admin' || user.role === 'observer' || isOwner || participant
 
-                if (!existingParticipant) {
-                    await prisma.roomParticipant.create({
-                        data: {
-                            roomId: room.id,
-                            userId: user.id,
-                        },
-                    })
-                    logger.debug(`Auto-added ${user.username} as participant to ${room.name}`)
-                }
+            if (!hasAccess) {
+                throw new Error('Access denied: You do not have permission to access this room')
             }
 
-            // TODO: Implement read-only mode when Hocuspocus API supports it
-            // if (room.ownerId !== user.id && !room.allowEdit) {
-            //     data.connection.readOnly = true
-            // }
+            // Auto-add user as participant if they're not already (and not owner)
+            // This applies when accessing via direct link or rejoining
+            if (!isOwner && !participant) {
+                await prisma.roomParticipant.create({
+                    data: {
+                        roomId: room.id,
+                        userId: user.id,
+                        canEdit: true, // Default to edit permission when auto-added
+                    },
+                })
+                logger.debug(`Auto-added ${user.username} as participant to ${room.name}`)
+            }
 
             // Update last seen
             await prisma.user.update({
@@ -81,6 +80,7 @@ export const hocuspocusServer = new Server({
                     username: user.username,
                     email: user.email,
                     color: user.color,
+                    role: user.role,
                 },
                 room: {
                     id: room.id,

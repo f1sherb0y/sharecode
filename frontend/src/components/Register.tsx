@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { api } from '../lib/api'
 
 export function Register() {
     const [email, setEmail] = useState('')
@@ -11,9 +12,28 @@ export function Register() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
+    const [allowRegistration, setAllowRegistration] = useState(true)
+    const [checkingStatus, setCheckingStatus] = useState(true)
     const { register } = useAuth()
     const navigate = useNavigate()
     const { t } = useTranslation()
+
+    useEffect(() => {
+        // Check if registration is enabled
+        const checkRegistrationStatus = async () => {
+            try {
+                const { allowRegistration } = await api.getRegistrationStatus()
+                setAllowRegistration(allowRegistration)
+            } catch (err) {
+                console.error('Failed to check registration status:', err)
+                // Default to allowing registration if check fails
+                setAllowRegistration(true)
+            } finally {
+                setCheckingStatus(false)
+            }
+        }
+        checkRegistrationStatus()
+    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -28,6 +48,55 @@ export function Register() {
         } finally {
             setIsLoading(false)
         }
+    }
+
+    if (checkingStatus) {
+        return (
+            <div className="auth-container">
+                <div className="auth-card">
+                    <div style={{ textAlign: 'center' }}>
+                        <p>{t('common.loading')}</p>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (!allowRegistration) {
+        return (
+            <div className="auth-container">
+                <div className="auth-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                        <h2>{t('auth.register.title')}</h2>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <LanguageSwitcher />
+                            <ThemeToggle />
+                        </div>
+                    </div>
+                    <div className="error-message" style={{ marginBottom: '1rem' }}>
+                        {t('auth.register.disabled')}
+                    </div>
+                    <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        {t('auth.register.hasAccount')}{' '}
+                        <button
+                            type="button"
+                            onClick={() => navigate('/login')}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--accent)',
+                                textDecoration: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                font: 'inherit'
+                            }}
+                        >
+                            {t('auth.register.loginLink')}
+                        </button>
+                    </p>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -77,9 +146,21 @@ export function Register() {
                 </form>
                 <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--text-secondary)' }}>
                     {t('auth.register.hasAccount')}{' '}
-                    <a href="/login" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
+                    <button
+                        type="button"
+                        onClick={() => navigate('/login')}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent)',
+                            textDecoration: 'none',
+                            cursor: 'pointer',
+                            padding: 0,
+                            font: 'inherit'
+                        }}
+                    >
                         {t('auth.register.loginLink')}
-                    </a>
+                    </button>
                 </p>
             </div>
         </div>
