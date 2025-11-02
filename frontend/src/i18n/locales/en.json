@@ -93,27 +93,53 @@
     }
   },
   "admin": {
-    "title": "Admin Panel",
+    "title": "Admin Dashboard",
+    "backToRooms": "Back to Rooms",
     "users": {
-      "title": "Users",
-      "username": "Username",
-      "email": "Email",
-      "role": "Role",
-      "created": "Created",
-      "lastSeen": "Last Seen",
-      "actions": "Actions",
-      "delete": "Delete",
+      "title": "Users Management",
+      "createButton": "Create User",
+      "cancelButton": "Cancel",
+      "createForm": {
+        "title": "Create New User",
+        "username": "Username",
+        "usernamePlaceholder": "Enter username",
+        "password": "Password",
+        "passwordPlaceholder": "Enter password",
+        "email": "Email (optional)",
+        "emailPlaceholder": "Enter email",
+        "role": "Role",
+        "roleUser": "User",
+        "roleAdmin": "Admin",
+        "roleObserver": "Observer",
+        "creating": "Creating...",
+        "createButton": "Create User"
+      },
+      "table": {
+        "username": "Username",
+        "email": "Email",
+        "role": "Role",
+        "created": "Created",
+        "actions": "Actions",
+        "delete": "Delete",
+        "loading": "Loading users..."
+      },
       "deleteConfirm": "Delete user \"{{username}}\"?"
     },
     "rooms": {
-      "title": "All Rooms",
-      "name": "Name",
-      "owner": "Owner",
-      "language": "Language",
-      "created": "Created",
-      "participants": "Participants",
-      "actions": "Actions",
-      "delete": "Delete",
+      "title": "Rooms Management",
+      "table": {
+        "name": "Name",
+        "owner": "Owner",
+        "language": "Language",
+        "participants": "Participants",
+        "status": "Status",
+        "statusActive": "Active",
+        "statusEnded": "Ended",
+        "created": "Created",
+        "actions": "Actions",
+        "delete": "Delete",
+        "loading": "Loading rooms..."
+      },
       "deleteConfirm": "Delete room \"{{name}}\"?"
     }
   },

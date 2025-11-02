@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from './ThemeToggle'
 import { api } from '../lib/api'
 import type { User, Room } from '../types'
 
 export function Admin() {
+    const { t } = useTranslation()
     const [users, setUsers] = useState<User[]>([])
     const [rooms, setRooms] = useState<Room[]>([])
     const [isLoadingUsers, setIsLoadingUsers] = useState(true)
@@ -99,13 +101,13 @@ export function Admin() {
         <div className="room-page">
             <div className="room-topbar">
                 <div className="room-topbar-inner">
-                    <h1 className="room-topbar-title">Admin Dashboard</h1>
+                    <h1 className="room-topbar-title">{t('admin.title')}</h1>
                     <div className="room-topbar-actions">
                         <button className="toolbar-button" onClick={() => navigate('/rooms')}>
-                            Back to Rooms
+                            {t('admin.backToRooms')}
                         </button>
                         <button className="toolbar-button" onClick={logout}>
-                            Logout
+                            {t('common.logout')}
                         </button>
                         <ThemeToggle />
                     </div>
@@ -118,58 +120,58 @@ export function Admin() {
                 {/* Users Section */}
                 <div style={{ marginBottom: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h2 style={{ margin: 0 }}>Users Management</h2>
+                        <h2 style={{ margin: 0 }}>{t('admin.users.title')}</h2>
                         <button onClick={() => setShowCreateUser(!showCreateUser)}>
-                            {showCreateUser ? 'Cancel' : '+ Create User'}
+                            {showCreateUser ? t('admin.users.cancelButton') : '+ ' + t('admin.users.createButton')}
                         </button>
                     </div>
 
                     {showCreateUser && (
                         <div className="card" style={{ marginBottom: '2rem' }}>
-                            <h3>Create New User</h3>
+                            <h3>{t('admin.users.createForm.title')}</h3>
                             <form className="auth-form" onSubmit={handleCreateUser} style={{ marginTop: '1rem' }}>
                                 <div className="form-group">
-                                    <label className="form-label">Username *</label>
+                                    <label className="form-label">{t('admin.users.createForm.username')} *</label>
                                     <input
                                         type="text"
-                                        placeholder="Enter username"
+                                        placeholder={t('admin.users.createForm.usernamePlaceholder')}
                                         value={newUsername}
                                         onChange={(e) => setNewUsername(e.target.value)}
                                         required
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Password *</label>
+                                    <label className="form-label">{t('admin.users.createForm.password')} *</label>
                                     <input
                                         type="password"
-                                        placeholder="Enter password"
+                                        placeholder={t('admin.users.createForm.passwordPlaceholder')}
                                         value={newPassword}
                                         onChange={(e) => setNewPassword(e.target.value)}
                                         required
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Email (optional)</label>
+                                    <label className="form-label">{t('admin.users.createForm.email')}</label>
                                     <input
                                         type="email"
-                                        placeholder="Enter email"
+                                        placeholder={t('admin.users.createForm.emailPlaceholder')}
                                         value={newEmail}
                                         onChange={(e) => setNewEmail(e.target.value)}
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Role</label>
+                                    <label className="form-label">{t('admin.users.createForm.role')}</label>
                                     <select
                                         value={newRole}
                                         onChange={(e) => setNewRole(e.target.value as 'user' | 'admin' | 'observer')}
                                     >
-                                        <option value="user">User</option>
-                                        <option value="admin">Admin</option>
-                                        <option value="observer">Observer</option>
+                                        <option value="user">{t('admin.users.createForm.roleUser')}</option>
+                                        <option value="admin">{t('admin.users.createForm.roleAdmin')}</option>
+                                        <option value="observer">{t('admin.users.createForm.roleObserver')}</option>
                                     </select>
                                 </div>
                                 <button type="submit" disabled={isCreating}>
-                                    {isCreating ? 'Creating...' : 'Create User'}
+                                    {isCreating ? t('admin.users.createForm.creating') : t('admin.users.createForm.createButton')}
                                 </button>
                             </form>
                         </div>
@@ -177,18 +179,18 @@ export function Admin() {
 
                     {isLoadingUsers ? (
                         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                            Loading users...
+                            {t('admin.users.table.loading')}
                         </div>
                     ) : (
                         <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                                        <th style={{ padding: '0.75rem' }}>Username</th>
-                                        <th style={{ padding: '0.75rem' }}>Email</th>
-                                        <th style={{ padding: '0.75rem' }}>Role</th>
-                                        <th style={{ padding: '0.75rem' }}>Created</th>
-                                        <th style={{ padding: '0.75rem' }}>Actions</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.users.table.username')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.users.table.email')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.users.table.role')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.users.table.created')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.users.table.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -211,7 +213,7 @@ export function Admin() {
                                                         onClick={() => handleDeleteUser(u.id, u.username)}
                                                         style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
                                                     >
-                                                        Delete
+                                                        {t('admin.users.table.delete')}
                                                     </button>
                                                 )}
                                             </td>
@@ -225,23 +227,23 @@ export function Admin() {
 
                 {/* Rooms Section */}
                 <div>
-                    <h2>Rooms Management</h2>
+                    <h2>{t('admin.rooms.title')}</h2>
                     {isLoadingRooms ? (
                         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                            Loading rooms...
+                            {t('admin.rooms.table.loading')}
                         </div>
                     ) : (
                         <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
-                                        <th style={{ padding: '0.75rem' }}>Name</th>
-                                        <th style={{ padding: '0.75rem' }}>Owner</th>
-                                        <th style={{ padding: '0.75rem' }}>Language</th>
-                                        <th style={{ padding: '0.75rem' }}>Participants</th>
-                                        <th style={{ padding: '0.75rem' }}>Status</th>
-                                        <th style={{ padding: '0.75rem' }}>Created</th>
-                                        <th style={{ padding: '0.75rem' }}>Actions</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.rooms.table.name')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.rooms.table.owner')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.rooms.table.language')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.rooms.table.participants')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.rooms.table.status')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.rooms.table.created')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.rooms.table.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -259,9 +261,9 @@ export function Admin() {
                                             </td>
                                             <td style={{ padding: '0.75rem' }}>
                                                 {room.isEnded ? (
-                                                    <span style={{ color: 'var(--error)' }}>Ended</span>
+                                                    <span style={{ color: 'var(--error)' }}>{t('admin.rooms.table.statusEnded')}</span>
                                                 ) : (
-                                                    <span style={{ color: 'var(--success)' }}>Active</span>
+                                                    <span style={{ color: 'var(--success)' }}>{t('admin.rooms.table.statusActive')}</span>
                                                 )}
                                             </td>
                                             <td style={{ padding: '0.75rem' }}>
@@ -273,7 +275,7 @@ export function Admin() {
                                                     onClick={() => handleDeleteRoom(room.id, room.name)}
                                                     style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
                                                 >
-                                                    Delete
+                                                    {t('admin.rooms.table.delete')}
                                                 </button>
                                             </td>
                                         </tr>
