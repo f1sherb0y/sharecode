@@ -159,11 +159,6 @@ export function RoomList() {
         })
     }
 
-    const togglePendingUserEditPermission = (userId: string) => {
-        setPendingUserSelection(prev =>
-            prev.map(u => u.userId === userId ? { ...u, canEdit: !u.canEdit } : u)
-        )
-    }
 
     const confirmPendingSelection = () => {
         setSelectedUsers(pendingUserSelection)
