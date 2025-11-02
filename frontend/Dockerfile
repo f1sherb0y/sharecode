@@ -7,6 +7,9 @@ ARG VITE_ALLOW_REGISTRATION
 # Build stage
 FROM oven/bun:1.2.2-alpine AS build
 WORKDIR /app
+ARG VITE_API_URL
+ARG VITE_WS_URL
+ARG VITE_ALLOW_REGISTRATION
 
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_WS_URL=${VITE_WS_URL}
@@ -28,6 +31,7 @@ COPY index.html ./
 COPY public ./public
 COPY src ./src
 
+RUN echo ${VITE_ALLOW_REGISTRATION}
 # Build the application
 RUN bun run build
 
