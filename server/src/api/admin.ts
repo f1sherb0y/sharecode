@@ -30,7 +30,40 @@ export async function getAllUsers(req: Request, res: Response) {
 
 export async function deleteUser(req: Request, res: Response) {
     try {
+        const currentUserId = (req as any).userId
         const { id } = req.params
+
+        // Check if user exists
+        const user = await prisma.user.findUnique({
+            where: { id },
+        })
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' })
+        }
+
+        if (user.isDeleted) {
+            return res.status(400).json({ error: 'User is already deleted' })
+        }
+
+        // Prevent deleting yourself
+        if (id === currentUserId) {
+            return res.status(403).json({ error: 'Cannot delete your own account' })
+        }
+
+        // Prevent deleting admin users to ensure at least one admin remains
+        if (user.role === 'admin') {
+            const adminCount = await prisma.user.count({
+                where: {
+                    role: 'admin',
+                    isDeleted: false,
+                },
+            })
+
+            if (adminCount <= 1) {
+                return res.status(403).json({ error: 'Cannot delete the last admin user' })
+            }
+        }
 
         // Soft delete user
         await prisma.user.update({
