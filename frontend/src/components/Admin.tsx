@@ -11,6 +11,12 @@ export function Admin() {
     const [isLoadingUsers, setIsLoadingUsers] = useState(true)
     const [isLoadingRooms, setIsLoadingRooms] = useState(true)
     const [error, setError] = useState('')
+    const [showCreateUser, setShowCreateUser] = useState(false)
+    const [newUsername, setNewUsername] = useState('')
+    const [newPassword, setNewPassword] = useState('')
+    const [newEmail, setNewEmail] = useState('')
+    const [newRole, setNewRole] = useState<'user' | 'admin' | 'observer'>('user')
+    const [isCreating, setIsCreating] = useState(false)
     const { user, logout } = useAuth()
     const navigate = useNavigate()
 
@@ -44,6 +50,26 @@ export function Admin() {
             setError(err instanceof Error ? err.message : 'Failed to load rooms')
         } finally {
             setIsLoadingRooms(false)
+        }
+    }
+
+    const handleCreateUser = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsCreating(true)
+        setError('')
+
+        try {
+            await api.createUser(newUsername, newPassword, newEmail || undefined, newRole)
+            setNewUsername('')
+            setNewPassword('')
+            setNewEmail('')
+            setNewRole('user')
+            setShowCreateUser(false)
+            loadUsers()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to create user')
+        } finally {
+            setIsCreating(false)
         }
     }
 
@@ -91,7 +117,64 @@ export function Admin() {
 
                 {/* Users Section */}
                 <div style={{ marginBottom: '3rem' }}>
-                    <h2>Users Management</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h2 style={{ margin: 0 }}>Users Management</h2>
+                        <button onClick={() => setShowCreateUser(!showCreateUser)}>
+                            {showCreateUser ? 'Cancel' : '+ Create User'}
+                        </button>
+                    </div>
+
+                    {showCreateUser && (
+                        <div className="card" style={{ marginBottom: '2rem' }}>
+                            <h3>Create New User</h3>
+                            <form className="auth-form" onSubmit={handleCreateUser} style={{ marginTop: '1rem' }}>
+                                <div className="form-group">
+                                    <label className="form-label">Username *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Enter username"
+                                        value={newUsername}
+                                        onChange={(e) => setNewUsername(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Password *</label>
+                                    <input
+                                        type="password"
+                                        placeholder="Enter password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Email (optional)</label>
+                                    <input
+                                        type="email"
+                                        placeholder="Enter email"
+                                        value={newEmail}
+                                        onChange={(e) => setNewEmail(e.target.value)}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Role</label>
+                                    <select
+                                        value={newRole}
+                                        onChange={(e) => setNewRole(e.target.value as 'user' | 'admin' | 'observer')}
+                                    >
+                                        <option value="user">User</option>
+                                        <option value="admin">Admin</option>
+                                        <option value="observer">Observer</option>
+                                    </select>
+                                </div>
+                                <button type="submit" disabled={isCreating}>
+                                    {isCreating ? 'Creating...' : 'Create User'}
+                                </button>
+                            </form>
+                        </div>
+                    )}
+
                     {isLoadingUsers ? (
                         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
                             Loading users...

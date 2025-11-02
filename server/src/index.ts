@@ -19,7 +19,7 @@ import {
 } from './api/rooms'
 import { authMiddleware } from './middleware/auth'
 import { adminMiddleware } from './middleware/admin'
-import { getAllUsers, deleteUser, getAllRooms as adminGetAllRooms, deleteRoom as adminDeleteRoom } from './api/admin'
+import { getAllUsers, deleteUser, getAllRooms as adminGetAllRooms, deleteRoom as adminDeleteRoom, createUser } from './api/admin'
 import { getPlaybackUpdates } from './api/playback'
 
 const app = express()
@@ -87,6 +87,7 @@ app.post('/api/rooms/:roomId/leave', authMiddleware, leaveRoom)
 app.post('/api/rooms/:roomId/end', authMiddleware, endRoom)
 
 // Admin routes
+app.post('/api/admin/users', adminMiddleware, createUser)
 app.get('/api/admin/users', adminMiddleware, getAllUsers)
 app.delete('/api/admin/users/:id', adminMiddleware, deleteUser)
 app.get('/api/admin/rooms', adminMiddleware, adminGetAllRooms)

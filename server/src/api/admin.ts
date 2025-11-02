@@ -1,5 +1,83 @@
 import type { Request, Response } from 'express'
+import bcrypt from 'bcrypt'
 import { prisma } from '../utils/db'
+
+const USER_COLORS = [
+    '#30bced',
+    '#6eeb83',
+    '#ffbc42',
+    '#ecd444',
+    '#ee6352',
+    '#9ac2c9',
+    '#8acb88',
+    '#1be7ff',
+]
+
+function getRandomColor() {
+    return USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)]
+}
+
+export async function createUser(req: Request, res: Response) {
+    try {
+        const { username, password, email, role = 'user' } = req.body
+
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' })
+        }
+
+        // Validate role
+        if (!['user', 'admin', 'observer'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role' })
+        }
+
+        // Check if username already exists
+        const existingUser = await prisma.user.findUnique({
+            where: { username },
+        })
+
+        if (existingUser) {
+            return res.status(400).json({ error: 'Username already taken' })
+        }
+
+        // Check if email already exists (if provided)
+        if (email) {
+            const existingEmail = await prisma.user.findUnique({
+                where: { email },
+            })
+
+            if (existingEmail) {
+                return res.status(400).json({ error: 'Email already in use' })
+            }
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10)
+
+        // Create user
+        const user = await prisma.user.create({
+            data: {
+                email,
+                username,
+                password: hashedPassword,
+                color: getRandomColor(),
+                role,
+            },
+        })
+
+        res.status(201).json({
+            user: {
+                id: user.id,
+                email: user.email,
+                username: user.username,
+                color: user.color,
+                role: user.role,
+            },
+        })
+    } catch (error) {
+        console.error('Create user error:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+}
 
 export async function getAllUsers(req: Request, res: Response) {
     try {

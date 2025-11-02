@@ -171,6 +171,13 @@ class ApiClient {
     }
 
     // Admin endpoints
+    async createUser(username: string, password: string, email?: string, role?: string): Promise<{ user: User }> {
+        return this.request<{ user: User }>('/api/admin/users', {
+            method: 'POST',
+            body: JSON.stringify({ username, password, email, role }),
+        })
+    }
+
     async getAllUsers(): Promise<{ users: User[] }> {
         return this.request<{ users: User[] }>('/api/admin/users')
     }
