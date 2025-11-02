@@ -17,7 +17,7 @@ export function Admin() {
     const [newUsername, setNewUsername] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [newEmail, setNewEmail] = useState('')
-    const [newRole, setNewRole] = useState<'user' | 'admin' | 'observer'>('user')
+    const [newRole, setNewRole] = useState<'user' | 'admin' | 'observer' | 'support'>('user')
     const [isCreating, setIsCreating] = useState(false)
     const { user, logout } = useAuth()
     const navigate = useNavigate()
@@ -163,11 +163,12 @@ export function Admin() {
                                     <label className="form-label">{t('admin.users.createForm.role')}</label>
                                     <select
                                         value={newRole}
-                                        onChange={(e) => setNewRole(e.target.value as 'user' | 'admin' | 'observer')}
+                                        onChange={(e) => setNewRole(e.target.value as 'user' | 'admin' | 'observer' | 'support')}
                                     >
                                         <option value="user">{t('admin.users.createForm.roleUser')}</option>
                                         <option value="admin">{t('admin.users.createForm.roleAdmin')}</option>
                                         <option value="observer">{t('admin.users.createForm.roleObserver')}</option>
+                                        <option value="support">{t('admin.users.createForm.roleSupport')}</option>
                                     </select>
                                 </div>
                                 <button type="submit" disabled={isCreating}>

@@ -53,6 +53,8 @@ export interface RemoteUser {
     }
 }
 
+export type Role = 'user' | 'admin' | 'observer' | 'support'
+
 export type Language =
     | 'javascript'
     | 'typescript'

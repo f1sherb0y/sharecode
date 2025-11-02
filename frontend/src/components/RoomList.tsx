@@ -401,7 +401,7 @@ export function RoomList() {
                                             </h3>
                                             <div className="language-badge">{room.language}</div>
                                         </div>
-                                        {(room.isOwner || user?.role === 'admin') && !room.isEnded && (
+                                        {(room.isOwner || user?.role === 'admin') && user?.role !== 'support' && !room.isEnded && (
                                             <button
                                                 className="btn-danger"
                                                 onClick={async (e) => {

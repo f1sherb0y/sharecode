@@ -111,6 +111,7 @@
         "roleUser": "普通用户",
         "roleAdmin": "管理员",
         "roleObserver": "观察者",
+        "roleSupport": "客服",
         "creating": "创建中...",
         "createButton": "创建用户"
       },

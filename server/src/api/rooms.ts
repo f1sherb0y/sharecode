@@ -129,7 +129,7 @@ export async function getRooms(req: Request, res: Response) {
         }
 
         // Regular users only see rooms they have access to
-        if (userRole !== 'admin' && userRole !== 'observer') {
+        if (userRole !== 'admin' && userRole !== 'observer' && userRole !== 'support') {
             whereClause.OR = [
                 { ownerId: userId },
                 {
@@ -141,7 +141,7 @@ export async function getRooms(req: Request, res: Response) {
                 },
             ]
         }
-        // Admin and observer can see all rooms (no additional filter needed)
+        // Admin, observer, and support can see all rooms (no additional filter needed)
 
         const rooms = await prisma.room.findMany({
             where: whereClause,
@@ -233,9 +233,9 @@ export async function getRoom(req: Request, res: Response) {
             return res.status(404).json({ error: 'Room not found' })
         }
 
-        // Check access: admin and observer can view any room
+        // Check access: admin, observer, and support can view any room
         // Regular users can only view if they're owner or participant
-        if (userRole !== 'admin' && userRole !== 'observer') {
+        if (userRole !== 'admin' && userRole !== 'observer' && userRole !== 'support') {
             const isOwner = room.ownerId === userId
             const isParticipant = room.participants.some(p => p.userId === userId)
 
@@ -274,10 +274,10 @@ export async function updateRoom(req: Request, res: Response) {
             return res.status(404).json({ error: 'Room not found' })
         }
 
-        // Check permissions: admin, owner, or participant with canEdit
+        // Check permissions: admin, support, owner, or participant with canEdit
         const isOwner = room.ownerId === userId
         const participant = room.participants.find(p => p.userId === userId)
-        const canEdit = userRole === 'admin' || isOwner || (participant?.canEdit ?? false)
+        const canEdit = userRole === 'admin' || userRole === 'support' || isOwner || (participant?.canEdit ?? false)
 
         if (!canEdit) {
             return res.status(403).json({ error: 'Not authorized to modify this room' })
@@ -316,9 +316,9 @@ export async function deleteRoom(req: Request, res: Response) {
         const userRole = (req as any).role
         const { roomId } = req.params
 
-        // Observers cannot delete rooms
-        if (userRole === 'observer') {
-            return res.status(403).json({ error: 'Observers cannot delete rooms' })
+        // Observers and support cannot delete rooms
+        if (userRole === 'observer' || userRole === 'support') {
+            return res.status(403).json({ error: 'You do not have permission to delete rooms' })
         }
 
         const room = await prisma.room.findUnique({
@@ -430,9 +430,9 @@ export async function endRoom(req: Request, res: Response) {
         const userRole = (req as any).role
         const { roomId } = req.params
 
-        // Observers cannot end rooms
-        if (userRole === 'observer') {
-            return res.status(403).json({ error: 'Observers cannot end rooms' })
+        // Observers and support cannot end rooms
+        if (userRole === 'observer' || userRole === 'support') {
+            return res.status(403).json({ error: 'You do not have permission to end rooms' })
         }
 
         const room = await prisma.room.findUnique({

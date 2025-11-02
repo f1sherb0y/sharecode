@@ -111,6 +111,7 @@
         "roleUser": "User",
         "roleAdmin": "Admin",
         "roleObserver": "Observer",
+        "roleSupport": "Support",
         "creating": "Creating...",
         "createButton": "Create User"
       },

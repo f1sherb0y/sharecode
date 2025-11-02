@@ -16,7 +16,7 @@ model User {
   username  String   @unique
   password  String
   color     String   @default("#30bced")
-  role      String   @default("user") // "user" | "admin" | "observer"
+  role      String   @default("user") // "user" | "admin" | "observer" | "support"
   isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())
   lastSeen  DateTime @default(now())
