@@ -40,6 +40,19 @@
       "deb": {
         "depends": []
       }
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["en-US", "zh-CN"],
+        "displayLanguageSelector": true
+      }
     }
   }
 }
