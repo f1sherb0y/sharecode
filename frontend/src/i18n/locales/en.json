@@ -90,6 +90,11 @@
       "disconnected": "Disconnected",
       "synced": "Synced",
       "syncing": "Syncing..."
+    },
+    "ended": {
+      "title": "Room ended",
+      "description": "This session has finished. Only the room owner or administrators can view the playback recording.",
+      "back": "Back to rooms"
     }
   },
   "admin": {
@@ -158,6 +163,11 @@
     "play": "Play",
     "pause": "Pause",
     "speed": "Speed",
+    "accessDenied": "Playback is limited to the room owner or administrators.",
+    "noData": "No playback data is available for this room.",
+    "loadFailed": "Failed to load playback data. Please try again later.",
+    "backToRooms": "Back to rooms",
+    "notEnded": "The room has not ended yet.",
     "progress": "Progress",
     "duration": "Duration",
     "noUpdates": "No playback data available"

@@ -1,33 +1,35 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { EditorView, basicSetup } from 'codemirror'
-import { EditorState, StateEffect } from '@codemirror/state'
-import { javascript } from '@codemirror/lang-javascript'
-import { python } from '@codemirror/lang-python'
-import { java } from '@codemirror/lang-java'
-import { cpp } from '@codemirror/lang-cpp'
-import { rust } from '@codemirror/lang-rust'
-import { go } from '@codemirror/lang-go'
-import { php } from '@codemirror/lang-php'
-import { oneDark } from '@codemirror/theme-one-dark'
+import { useTranslation } from 'react-i18next'
 import * as Y from 'yjs'
 import pako from 'pako'
 import { api } from '../lib/api'
 import { ThemeToggle } from './ThemeToggle'
 import { PlayIcon, PauseIcon, SkipBackIcon, SkipForwardIcon } from './PlaybackIcons'
 import { useTheme } from '../contexts/ThemeContext'
-import type { Language } from '../types'
+import { useAuth } from '../contexts/AuthContext'
+import type { Language, Room } from '../types'
+import type * as Monaco from 'monaco-editor'
+import { loadMonaco } from '../lib/monacoLoader'
+import 'monaco-editor/min/vs/editor/editor.main.css'
 
-const languageExtensions: Record<Language, any> = {
-    javascript: javascript(),
-    typescript: javascript({ typescript: true }),
-    python: python(),
-    java: java(),
-    cpp: cpp(),
-    rust: rust(),
-    go: go(),
-    php: php(),
+type MonacoModule = typeof Monaco
+type MonacoEditorInstance = Monaco.editor.IStandaloneCodeEditor
+type MonacoModel = Monaco.editor.ITextModel
+
+const monacoLanguageIds: Record<Language, string> = {
+    javascript: 'javascript',
+    typescript: 'typescript',
+    python: 'python',
+    java: 'java',
+    cpp: 'cpp',
+    rust: 'rust',
+    go: 'go',
+    php: 'php',
 }
+
+const resolveMonacoLanguage = (language?: string) =>
+    monacoLanguageIds[language as Language] ?? 'javascript'
 
 function base64ToUint8Array(base64: string): Uint8Array {
     const binaryString = atob(base64)
@@ -63,8 +65,10 @@ export function RoomPlayback() {
     const { roomId } = useParams<{ roomId: string }>()
     const navigate = useNavigate()
     const { theme } = useTheme()
+    const { t } = useTranslation()
+    const { user } = useAuth()
 
-    const [room, setRoom] = useState<any>(null)
+    const [room, setRoom] = useState<Room | null>(null)
     const [updates, setUpdates] = useState<Update[]>([])
     const [startMs, setStartMs] = useState(0)
     const [endMs, setEndMs] = useState(0)
@@ -74,25 +78,66 @@ export function RoomPlayback() {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState('')
     const editorRef = useRef<HTMLDivElement | null>(null)
-    const viewRef = useRef<EditorView | null>(null)
-    const [editorVersion, setEditorVersion] = useState(0)
+    const monacoRef = useRef<MonacoModule | null>(null)
+    const monacoEditorRef = useRef<MonacoEditorInstance | null>(null)
+    const monacoModelRef = useRef<MonacoModel | null>(null)
+
+    const destroyMonaco = useCallback(() => {
+        monacoEditorRef.current?.dispose()
+        monacoEditorRef.current = null
+        monacoModelRef.current?.dispose()
+        monacoModelRef.current = null
+        monacoRef.current = null
+    }, [])
+
+    const getContentAtTimestamp = useCallback((timestamp: number) => {
+        if (updates.length === 0) return ''
+
+        const tempDoc = new Y.Doc()
+        const ytext = tempDoc.getText('codemirror')
+
+        updates
+            .filter((u) => u.timestampMs <= timestamp)
+            .forEach((u) => {
+                try {
+                    Y.applyUpdate(tempDoc, u.update)
+                } catch (err) {
+                    console.error('Error applying update:', err)
+                }
+            })
+
+        return ytext.toString()
+    }, [updates])
 
     // Load room and updates
     useEffect(() => {
-        if (!roomId) return
+        if (!roomId || !user) return
+
+        let isCancelled = false
 
         const load = async () => {
             try {
                 setIsLoading(true)
-                const [roomData, updatesData] = await Promise.all([
-                    api.getRoom(roomId),
-                    api.getPlaybackUpdates(roomId),
-                ])
+                setError('')
 
-                setRoom(roomData.room)
+                const { room } = await api.getRoom(roomId)
+                if (isCancelled) return
+                setRoom(room)
+
+                const isOwner = room.ownerId === user.id
+                const isAdminOrSuper = user.role === 'admin' || user.role === 'superuser'
+
+                if (!isOwner && !isAdminOrSuper) {
+                    setError(t('playback.accessDenied'))
+                    setIsLoading(false)
+                    return
+                }
+
+                const updatesData = await api.getPlaybackUpdates(roomId)
+                if (isCancelled) return
 
                 if (updatesData.updates.length === 0) {
-                    setError('No playback data available for this room')
+                    setError(t('playback.noData'))
                     setIsLoading(false)
                     return
                 }
@@ -113,91 +158,97 @@ export function RoomPlayback() {
                 setCurrentTimestamp(start)
                 setIsLoading(false)
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to load playback data')
+                if (isCancelled) return
+                if (err instanceof Error) {
+                    if (err.message === 'Access denied') {
+                        setError(t('playback.accessDenied'))
+                    } else if (err.message === 'Room has not ended yet') {
+                        setError(t('playback.notEnded'))
+                    } else {
+                        setError(err.message)
+                    }
+                } else {
+                    setError(t('playback.loadFailed'))
+                }
                 setIsLoading(false)
             }
         }
 
         load()
-    }, [roomId])
-
-    // Initialize CodeMirror (only once when room is loaded)
-    useEffect(() => {
-        if (!room?.id || viewRef.current || !editorRef.current) return
-
-        const languageExt = languageExtensions[room.language as Language] || javascript()
-
-        const state = EditorState.create({
-            doc: '',
-            extensions: [
-                basicSetup,
-                languageExt,
-                EditorState.readOnly.of(true),
-                EditorView.editable.of(false),
-            ],
-        })
-
-        const view = new EditorView({
-            state,
-            parent: editorRef.current,
-        })
-
-        viewRef.current = view
-        setEditorVersion((version) => version + 1)
 
         return () => {
-            view.destroy()
-            viewRef.current = null
+            isCancelled = true
         }
-    }, [room])
+    }, [roomId, user, t])
 
-    // Update theme when it changes (using reconfigure, not recreating editor)
+    // Initialize Monaco editor once room data is ready
+    const hasPlaybackPrivileges = !!user && (user.role === 'admin' || user.role === 'superuser')
+    const isOwner = !!room && !!user && room.ownerId === user.id
+    const canViewPlayback = !!room && !!user && (isOwner || hasPlaybackPrivileges)
+
     useEffect(() => {
-        if (!viewRef.current || !room) return
+        if (!room?.id || !editorRef.current || monacoEditorRef.current) return
+        if (!canViewPlayback) return
 
-        const languageExt = languageExtensions[room.language as Language] || javascript()
-        const themeExt = theme === 'dark' ? [oneDark] : []
+        let isCancelled = false
 
-        viewRef.current.dispatch({
-            effects: StateEffect.reconfigure.of([
-                basicSetup,
-                languageExt,
-                ...themeExt,
-                EditorState.readOnly.of(true),
-                EditorView.editable.of(false),
-            ]),
-        })
-    }, [theme, room, editorVersion])
+        loadMonaco()
+            .then((monaco) => {
+                if (isCancelled || !editorRef.current) return
+                monacoRef.current = monaco
+
+                const languageId = resolveMonacoLanguage(room.language)
+                const model = monaco.editor.createModel('', languageId)
+                monacoModelRef.current = model
+
+                const editor = monaco.editor.create(editorRef.current, {
+                    model,
+                    automaticLayout: true,
+                    minimap: { enabled: false },
+                    wordWrap: 'on',
+                    readOnly: true,
+                    scrollBeyondLastLine: false,
+                    fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
+                    fontSize: 14,
+                    theme: theme === 'dark' ? 'vs-dark' : 'vs',
+                })
+                monacoEditorRef.current = editor
+                const initialContent = getContentAtTimestamp(currentTimestamp)
+                model.setValue(initialContent)
+                editor.focus()
+            })
+            .catch((err) => {
+                console.error('Failed to initialize Monaco playback editor', err)
+                setError(err instanceof Error ? err.message : 'Failed to initialize playback editor')
+            })
+
+        return () => {
+            isCancelled = true
+        }
+    }, [room, theme, getContentAtTimestamp, currentTimestamp, canViewPlayback])
+
+    // Cleanup Monaco on unmount
+    useEffect(() => destroyMonaco, [destroyMonaco])
+
+    // Update theme dynamically
+    useEffect(() => {
+        if (!monacoRef.current) return
+        monacoRef.current.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs')
+    }, [theme])
+
+    // Ensure language stays in sync with room metadata
+    useEffect(() => {
+        if (!monacoRef.current || !monacoModelRef.current) return
+        const languageId = resolveMonacoLanguage(room?.language)
+        monacoRef.current.editor.setModelLanguage(monacoModelRef.current, languageId)
+    }, [room?.language])
 
     // Reconstruct document at current timestamp
     useEffect(() => {
-        if (updates.length === 0 || !viewRef.current) return
-
-        const relevantUpdates = updates.filter((u) => u.timestampMs <= currentTimestamp)
-
-        // Reconstruct Y.Doc
-        const tempDoc = new Y.Doc()
-        const ytext = tempDoc.getText('codemirror')
-
-        relevantUpdates.forEach((u) => {
-            try {
-                Y.applyUpdate(tempDoc, u.update)
-            } catch (err) {
-                console.error('Error applying update:', err)
-            }
-        })
-
-        const content = ytext.toString()
-
-        // Update editor content
-        viewRef.current.dispatch({
-            changes: {
-                from: 0,
-                to: viewRef.current.state.doc.length,
-                insert: content,
-            },
-        })
-    }, [currentTimestamp, updates, editorVersion])
+        if (!monacoModelRef.current || !canViewPlayback) return
+        const content = getContentAtTimestamp(currentTimestamp)
+        monacoModelRef.current.setValue(content)
+    }, [currentTimestamp, getContentAtTimestamp, canViewPlayback])
 
     // Auto-play logic
     useEffect(() => {
@@ -220,7 +271,7 @@ export function RoomPlayback() {
     if (isLoading) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-                Loading playback...
+                {t('common.loading')}
             </div>
         )
     }
@@ -229,7 +280,7 @@ export function RoomPlayback() {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', gap: '1rem' }}>
                 <div style={{ color: 'var(--error)' }}>{error}</div>
-                <button onClick={() => navigate('/rooms')}>Back to Rooms</button>
+                <button onClick={() => navigate('/rooms')}>{t('playback.backToRooms')}</button>
             </div>
         )
     }

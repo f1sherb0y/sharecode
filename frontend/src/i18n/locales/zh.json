@@ -90,6 +90,11 @@
       "disconnected": "未连接",
       "synced": "已同步",
       "syncing": "同步中..."
+    },
+    "ended": {
+      "title": "房间已结束",
+      "description": "此协作会话已经结束，仅房主或管理员可以查看回放。",
+      "back": "返回房间列表"
     }
   },
   "admin": {
@@ -158,6 +163,11 @@
     "play": "播放",
     "pause": "暂停",
     "speed": "速度",
+    "accessDenied": "仅房主或管理员可以查看回放。",
+    "noData": "该房间没有可用的回放数据。",
+    "loadFailed": "加载回放失败，请稍后再试。",
+    "backToRooms": "返回房间列表",
+    "notEnded": "该房间还未结束。",
     "progress": "进度",
     "duration": "时长",
     "noUpdates": "无可用回放数据"

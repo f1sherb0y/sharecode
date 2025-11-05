@@ -84,7 +84,7 @@ export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
     )
 
     return (
-        <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="card share-link-modal">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3>{t('share.manager.title')}</h3>
                 <button type="button" className="btn-secondary" onClick={onClose}>

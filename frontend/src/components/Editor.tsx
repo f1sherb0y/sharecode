@@ -1,19 +1,8 @@
-import { useEffect, useRef, useState, useContext } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { EditorView, basicSetup } from 'codemirror'
-import { EditorState, StateEffect } from '@codemirror/state'
-import { keymap } from '@codemirror/view'
-import { indentWithTab } from '@codemirror/commands'
-import { javascript } from '@codemirror/lang-javascript'
-import { python } from '@codemirror/lang-python'
-import { java } from '@codemirror/lang-java'
-import { cpp } from '@codemirror/lang-cpp'
-import { rust } from '@codemirror/lang-rust'
-import { go } from '@codemirror/lang-go'
-import { php } from '@codemirror/lang-php'
-import { yCollab, yUndoManagerKeymap, YSyncConfig } from 'y-codemirror.next'
-import { oneDark } from '@codemirror/theme-one-dark'
+import * as Y from 'yjs'
+import type * as Monaco from 'monaco-editor'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useShareSession } from '../contexts/ShareSessionContext'
@@ -25,6 +14,9 @@ import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
 import { ShareLinkManager } from './ShareLinkManager'
 import { createPortal } from 'react-dom'
+import 'monaco-editor/min/vs/editor/editor.main.css'
+import { MonacoBinding } from '../lib/MonacoBinding'
+import { loadMonaco } from '../lib/monacoLoader'
 
 interface UserColorScheme {
     color: string
@@ -62,15 +54,23 @@ const LANGUAGES: Language[] = [
     'php',
 ]
 
-const languageExtensions: Record<string, any> = {
-    javascript: javascript(),
-    typescript: javascript({ typescript: true }),
-    python: python(),
-    java: java(),
-    cpp: cpp(),
-    rust: rust(),
-    go: go(),
-    php: php(),
+const monacoLanguageIds: Record<Language, string> = {
+    javascript: 'javascript',
+    typescript: 'typescript',
+    python: 'python',
+    java: 'java',
+    cpp: 'cpp',
+    rust: 'rust',
+    go: 'go',
+    php: 'php',
+}
+
+type MonacoModule = typeof import('monaco-editor')
+type MonacoEditorInstance = Monaco.editor.IStandaloneCodeEditor
+type MonacoModelInstance = Monaco.editor.ITextModel
+
+const resolveMonacoLanguage = (language?: string) => {
+    return monacoLanguageIds[language as Language] ?? 'javascript'
 }
 
 export function Editor() {
@@ -83,10 +83,12 @@ export function Editor() {
     // Try to access share session - will be undefined if not in ShareSessionProvider context
     let shareSession = null
     let isLoadingShare = false
+    let refreshShareSession: (() => Promise<void>) | null = null
     try {
         const ctx = useShareSession()
         shareSession = ctx.session
         isLoadingShare = ctx.isLoading
+        refreshShareSession = ctx.refreshSession
     } catch {
         // Not in a share context, that's fine
     }
@@ -101,8 +103,20 @@ export function Editor() {
         generateUserColorScheme(user?.id)
     )
     const editorRef = useRef<HTMLDivElement>(null)
-    const viewRef = useRef<EditorView | null>(null)
-    const ySyncConfigRef = useRef<YSyncConfig | null>(null)
+    const monacoRef = useRef<MonacoModule | null>(null)
+    const monacoEditorRef = useRef<MonacoEditorInstance | null>(null)
+    const monacoModelRef = useRef<MonacoModelInstance | null>(null)
+    const monacoBindingRef = useRef<MonacoBinding | null>(null)
+    const [isEditorReady, setIsEditorReady] = useState(false)
+    const destroyMonacoEditor = useCallback(() => {
+        monacoBindingRef.current?.destroy()
+        monacoBindingRef.current = null
+        monacoEditorRef.current?.dispose()
+        monacoEditorRef.current = null
+        monacoModelRef.current?.dispose()
+        monacoModelRef.current = null
+        setIsEditorReady(false)
+    }, [])
     const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
     // Load room from guest session if in guest mode
@@ -110,6 +124,17 @@ export function Editor() {
         if (!isGuestMode || !shareSession) return
         setRoom(shareSession.room as Room)
     }, [isGuestMode, shareSession])
+
+    const refreshedShareTokenRef = useRef<string | null>(null)
+
+    useEffect(() => {
+        if (!isGuestMode || !shareSession?.authToken || !refreshShareSession) return
+        if (refreshedShareTokenRef.current === shareSession.authToken) return
+        refreshedShareTokenRef.current = shareSession.authToken
+        refreshShareSession().catch((err) => {
+            console.error('Failed to refresh share session', err)
+        })
+    }, [isGuestMode, shareSession?.authToken, refreshShareSession])
 
     // Load room details for authenticated users
     useEffect(() => {
@@ -136,10 +161,27 @@ export function Editor() {
         : (token || '')
 
     // Only create provider once we have the room data
-    const { provider, ytext, isConnected, isSynced } = useYjsProvider(
+    const { provider, ydoc, ytext, isConnected, isSynced } = useYjsProvider(
         documentId,
         authToken
     )
+
+    const hasPrivilegedRole = !isGuestMode && (user?.role === 'admin' || user?.role === 'superuser')
+    const isOwner = !isGuestMode && room?.ownerId === user?.id
+    const canAccessPlayback = !!room && (isOwner || hasPrivilegedRole)
+
+    useEffect(() => {
+        if (!room?.isEnded) return
+        if (canAccessPlayback) {
+            navigate(`/playback/${room.id}`, { replace: true })
+        }
+    }, [room?.isEnded, room?.id, canAccessPlayback, navigate])
+
+    useEffect(() => {
+        return () => {
+            destroyMonacoEditor()
+        }
+    }, [documentId, destroyMonacoEditor])
 
     useEffect(() => {
         if (!provider?.awareness) return
@@ -165,69 +207,83 @@ export function Editor() {
         )
     }, [provider, isGuestMode, user?.id, user?.username, shareSession?.guest])
 
-    // Set up CodeMirror editor (only once)
+    // Initialize Monaco editor once we have the provider + room
     useEffect(() => {
-        if (!editorRef.current || !provider || !room || viewRef.current) return
+        if (!editorRef.current || !provider || !room || monacoEditorRef.current) return
+        if (room.isEnded && !canAccessPlayback) return
 
-        // Create YSyncConfig for position conversion
-        const ySyncConfig = new YSyncConfig(ytext, provider.awareness)
-        ySyncConfigRef.current = ySyncConfig
+        let isCancelled = false
 
-        const languageExt = languageExtensions[room.language] || javascript()
-        const themeExt = theme === 'dark' ? [oneDark] : []
+        loadMonaco()
+            .then((monaco) => {
+                if (isCancelled || !editorRef.current) return
+                monacoRef.current = monaco
 
-        // Check if guest mode and no edit permission
-        const readOnly = isGuestMode && !shareSession?.guest.canEdit
+                const languageId = resolveMonacoLanguage(room.language)
+                const model = monaco.editor.createModel(ytext.toString(), languageId)
+                monacoModelRef.current = model
 
-        const extensions = [
-            keymap.of([...yUndoManagerKeymap, indentWithTab]),
-            basicSetup,
-            languageExt,
-            ...themeExt,
-            EditorView.lineWrapping,
-            yCollab(ytext, provider.awareness),
-        ]
+                const editor = monaco.editor.create(editorRef.current, {
+                    model,
+                    automaticLayout: true,
+                    minimap: { enabled: false },
+                    wordWrap: 'on',
+                    wrappingStrategy: 'advanced',
+                    scrollBeyondLastLine: false,
+                    fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
+                    fontSize: 14,
+                    theme: theme === 'dark' ? 'vs-dark' : 'vs',
+                    readOnly: isGuestMode && !shareSession?.guest.canEdit,
+                })
+                monacoEditorRef.current = editor
 
-        if (readOnly) {
-            extensions.push(EditorState.readOnly.of(true))
-        }
+                monacoBindingRef.current = new MonacoBinding(
+                    monaco,
+                    ytext,
+                    model,
+                    new Set([editor]),
+                    provider.awareness ?? null
+                )
 
-        const state = EditorState.create({
-            doc: ytext.toString(),
-            extensions,
-        })
-
-        const view = new EditorView({
-            state,
-            parent: editorRef.current,
-        })
-
-        viewRef.current = view
+                editor.focus()
+                setIsEditorReady(true)
+            })
+            .catch((err) => {
+                console.error('Failed to initialize Monaco editor', err)
+                setError(err instanceof Error ? err.message : 'Failed to initialize editor')
+            })
 
         return () => {
-            view.destroy()
-            viewRef.current = null
+            isCancelled = true
         }
-    }, [provider, room, ytext])
+    }, [provider, room, ytext, theme, isGuestMode, shareSession?.guest?.canEdit, canAccessPlayback])
 
-    // Update theme when it changes (using reconfigure, not recreating editor)
     useEffect(() => {
-        if (!viewRef.current || !room || !provider) return
+        const container = editorRef.current
+        if (!container || !isEditorReady) return
 
-        const languageExt = languageExtensions[room.language] || javascript()
-        const themeExt = theme === 'dark' ? [oneDark] : []
+        const focusEditor = () => {
+            monacoEditorRef.current?.focus()
+        }
 
-        viewRef.current.dispatch({
-            effects: StateEffect.reconfigure.of([
-                keymap.of([...yUndoManagerKeymap, indentWithTab]),
-                basicSetup,
-                languageExt,
-                ...themeExt,
-                EditorView.lineWrapping,
-                yCollab(ytext, provider.awareness),
-            ]),
-        })
+        container.addEventListener('mousedown', focusEditor)
+
+        return () => {
+            container.removeEventListener('mousedown', focusEditor)
+        }
+    }, [isEditorReady])
+
+    // Update Monaco theme when toggled
+    useEffect(() => {
+        if (!monacoRef.current) return
+        monacoRef.current.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs')
     }, [theme])
+
+    useEffect(() => {
+        if (!monacoEditorRef.current) return
+        const readOnly = isGuestMode && !shareSession?.guest.canEdit
+        monacoEditorRef.current.updateOptions({ readOnly })
+    }, [isGuestMode, shareSession?.guest?.canEdit])
 
     // Track remote users via awareness
     useEffect(() => {
@@ -268,39 +324,35 @@ export function Editor() {
 
     // Follow user feature
     useEffect(() => {
-        if (!followingUser || !provider?.awareness || !viewRef.current || !ySyncConfigRef.current) return
+        if (!followingUser || !provider?.awareness) return
+        if (!monacoRef.current || !monacoEditorRef.current || !monacoModelRef.current) return
 
-        const handleAwarenessChange = () => {
-            if (!provider.awareness || !viewRef.current || !ySyncConfigRef.current) return
-
+        const scrollToUser = () => {
+            if (!provider.awareness) return
             const state = provider.awareness.getStates().get(followingUser)
-            if (state?.cursor?.head) {
-                try {
-                    // Convert Yjs relative position to absolute position
-                    const absolutePos = ySyncConfigRef.current.fromYPos(state.cursor.head)
+            if (!state?.cursor?.head) return
 
-                    // Scroll to the followed user's cursor
-                    viewRef.current.dispatch({
-                        effects: EditorView.scrollIntoView(absolutePos.pos, { y: 'center' }),
-                    })
-                } catch (err) {
-                    console.error('Error following user:', err)
-                }
+            try {
+                const absolutePos = Y.createAbsolutePositionFromRelativePosition(state.cursor.head, ydoc)
+                if (!absolutePos || absolutePos.type !== ytext) return
+                const position = monacoModelRef.current!.getPositionAt(absolutePos.index)
+                monacoEditorRef.current!.revealPositionInCenter(
+                    position,
+                    monacoRef.current!.editor.ScrollType.Smooth
+                )
+                monacoEditorRef.current!.setPosition(position)
+            } catch (err) {
+                console.error('Error following user:', err)
             }
         }
 
-        // Trigger immediately on follow
-        handleAwarenessChange()
-
-        // Then listen for changes
-        provider.awareness.on('change', handleAwarenessChange)
+        scrollToUser()
+        provider.awareness.on('change', scrollToUser)
 
         return () => {
-            if (provider.awareness) {
-                provider.awareness.off('change', handleAwarenessChange)
-            }
+            provider.awareness?.off('change', scrollToUser)
         }
-    }, [followingUser, provider])
+    }, [followingUser, provider, ydoc, ytext])
 
     // Redirect guest to join page if session expired
     if (isGuestMode && !isLoadingShare && !shareSession) {
@@ -311,11 +363,13 @@ export function Editor() {
         return <div>Room ID not provided</div>
     }
 
+    const backPath = isGuestMode ? `/share/${shareToken}` : '/rooms'
+
     if (error) {
         return (
             <div style={{ padding: '20px' }}>
                 <div style={{ color: 'red' }}>{error}</div>
-                <button onClick={() => navigate(isGuestMode ? `/share/${shareToken}` : '/rooms')}>
+                <button onClick={() => navigate(backPath)}>
                     {t('common.back')}
                 </button>
             </div>
@@ -324,21 +378,9 @@ export function Editor() {
 
     // Reconfigure editor with new language extension
     const reconfigureLanguage = (newLanguage: Language) => {
-        if (!viewRef.current || !provider) return
-
-        const languageExt = languageExtensions[newLanguage] || javascript()
-        const themeExt = theme === 'dark' ? [oneDark] : []
-
-        viewRef.current.dispatch({
-            effects: StateEffect.reconfigure.of([
-                keymap.of([...yUndoManagerKeymap, indentWithTab]),
-                basicSetup,
-                languageExt,
-                ...themeExt,
-                EditorView.lineWrapping,
-                yCollab(ytext, provider.awareness),
-            ]),
-        })
+        if (!monacoRef.current || !monacoModelRef.current) return
+        const languageId = resolveMonacoLanguage(newLanguage)
+        monacoRef.current.editor.setModelLanguage(monacoModelRef.current, languageId)
     }
 
     const handleLanguageChange = async (newLanguage: Language) => {
@@ -375,7 +417,6 @@ export function Editor() {
             provider.awareness.getStates().forEach((state: any) => {
                 if (state.user && state.roomLanguage && state.roomLanguage !== room.language) {
                     // Owner changed the language
-                    console.log(`Language changed to ${state.roomLanguage} by owner`)
                     setRoom({ ...room, language: state.roomLanguage })
                     reconfigureLanguage(state.roomLanguage)
                 }
@@ -391,7 +432,6 @@ export function Editor() {
         }
     }, [provider, room])
 
-    const isOwner = !isGuestMode && room?.ownerId === user?.id
     const currentUserName = isGuestMode
         ? (shareSession?.guest.displayName || 'Guest')
         : (user?.username || 'You')
@@ -412,6 +452,69 @@ export function Editor() {
         return <div style={{ padding: '20px' }}>{t('common.loading')}</div>
     }
 
+    if (room.isEnded && !canAccessPlayback) {
+        return (
+            <div className="editor-container">
+                <div className="editor-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <button
+                            className="toolbar-button"
+                            onClick={() => navigate(backPath)}
+                        >
+                            ← {t('common.back')}
+                        </button>
+                        <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
+                        <span className="language-badge">{room.language}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <LanguageSwitcher />
+                        <ThemeToggle />
+                    </div>
+                </div>
+                <div
+                    style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2rem',
+                    }}
+                >
+                    <div
+                        style={{
+                            width: 'min(480px, 100%)',
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '10px',
+                            padding: '2rem',
+                            textAlign: 'center',
+                            boxShadow: '0 24px 48px rgba(15, 23, 42, 0.2)',
+                        }}
+                    >
+                        <h2 style={{ marginBottom: '0.75rem' }}>{t('editor.ended.title')}</h2>
+                        <p
+                            style={{
+                                color: 'var(--text-secondary)',
+                                marginBottom: '1.5rem',
+                                lineHeight: 1.6,
+                            }}
+                        >
+                            {t('editor.ended.description')}
+                        </p>
+                        <button
+                            type="button"
+                            className="toolbar-button"
+                            onClick={() => navigate(backPath)}
+                            style={{ alignSelf: 'center' }}
+                        >
+                            {t('editor.ended.back')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="editor-container">
             {/* Header */}
@@ -419,7 +522,7 @@ export function Editor() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <button
                         className="toolbar-button"
-                        onClick={() => navigate(isGuestMode ? `/share/${shareToken}` : '/rooms')}
+                        onClick={() => navigate(backPath)}
                     >
                         ← {t('common.back')}
                     </button>

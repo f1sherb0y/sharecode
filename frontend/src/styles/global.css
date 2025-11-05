@@ -360,6 +360,7 @@ select:focus {
 /* Editor Layout */
 .editor-container {
     min-height: 100vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
     background-color: var(--bg-primary);
@@ -1146,6 +1147,31 @@ select:focus {
     opacity: 0.85;
     cursor: pointer;
     filter: none;
+}
+
+.yRemoteSelection {
+    pointer-events: none;
+    border-radius: 2px;
+}
+
+.yRemoteSelectionHead {
+    pointer-events: none;
+}
+
+.share-link-modal {
+    padding: 0;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+
+.share-link-modal:hover {
+    box-shadow: none;
+}
+
+.share-link-modal h3 {
+    margin: 0;
 }
 
 /* Chrome 120+ exposes ::picker for popup styling - commented out due to build issues */

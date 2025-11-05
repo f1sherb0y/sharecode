@@ -5,8 +5,11 @@ import { prisma } from '../utils/db'
 
 const gzipAsync = promisify(gzip)
 
+type Role = 'user' | 'admin' | 'superuser'
+
 interface AuthUser {
     id: string
+    role: Role
     canReadAllRooms: boolean
     canWriteAllRooms: boolean
     canDeleteAllRooms: boolean
@@ -44,9 +47,12 @@ export async function getPlaybackUpdates(req: Request, res: Response) {
         }
 
         const isOwner = room.ownerId === authUser.id
-        const isParticipant = room.participants.some(p => p.userId === authUser.id)
+        const isPrivileged =
+            authUser.role === 'admin' ||
+            authUser.role === 'superuser' ||
+            hasGlobalRead(authUser)
 
-        if (!hasGlobalRead(authUser) && !isOwner && !isParticipant) {
+        if (!isOwner && !isPrivileged) {
             return res.status(403).json({ error: 'Access denied' })
         }
 

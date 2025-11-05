@@ -239,6 +239,7 @@ export async function joinShareLink(req: Request, res: Response) {
                         allowEdit: true,
                         isDeleted: true,
                         isEnded: true,
+                        endedAt: true,
                     },
                 },
             },
@@ -294,6 +295,8 @@ export async function joinShareLink(req: Request, res: Response) {
                 language: shareLink.room.language,
                 documentId: shareLink.room.documentId,
                 allowEdit: shareLink.room.allowEdit,
+                isEnded: shareLink.room.isEnded,
+                endedAt: shareLink.room.endedAt,
             },
         })
     } catch (error) {
@@ -326,6 +329,7 @@ export async function getGuestSession(req: Request, res: Response) {
                         allowEdit: true,
                         isDeleted: true,
                         isEnded: true,
+                        endedAt: true,
                     },
                 },
                 shareLink: {
@@ -372,6 +376,7 @@ export async function getGuestSession(req: Request, res: Response) {
                 documentId: guest.room.documentId,
                 allowEdit: guest.room.allowEdit,
                 isEnded: guest.room.isEnded,
+                endedAt: guest.room.endedAt,
             },
             share: {
                 id: guest.shareLink.id,

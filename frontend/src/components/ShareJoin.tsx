@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { fetchShareInfo, joinShare } from '../lib/shareApi'
 import { useShareSession } from '../contexts/ShareSessionContext'
 
 export function ShareJoin() {
-    const { shareToken, session, setSession, clearSession } = useShareSession()
+    const { shareToken, session, setSession, clearSession, refreshSession } = useShareSession()
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [username, setUsername] = useState(session?.guest.displayName ?? '')
@@ -55,6 +55,17 @@ export function ShareJoin() {
             isMounted = false
         }
     }, [shareToken])
+
+    const sessionRefreshTokenRef = useRef<string | null>(null)
+
+    useEffect(() => {
+        if (!session) return
+        if (sessionRefreshTokenRef.current === session.authToken) return
+        sessionRefreshTokenRef.current = session.authToken
+        refreshSession().catch((err) => {
+            console.error('Failed to refresh share session', err)
+        })
+    }, [session, refreshSession])
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault()
