@@ -30,6 +30,7 @@ Thumbs.db
 # Reference documentation (not part of our project)
 tiptap-docs/
 y-codemirror/
+y-monaco/
 
 # Bun
 .bun/
