@@ -20,7 +20,7 @@ COPY bun.lock package.json ./
 
 # Install dependencies with cache mount for faster rebuilds
 RUN --mount=type=cache,target=/root/.bun/install/cache \
-    bun install --frozen-lockfile
+    bun install
 
 # Copy config files (occasionally changed)
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
