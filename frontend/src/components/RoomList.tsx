@@ -7,6 +7,7 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { createPortal } from 'react-dom'
 import { api } from '../lib/api'
 import type { Room, Language, User } from '../types'
+import { ShareLinkManager } from './ShareLinkManager'
 
 const LANGUAGES: Language[] = [
     'javascript',
@@ -35,6 +36,7 @@ export function RoomList() {
     const [isUserModalOpen, setIsUserModalOpen] = useState(false)
     const [pendingUserSelection, setPendingUserSelection] = useState<{ userId: string; canEdit: boolean }[]>([])
     const [userSearchTerm, setUserSearchTerm] = useState('')
+    const [shareModalRoom, setShareModalRoom] = useState<{ id: string; name: string } | null>(null)
     const { user, logout } = useAuth()
     const navigate = useNavigate()
 
@@ -179,14 +181,14 @@ export function RoomList() {
     useEffect(() => {
         if (typeof document === 'undefined') return
         const previousOverflow = document.body.style.overflow
-        if (isUserModalOpen) {
+        if (isUserModalOpen || shareModalRoom) {
             document.body.style.overflow = 'hidden'
             return () => {
                 document.body.style.overflow = previousOverflow
             }
         }
         document.body.style.overflow = previousOverflow
-    }, [isUserModalOpen])
+    }, [isUserModalOpen, shareModalRoom])
 
     const handleJoinRoom = (roomId: string) => {
         navigate(`/editor/${roomId}`)
@@ -407,25 +409,39 @@ export function RoomList() {
                                             </h3>
                                             <div className="language-badge">{room.language}</div>
                                         </div>
-                                        {(room.isOwner || user?.canDeleteAllRooms) && !room.isEnded && (
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            {room.isOwner && !room.isEnded && (
+                                                <button
+                                                    className="btn-secondary"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setShareModalRoom({ id: room.id, name: room.name })
+                                                    }}
+                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                                                >
+                                                    {t('share.manager.openPanel')}
+                                                </button>
+                                            )}
+                                            {(room.isOwner || user?.canDeleteAllRooms) && !room.isEnded && (
                                                 <button
                                                     className="btn-danger"
                                                     onClick={async (e) => {
-                                                    e.stopPropagation()
-                                                    if (confirm(t('rooms.list.deleteConfirm', { name: room.name }))) {
-                                                        try {
-                                                            await api.deleteRoom(room.id)
-                                                            loadRooms()
-                                                        } catch (err) {
-                                                            setError(err instanceof Error ? err.message : 'Failed to delete room')
+                                                        e.stopPropagation()
+                                                        if (confirm(t('rooms.list.deleteConfirm', { name: room.name }))) {
+                                                            try {
+                                                                await api.deleteRoom(room.id)
+                                                                loadRooms()
+                                                            } catch (err) {
+                                                                setError(err instanceof Error ? err.message : 'Failed to delete room')
+                                                            }
                                                         }
-                                                    }
-                                                }}
-                                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                                            >
-                                                {t('rooms.list.delete')}
-                                            </button>
-                                        )}
+                                                    }}
+                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                                                >
+                                                    {t('rooms.list.delete')}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="room-meta">
                                         <div>{t('rooms.list.owner')}: {room.owner.username}</div>
@@ -630,6 +646,54 @@ export function RoomList() {
                                 {t('rooms.create.modalConfirm')}
                             </button>
                         </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {shareModalRoom && typeof document !== 'undefined' && createPortal(
+                <div
+                    className="modal-overlay"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10000,
+                        padding: '1rem',
+                    }}
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) {
+                            setShareModalRoom(null)
+                        }
+                    }}
+                >
+                    <div
+                        className="modal-content"
+                        style={{
+                            background: 'var(--bg-card)',
+                            color: 'var(--text-primary)',
+                            borderRadius: '6px',
+                            width: 'min(720px, 100%)',
+                            maxHeight: '85vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                            border: '1px solid var(--border)',
+                            position: 'relative',
+                            zIndex: 10001,
+                            padding: '1.5rem',
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <ShareLinkManager
+                            roomId={shareModalRoom.id}
+                            onClose={() => setShareModalRoom(null)}
+                        />
                     </div>
                 </div>,
                 document.body

@@ -10,7 +10,8 @@ const USER_COLORS = [
 ]
 
 export function getRandomUserColor() {
-    return USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)]
+    const index = Math.floor(Math.random() * USER_COLORS.length)
+    return USER_COLORS[index] ?? '#30bced'
 }
 
 export { USER_COLORS }

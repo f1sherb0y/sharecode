@@ -43,6 +43,51 @@ export interface Room {
     canEdit?: boolean
 }
 
+export interface ShareLink {
+    id: string
+    token: string
+    canEdit: boolean
+    createdAt: string
+    guestCount: number
+    shareUrl?: string | null
+}
+
+export interface ShareLinkInfo {
+    token: string
+    canEdit: boolean
+    effectiveCanEdit: boolean
+    createdAt: string
+    shareUrl?: string | null
+}
+
+export interface ShareGuest {
+    id: string
+    displayName: string
+    email: string | null
+    color: string
+    canEdit: boolean
+}
+
+export interface ShareRoomSummary {
+    id: string
+    name: string
+    language: Language
+    isEnded?: boolean
+    endedAt?: string
+}
+
+export interface ShareRoomDetails extends ShareRoomSummary {
+    documentId: string
+    allowEdit: boolean
+}
+
+export interface ShareSession {
+    shareToken: string
+    authToken: string
+    guest: ShareGuest
+    room: ShareRoomDetails
+}
+
 export interface AuthResponse {
     user: User
     token: string

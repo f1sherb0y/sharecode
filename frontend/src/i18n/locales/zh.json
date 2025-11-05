@@ -190,6 +190,63 @@
       }
     }
   },
+  "share": {
+    "manager": {
+      "title": "访客分享链接",
+      "description": "生成无需账号即可加入房间的访客邀请链接。",
+      "createView": "创建仅查看链接",
+      "createEdit": "创建可编辑链接",
+      "loading": "加载分享链接中...",
+      "empty": "还没有分享链接，立即创建一个邀请访客吧。",
+      "copy": "复制链接",
+      "copied": "链接已复制",
+      "copyFailed": "无法复制链接，请手动复制。",
+      "delete": "删除",
+      "deleteConfirm": "确定删除该分享链接？",
+      "editLabel": "可编辑",
+      "viewLabel": "仅查看",
+      "guests": "活跃访客：{{count}}",
+      "close": "关闭",
+      "openPanel": "分享房间",
+      "hidePanel": "收起分享面板",
+      "created": "已创建新的分享链接！"
+    },
+    "join": {
+      "title": "加入分享房间",
+      "loading": "正在加载分享信息...",
+      "descriptionEdit": "输入信息即可加入并共同协作。",
+      "descriptionView": "输入信息即可实时观看会话。",
+      "ended": "此房间已不可用。",
+      "existingSessionTitle": "已有会话",
+      "existingSessionDescription": "你之前以 {{name}} 的身份加入。",
+      "resumeButton": "继续",
+      "resetButton": "更换身份加入",
+      "nameLabel": "显示名称",
+      "namePlaceholder": "你的名称",
+      "emailLabel": "邮箱（可选）",
+      "emailPlaceholder": "you@example.com",
+      "emailHint": "邮箱仅用于本次会话的身份标识。",
+      "validationName": "请输入显示名称。",
+      "joining": "加入中...",
+      "joinButton": "加入房间"
+    },
+    "editor": {
+      "loading": "正在加载访客会话...",
+      "sessionExpired": "访客会话已失效，请重新通过链接加入。",
+      "permissionEdit": "可编辑",
+      "permissionView": "仅查看",
+      "permissionLabel": "权限",
+      "connectedAs": "当前身份：{{name}}",
+      "leaveButton": "离开",
+      "sessionInfoTitle": "会话信息",
+      "language": "语言：{{language}}",
+      "participants": "参与者",
+      "anonymous": "匿名用户",
+      "you": "你",
+      "noOtherParticipants": "暂无其他参与者在线。",
+      "following": "正在跟随"
+    }
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",

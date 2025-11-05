@@ -190,6 +190,63 @@
       }
     }
   },
+  "share": {
+    "manager": {
+      "title": "Guest Share Links",
+      "description": "Generate invite links that let guests join this room without an account.",
+      "createView": "Create view-only link",
+      "createEdit": "Create edit link",
+      "loading": "Loading share links...",
+      "empty": "No share links yet. Create one to invite guests.",
+      "copy": "Copy link",
+      "copied": "Link copied to clipboard",
+      "copyFailed": "Could not copy link. Please copy manually.",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this share link?",
+      "editLabel": "Can edit",
+      "viewLabel": "View only",
+      "guests": "Active guests: {{count}}",
+      "close": "Close",
+      "openPanel": "Share room",
+      "hidePanel": "Hide share panel",
+      "created": "Share link created!"
+    },
+    "join": {
+      "title": "Join Shared Room",
+      "loading": "Loading share information...",
+      "descriptionEdit": "Enter your details to join and collaborate in this room.",
+      "descriptionView": "Enter your details to watch this session in real time.",
+      "ended": "This room is no longer available.",
+      "existingSessionTitle": "Existing session",
+      "existingSessionDescription": "You previously joined as {{name}}.",
+      "resumeButton": "Resume",
+      "resetButton": "Join with another name",
+      "nameLabel": "Display name",
+      "namePlaceholder": "Your name",
+      "emailLabel": "Email (optional)",
+      "emailPlaceholder": "you@example.com",
+      "emailHint": "Email is only used for identification within this session.",
+      "validationName": "Please enter a display name.",
+      "joining": "Joining...",
+      "joinButton": "Join room"
+    },
+    "editor": {
+      "loading": "Loading shared session...",
+      "sessionExpired": "Your guest session expired. Please rejoin with the link.",
+      "permissionEdit": "Can edit",
+      "permissionView": "View only",
+      "permissionLabel": "Permission",
+      "connectedAs": "Connected as {{name}}",
+      "leaveButton": "Leave",
+      "sessionInfoTitle": "Session info",
+      "language": "Language: {{language}}",
+      "participants": "Participants",
+      "anonymous": "Anonymous",
+      "you": "You",
+      "noOtherParticipants": "No other participants online.",
+      "following": "Following"
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

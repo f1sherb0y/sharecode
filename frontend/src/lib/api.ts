@@ -1,6 +1,6 @@
-import type { User, Room, AuthResponse, Role } from '../types'
+import type { User, Room, AuthResponse, Role, ShareLink } from '../types'
 
-const resolveApiUrl = (): string => {
+export const resolveApiUrl = (): string => {
     // First check localStorage for user-configured settings
     if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('sharecode_settings')
@@ -168,6 +168,30 @@ class ApiClient {
         return this.request<{ room: Room }>(`/api/rooms/${roomId}/end`, {
             method: 'POST',
         })
+    }
+
+    // Share link endpoints
+    async createShareLink(
+        roomId: string,
+        canEdit: boolean
+    ): Promise<{ shareLink: ShareLink }> {
+        return this.request<{ shareLink: ShareLink }>(`/api/rooms/${roomId}/share-links`, {
+            method: 'POST',
+            body: JSON.stringify({ canEdit }),
+        })
+    }
+
+    async listShareLinks(roomId: string): Promise<{ shareLinks: ShareLink[] }> {
+        return this.request<{ shareLinks: ShareLink[] }>(`/api/rooms/${roomId}/share-links`)
+    }
+
+    async deleteShareLink(roomId: string, shareLinkId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(
+            `/api/rooms/${roomId}/share-links/${shareLinkId}`,
+            {
+                method: 'DELETE',
+            }
+        )
     }
 
     // Admin endpoints

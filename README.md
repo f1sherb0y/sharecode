@@ -13,6 +13,7 @@ A real-time collaborative code editing platform built with React, CodeMirror, Yj
 - 💾 Persistent document storage with PostgreSQL
 - 🔒 Room-based access control
 - 🔑 Fine-grained room permissions (read/write/delete all) with superuser, admin, and user roles
+- 🔗 Guest share links with configurable view/edit permissions
 
 ## Tech Stack
 
@@ -223,6 +224,14 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `DELETE /api/rooms/:roomId` - Delete room (owner or users with delete-all permission)
 - `POST /api/rooms/:roomId/join` - Join room (authenticated)
 - `POST /api/rooms/:roomId/leave` - Leave room (authenticated)
+- `POST /api/rooms/:roomId/share-links` - Create a guest share link with view/edit permissions (owner)
+- `GET /api/rooms/:roomId/share-links` - List share links for the room (owner)
+- `DELETE /api/rooms/:roomId/share-links/:shareLinkId` - Delete an existing share link (owner)
+
+### Share Links (Public)
+- `GET /api/share/:token` - Inspect share link details for a guest invite
+- `POST /api/share/:token/join` - Join a room as a guest by providing display name/email
+- `GET /api/share/session` - Refresh guest session details using the guest token
 
 ### Admin / Superuser
 - `GET /api/admin/users` - List all active users (admin/superuser)

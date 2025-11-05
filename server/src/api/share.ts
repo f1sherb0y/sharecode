@@ -9,8 +9,14 @@ function buildShareUrl(token: string) {
     if (!baseUrl) {
         return null
     }
+
     const normalizedBase = baseUrl.replace(/\/$/, '')
-    return `${normalizedBase}/#/share/${token}`
+    const useHashRoutes = process.env.FRONTEND_HASH_ROUTER === 'true'
+    const path = useHashRoutes ? `#/share/${token}` : `share/${token}`
+
+    return useHashRoutes
+        ? `${normalizedBase}/${path}`
+        : `${normalizedBase}/${path}`
 }
 
 function ensureAuthorizationHeader(req: Request): string | null {
@@ -213,7 +219,9 @@ export async function joinShareLink(req: Request, res: Response) {
         const { token } = req.params
         const { username, email } = req.body as { username?: string; email?: string }
 
-        const normalizedUsername = username?.trim()
+        const normalizedUsername = (username ?? '').trim()
+        const trimmedEmail = email?.trim() ?? ''
+        const normalizedEmail = trimmedEmail.length > 0 ? trimmedEmail : null
 
         if (!normalizedUsername) {
             return res.status(400).json({ error: 'Username is required' })
@@ -245,7 +253,7 @@ export async function joinShareLink(req: Request, res: Response) {
         }
 
         const sessionToken = randomBytes(24).toString('hex')
-        const guestColor = getRandomUserColor()
+        const guestColor: string = getRandomUserColor()
         const canEdit = shareLink.canEdit && shareLink.room.allowEdit
 
         const guest = await prisma.guestSession.create({
@@ -254,7 +262,7 @@ export async function joinShareLink(req: Request, res: Response) {
                 roomId: shareLink.room.id,
                 token: sessionToken,
                 displayName: normalizedUsername,
-                email: email?.trim() || null,
+                email: normalizedEmail,
                 color: guestColor,
                 canEdit,
             },

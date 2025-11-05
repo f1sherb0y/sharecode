@@ -115,10 +115,10 @@ app.delete('/api/admin/rooms/:id', authMiddleware, adminMiddleware, adminDeleteR
 // Playback routes
 app.get('/api/rooms/:roomId/playback/updates', authMiddleware, getPlaybackUpdates)
 
-// Share routes
+// Share routes (specific routes before parameterized routes)
+app.get('/api/share/session', getGuestSession)
 app.get('/api/share/:token', getShareInfo)
 app.post('/api/share/:token/join', joinShareLink)
-app.get('/api/share/session', getGuestSession)
 
 // Create HTTP server and integrate Hocuspocus
 const httpServer = createServer(app)

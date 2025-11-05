@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, useContext } from 'react'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, StateEffect } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
+import { indentWithTab } from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import { java } from '@codemirror/lang-java'
@@ -15,12 +16,15 @@ import { yCollab, yUndoManagerKeymap, YSyncConfig } from 'y-codemirror.next'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { useShareSession } from '../contexts/ShareSessionContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
 import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { ConnectedIcon, DisconnectedIcon, SyncedIcon, SyncingIcon } from './StatusIcons'
 import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
+import { ShareLinkManager } from './ShareLinkManager'
+import { createPortal } from 'react-dom'
 
 interface UserColorScheme {
     color: string
@@ -70,11 +74,24 @@ const languageExtensions: Record<string, any> = {
 }
 
 export function Editor() {
-    const { roomId } = useParams<{ roomId: string }>()
+    const { roomId, shareToken } = useParams<{ roomId?: string; shareToken?: string }>()
     const { user, token } = useAuth()
     const { theme } = useTheme()
     const { t } = useTranslation()
     const navigate = useNavigate()
+
+    // Try to access share session - will be undefined if not in ShareSessionProvider context
+    let shareSession = null
+    let isLoadingShare = false
+    try {
+        const ctx = useShareSession()
+        shareSession = ctx.session
+        isLoadingShare = ctx.isLoading
+    } catch {
+        // Not in a share context, that's fine
+    }
+
+    const isGuestMode = !!shareToken && !!shareSession
     const [room, setRoom] = useState<Room | null>(null)
     const [error, setError] = useState('')
     const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
@@ -86,10 +103,17 @@ export function Editor() {
     const editorRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const ySyncConfigRef = useRef<YSyncConfig | null>(null)
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
-    // Load room details first
+    // Load room from guest session if in guest mode
     useEffect(() => {
-        if (!roomId) return
+        if (!isGuestMode || !shareSession) return
+        setRoom(shareSession.room as Room)
+    }, [isGuestMode, shareSession])
+
+    // Load room details for authenticated users
+    useEffect(() => {
+        if (isGuestMode || !roomId) return
 
         const loadRoom = async () => {
             try {
@@ -101,23 +125,37 @@ export function Editor() {
         }
 
         loadRoom()
-    }, [roomId])
+    }, [roomId, isGuestMode])
+
+    // Determine document ID and auth token based on mode
+    const documentId = isGuestMode
+        ? (shareSession?.room.documentId || '')
+        : (room?.documentId || '')
+    const authToken = isGuestMode
+        ? (shareSession?.authToken || '')
+        : (token || '')
 
     // Only create provider once we have the room data
     const { provider, ytext, isConnected, isSynced } = useYjsProvider(
-        room?.documentId || '',
-        token || ''
+        documentId,
+        authToken
     )
 
     useEffect(() => {
         if (!provider?.awareness) return
 
-        const identifier = user?.id ?? provider.awareness.clientID
+        const identifier = isGuestMode
+            ? (shareSession?.guest.id ?? provider.awareness.clientID)
+            : (user?.id ?? provider.awareness.clientID)
         const colors = generateUserColorScheme(identifier)
 
+        const userName = isGuestMode
+            ? (shareSession?.guest.displayName || 'Guest')
+            : (user?.username || 'Anonymous')
+
         provider.awareness.setLocalStateField('user', {
-            id: user?.id ?? provider.awareness.clientID,
-            name: user?.username || 'Anonymous',
+            id: identifier,
+            name: userName,
             color: colors.color,
             colorLight: colors.colorLight,
         })
@@ -125,7 +163,7 @@ export function Editor() {
         setLocalUserColors((prev) =>
             prev.color === colors.color && prev.colorLight === colors.colorLight ? prev : colors
         )
-    }, [provider, user?.id, user?.username])
+    }, [provider, isGuestMode, user?.id, user?.username, shareSession?.guest])
 
     // Set up CodeMirror editor (only once)
     useEffect(() => {
@@ -138,16 +176,25 @@ export function Editor() {
         const languageExt = languageExtensions[room.language] || javascript()
         const themeExt = theme === 'dark' ? [oneDark] : []
 
+        // Check if guest mode and no edit permission
+        const readOnly = isGuestMode && !shareSession?.guest.canEdit
+
+        const extensions = [
+            keymap.of([...yUndoManagerKeymap, indentWithTab]),
+            basicSetup,
+            languageExt,
+            ...themeExt,
+            EditorView.lineWrapping,
+            yCollab(ytext, provider.awareness),
+        ]
+
+        if (readOnly) {
+            extensions.push(EditorState.readOnly.of(true))
+        }
+
         const state = EditorState.create({
             doc: ytext.toString(),
-            extensions: [
-                keymap.of([...yUndoManagerKeymap]),
-                basicSetup,
-                languageExt,
-                ...themeExt,
-                EditorView.lineWrapping,
-                yCollab(ytext, provider.awareness),
-            ],
+            extensions,
         })
 
         const view = new EditorView({
@@ -172,7 +219,7 @@ export function Editor() {
 
         viewRef.current.dispatch({
             effects: StateEffect.reconfigure.of([
-                keymap.of([...yUndoManagerKeymap]),
+                keymap.of([...yUndoManagerKeymap, indentWithTab]),
                 basicSetup,
                 languageExt,
                 ...themeExt,
@@ -255,7 +302,12 @@ export function Editor() {
         }
     }, [followingUser, provider])
 
-    if (!roomId) {
+    // Redirect guest to join page if session expired
+    if (isGuestMode && !isLoadingShare && !shareSession) {
+        return <Navigate to={`/share/${shareToken}`} replace />
+    }
+
+    if (!roomId && !isGuestMode) {
         return <div>Room ID not provided</div>
     }
 
@@ -263,7 +315,9 @@ export function Editor() {
         return (
             <div style={{ padding: '20px' }}>
                 <div style={{ color: 'red' }}>{error}</div>
-                <button onClick={() => navigate('/rooms')}>{t('common.back')}</button>
+                <button onClick={() => navigate(isGuestMode ? `/share/${shareToken}` : '/rooms')}>
+                    {t('common.back')}
+                </button>
             </div>
         )
     }
@@ -277,7 +331,7 @@ export function Editor() {
 
         viewRef.current.dispatch({
             effects: StateEffect.reconfigure.of([
-                keymap.of([...yUndoManagerKeymap]),
+                keymap.of([...yUndoManagerKeymap, indentWithTab]),
                 basicSetup,
                 languageExt,
                 ...themeExt,
@@ -337,7 +391,22 @@ export function Editor() {
         }
     }, [provider, room])
 
-    const isOwner = room?.ownerId === user?.id
+    const isOwner = !isGuestMode && room?.ownerId === user?.id
+    const currentUserName = isGuestMode
+        ? (shareSession?.guest.displayName || 'Guest')
+        : (user?.username || 'You')
+
+    useEffect(() => {
+        if (typeof document === 'undefined') return
+        const previousOverflow = document.body.style.overflow
+        if (isShareModalOpen) {
+            document.body.style.overflow = 'hidden'
+            return () => {
+                document.body.style.overflow = previousOverflow
+            }
+        }
+        document.body.style.overflow = previousOverflow
+    }, [isShareModalOpen])
 
     if (!room) {
         return <div style={{ padding: '20px' }}>{t('common.loading')}</div>
@@ -348,7 +417,10 @@ export function Editor() {
             {/* Header */}
             <div className="editor-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <button className="toolbar-button" onClick={() => navigate('/rooms')}>
+                    <button
+                        className="toolbar-button"
+                        onClick={() => navigate(isGuestMode ? `/share/${shareToken}` : '/rooms')}
+                    >
                         ← {t('common.back')}
                     </button>
                     <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
@@ -370,6 +442,17 @@ export function Editor() {
                     )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {isOwner && !room.isEnded && (
+                        <button
+                            className="btn-secondary"
+                            onClick={(event) => {
+                                event.preventDefault()
+                                setIsShareModalOpen(true)
+                            }}
+                        >
+                            {t('share.manager.openPanel')}
+                        </button>
+                    )}
                     {isOwner && !room.isEnded && (
                         <button
                             className="btn-danger"
@@ -414,7 +497,7 @@ export function Editor() {
                             }}
                         >
                             <div className="user-dot" style={{ backgroundColor: localUserColors.color }} />
-                            <span style={{ fontWeight: 600 }}>{user?.username || 'You'}</span>
+                            <span style={{ fontWeight: 600 }}>{currentUserName}</span>
                         </div>
 
                         {/* Remote users */}
@@ -472,6 +555,54 @@ export function Editor() {
                     </div>
                 </div>
             </div>
+
+            {isShareModalOpen && typeof document !== 'undefined' && createPortal(
+                <div
+                    className="modal-overlay"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10000,
+                        padding: '1rem',
+                    }}
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) {
+                            setIsShareModalOpen(false)
+                        }
+                    }}
+                >
+                    <div
+                        className="modal-content"
+                        style={{
+                            background: 'var(--bg-card)',
+                            color: 'var(--text-primary)',
+                            borderRadius: '6px',
+                            width: 'min(720px, 100%)',
+                            maxHeight: '85vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                            border: '1px solid var(--border)',
+                            position: 'relative',
+                            zIndex: 10001,
+                            padding: '1.5rem',
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <ShareLinkManager
+                            roomId={room.id}
+                            onClose={() => setIsShareModalOpen(false)}
+                        />
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     )
 }
