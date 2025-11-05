@@ -3,7 +3,12 @@ export interface User {
     email: string
     username: string
     color: string
-    role?: string
+    role?: Role
+    canReadAllRooms?: boolean
+    canWriteAllRooms?: boolean
+    canDeleteAllRooms?: boolean
+    createdAt?: string
+    lastSeen?: string
 }
 
 export interface Room {
@@ -35,6 +40,7 @@ export interface Room {
     isExpired?: boolean
     isMember?: boolean
     isOwner?: boolean
+    canEdit?: boolean
 }
 
 export interface AuthResponse {
@@ -53,7 +59,7 @@ export interface RemoteUser {
     }
 }
 
-export type Role = 'user' | 'admin' | 'observer' | 'support'
+export type Role = 'user' | 'admin' | 'superuser'
 
 export type Language =
     | 'javascript'

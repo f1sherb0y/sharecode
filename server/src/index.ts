@@ -19,8 +19,23 @@ import {
 } from './api/rooms'
 import { authMiddleware } from './middleware/auth'
 import { adminMiddleware } from './middleware/admin'
-import { getAllUsers, deleteUser, getAllRooms as adminGetAllRooms, deleteRoom as adminDeleteRoom, createUser } from './api/admin'
+import {
+    getAllUsers,
+    deleteUser,
+    getAllRooms as adminGetAllRooms,
+    deleteRoom as adminDeleteRoom,
+    createUser,
+    updateUser,
+} from './api/admin'
 import { getPlaybackUpdates } from './api/playback'
+import {
+    createShareLink,
+    listShareLinks,
+    deleteShareLink,
+    getShareInfo,
+    joinShareLink,
+    getGuestSession,
+} from './api/share'
 
 const app = express()
 const PORT = parseInt(process.env.PORT || '3001')
@@ -85,16 +100,25 @@ app.delete('/api/rooms/:roomId', authMiddleware, deleteRoom)
 app.post('/api/rooms/:roomId/join', authMiddleware, joinRoom)
 app.post('/api/rooms/:roomId/leave', authMiddleware, leaveRoom)
 app.post('/api/rooms/:roomId/end', authMiddleware, endRoom)
+app.post('/api/rooms/:roomId/share-links', authMiddleware, createShareLink)
+app.get('/api/rooms/:roomId/share-links', authMiddleware, listShareLinks)
+app.delete('/api/rooms/:roomId/share-links/:shareLinkId', authMiddleware, deleteShareLink)
 
 // Admin routes
-app.post('/api/admin/users', adminMiddleware, createUser)
-app.get('/api/admin/users', adminMiddleware, getAllUsers)
-app.delete('/api/admin/users/:id', adminMiddleware, deleteUser)
-app.get('/api/admin/rooms', adminMiddleware, adminGetAllRooms)
-app.delete('/api/admin/rooms/:id', adminMiddleware, adminDeleteRoom)
+app.post('/api/admin/users', authMiddleware, adminMiddleware, createUser)
+app.get('/api/admin/users', authMiddleware, adminMiddleware, getAllUsers)
+app.patch('/api/admin/users/:id', authMiddleware, adminMiddleware, updateUser)
+app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, deleteUser)
+app.get('/api/admin/rooms', authMiddleware, adminMiddleware, adminGetAllRooms)
+app.delete('/api/admin/rooms/:id', authMiddleware, adminMiddleware, adminDeleteRoom)
 
 // Playback routes
 app.get('/api/rooms/:roomId/playback/updates', authMiddleware, getPlaybackUpdates)
+
+// Share routes
+app.get('/api/share/:token', getShareInfo)
+app.post('/api/share/:token/join', joinShareLink)
+app.get('/api/share/session', getGuestSession)
 
 // Create HTTP server and integrate Hocuspocus
 const httpServer = createServer(app)

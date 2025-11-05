@@ -38,7 +38,8 @@
 
 ### 2. User Management
 - **Username-based authentication**: Login with username (email optional)
-- **Role-based access control**: Admin and regular user roles
+- **Role-based access control**: Three tiers (superuser, admin, user)
+- **Fine-grained permissions**: Per-user flags for read/write/delete access to all rooms
 - **JWT tokens**: Secure authentication with 7-day expiration
 - **User profiles**: Color-coded users for easy identification
 
@@ -58,9 +59,9 @@
 - **Real-world timestamps**: Timeline shows actual clock time
 
 ### 5. Admin Dashboard
-- **User management**: View all users, soft delete non-admin users
-- **Room management**: View all rooms with details, delete any room
-- **Protected routes**: Admin-only access with middleware verification
+- **User management**: View all users, edit roles/permissions, soft delete accounts
+- **Room management**: View all rooms with details, delete rooms when permitted
+- **Protected routes**: Admin/superuser-only access with middleware verification
 
 ### 6. Internationalization (i18n)
 - **Multi-language support**: English and Chinese translations
@@ -107,7 +108,8 @@ Single HTTP Server (Port 3001)
 ```
 User
 ├── id, username, email?, password, color, role
-├── isDeleted (soft delete)
+├── canReadAllRooms, canWriteAllRooms, canDeleteAllRooms
+├── isDeleted (soft delete), lastSeen
 └── Relations: ownedRooms, rooms (participants)
 
 Room
@@ -183,7 +185,8 @@ Document (Y.js persistence)
 - Established WebSocket connection via Hocuspocus
 
 ### 3. Feature Additions
-- Admin role and dashboard
+- Role hierarchy (superuser/admin/user) with fine-grained permissions
+- Admin dashboard
 - Room scheduling with expiration
 - Session playback system
 - Username-based authentication

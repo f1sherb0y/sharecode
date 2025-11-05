@@ -22,72 +22,152 @@ export const hocuspocusServer = new Server({
             // Verify JWT token
             const decoded = verifyToken(token as string)
 
-            // Get user from database
-            const user = await prisma.user.findUnique({
-                where: { id: decoded.userId },
-            })
+            if (decoded.type === 'user') {
+                // Get user from database
+                const user = await prisma.user.findUnique({
+                    where: { id: decoded.userId },
+                })
 
-            if (!user) {
-                throw new Error('User not found')
-            }
+                if (!user || user.isDeleted) {
+                    throw new Error('User not found')
+                }
 
-            // Find room by documentId with participants
-            const room = await prisma.room.findFirst({
-                where: { documentId: documentName },
-                include: {
-                    owner: true,
-                    participants: true,
-                },
-            })
-
-            if (!room) {
-                throw new Error(`Room with document ${documentName} not found`)
-            }
-
-            // Check access: admin and observer can access any room
-            // Regular users need to be owner or participant
-            const isOwner = room.ownerId === user.id
-            const participant = room.participants.find(p => p.userId === user.id)
-            const hasAccess = user.role === 'admin' || user.role === 'observer' || isOwner || participant
-
-            if (!hasAccess) {
-                throw new Error('Access denied: You do not have permission to access this room')
-            }
-
-            // Auto-add user as participant if they're not already (and not owner)
-            // This applies when accessing via direct link or rejoining
-            if (!isOwner && !participant) {
-                await prisma.roomParticipant.create({
-                    data: {
-                        roomId: room.id,
-                        userId: user.id,
-                        canEdit: true, // Default to edit permission when auto-added
+                // Find room by documentId with participants
+                const room = await prisma.room.findFirst({
+                    where: { documentId: documentName },
+                    include: {
+                        owner: true,
+                        participants: true,
                     },
                 })
-                logger.debug(`Auto-added ${user.username} as participant to ${room.name}`)
+
+                if (!room) {
+                    throw new Error(`Room with document ${documentName} not found`)
+                }
+
+                // Check access: users with global read/write/delete or room membership may connect
+                const isOwner = room.ownerId === user.id
+                const participant = room.participants.find(p => p.userId === user.id)
+                const canReadGlobally = user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
+                const canWriteGlobally = user.canWriteAllRooms || user.canDeleteAllRooms
+                const hasAccess = canReadGlobally || isOwner || participant
+
+                if (!hasAccess) {
+                    throw new Error('Access denied: You do not have permission to access this room')
+                }
+
+                const participantCanEdit = participant?.canEdit ?? false
+                const canEdit = canWriteGlobally || isOwner || participantCanEdit
+
+                const connection = (data as any).connection
+                if (!canEdit && connection) {
+                    connection.readOnly = true
+                }
+
+                // Auto-add user as participant if they're not already (and not owner)
+                // This applies when accessing via direct link or rejoining
+                if (!isOwner && !participant) {
+                    await prisma.roomParticipant.create({
+                        data: {
+                            roomId: room.id,
+                            userId: user.id,
+                            canEdit: canWriteGlobally,
+                        },
+                    })
+                    logger.debug(`Auto-added ${user.username} as participant to ${room.name}`)
+                }
+
+                // Update last seen
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { lastSeen: new Date() },
+                })
+
+                // Return context for other hooks
+                return {
+                    sessionType: 'user',
+                    user: {
+                        id: user.id,
+                        username: user.username,
+                        email: user.email,
+                        color: user.color,
+                        role: user.role,
+                    },
+                    permissions: {
+                        canEdit,
+                    },
+                    room: {
+                        id: room.id,
+                        name: room.name,
+                        language: room.language,
+                    },
+                }
             }
 
-            // Update last seen
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { lastSeen: new Date() },
-            })
+            if (decoded.type === 'guest') {
+                const guest = await prisma.guestSession.findUnique({
+                    where: { id: decoded.guestId },
+                    include: {
+                        room: {
+                            include: {
+                                owner: true,
+                            },
+                        },
+                        shareLink: true,
+                    },
+                })
 
-            // Return context for other hooks
-            return {
-                user: {
-                    id: user.id,
-                    username: user.username,
-                    email: user.email,
-                    color: user.color,
-                    role: user.role,
-                },
-                room: {
-                    id: room.id,
-                    name: room.name,
-                    language: room.language,
-                },
+                if (!guest) {
+                    throw new Error('Guest session not found')
+                }
+
+                if (guest.token !== decoded.sessionToken) {
+                    throw new Error('Guest session token mismatch')
+                }
+
+                if (guest.room.documentId !== documentName) {
+                    throw new Error('Guest session does not match this document')
+                }
+
+                if (guest.room.isDeleted || guest.room.isEnded) {
+                    throw new Error('Room is no longer available')
+                }
+
+                const effectiveCanEdit = guest.canEdit && guest.room.allowEdit && guest.shareLink.canEdit
+
+                const connection = (data as any).connection
+                if (!effectiveCanEdit && connection) {
+                    connection.readOnly = true
+                }
+
+                await prisma.guestSession.update({
+                    where: { id: guest.id },
+                    data: {
+                        lastActive: new Date(),
+                        canEdit: effectiveCanEdit,
+                    },
+                })
+
+                return {
+                    sessionType: 'guest',
+                    guest: {
+                        id: guest.id,
+                        displayName: guest.displayName,
+                        email: guest.email,
+                        color: guest.color,
+                    },
+                    permissions: {
+                        canEdit: effectiveCanEdit,
+                    },
+                    room: {
+                        id: guest.room.id,
+                        name: guest.room.name,
+                        language: guest.room.language,
+                    },
+                }
             }
+
+            throw new Error('Unsupported token type')
         } catch (error) {
             logger.error('Authentication error:', error)
             throw new Error('Authentication failed: ' + (error as Error).message)
@@ -96,15 +176,21 @@ export const hocuspocusServer = new Server({
 
     async onConnect(data) {
         const { context, documentName } = data
-        if (context?.user) {
+        if (context?.sessionType === 'user' && context.user) {
             logger.websocket(`${context.user.username} connected to ${documentName}`)
+        }
+        if (context?.sessionType === 'guest' && context.guest) {
+            logger.websocket(`Guest ${context.guest.displayName} connected to ${documentName}`)
         }
     },
 
     async onDisconnect(data) {
         const { context, documentName } = data
-        if (context?.user) {
+        if (context?.sessionType === 'user' && context.user) {
             logger.websocket(`${context.user.username} disconnected from ${documentName}`)
+        }
+        if (context?.sessionType === 'guest' && context.guest) {
+            logger.websocket(`Guest ${context.guest.displayName} disconnected from ${documentName}`)
         }
     },
 
@@ -114,8 +200,11 @@ export const hocuspocusServer = new Server({
 
     async onChange(data) {
         const { documentName, context } = data
-        if (context?.user) {
+        if (context?.sessionType === 'user' && context.user) {
             logger.debug(`Document ${documentName} changed by ${context.user.username}`)
+        }
+        if (context?.sessionType === 'guest' && context.guest) {
+            logger.debug(`Document ${documentName} changed by guest ${context.guest.displayName}`)
         }
     },
 })

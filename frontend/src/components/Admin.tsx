@@ -4,7 +4,119 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from './ThemeToggle'
 import { api } from '../lib/api'
-import type { User, Room } from '../types'
+import type { User, Room, Role } from '../types'
+
+type PermissionState = {
+    canReadAllRooms: boolean
+    canWriteAllRooms: boolean
+    canDeleteAllRooms: boolean
+}
+
+type EditableUserState = PermissionState & {
+    role: Role
+}
+
+const INITIAL_PERMISSION_STATE: PermissionState = {
+    canReadAllRooms: false,
+    canWriteAllRooms: false,
+    canDeleteAllRooms: false,
+}
+
+function enforcePermissionImplications(state: PermissionState): PermissionState {
+    const next = { ...state }
+
+    if (next.canDeleteAllRooms) {
+        next.canWriteAllRooms = true
+        next.canReadAllRooms = true
+    } else if (next.canWriteAllRooms) {
+        next.canReadAllRooms = true
+    }
+
+    return next
+}
+
+function getInitialPermissionsForRole(role: Role): PermissionState {
+    if (role === 'superuser') {
+        return {
+            canReadAllRooms: true,
+            canWriteAllRooms: true,
+            canDeleteAllRooms: true,
+        }
+    }
+
+    if (role === 'admin') {
+        return {
+            canReadAllRooms: true,
+            canWriteAllRooms: true,
+            canDeleteAllRooms: false,
+        }
+    }
+
+    return { ...INITIAL_PERMISSION_STATE }
+}
+
+function alignPermissionsWithRole(role: Role, state: PermissionState): PermissionState {
+    if (role === 'superuser') {
+        return {
+            canReadAllRooms: true,
+            canWriteAllRooms: true,
+            canDeleteAllRooms: true,
+        }
+    }
+
+    if (role === 'admin') {
+        return enforcePermissionImplications({
+            ...state,
+            canReadAllRooms: true,
+            canWriteAllRooms: true,
+        })
+    }
+
+    return enforcePermissionImplications(state)
+}
+
+function updatePermissionState(
+    state: PermissionState,
+    key: keyof PermissionState,
+    value: boolean
+): PermissionState {
+    let next: PermissionState = { ...state, [key]: value }
+
+    if (key === 'canReadAllRooms') {
+        if (!value && (state.canWriteAllRooms || state.canDeleteAllRooms)) {
+            return state
+        }
+    }
+
+    if (key === 'canWriteAllRooms') {
+        if (value) {
+            next.canReadAllRooms = true
+        } else if (state.canDeleteAllRooms) {
+            next.canDeleteAllRooms = false
+        }
+    }
+
+    if (key === 'canDeleteAllRooms' && value) {
+        next.canWriteAllRooms = true
+        next.canReadAllRooms = true
+    }
+
+    return enforcePermissionImplications(next)
+}
+
+function toEditableState(user: User): EditableUserState {
+    const role = (user.role as Role) ?? 'user'
+    const base: PermissionState = {
+        canReadAllRooms: Boolean(user.canReadAllRooms),
+        canWriteAllRooms: Boolean(user.canWriteAllRooms),
+        canDeleteAllRooms: Boolean(user.canDeleteAllRooms),
+    }
+    const aligned = alignPermissionsWithRole(role, base)
+    return {
+        role,
+        ...aligned,
+    }
+}
 
 export function Admin() {
     const { t } = useTranslation()
@@ -17,16 +129,42 @@ export function Admin() {
     const [newUsername, setNewUsername] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [newEmail, setNewEmail] = useState('')
-    const [newRole, setNewRole] = useState<'user' | 'admin' | 'observer' | 'support'>('user')
+    const [newRole, setNewRole] = useState<Role>('user')
+    const [newPermissions, setNewPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
     const [isCreating, setIsCreating] = useState(false)
+    const [editedUsers, setEditedUsers] = useState<Record<string, EditableUserState>>({})
+    const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
     const { user, logout } = useAuth()
     const navigate = useNavigate()
+    const isSuperuser = user?.role === 'superuser'
+    const roleOptions: Role[] = ['user', 'admin', 'superuser']
+    const createRoleOptions: Role[] = isSuperuser ? roleOptions : ['user']
+
+    const roleDisplay = (role: Role | undefined) => {
+        switch (role) {
+            case 'superuser':
+                return t('common.superuser')
+            case 'admin':
+                return t('common.admin')
+            default:
+                return t('admin.users.createForm.roleUser')
+        }
+    }
+
+    const readDisabledForNewUser = newRole !== 'user' || newPermissions.canWriteAllRooms || newPermissions.canDeleteAllRooms
+    const writeDisabledForNewUser = newRole === 'admin' || newRole === 'superuser' || newPermissions.canDeleteAllRooms
+    const deleteDisabledForNewUser = newRole === 'superuser'
 
     useEffect(() => {
-        if (user?.role !== 'admin') {
+        if (!user) {
+            return
+        }
+
+        if (user.role !== 'admin' && user.role !== 'superuser') {
             navigate('/rooms')
             return
         }
+
         loadUsers()
         loadRooms()
     }, [user, navigate])
@@ -36,6 +174,11 @@ export function Admin() {
             setIsLoadingUsers(true)
             const { users } = await api.getAllUsers()
             setUsers(users)
+            const mapped = users.reduce<Record<string, EditableUserState>>((acc, item) => {
+                acc[item.id] = toEditableState(item)
+                return acc
+            }, {})
+            setEditedUsers(mapped)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load users')
         } finally {
@@ -55,17 +198,28 @@ export function Admin() {
         }
     }
 
+    const resetCreateForm = () => {
+        setNewUsername('')
+        setNewPassword('')
+        setNewEmail('')
+        setNewRole('user')
+        setNewPermissions(getInitialPermissionsForRole('user'))
+    }
+
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault()
         setIsCreating(true)
         setError('')
 
         try {
-            await api.createUser(newUsername, newPassword, newEmail || undefined, newRole)
-            setNewUsername('')
-            setNewPassword('')
-            setNewEmail('')
-            setNewRole('user')
+            await api.createUser({
+                username: newUsername,
+                password: newPassword,
+                email: newEmail || undefined,
+                role: newRole,
+                ...newPermissions,
+            })
+            resetCreateForm()
             setShowCreateUser(false)
             loadUsers()
         } catch (err) {
@@ -97,6 +251,95 @@ export function Admin() {
         }
     }
 
+    const handleNewRoleChange = (role: Role) => {
+        setNewRole(role)
+        setNewPermissions(getInitialPermissionsForRole(role))
+    }
+
+    const handleNewPermissionToggle = (key: keyof PermissionState, value: boolean) => {
+        setNewPermissions(prev => alignPermissionsWithRole(newRole, updatePermissionState(prev, key, value)))
+    }
+
+    const handleEditedPermissionToggle = (userId: string, key: keyof PermissionState, value: boolean) => {
+        setEditedUsers(prev => {
+            const current = prev[userId]
+            if (!current) return prev
+
+            const { role, ...permissionState } = current
+            const updatedPermissions = alignPermissionsWithRole(
+                role,
+                updatePermissionState(permissionState, key, value)
+            )
+
+            return {
+                ...prev,
+                [userId]: {
+                    role,
+                    ...updatedPermissions,
+                },
+            }
+        })
+    }
+
+    const handleEditedRoleChange = (userId: string, role: Role) => {
+        setEditedUsers(prev => {
+            const current = prev[userId]
+            if (!current) return prev
+
+            const { role: _oldRole, ...permissionState } = current
+            const updatedPermissions = alignPermissionsWithRole(role, permissionState)
+
+            return {
+                ...prev,
+                [userId]: {
+                    role,
+                    ...updatedPermissions,
+                },
+            }
+        })
+    }
+
+    const handleUpdateUser = async (target: User) => {
+        const edits = editedUsers[target.id]
+        if (!edits) return
+
+        const original = toEditableState(target)
+
+        const payload: {
+            role?: Role
+            canReadAllRooms?: boolean
+            canWriteAllRooms?: boolean
+            canDeleteAllRooms?: boolean
+        } = {}
+
+        if (edits.role !== original.role) {
+            payload.role = edits.role
+        }
+        if (edits.canReadAllRooms !== original.canReadAllRooms) {
+            payload.canReadAllRooms = edits.canReadAllRooms
+        }
+        if (edits.canWriteAllRooms !== original.canWriteAllRooms) {
+            payload.canWriteAllRooms = edits.canWriteAllRooms
+        }
+        if (edits.canDeleteAllRooms !== original.canDeleteAllRooms) {
+            payload.canDeleteAllRooms = edits.canDeleteAllRooms
+        }
+
+        if (Object.keys(payload).length === 0) {
+            return
+        }
+
+        try {
+            setUpdatingUserId(target.id)
+            await api.updateUser(target.id, payload)
+            await loadUsers()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to update user')
+        } finally {
+            setUpdatingUserId(null)
+        }
+    }
+
     return (
         <div className="room-page">
             <div className="room-topbar">
@@ -121,7 +364,14 @@ export function Admin() {
                 <div style={{ marginBottom: '3rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h2 style={{ margin: 0 }}>{t('admin.users.title')}</h2>
-                        <button onClick={() => setShowCreateUser(!showCreateUser)}>
+                        <button
+                            onClick={() => {
+                                if (showCreateUser) {
+                                    resetCreateForm()
+                                }
+                                setShowCreateUser(!showCreateUser)
+                            }}
+                        >
                             {showCreateUser ? t('admin.users.cancelButton') : '+ ' + t('admin.users.createButton')}
                         </button>
                     </div>
@@ -163,13 +413,49 @@ export function Admin() {
                                     <label className="form-label">{t('admin.users.createForm.role')}</label>
                                     <select
                                         value={newRole}
-                                        onChange={(e) => setNewRole(e.target.value as 'user' | 'admin' | 'observer' | 'support')}
+                                        onChange={(e) => handleNewRoleChange(e.target.value as Role)}
                                     >
-                                        <option value="user">{t('admin.users.createForm.roleUser')}</option>
-                                        <option value="admin">{t('admin.users.createForm.roleAdmin')}</option>
-                                        <option value="observer">{t('admin.users.createForm.roleObserver')}</option>
-                                        <option value="support">{t('admin.users.createForm.roleSupport')}</option>
+                                        {createRoleOptions.map((option) => (
+                                            <option key={option} value={option}>
+                                                {roleDisplay(option)}
+                                            </option>
+                                        ))}
                                     </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">{t('admin.users.createForm.permissions')}</label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={newPermissions.canReadAllRooms}
+                                                disabled={readDisabledForNewUser}
+                                                onChange={(e) => handleNewPermissionToggle('canReadAllRooms', e.target.checked)}
+                                            />
+                                            {t('admin.users.permissions.readAll')}
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={newPermissions.canWriteAllRooms}
+                                                disabled={writeDisabledForNewUser}
+                                                onChange={(e) => handleNewPermissionToggle('canWriteAllRooms', e.target.checked)}
+                                            />
+                                            {t('admin.users.permissions.writeAll')}
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={newPermissions.canDeleteAllRooms}
+                                                disabled={deleteDisabledForNewUser}
+                                                onChange={(e) => handleNewPermissionToggle('canDeleteAllRooms', e.target.checked)}
+                                            />
+                                            {t('admin.users.permissions.deleteAll')}
+                                        </label>
+                                    </div>
+                                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', display: 'block', marginTop: '0.5rem' }}>
+                                        {t('admin.users.permissions.hint')}
+                                    </small>
                                 </div>
                                 <button type="submit" disabled={isCreating}>
                                     {isCreating ? t('admin.users.createForm.creating') : t('admin.users.createForm.createButton')}
@@ -190,36 +476,112 @@ export function Admin() {
                                         <th style={{ padding: '0.75rem' }}>{t('admin.users.table.username')}</th>
                                         <th style={{ padding: '0.75rem' }}>{t('admin.users.table.email')}</th>
                                         <th style={{ padding: '0.75rem' }}>{t('admin.users.table.role')}</th>
+                                        <th style={{ padding: '0.75rem' }}>{t('admin.users.table.permissions')}</th>
                                         <th style={{ padding: '0.75rem' }}>{t('admin.users.table.created')}</th>
                                         <th style={{ padding: '0.75rem' }}>{t('admin.users.table.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {users.map((u) => (
-                                        <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                            <td style={{ padding: '0.75rem' }}>{u.username}</td>
-                                            <td style={{ padding: '0.75rem' }}>{u.email}</td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                <span style={{ color: u.role === 'admin' ? 'var(--accent)' : 'inherit' }}>
-                                                    {u.role}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                {new Date((u as any).createdAt).toLocaleDateString()}
-                                            </td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                {u.role !== 'admin' && (
-                                                    <button
-                                                        className="btn-danger"
-                                                        onClick={() => handleDeleteUser(u.id, u.username)}
-                                                        style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
-                                                    >
-                                                        {t('admin.users.table.delete')}
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {users.map((u) => {
+                                        const originalState = toEditableState(u)
+                                        const editState = editedUsers[u.id] ?? originalState
+                                        const canModifyRole = isSuperuser && u.id !== user?.id
+                                        const canModifyPermissions = isSuperuser || editState.role === 'user'
+                                        const readDisabled = !canModifyPermissions || editState.role !== 'user' || editState.canWriteAllRooms || editState.canDeleteAllRooms
+                                        const writeDisabled = !canModifyPermissions || editState.role !== 'user' || editState.canDeleteAllRooms
+                                        const deleteDisabled = !canModifyPermissions || editState.role === 'superuser'
+                                        const canDelete = isSuperuser ? (u.id !== user?.id && editState.role !== 'superuser') : editState.role === 'user'
+                                        const hasChanges =
+                                            editState.role !== originalState.role ||
+                                            editState.canReadAllRooms !== originalState.canReadAllRooms ||
+                                            editState.canWriteAllRooms !== originalState.canWriteAllRooms ||
+                                            editState.canDeleteAllRooms !== originalState.canDeleteAllRooms
+
+                                        return (
+                                            <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                <td style={{ padding: '0.75rem' }}>{u.username}</td>
+                                                <td style={{ padding: '0.75rem' }}>{u.email}</td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    {isSuperuser ? (
+                                                        <select
+                                                            value={editState.role}
+                                                            onChange={(e) => handleEditedRoleChange(u.id, e.target.value as Role)}
+                                                            disabled={!canModifyRole}
+                                                        >
+                                                            {roleOptions.map((option) => (
+                                                                <option key={option} value={option}>
+                                                                    {roleDisplay(option)}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <span>{roleDisplay(editState.role)}</span>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={editState.canReadAllRooms}
+                                                                disabled={readDisabled}
+                                                                onChange={(e) => handleEditedPermissionToggle(u.id, 'canReadAllRooms', e.target.checked)}
+                                                            />
+                                                            {t('admin.users.permissions.readAll')}
+                                                        </label>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={editState.canWriteAllRooms}
+                                                                disabled={writeDisabled}
+                                                                onChange={(e) => handleEditedPermissionToggle(u.id, 'canWriteAllRooms', e.target.checked)}
+                                                            />
+                                                            {t('admin.users.permissions.writeAll')}
+                                                        </label>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={editState.canDeleteAllRooms}
+                                                                disabled={deleteDisabled}
+                                                                onChange={(e) => handleEditedPermissionToggle(u.id, 'canDeleteAllRooms', e.target.checked)}
+                                                            />
+                                                            {t('admin.users.permissions.deleteAll')}
+                                                        </label>
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    {new Date((u as any).createdAt).toLocaleDateString()}
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                        {(isSuperuser || editState.role === 'user') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleUpdateUser(u)}
+                                                                disabled={!hasChanges || updatingUserId === u.id}
+                                                                style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
+                                                            >
+                                                                {updatingUserId === u.id
+                                                                    ? t('admin.users.table.updating')
+                                                                    : t('admin.users.table.update')}
+                                                            </button>
+                                                        )}
+                                                        {canDelete && (
+                                                            <button
+                                                                type="button"
+                                                                className="btn-danger"
+                                                                onClick={() => handleDeleteUser(u.id, u.username)}
+                                                                disabled={updatingUserId === u.id}
+                                                                style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
+                                                            >
+                                                                {t('admin.users.table.delete')}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                                 </tbody>
                             </table>
                         </div>

@@ -12,6 +12,7 @@ A real-time collaborative code editing platform built with React, CodeMirror, Yj
 - 🔄 Follow mode - follow another user's viewport
 - 💾 Persistent document storage with PostgreSQL
 - 🔒 Room-based access control
+- 🔑 Fine-grained room permissions (read/write/delete all) with superuser, admin, and user roles
 
 ## Tech Stack
 
@@ -71,12 +72,12 @@ The application will be available at **http://localhost**
 - nginx serves frontend static files for other paths
 - WebSocket connections use `/api/ws`
 
-**Default Admin Credentials:**
+**Default Superuser Credentials:**
 - Username: `admin`
 - Password: `admin123`
 - Email: `admin@sharecode.local`
 
-**⚠️ IMPORTANT:** Change these credentials in `docker-compose.yml` before deploying to production!
+**⚠️ IMPORTANT:** Change these credentials in `docker-compose.yml` before deploying to production! This account boots as the first **superuser** and can manage every other account.
 
 #### Docker Environment Configuration
 
@@ -89,7 +90,7 @@ environment:
   PORT: 3001
   LOG_LEVEL: info  # Options: debug, info, warn, error
   
-  # Admin credentials - CHANGE THESE IN PRODUCTION
+  # Superuser credentials - CHANGE THESE IN PRODUCTION
   ADMIN_USERNAME: admin
   ADMIN_PASSWORD: admin123
   ADMIN_EMAIL: admin@sharecode.local
@@ -184,7 +185,7 @@ FRONTEND_URL="http://localhost:5173"
 # Logging - Options: debug, info, warn, error (default: info)
 LOG_LEVEL="info"
 
-# Admin credentials - CHANGE THESE IN PRODUCTION
+# Superuser credentials - CHANGE THESE IN PRODUCTION
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD="admin123"
 ADMIN_EMAIL="admin@sharecode.local"
@@ -217,10 +218,19 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `POST /api/rooms` - Create new room (authenticated)
 - `GET /api/rooms` - Get user's rooms (authenticated)
 - `GET /api/rooms/:roomId` - Get room details (authenticated)
-- `PUT /api/rooms/:roomId` - Update room (owner only)
-- `DELETE /api/rooms/:roomId` - Delete room (owner only)
+- `PUT /api/rooms/:roomId` - Update room (owner or users with write-all permission)
+- `POST /api/rooms/:roomId/end` - End an active room (owner or users with delete-all permission)
+- `DELETE /api/rooms/:roomId` - Delete room (owner or users with delete-all permission)
 - `POST /api/rooms/:roomId/join` - Join room (authenticated)
 - `POST /api/rooms/:roomId/leave` - Leave room (authenticated)
+
+### Admin / Superuser
+- `GET /api/admin/users` - List all active users (admin/superuser)
+- `POST /api/admin/users` - Create a new user with role + global permissions (admin limited to normal users, superuser for all)
+- `PATCH /api/admin/users/:id` - Update role or global permissions
+- `DELETE /api/admin/users/:id` - Soft delete a user (admins can only remove normal users)
+- `GET /api/admin/rooms` - List all rooms
+- `DELETE /api/admin/rooms/:id` - Force-delete a room (requires delete-all permission or superuser)
 
 ## Supported Languages
 
@@ -280,10 +290,18 @@ sharecode/
 
 ### Room Access Control
 
-- Room owner has full control (edit, delete, manage)
-- Participants can edit if `allowEdit` is true
-- Users must be authenticated to access rooms
-- Hocuspocus verifies access on every WebSocket connection
+- Room owner has full control over their room (edit, delete, manage participants)
+- Participants can edit if `canEdit` is true, otherwise they are read-only
+- Optional fine-grained permissions allow any user to be granted:
+  - **Read all rooms** — view every active/ended room
+  - **Write all rooms** — edit any room (implies read-all)
+  - **Delete all rooms** — delete or end any room (implies read/write)
+- Three role tiers ship out-of-the-box:
+  - **Superuser** — manages admins, toggles all permissions, full room control
+  - **Admin** — manages regular users and can write all rooms
+  - **User** — controls personal rooms and any room the owner explicitly shares
+- Users must be authenticated to access rooms and their permission flags are validated on every REST/WebSocket request
+- Hocuspocus verifies access on every WebSocket connection and auto-adds participants with read-only or read/write access based on their permissions
 
 ## Development
 

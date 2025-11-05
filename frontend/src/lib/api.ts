@@ -1,4 +1,4 @@
-import type { User, Room, AuthResponse } from '../types'
+import type { User, Room, AuthResponse, Role } from '../types'
 
 const resolveApiUrl = (): string => {
     // First check localStorage for user-configured settings
@@ -171,15 +171,53 @@ class ApiClient {
     }
 
     // Admin endpoints
-    async createUser(username: string, password: string, email?: string, role?: string): Promise<{ user: User }> {
+    async createUser(payload: {
+        username: string
+        password: string
+        email?: string
+        role?: Role
+        canReadAllRooms?: boolean
+        canWriteAllRooms?: boolean
+        canDeleteAllRooms?: boolean
+    }): Promise<{ user: User }> {
+        const { username, password, email, role, canReadAllRooms, canWriteAllRooms, canDeleteAllRooms } = payload
         return this.request<{ user: User }>('/api/admin/users', {
             method: 'POST',
-            body: JSON.stringify({ username, password, email, role }),
+            body: JSON.stringify({
+                username,
+                password,
+                email,
+                role,
+                canReadAllRooms,
+                canWriteAllRooms,
+                canDeleteAllRooms,
+            }),
         })
     }
 
     async getAllUsers(): Promise<{ users: User[] }> {
         return this.request<{ users: User[] }>('/api/admin/users')
+    }
+
+    async updateUser(
+        userId: string,
+        data: {
+            role?: Role
+            canReadAllRooms?: boolean
+            canWriteAllRooms?: boolean
+            canDeleteAllRooms?: boolean
+        }
+    ): Promise<{ user: User }> {
+        const { role, canReadAllRooms, canWriteAllRooms, canDeleteAllRooms } = data
+        return this.request<{ user: User }>(`/api/admin/users/${userId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+                role,
+                canReadAllRooms,
+                canWriteAllRooms,
+                canDeleteAllRooms,
+            }),
+        })
     }
 
     async deleteUser(userId: string): Promise<{ message: string }> {

@@ -16,13 +16,17 @@ model User {
   username  String   @unique
   password  String
   color     String   @default("#30bced")
-  role      String   @default("user") // "user" | "admin" | "observer" | "support"
+  role      String   @default("user") // "user" | "admin" | "superuser"
+  canReadAllRooms   Boolean @default(false)
+  canWriteAllRooms  Boolean @default(false)
+  canDeleteAllRooms Boolean @default(false)
   isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())
   lastSeen  DateTime @default(now())
 
   ownedRooms Room[]            @relation("RoomOwner")
   rooms      RoomParticipant[]
+  shareLinks RoomShareLink[]   @relation("ShareLinkOwner")
 
   @@index([email])
   @@index([username])
@@ -43,8 +47,10 @@ model Room {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  owner        User              @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  participants RoomParticipant[]
+  owner         User              @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  participants  RoomParticipant[]
+  shareLinks    RoomShareLink[]
+  guestSessions GuestSession[]
 
   @@index([ownerId])
   @@index([documentId])
@@ -82,4 +88,39 @@ model DocumentUpdate {
   userId     String?
 
   @@index([documentId, timestamp])
+}
+
+model RoomShareLink {
+  id         String   @id @default(uuid())
+  roomId     String
+  token      String   @unique
+  canEdit    Boolean  @default(false)
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  room   Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  owner  User @relation("ShareLinkOwner", fields: [createdBy], references: [id], onDelete: Cascade)
+  guests GuestSession[]
+
+  @@index([roomId])
+  @@index([createdBy])
+}
+
+model GuestSession {
+  id          String   @id @default(uuid())
+  shareLinkId String
+  roomId      String
+  token       String   @unique
+  displayName String
+  email       String?
+  color       String
+  canEdit     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  lastActive  DateTime @default(now())
+
+  shareLink RoomShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  room      Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([shareLinkId])
 }

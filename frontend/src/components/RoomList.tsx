@@ -41,6 +41,12 @@ export function RoomList() {
     // Check if running in Tauri desktop environment
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
+    const formatUserRole = (role?: string) => {
+        if (role === 'superuser') return t('common.superuser')
+        if (role === 'admin') return t('common.admin')
+        return null
+    }
+
     useEffect(() => {
         loadRooms()
         loadUsers()
@@ -193,7 +199,7 @@ export function RoomList() {
                     <h1 className="room-topbar-title">ShareCode</h1>
                     <div className="room-topbar-actions">
                         <span style={{ color: 'var(--text-secondary)' }}>{t('rooms.welcome')}, {user?.username}</span>
-                        {user?.role === 'admin' && (
+                        {(user?.role === 'admin' || user?.role === 'superuser') && (
                             <button className="toolbar-button" onClick={() => navigate('/admin')}>
                                 {t('common.admin')}
                             </button>
@@ -401,10 +407,10 @@ export function RoomList() {
                                             </h3>
                                             <div className="language-badge">{room.language}</div>
                                         </div>
-                                        {(room.isOwner || user?.role === 'admin') && user?.role !== 'support' && !room.isEnded && (
-                                            <button
-                                                className="btn-danger"
-                                                onClick={async (e) => {
+                                        {(room.isOwner || user?.canDeleteAllRooms) && !room.isEnded && (
+                                                <button
+                                                    className="btn-danger"
+                                                    onClick={async (e) => {
                                                     e.stopPropagation()
                                                     if (confirm(t('rooms.list.deleteConfirm', { name: room.name }))) {
                                                         try {
@@ -554,9 +560,9 @@ export function RoomList() {
                                                 />
                                                 <div style={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                                     <span style={{ fontWeight: 500 }}>{u.username}</span>
-                                                    {u.role === 'observer' && (
+                                                    {formatUserRole(u.role) && (
                                                         <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>
-                                                            ({t('common.observer')})
+                                                            ({formatUserRole(u.role)})
                                                         </span>
                                                     )}
                                                 </div>

@@ -110,8 +110,8 @@
         "role": "Role",
         "roleUser": "User",
         "roleAdmin": "Admin",
-        "roleObserver": "Observer",
-        "roleSupport": "Support",
+        "roleSuperuser": "Superuser",
+        "permissions": "Global permissions",
         "creating": "Creating...",
         "createButton": "Create User"
       },
@@ -119,10 +119,19 @@
         "username": "Username",
         "email": "Email",
         "role": "Role",
+        "permissions": "Permissions",
         "created": "Created",
         "actions": "Actions",
         "delete": "Delete",
+        "update": "Save",
+        "updating": "Saving...",
         "loading": "Loading users..."
+      },
+      "permissions": {
+        "readAll": "Read all rooms",
+        "writeAll": "Write all rooms",
+        "deleteAll": "Delete all rooms",
+        "hint": "Delete implies end + write access, write implies read."
       },
       "deleteConfirm": "Delete user \"{{username}}\"?"
     },
@@ -190,7 +199,7 @@
     "back": "Back",
     "logout": "Logout",
     "admin": "Admin",
-    "observer": "Observer",
+    "superuser": "Superuser",
     "settings": "Settings",
     "loading": "Loading...",
     "error": "Error",

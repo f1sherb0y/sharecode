@@ -1,22 +1,8 @@
 import type { Request, Response } from 'express'
 import bcrypt from 'bcrypt'
 import { prisma } from '../utils/db'
-import { generateToken } from '../utils/jwt'
-
-const USER_COLORS = [
-    '#30bced',
-    '#6eeb83',
-    '#ffbc42',
-    '#ecd444',
-    '#ee6352',
-    '#9ac2c9',
-    '#8acb88',
-    '#1be7ff',
-]
-
-function getRandomColor() {
-    return USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)]
-}
+import { generateUserToken } from '../utils/jwt'
+import { getRandomUserColor } from '../utils/colors'
 
 export async function register(req: Request, res: Response) {
     try {
@@ -60,16 +46,19 @@ export async function register(req: Request, res: Response) {
                 email,
                 username,
                 password: hashedPassword,
-                color: getRandomColor(),
+                color: getRandomUserColor(),
             },
         })
 
         // Generate token
-        const token = generateToken({
+        const token = generateUserToken({
             userId: user.id,
             email: user.email,
             username: user.username,
             role: user.role,
+            canReadAllRooms: user.canReadAllRooms,
+            canWriteAllRooms: user.canWriteAllRooms,
+            canDeleteAllRooms: user.canDeleteAllRooms,
         })
 
         res.status(201).json({
@@ -79,6 +68,9 @@ export async function register(req: Request, res: Response) {
                 username: user.username,
                 color: user.color,
                 role: user.role,
+                canReadAllRooms: user.canReadAllRooms,
+                canWriteAllRooms: user.canWriteAllRooms,
+                canDeleteAllRooms: user.canDeleteAllRooms,
             },
             token,
         })
@@ -101,7 +93,7 @@ export async function login(req: Request, res: Response) {
             where: { username },
         })
 
-        if (!user) {
+        if (!user || user.isDeleted) {
             return res.status(401).json({ error: 'Invalid credentials' })
         }
 
@@ -113,11 +105,14 @@ export async function login(req: Request, res: Response) {
         }
 
         // Generate token
-        const token = generateToken({
+        const token = generateUserToken({
             userId: user.id,
             email: user.email,
             username: user.username,
             role: user.role,
+            canReadAllRooms: user.canReadAllRooms,
+            canWriteAllRooms: user.canWriteAllRooms,
+            canDeleteAllRooms: user.canDeleteAllRooms,
         })
 
         res.json({
@@ -127,6 +122,9 @@ export async function login(req: Request, res: Response) {
                 username: user.username,
                 color: user.color,
                 role: user.role,
+                canReadAllRooms: user.canReadAllRooms,
+                canWriteAllRooms: user.canWriteAllRooms,
+                canDeleteAllRooms: user.canDeleteAllRooms,
             },
             token,
         })
@@ -148,6 +146,9 @@ export async function getProfile(req: Request, res: Response) {
                 username: true,
                 color: true,
                 role: true,
+                canReadAllRooms: true,
+                canWriteAllRooms: true,
+                canDeleteAllRooms: true,
                 createdAt: true,
             },
         })
