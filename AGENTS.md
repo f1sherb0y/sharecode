@@ -387,9 +387,15 @@ bun tauri dev
 bun tauri build
 
 # Outputs:
-# - Linux: .deb and .rpm packages in src-tauri/target/release/bundle/
-# - Windows: .msi and .exe installers
-# - macOS: .dmg and .app bundles
+# - Linux: .deb and .rpm packages in src-tauri/target/release/bundle/deb/ and src-tauri/target/release/bundle/rpm/
+# - Windows: .msi installer in src-tauri/target/release/bundle/msi/ and .exe installer in src-tauri/target/release/bundle/nsis/
+# - macOS: .dmg and .app bundles in src-tauri/target/release/bundle/dmg/ and src-tauri/target/release/bundle/macos/
+
+**Windows Build Notes:**
+- NSIS installer (.exe) supports both English and Chinese with language selector
+- WiX installer (.msi) uses English by default
+- Both installers support "current user" installation (no admin required)
+- Windows icons (icon.ico) are automatically included
 ```
 
 ### Environment Variables
