@@ -92,8 +92,10 @@
       "syncing": "Syncing..."
     },
     "ended": {
-      "title": "Room ended",
-      "description": "This session has finished. Only the room owner or administrators can view the playback recording.",
+      "title": "This room has ended",
+      "subtitle": "Live editing is no longer available",
+      "description": "The session is finished. You can reach out to the room owner if you need the playback recording or access to the next session.",
+      "endedAt": "Ended at {{time}}",
       "back": "Back to rooms"
     }
   },

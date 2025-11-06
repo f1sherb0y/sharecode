@@ -174,8 +174,10 @@ export function Editor() {
         if (!room?.isEnded) return
         if (canAccessPlayback) {
             navigate(`/playback/${room.id}`, { replace: true })
+        } else if (isGuestMode && shareToken) {
+            navigate(`/share/${shareToken}`, { replace: true })
         }
-    }, [room?.isEnded, room?.id, canAccessPlayback, navigate])
+    }, [room?.isEnded, room?.id, canAccessPlayback, navigate, isGuestMode, shareToken])
 
     useEffect(() => {
         return () => {
@@ -221,6 +223,7 @@ export function Editor() {
 
                 const languageId = resolveMonacoLanguage(room.language)
                 const model = monaco.editor.createModel(ytext.toString(), languageId)
+                model.setEOL(monaco.editor.EndOfLineSequence.LF)
                 monacoModelRef.current = model
 
                 const editor = monaco.editor.create(editorRef.current, {
@@ -236,6 +239,13 @@ export function Editor() {
                     readOnly: isGuestMode && !shareSession?.guest.canEdit,
                 })
                 monacoEditorRef.current = editor
+
+                editor.addCommand(
+                    monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF,
+                    () => {
+                        editor.getAction('actions.find')?.run()
+                    }
+                )
 
                 monacoBindingRef.current = new MonacoBinding(
                     monaco,
@@ -406,31 +416,72 @@ export function Editor() {
         }
     }
 
-    // Listen for language changes from owner via awareness
+    // Listen for room updates (language/status) via awareness
     useEffect(() => {
         if (!provider?.awareness || !room) return
 
-        const handleLanguageUpdate = () => {
+        const handleAwarenessUpdate = () => {
             if (!provider.awareness) return
 
-            // Find the owner's awareness state
+            let nextLanguage: Language | null = null
+            let ended = false
+            let endedAt: string | null = null
+
             provider.awareness.getStates().forEach((state: any) => {
-                if (state.user && state.roomLanguage && state.roomLanguage !== room.language) {
-                    // Owner changed the language
-                    setRoom({ ...room, language: state.roomLanguage })
-                    reconfigureLanguage(state.roomLanguage)
+                if (!state) return
+
+                if (state.user && state.user.id === room.ownerId && state.roomLanguage) {
+                    nextLanguage = state.roomLanguage
+                }
+
+                if (state.roomStatus === 'ended') {
+                    ended = true
+                    if (typeof state.roomEndedAt === 'string') {
+                        endedAt = state.roomEndedAt
+                    }
                 }
             })
+
+            if (nextLanguage && nextLanguage !== room.language) {
+                setRoom((prevRoom) => {
+                    if (!prevRoom || prevRoom.language === nextLanguage) return prevRoom
+                    return { ...prevRoom, language: nextLanguage as Language }
+                })
+                reconfigureLanguage(nextLanguage)
+            }
+
+            if (ended) {
+                setRoom((prevRoom) => {
+                    if (!prevRoom || prevRoom.isEnded) return prevRoom
+                    return {
+                        ...prevRoom,
+                        isEnded: true,
+                        endedAt: endedAt ?? prevRoom.endedAt ?? new Date().toISOString(),
+                    }
+                })
+            }
         }
 
-        provider.awareness.on('change', handleLanguageUpdate)
+        provider.awareness.on('change', handleAwarenessUpdate)
+        handleAwarenessUpdate()
 
         return () => {
             if (provider.awareness) {
-                provider.awareness.off('change', handleLanguageUpdate)
+                provider.awareness.off('change', handleAwarenessUpdate)
             }
         }
     }, [provider, room])
+
+    // Keep awareness in sync once the room ends so late listeners receive the signal
+    useEffect(() => {
+        if (!provider?.awareness) return
+        if (!room?.isEnded) return
+
+        provider.awareness.setLocalStateField('roomStatus', 'ended')
+        if (room.endedAt) {
+            provider.awareness.setLocalStateField('roomEndedAt', room.endedAt)
+        }
+    }, [provider, room?.isEnded, room?.endedAt])
 
     const currentUserName = isGuestMode
         ? (shareSession?.guest.displayName || 'Guest')
@@ -453,6 +504,8 @@ export function Editor() {
     }
 
     if (room.isEnded && !canAccessPlayback) {
+        const endedAtLabel = room.endedAt ? new Date(room.endedAt).toLocaleString() : null
+
         return (
             <div className="editor-container">
                 <div className="editor-header">
@@ -471,44 +524,33 @@ export function Editor() {
                         <ThemeToggle />
                     </div>
                 </div>
-                <div
-                    style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '2rem',
-                    }}
-                >
-                    <div
-                        style={{
-                            width: 'min(480px, 100%)',
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border)',
-                            borderRadius: '10px',
-                            padding: '2rem',
-                            textAlign: 'center',
-                            boxShadow: '0 24px 48px rgba(15, 23, 42, 0.2)',
-                        }}
-                    >
-                        <h2 style={{ marginBottom: '0.75rem' }}>{t('editor.ended.title')}</h2>
-                        <p
-                            style={{
-                                color: 'var(--text-secondary)',
-                                marginBottom: '1.5rem',
-                                lineHeight: 1.6,
-                            }}
-                        >
+
+                <div className="editor-ended">
+                    <div className="editor-ended-card">
+                        <div className="editor-ended-icon" aria-hidden="true">
+                            <span>⏹</span>
+                        </div>
+                        <h2>{t('editor.ended.title')}</h2>
+                        <p className="editor-ended-subtitle">
+                            {t('editor.ended.subtitle')}
+                        </p>
+                        <p className="editor-ended-description">
                             {t('editor.ended.description')}
                         </p>
-                        <button
-                            type="button"
-                            className="toolbar-button"
-                            onClick={() => navigate(backPath)}
-                            style={{ alignSelf: 'center' }}
-                        >
-                            {t('editor.ended.back')}
-                        </button>
+                        {endedAtLabel && (
+                            <p className="editor-ended-meta">
+                                {t('editor.ended.endedAt', { time: endedAtLabel })}
+                            </p>
+                        )}
+                        <div className="editor-ended-actions">
+                            <button
+                                type="button"
+                                className="toolbar-button"
+                                onClick={() => navigate(backPath)}
+                            >
+                                {t('editor.ended.back')}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -563,7 +605,12 @@ export function Editor() {
                                 e.preventDefault()
                                 if (confirm(t('editor.toolbar.endRoom') + '?')) {
                                     try {
-                                        await api.endRoom(roomId!)
+                                        const { room: endedRoom } = await api.endRoom(roomId!)
+                                        provider?.awareness?.setLocalStateField('roomStatus', 'ended')
+                                        provider?.awareness?.setLocalStateField(
+                                            'roomEndedAt',
+                                            endedRoom?.endedAt ?? new Date().toISOString()
+                                        )
                                         navigate('/rooms')
                                     } catch (err) {
                                         setError(err instanceof Error ? err.message : 'Failed to end room')

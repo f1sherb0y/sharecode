@@ -199,6 +199,7 @@ export function RoomPlayback() {
 
                 const languageId = resolveMonacoLanguage(room.language)
                 const model = monaco.editor.createModel('', languageId)
+                model.setEOL(monaco.editor.EndOfLineSequence.LF)
                 monacoModelRef.current = model
 
                 const editor = monaco.editor.create(editorRef.current, {

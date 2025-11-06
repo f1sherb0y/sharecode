@@ -9,8 +9,8 @@
 ### Frontend
 - **Framework**: React 19 + Vite
 - **Language**: TypeScript
-- **Editor**: CodeMirror 6
-- **Collaboration**: Yjs + y-codemirror.next
+- **Editor**: Monaco Editor
+- **Collaboration**: Yjs + custom Monaco binding
 - **Routing**: React Router v6 (HashRouter for desktop)
 - **Styling**: CSS Variables (Light/Dark themes)
 - **Internationalization**: react-i18next (English & Chinese)
@@ -57,6 +57,7 @@
 - **Gzip compression**: Efficient data transfer (~60-80% reduction)
 - **Video-style controls**: Play, pause, skip, speed control (0.5x-10x)
 - **Real-world timestamps**: Timeline shows actual clock time
+- **Role-aware access**: Owners and admins auto-redirect to playback for ended rooms; guests see an ended-room notice
 
 ### 5. Admin Dashboard
 - **User management**: View all users, edit roles/permissions, soft delete accounts
@@ -181,7 +182,7 @@ Document (Y.js persistence)
 ### 2. Core Implementation
 - Set up project structure (frontend + server folders)
 - Implemented authentication and room management
-- Integrated CodeMirror with Yjs
+- Integrated Monaco Editor with Yjs (custom awareness + selection bridge)
 - Established WebSocket connection via Hocuspocus
 
 ### 3. Feature Additions
@@ -200,41 +201,51 @@ Document (Y.js persistence)
 
 ## Key Implementation Patterns
 
-### 1. CodeMirror + Yjs Integration
+### 1. Monaco + Yjs Integration
 ```typescript
-// Create Y.js provider
-const provider = new HocuspocusProvider({
-  url: wsUrl,
-  name: documentId,
-  token: authToken,
-})
+const { provider, ytext } = useYjsProvider(documentId, token)
 
-// Bind to CodeMirror
-const ytext = ydoc.getText('codemirror')
-const state = EditorState.create({
-  extensions: [
-    basicSetup,
-    languageExt,
-    yCollab(ytext, provider.awareness)
-  ]
-})
+useEffect(() => {
+  if (!editorRef.current || !provider || monacoEditorRef.current) return
+
+  loadMonaco().then(monaco => {
+    monacoRef.current = monaco
+    const model = monaco.editor.createModel(ytext.toString(), resolveLanguage(room.language))
+    monacoModelRef.current = model
+
+    const editor = monaco.editor.create(editorRef.current, {
+      model,
+      automaticLayout: true,
+      theme: theme === 'dark' ? 'vs-dark' : 'vs',
+      minimap: { enabled: false },
+      readOnly: isGuestMode && !canEdit,
+    })
+    monacoEditorRef.current = editor
+
+    monacoBindingRef.current = new MonacoBinding(
+      monaco,
+      ytext,
+      model,
+      new Set([editor]),
+      provider.awareness ?? null
+    )
+  })
+}, [provider, ytext, room?.language, theme])
 ```
 
-### 2. Theme-Safe Editor Updates
+### 2. Theme & Language Reconfiguration
 ```typescript
-// Create once
 useEffect(() => {
-  const view = new EditorView({ state, parent: container })
-  viewRef.current = view
-  return () => view.destroy()
-}, [provider, room, ytext])  // NO theme dependency
+  monacoRef.current?.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs')
+}, [theme])
 
-// Reconfigure on theme change
 useEffect(() => {
-  viewRef.current?.dispatch({
-    effects: StateEffect.reconfigure.of([...extensions])
-  })
-}, [theme])  // Only theme
+  if (!monacoRef.current || !monacoModelRef.current || !room) return
+  monacoRef.current.editor.setModelLanguage(
+    monacoModelRef.current,
+    resolveLanguage(room.language)
+  )
+}, [room?.language])
 ```
 
 ### 3. Tauri Desktop Environment Detection
@@ -284,7 +295,7 @@ updates
   .filter(u => u.timestampMs <= currentTimestamp)
   .forEach(u => Y.applyUpdate(tempDoc, u.update))
 
-const content = ytext.toString()
+monacoModelRef.current?.setValue(ytext.toString())
 ```
 
 ## Challenges and Solutions
@@ -294,12 +305,12 @@ const content = ytext.toString()
 **Solution**: Atomic database inserts (one row per update) instead of array append operations
 
 ### Challenge 2: Editor Disappearing on Theme Change
-**Problem**: Editor destroyed and recreated on theme toggle
-**Solution**: Separate editor creation from theme updates using StateEffect.reconfigure
+**Problem**: Monaco editor re-created on every theme toggle, dropping focus and awareness state
+**Solution**: Keep a single Monaco instance and switch `editor.setTheme` / `setModelLanguage` dynamically
 
 ### Challenge 3: Follow Mode Cursor Position
 **Problem**: Y.js uses relative positions, not absolute numbers
-**Solution**: YSyncConfig utility to convert Y.js positions to CodeMirror positions
+**Solution**: Custom Monaco binding converts Y.RelativePosition to absolute offsets before calling `revealPositionInCenter`
 
 ### Challenge 4: Large Playback Data Transfer
 **Problem**: Hour-long sessions generate 5000+ updates (~2MB)
@@ -450,7 +461,7 @@ VITE_WS_URL=ws://localhost:3001/ws
    - Basic room management
 
 2. **Phase 2**: Collaboration Features (Day 1-2)
-   - CodeMirror + Yjs integration
+   - Monaco + Yjs integration (custom binding)
    - Hocuspocus WebSocket server
    - Real-time cursor tracking
    - Follow mode implementation
@@ -488,9 +499,9 @@ VITE_WS_URL=ws://localhost:3001/ws
 ## Lessons Learned
 
 1. **Y.js Integration**: Understanding CRDT principles is crucial for debugging sync issues
-2. **React + CodeMirror**: Careful lifecycle management prevents memory leaks
+2. **React + Monaco**: Careful lifecycle management prevents memory leaks
 3. **WebSocket + HTTP**: Single-server architecture simplifies deployment
-4. **Theme Switching**: Use reconfigure instead of recreation for complex components
+4. **Theme Switching**: Change Monaco theme/config in place instead of recreating the editor
 5. **Database Design**: Event sourcing patterns work well for collaborative systems
 6. **Compression**: Always consider data transfer size for real-time applications
 7. **Desktop Packaging**: Tauri provides excellent DX for turning React apps into native desktop apps
@@ -502,7 +513,7 @@ VITE_WS_URL=ws://localhost:3001/ws
 
 Built with assistance from AI (Cline/Claude), leveraging:
 - [Yjs](https://docs.yjs.dev/) - CRDT framework
-- [CodeMirror](https://codemirror.net/) - Code editor
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) - Code editor
 - [Hocuspocus](https://tiptap.dev/hocuspocus) - WebSocket provider
 - [Prisma](https://www.prisma.io/) - Database ORM
 - [Bun](https://bun.sh/) - JavaScript runtime
