@@ -32,6 +32,8 @@ tiptap-docs/
 y-codemirror/
 y-monaco/
 
+server-rs
+
 # Bun
 .bun/
 bun.lockb
