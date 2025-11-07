@@ -247,6 +247,14 @@ export function Editor() {
                     }
                 )
 
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.BracketRight, () => {
+                    editor.getAction('editor.action.indentLines')?.run()
+                })
+
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.BracketLeft, () => {
+                    editor.getAction('editor.action.outdentLines')?.run()
+                })
+
                 monacoBindingRef.current = new MonacoBinding(
                     monaco,
                     ytext,

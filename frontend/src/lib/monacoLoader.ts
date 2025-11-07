@@ -13,6 +13,7 @@ import 'monaco-editor/esm/vs/basic-languages/rust/rust.contribution'
 import 'monaco-editor/esm/vs/basic-languages/go/go.contribution'
 import 'monaco-editor/esm/vs/basic-languages/php/php.contribution'
 import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController'
+import 'monaco-editor/esm/vs/editor/contrib/linesOperations/browser/linesOperations'
 
 import type * as monaco from 'monaco-editor'
 
