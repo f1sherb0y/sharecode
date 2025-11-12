@@ -310,7 +310,30 @@ export function RoomPlayback() {
             {/* Playback Controls */}
             <div className="status-bar" style={{ flexDirection: 'column', gap: '0.5rem', padding: '1rem' }}>
                 {/* Timeline with markers */}
-                <div style={{ position: 'relative', width: '100%' }}>
+                <div style={{ position: 'relative', width: '100%', height: '24px', display: 'flex', alignItems: 'center' }}>
+                    {/* Markers layer - positioned behind the slider */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 0 }}>
+                        {updates.map((update) => {
+                            const position = ((update.timestampMs - startMs) / (endMs - startMs)) * 100
+                            return (
+                                <div
+                                    key={update.id}
+                                    title={formatTime(update.timestampMs)}
+                                    style={{
+                                        position: 'absolute',
+                                        left: `${position}%`,
+                                        top: '50%',
+                                        transform: 'translate(-50%, -50%)',
+                                        width: '2px',
+                                        height: '16px',
+                                        backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.4)',
+                                        pointerEvents: 'none',
+                                    }}
+                                />
+                            )
+                        })}
+                    </div>
+                    {/* Slider on top layer */}
                     <input
                         type="range"
                         min={startMs}
@@ -321,36 +344,19 @@ export function RoomPlayback() {
                             setCurrentTimestamp(Number(e.target.value))
                             setIsPlaying(false)
                         }}
+                        onInput={(e) => {
+                            setCurrentTimestamp(Number((e.target as HTMLInputElement).value))
+                            setIsPlaying(false)
+                        }}
                         style={{
+                            position: 'relative',
+                            zIndex: 1,
                             width: '100%',
                             cursor: 'pointer',
                             margin: 0,
                             padding: 0
                         }}
                     />
-                    {/* Render markers for each update */}
-                    {updates.map((update) => {
-                        const position = ((update.timestampMs - startMs) / (endMs - startMs)) * 100
-                        return (
-                            <div
-                                key={update.id}
-                                title={formatTime(update.timestampMs)}
-                                style={{
-                                    position: 'absolute',
-                                    left: `${position}%`,
-                                    top: 0,
-                                    bottom: 0,
-                                    margin: 'auto',
-                                    transform: 'translateX(-50%)',
-                                    width: '2px',
-                                    height: '16px',
-                                    backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.4)',
-                                    pointerEvents: 'none',
-                                    zIndex: 0,
-                                }}
-                            />
-                        )
-                    })}
                 </div>
 
                 {/* Controls Row */}
