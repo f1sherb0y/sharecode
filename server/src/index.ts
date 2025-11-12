@@ -10,6 +10,7 @@ import {
     createRoom,
     getRooms,
     getRoom,
+    getRoomByDocumentId,
     updateRoom,
     deleteRoom,
     joinRoom,
@@ -94,6 +95,7 @@ app.get('/api/config/registration', getRegistrationStatus)
 app.get('/api/users', authMiddleware, getAllUsersForRoomCreation)
 app.post('/api/rooms', authMiddleware, createRoom)
 app.get('/api/rooms', authMiddleware, getRooms)
+app.get('/api/rooms/by-document/:documentId', authMiddleware, getRoomByDocumentId)
 app.get('/api/rooms/:roomId', authMiddleware, getRoom)
 app.put('/api/rooms/:roomId', authMiddleware, updateRoom)
 app.delete('/api/rooms/:roomId', authMiddleware, deleteRoom)

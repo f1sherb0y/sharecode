@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getGuestSession } from '../lib/shareApi'
 import type { ShareSession, ShareGuest, ShareRoomDetails } from '../types'
+import { ShareJoin } from '../components/ShareJoin'
 
 interface ShareSessionContextValue {
     shareToken: string
+    roomId?: string
     session: ShareSession | null
     isLoading: boolean
     setSession: (session: ShareSession) => void
@@ -41,9 +43,11 @@ function persistSession(shareToken: string, session: ShareSession | null) {
 
 export function ShareSessionProvider({
     shareToken,
+    roomId,
     children,
 }: {
     shareToken: string
+    roomId?: string
     children: ReactNode
 }) {
     const storageKey = useMemo(() => getStorageKey(shareToken), [shareToken])
@@ -51,11 +55,19 @@ export function ShareSessionProvider({
         loadSessionFromStorage(shareToken)
     )
     const [isLoading, setIsLoading] = useState(true)
+    const [showJoinForm, setShowJoinForm] = useState(false)
 
     useEffect(() => {
-        setSessionState(loadSessionFromStorage(shareToken))
+        const loadedSession = loadSessionFromStorage(shareToken)
+        setSessionState(loadedSession)
+
+        // If roomId is provided and we don't have a session, show join form
+        if (roomId && !loadedSession) {
+            setShowJoinForm(true)
+        }
+
         setIsLoading(false)
-    }, [storageKey, shareToken])
+    }, [storageKey, shareToken, roomId])
 
     const setSession = (nextSession: ShareSession) => {
         setSessionState(nextSession)
@@ -95,11 +107,21 @@ export function ShareSessionProvider({
 
     const value: ShareSessionContextValue = {
         shareToken,
+        roomId,
         session,
         isLoading,
         setSession,
         clearSession,
         refreshSession,
+    }
+
+    // If we need to show join form, render it before the children
+    if (showJoinForm && !session) {
+        return (
+            <ShareSessionContext.Provider value={value}>
+                <ShareJoin onJoined={() => setShowJoinForm(false)} />
+            </ShareSessionContext.Provider>
+        )
     }
 
     return <ShareSessionContext.Provider value={value}>{children}</ShareSessionContext.Provider>

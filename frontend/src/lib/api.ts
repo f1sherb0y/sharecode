@@ -136,6 +136,10 @@ class ApiClient {
         return this.request<{ room: Room }>(`/api/rooms/${roomId}`)
     }
 
+    async getRoomByDocumentId(documentId: string): Promise<{ room: Room }> {
+        return this.request<{ room: Room }>(`/api/rooms/by-document/${documentId}`)
+    }
+
     async updateRoom(
         roomId: string,
         data: { name?: string; language?: string }

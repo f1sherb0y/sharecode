@@ -62,7 +62,7 @@ function hasGlobalDelete(user: AuthUser): boolean {
 }
 
 function generateDocumentId(): string {
-    return `doc-${randomBytes(16).toString('hex')}`
+    return randomBytes(16).toString('hex')
 }
 
 export async function createRoom(req: Request, res: Response) {
@@ -265,6 +265,54 @@ export async function getRoom(req: Request, res: Response) {
         res.json({ room })
     } catch (error) {
         console.error('Get room error:', error)
+        res.status(500).json({ error: 'Internal server error' })
+    }
+}
+
+export async function getRoomByDocumentId(req: Request, res: Response) {
+    try {
+        const authUser = getAuthUser(req)
+        const userId = authUser.id
+        const { documentId } = req.params
+
+        const room = await prisma.room.findFirst({
+            where: { documentId },
+            include: {
+                owner: {
+                    select: {
+                        id: true,
+                        username: true,
+                        color: true,
+                    },
+                },
+                participants: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                username: true,
+                                color: true,
+                            },
+                        },
+                    },
+                },
+            },
+        })
+
+        if (!room) {
+            return res.status(404).json({ error: 'Room not found' })
+        }
+
+        const isOwner = room.ownerId === userId
+        const isParticipant = room.participants.some(p => p.userId === userId)
+
+        if (!hasGlobalRead(authUser) && !isOwner && !isParticipant) {
+            return res.status(403).json({ error: 'Access denied' })
+        }
+
+        res.json({ room })
+    } catch (error) {
+        console.error('Get room by documentId error:', error)
         res.status(500).json({ error: 'Internal server error' })
     }
 }

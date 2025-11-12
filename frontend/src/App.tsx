@@ -1,4 +1,4 @@
-import { HashRouter, BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { HashRouter, BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { Login } from './components/Login'
@@ -9,7 +9,6 @@ import { Admin } from './components/Admin'
 import { RoomPlayback } from './components/RoomPlayback'
 import { Settings } from './components/Settings'
 import { ShareSessionProvider } from './contexts/ShareSessionContext'
-import { ShareJoin } from './components/ShareJoin'
 
 // Detect if running in Tauri desktop environment
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -68,12 +67,8 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/editor/:roomId"
-        element={
-          <PrivateRoute>
-            <Editor />
-          </PrivateRoute>
-        }
+        path="/room/:roomId"
+        element={<RoomRoute />}
       />
       <Route
         path="/admin"
@@ -92,14 +87,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/share/:shareToken"
-        element={<ShareRoute mode="join" />}
-      />
-      <Route
-        path="/share/:shareToken/editor"
-        element={<ShareRoute mode="editor" />}
-      />
-      <Route
         path="/settings"
         element={<Settings />}
       />
@@ -108,17 +95,29 @@ function AppRoutes() {
   )
 }
 
-function ShareRoute({ mode }: { mode: 'join' | 'editor' }) {
-  const { shareToken } = useParams<{ shareToken: string }>()
+function RoomRoute() {
+  const { roomId } = useParams<{ roomId: string }>()
+  const [searchParams] = useSearchParams()
+  const shareToken = searchParams.get('share')
 
-  if (!shareToken) {
+  if (!roomId) {
     return <Navigate to="/login" />
   }
 
+  // If there's a share token, this is a guest accessing via share link
+  if (shareToken) {
+    return (
+      <ShareSessionProvider shareToken={shareToken} roomId={roomId}>
+        <Editor />
+      </ShareSessionProvider>
+    )
+  }
+
+  // Otherwise, this is an authenticated user
   return (
-    <ShareSessionProvider shareToken={shareToken}>
-      {mode === 'join' ? <ShareJoin /> : <Editor />}
-    </ShareSessionProvider>
+    <PrivateRoute>
+      <Editor />
+    </PrivateRoute>
   )
 }
 

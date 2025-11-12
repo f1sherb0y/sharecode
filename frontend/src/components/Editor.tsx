@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate, Navigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import * as Y from 'yjs'
 import type * as Monaco from 'monaco-editor'
@@ -74,11 +74,13 @@ const resolveMonacoLanguage = (language?: string) => {
 }
 
 export function Editor() {
-    const { roomId, shareToken } = useParams<{ roomId?: string; shareToken?: string }>()
+    const { roomId } = useParams<{ roomId: string }>()
     const { user, token } = useAuth()
     const { theme } = useTheme()
     const { t } = useTranslation()
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
+    const shareToken = searchParams.get('share')
 
     // Try to access share session - will be undefined if not in ShareSessionProvider context
     let shareSession = null
@@ -142,7 +144,8 @@ export function Editor() {
 
         const loadRoom = async () => {
             try {
-                const { room } = await api.getRoom(roomId)
+                // roomId is now documentId, need to fetch room by documentId
+                const { room } = await api.getRoomByDocumentId(roomId)
                 setRoom(room)
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load room')
@@ -153,9 +156,8 @@ export function Editor() {
     }, [roomId, isGuestMode])
 
     // Determine document ID and auth token based on mode
-    const documentId = isGuestMode
-        ? (shareSession?.room.documentId || '')
-        : (room?.documentId || '')
+    // roomId in the URL is now the documentId
+    const documentId = roomId || ''
     const authToken = isGuestMode
         ? (shareSession?.authToken || '')
         : (token || '')
@@ -175,7 +177,8 @@ export function Editor() {
         if (canAccessPlayback) {
             navigate(`/playback/${room.id}`, { replace: true })
         } else if (isGuestMode && shareToken) {
-            navigate(`/share/${shareToken}`, { replace: true })
+            // For guests, just show the ended message in-place
+            // No need to redirect
         }
     }, [room?.isEnded, room?.id, canAccessPlayback, navigate, isGuestMode, shareToken])
 
@@ -374,14 +377,19 @@ export function Editor() {
 
     // Redirect guest to join page if session expired
     if (isGuestMode && !isLoadingShare && !shareSession) {
-        return <Navigate to={`/share/${shareToken}`} replace />
+        // Session expired, redirect to login or show error
+        return (
+            <div style={{ padding: '20px' }}>
+                <div style={{ color: 'red' }}>Your session has expired. Please refresh the page to rejoin.</div>
+            </div>
+        )
     }
 
-    if (!roomId && !isGuestMode) {
+    if (!roomId) {
         return <div>Room ID not provided</div>
     }
 
-    const backPath = isGuestMode ? `/share/${shareToken}` : '/rooms'
+    const backPath = '/rooms'
 
     if (error) {
         return (

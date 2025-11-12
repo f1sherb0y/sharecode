@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { fetchShareInfo, joinShare } from '../lib/shareApi'
 import { useShareSession } from '../contexts/ShareSessionContext'
 
-export function ShareJoin() {
+export function ShareJoin({ onJoined }: { onJoined?: () => void }) {
     const { shareToken, session, setSession, clearSession, refreshSession } = useShareSession()
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -91,7 +91,13 @@ export function ShareJoin() {
                 room: response.room,
             })
 
-            navigate(`/share/${shareToken}/editor`)
+            // If onJoined callback is provided (when embedded), call it
+            if (onJoined) {
+                onJoined()
+            } else {
+                // Otherwise navigate to the new room route format
+                navigate(`/room/${response.room.documentId}?share=${shareToken}`)
+            }
         } catch (err) {
             console.error('Failed to join shared room', err)
             setError(err instanceof Error ? err.message : 'Failed to join shared room')
@@ -160,7 +166,13 @@ export function ShareJoin() {
                             })}
                         </p>
                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                            <button type="button" onClick={() => navigate(`/share/${shareToken}/editor`)}>
+                            <button type="button" onClick={() => {
+                                if (onJoined) {
+                                    onJoined()
+                                } else {
+                                    navigate(`/room/${session.room.documentId}?share=${shareToken}`)
+                                }
+                            }}>
                                 {t('share.join.resumeButton')}
                             </button>
                             <button

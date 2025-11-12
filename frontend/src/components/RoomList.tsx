@@ -122,7 +122,7 @@ export function RoomList() {
             setSelectedUsers([])
             setShowCreate(false)
 
-            navigate(`/editor/${room.id}`)
+            navigate(`/room/${room.documentId}`)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create room')
         } finally {
@@ -190,8 +190,8 @@ export function RoomList() {
         document.body.style.overflow = previousOverflow
     }, [isUserModalOpen, shareModalRoom])
 
-    const handleJoinRoom = (roomId: string) => {
-        navigate(`/editor/${roomId}`)
+    const handleJoinRoom = (documentId: string) => {
+        navigate(`/room/${documentId}`)
     }
 
     return (
@@ -393,7 +393,7 @@ export function RoomList() {
                                 <div
                                     key={room.id}
                                     className="room-card"
-                                    onClick={() => !room.isEnded && handleJoinRoom(room.id)}
+                                    onClick={() => !room.isEnded && handleJoinRoom(room.documentId)}
                                     style={{
                                         opacity: room.isExpired ? 0.5 : 1,
                                         cursor: room.isEnded ? 'default' : 'pointer',

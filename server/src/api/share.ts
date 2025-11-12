@@ -4,7 +4,7 @@ import { prisma } from '../utils/db'
 import { getRandomUserColor } from '../utils/colors'
 import { generateGuestToken, verifyToken } from '../utils/jwt'
 
-function buildShareUrl(token: string) {
+function buildShareUrl(token: string, documentId: string) {
     const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL
     if (!baseUrl) {
         return null
@@ -12,7 +12,7 @@ function buildShareUrl(token: string) {
 
     const normalizedBase = baseUrl.replace(/\/$/, '')
     const useHashRoutes = process.env.FRONTEND_HASH_ROUTER === 'true'
-    const path = useHashRoutes ? `#/share/${token}` : `share/${token}`
+    const path = useHashRoutes ? `#/room/${documentId}?share=${token}` : `room/${documentId}?share=${token}`
 
     return useHashRoutes
         ? `${normalizedBase}/${path}`
@@ -27,14 +27,14 @@ function ensureAuthorizationHeader(req: Request): string | null {
     return authHeader.substring(7)
 }
 
-function formatShareLink(link: { id: string; token: string; canEdit: boolean; createdAt: Date; guests: { id: string }[] }) {
+function formatShareLink(link: { id: string; token: string; canEdit: boolean; createdAt: Date; guests: { id: string }[]; room: { documentId: string } }) {
     return {
         id: link.id,
         token: link.token,
         canEdit: link.canEdit,
         createdAt: link.createdAt,
         guestCount: link.guests.length,
-        shareUrl: buildShareUrl(link.token),
+        shareUrl: buildShareUrl(link.token, link.room.documentId),
     }
 }
 
@@ -49,6 +49,7 @@ export async function createShareLink(req: Request, res: Response) {
             select: {
                 id: true,
                 ownerId: true,
+                documentId: true,
                 isDeleted: true,
                 isEnded: true,
                 allowEdit: true,
@@ -78,6 +79,11 @@ export async function createShareLink(req: Request, res: Response) {
             },
             include: {
                 guests: true,
+                room: {
+                    select: {
+                        documentId: true,
+                    },
+                },
             },
         })
 
@@ -114,6 +120,11 @@ export async function listShareLinks(req: Request, res: Response) {
                 guests: {
                     select: {
                         id: true,
+                    },
+                },
+                room: {
+                    select: {
+                        documentId: true,
                     },
                 },
             },
