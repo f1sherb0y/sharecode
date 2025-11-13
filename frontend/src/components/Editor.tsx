@@ -414,8 +414,8 @@ export function Editor() {
 
         setIsChangingLanguage(true)
         try {
-            // Update database
-            await api.updateRoom(roomId, { language: newLanguage })
+            // Update database - use room.id not documentId
+            await api.updateRoom(room.id, { language: newLanguage })
 
             // Update local room state
             setRoom({ ...room, language: newLanguage })
@@ -446,7 +446,9 @@ export function Editor() {
             provider.awareness.getStates().forEach((state: any) => {
                 if (!state) return
 
-                if (state.user && state.user.id === room.ownerId && state.roomLanguage) {
+                // Listen to language changes from any user (not just owner)
+                // The owner is the one who can change it, so we trust the broadcast
+                if (state.roomLanguage) {
                     nextLanguage = state.roomLanguage
                 }
 
@@ -621,12 +623,20 @@ export function Editor() {
                                 e.preventDefault()
                                 if (confirm(t('editor.toolbar.endRoom') + '?')) {
                                     try {
-                                        const { room: endedRoom } = await api.endRoom(roomId!)
+                                        // Use room.id not documentId
+                                        const { room: endedRoom } = await api.endRoom(room.id)
+
+                                        // Update local state first
+                                        setRoom(endedRoom)
+
+                                        // Broadcast to other users
                                         provider?.awareness?.setLocalStateField('roomStatus', 'ended')
                                         provider?.awareness?.setLocalStateField(
                                             'roomEndedAt',
                                             endedRoom?.endedAt ?? new Date().toISOString()
                                         )
+
+                                        // Then navigate
                                         navigate('/rooms')
                                     } catch (err) {
                                         setError(err instanceof Error ? err.message : 'Failed to end room')
