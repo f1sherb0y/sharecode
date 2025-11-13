@@ -9,7 +9,15 @@
       "button": "Login",
       "loggingIn": "Logging in...",
       "noAccount": "Don't have an account?",
-      "registerLink": "Register"
+      "registerLink": "Register",
+      "joinLink": {
+        "title": "Or join a shared room",
+        "label": "Share Link",
+        "placeholder": "Paste share link here...",
+        "button": "Join Room",
+        "joining": "Joining...",
+        "invalid": "Invalid share link format"
+      }
     },
     "register": {
       "title": "Register",
