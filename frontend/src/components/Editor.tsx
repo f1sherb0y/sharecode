@@ -110,6 +110,7 @@ export function Editor() {
     const monacoModelRef = useRef<MonacoModelInstance | null>(null)
     const monacoBindingRef = useRef<MonacoBinding | null>(null)
     const [isEditorReady, setIsEditorReady] = useState(false)
+    const roomRef = useRef<Room | null>(null)
     const destroyMonacoEditor = useCallback(() => {
         monacoBindingRef.current?.destroy()
         monacoBindingRef.current = null
@@ -120,6 +121,11 @@ export function Editor() {
         setIsEditorReady(false)
     }, [])
     const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+
+    // Keep roomRef in sync with room state
+    useEffect(() => {
+        roomRef.current = room
+    }, [room])
 
     // Load room from guest session if in guest mode
     useEffect(() => {
@@ -176,17 +182,18 @@ export function Editor() {
         if (!room?.isEnded) return
         if (canAccessPlayback) {
             navigate(`/playback/${room.id}`, { replace: true })
-        } else if (isGuestMode && shareToken) {
-            // For guests, just show the ended message in-place
-            // No need to redirect
         }
-    }, [room?.isEnded, room?.id, canAccessPlayback, navigate, isGuestMode, shareToken])
+        // For guests and non-privileged users, stay on page to show ended message
+        // The render logic below will handle displaying the ended UI
+    }, [room?.isEnded, room?.id, canAccessPlayback, navigate])
 
     useEffect(() => {
         return () => {
             destroyMonacoEditor()
         }
-    }, [documentId, destroyMonacoEditor])
+        // Only destroy when documentId changes, not when destroyMonacoEditor changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [documentId])
 
     useEffect(() => {
         if (!provider?.awareness) return
@@ -434,10 +441,10 @@ export function Editor() {
 
     // Listen for room updates (language/status) via awareness
     useEffect(() => {
-        if (!provider?.awareness || !room) return
+        if (!provider?.awareness || !roomRef.current) return
 
         const handleAwarenessUpdate = () => {
-            if (!provider.awareness) return
+            if (!provider.awareness || !roomRef.current) return
 
             let nextLanguage: Language | null = null
             let ended = false
@@ -460,7 +467,7 @@ export function Editor() {
                 }
             })
 
-            if (nextLanguage && nextLanguage !== room.language) {
+            if (nextLanguage && roomRef.current && nextLanguage !== roomRef.current.language) {
                 setRoom((prevRoom) => {
                     if (!prevRoom || prevRoom.language === nextLanguage) return prevRoom
                     return { ...prevRoom, language: nextLanguage as Language }
@@ -488,7 +495,10 @@ export function Editor() {
                 provider.awareness.off('change', handleAwarenessUpdate)
             }
         }
-    }, [provider, room])
+        // Only depend on provider to avoid infinite loop
+        // room is accessed via roomRef which is always current
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [provider])
 
     // Keep awareness in sync once the room ends so late listeners receive the signal
     useEffect(() => {
