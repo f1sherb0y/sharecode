@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { prisma } from '../utils/db'
+import { hocuspocusServer } from '../hocuspocus/server'
 import { randomBytes } from 'crypto'
 
 export async function getAllUsersForRoomCreation(req: Request, res: Response) {
@@ -507,9 +508,31 @@ export async function endRoom(req: Request, res: Response) {
             },
         })
 
+        // Notify all connected collaborators via stateless WebSocket message
+        broadcastRoomEnded(room.documentId, updatedRoom.endedAt)
+
         res.json({ room: updatedRoom })
     } catch (error) {
         console.error('End room error:', error)
         res.status(500).json({ error: 'Internal server error' })
+    }
+}
+
+function broadcastRoomEnded(documentId: string, endedAt: Date | null) {
+    try {
+        if (!documentId) return
+        const instance = hocuspocusServer?.hocuspocus
+        const document = instance?.documents.get(documentId)
+        if (!document) return
+
+        document.broadcastStateless(
+            JSON.stringify({
+                type: 'room-status',
+                status: 'ended',
+                endedAt: endedAt?.toISOString() ?? new Date().toISOString(),
+            })
+        )
+    } catch (err) {
+        console.error('Failed to broadcast room ended status', err)
     }
 }

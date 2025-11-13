@@ -182,10 +182,12 @@ export function Editor() {
         if (!room?.isEnded) return
         if (canAccessPlayback) {
             navigate(`/playback/${room.id}`, { replace: true })
+            return
         }
+        destroyMonacoEditor()
         // For guests and non-privileged users, stay on page to show ended message
         // The render logic below will handle displaying the ended UI
-    }, [room?.isEnded, room?.id, canAccessPlayback, navigate])
+    }, [room?.isEnded, room?.id, canAccessPlayback, navigate, destroyMonacoEditor])
 
     useEffect(() => {
         return () => {
@@ -441,7 +443,7 @@ export function Editor() {
 
     // Listen for room updates (language/status) via awareness
     useEffect(() => {
-        if (!provider?.awareness || !roomRef.current) return
+        if (!provider?.awareness) return
 
         const handleAwarenessUpdate = () => {
             if (!provider.awareness || !roomRef.current) return
@@ -495,10 +497,48 @@ export function Editor() {
                 provider.awareness.off('change', handleAwarenessUpdate)
             }
         }
-        // Only depend on provider to avoid infinite loop
-        // room is accessed via roomRef which is always current
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [provider])
+    }, [provider, room?.id])
+
+    // Receive server-side stateless updates (e.g., owner ending the room)
+    useEffect(() => {
+        if (!provider) return
+
+        const handleStateless = ({ payload }: { payload: string }) => {
+            try {
+                const message = JSON.parse(payload)
+                if (message?.type !== 'room-status') return
+                if (message.status !== 'ended') return
+
+                const endedAtIso =
+                    typeof message.endedAt === 'string' ? message.endedAt : new Date().toISOString()
+
+                setRoom((prevRoom) => {
+                    if (!prevRoom || prevRoom.isEnded) return prevRoom
+                    return {
+                        ...prevRoom,
+                        isEnded: true,
+                        endedAt: prevRoom.endedAt ?? endedAtIso,
+                    }
+                })
+
+                provider.awareness?.setLocalStateField('roomStatus', 'ended')
+                provider.awareness?.setLocalStateField('roomEndedAt', endedAtIso)
+
+                if (isGuestMode && refreshShareSession) {
+                    refreshShareSession().catch((err) => {
+                        console.error('Failed to refresh share session after room end', err)
+                    })
+                }
+            } catch (err) {
+                console.error('Failed to process stateless message', err)
+            }
+        }
+
+        provider.on('stateless', handleStateless)
+        return () => {
+            provider.off('stateless', handleStateless)
+        }
+    }, [provider, isGuestMode, refreshShareSession])
 
     // Keep awareness in sync once the room ends so late listeners receive the signal
     useEffect(() => {
