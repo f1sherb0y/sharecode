@@ -208,6 +208,18 @@
         "title": "Local Development",
         "url": "http://localhost:3000"
       }
+    },
+    "privacy": {
+      "title": "Privacy Settings",
+      "hideFromCapture": {
+        "label": "Hide from screen capture",
+        "hint": "Prevent this window from appearing in screen recordings and screenshots (Windows/macOS only)"
+      },
+      "hideFromTaskbar": {
+        "label": "Hide from taskbar/dock",
+        "hint": "Hide the application from taskbar (Windows) or dock (macOS)"
+      },
+      "note": "Note: These settings are only available on Windows and macOS. Changes will take effect immediately."
     }
   },
   "share": {

@@ -208,6 +208,18 @@
         "title": "本地开发",
         "url": "http://localhost:3000"
       }
+    },
+    "privacy": {
+      "title": "隐私设置",
+      "hideFromCapture": {
+        "label": "隐藏截屏",
+        "hint": "防止此窗口出现在屏幕录制和截图中（仅限 Windows/macOS）"
+      },
+      "hideFromTaskbar": {
+        "label": "隐藏任务栏/程序坞图标",
+        "hint": "从任务栏（Windows）或程序坞（macOS）中隐藏应用程序"
+      },
+      "note": "注意：这些设置仅在 Windows 和 macOS 上可用。更改将立即生效。"
     }
   },
   "share": {

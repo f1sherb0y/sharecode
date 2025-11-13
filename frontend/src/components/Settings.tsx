@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { setScreenCaptureProtection, setTaskbarVisibility, isTauriApp, isScreenCaptureProtectionSupported } from '../lib/tauri'
 
 const DEFAULT_SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 const DEFAULT_WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000'
@@ -15,6 +16,10 @@ export function Settings() {
     const [wsUrl, setWsUrl] = useState(DEFAULT_WS_URL)
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+    const [hideFromCapture, setHideFromCapture] = useState(false)
+    const [hideFromTaskbar, setHideFromTaskbar] = useState(false)
+    const isTauri = isTauriApp()
+    const supportsCaptureProtection = isScreenCaptureProtectionSupported()
 
     useEffect(() => {
         // Load saved settings
@@ -24,19 +29,33 @@ export function Settings() {
                 const settings = JSON.parse(saved)
                 setServerUrl(settings.serverUrl || DEFAULT_SERVER_URL)
                 setWsUrl(settings.wsUrl || DEFAULT_WS_URL)
+                setHideFromCapture(settings.hideFromCapture || false)
+                setHideFromTaskbar(settings.hideFromTaskbar || false)
             } catch (e) {
                 console.error('Failed to load settings', e)
             }
         }
     }, [])
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const settings = {
             serverUrl: serverUrl.replace(/\/$/, ''), // Remove trailing slash
-            wsUrl: wsUrl.replace(/\/$/, '')
+            wsUrl: wsUrl.replace(/\/$/, ''),
+            hideFromCapture,
+            hideFromTaskbar
         }
 
         localStorage.setItem('sharecode_settings', JSON.stringify(settings))
+
+        // Apply privacy settings if in Tauri
+        if (isTauri && supportsCaptureProtection) {
+            try {
+                await setScreenCaptureProtection(hideFromCapture)
+                await setTaskbarVisibility(!hideFromTaskbar)
+            } catch (error) {
+                console.error('Failed to apply privacy settings:', error)
+            }
+        }
 
         // Navigate to login after saving
         navigate('/login')
@@ -131,6 +150,70 @@ export function Settings() {
                             {t('settings.websocketUrl.hint')}
                         </small>
                     </div>
+
+                    {supportsCaptureProtection && (
+                        <>
+                            <div style={{
+                                marginTop: '2rem',
+                                marginBottom: '1rem',
+                                paddingTop: '1.5rem',
+                                borderTop: '1px solid var(--border)'
+                            }}>
+                                <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>
+                                    {t('settings.privacy.title')}
+                                </h3>
+
+                                <div className="form-group">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={hideFromCapture}
+                                            onChange={(e) => setHideFromCapture(e.target.checked)}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                        />
+                                        <div>
+                                            <div style={{ fontWeight: 500 }}>
+                                                {t('settings.privacy.hideFromCapture.label')}
+                                            </div>
+                                            <small style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+                                                {t('settings.privacy.hideFromCapture.hint')}
+                                            </small>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div className="form-group">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={hideFromTaskbar}
+                                            onChange={(e) => setHideFromTaskbar(e.target.checked)}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                        />
+                                        <div>
+                                            <div style={{ fontWeight: 500 }}>
+                                                {t('settings.privacy.hideFromTaskbar.label')}
+                                            </div>
+                                            <small style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+                                                {t('settings.privacy.hideFromTaskbar.hint')}
+                                            </small>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div style={{
+                                    padding: '0.75rem',
+                                    background: 'var(--bg-elevated)',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border)',
+                                    fontSize: '0.8125rem',
+                                    color: 'var(--text-secondary)'
+                                }}>
+                                    {t('settings.privacy.note')}
+                                </div>
+                            </div>
+                        </>
+                    )}
 
                     {testResult && (
                         <div style={{
