@@ -5,10 +5,12 @@ import * as Y from 'yjs'
 import type * as Monaco from 'monaco-editor'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { useFont } from '../contexts/FontContext'
 import { useShareSession } from '../contexts/ShareSessionContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
 import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { FontSwitcher } from './FontSwitcher'
 import { ConnectedIcon, DisconnectedIcon, SyncedIcon, SyncingIcon } from './StatusIcons'
 import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
@@ -77,6 +79,7 @@ export function Editor() {
     const { roomId } = useParams<{ roomId: string }>()
     const { user, token } = useAuth()
     const { theme } = useTheme()
+    const { font } = useFont()
     const { t } = useTranslation()
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
@@ -262,7 +265,9 @@ export function Editor() {
                     wordWrap: 'on',
                     wrappingStrategy: 'advanced',
                     scrollBeyondLastLine: false,
-                    fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
+                    fontFamily: font === 'Julia Mono'
+                        ? 'JuliaMono, JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace'
+                        : 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
                     fontSize: 14,
                     theme: theme === 'dark' ? 'vs-dark' : 'vs',
                     readOnly: isGuestMode && !shareSession?.guest.canEdit,
@@ -303,7 +308,7 @@ export function Editor() {
         return () => {
             isCancelled = true
         }
-    }, [provider, room, ytext, theme, isGuestMode, shareSession?.guest?.canEdit, canAccessPlayback])
+    }, [provider, room, ytext, theme, font, isGuestMode, shareSession?.guest?.canEdit, canAccessPlayback])
 
     useEffect(() => {
         const container = editorRef.current
@@ -325,6 +330,15 @@ export function Editor() {
         if (!monacoRef.current) return
         monacoRef.current.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs')
     }, [theme])
+
+    // Update Monaco font when changed
+    useEffect(() => {
+        if (!monacoEditorRef.current) return
+        const fontFamily = font === 'Julia Mono'
+            ? 'JuliaMono, JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace'
+            : 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace'
+        monacoEditorRef.current.updateOptions({ fontFamily })
+    }, [font])
 
     useEffect(() => {
         if (!monacoEditorRef.current) return
@@ -714,6 +728,7 @@ export function Editor() {
                         </button>
                     )}
                     <LanguageSwitcher />
+                    <FontSwitcher />
                     <ThemeToggle />
                 </div>
             </div>

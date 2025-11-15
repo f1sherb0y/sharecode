@@ -1,3 +1,39 @@
+/* Import Code Editor Fonts */
+@import url('https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.0/index.css');
+
+/* Julia Mono Font */
+@font-face {
+    font-family: 'JuliaMono';
+    src: local('JuliaMono-Regular'),
+         url('https://juliamono.netlify.app/assets/fonts/JuliaMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'JuliaMono';
+    src: local('JuliaMono-RegularItalic'),
+         url('https://juliamono.netlify.app/assets/fonts/JuliaMono-RegularItalic.woff2') format('woff2');
+    font-weight: 400;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: 'JuliaMono';
+    src: local('JuliaMono-Bold'),
+         url('https://juliamono.netlify.app/assets/fonts/JuliaMono-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'JuliaMono';
+    src: local('JuliaMono-BoldItalic'),
+         url('https://juliamono.netlify.app/assets/fonts/JuliaMono-BoldItalic.woff2') format('woff2');
+    font-weight: 700;
+    font-style: italic;
+}
+
 /* CSS Variables for Theming */
 :root {
     /* Light Mode Colors */

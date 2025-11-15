@@ -1,6 +1,7 @@
 import { HashRouter, BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { FontProvider } from './contexts/FontContext'
 import { Login } from './components/Login'
 import { Register } from './components/Register'
 import { RoomList } from './components/RoomList'
@@ -125,9 +126,11 @@ function App() {
   return (
     <Router>
       <ThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <FontProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </FontProvider>
       </ThemeProvider>
     </Router>
   )
