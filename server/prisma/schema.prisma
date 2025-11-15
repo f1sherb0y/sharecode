@@ -36,7 +36,6 @@ model Room {
   id            String    @id @default(uuid())
   name          String
   language      String    @default("javascript")
-  documentId    String
   ownerId       String
   allowEdit     Boolean   @default(true)
   isDeleted     Boolean   @default(false)
@@ -53,7 +52,6 @@ model Room {
   guestSessions GuestSession[]
 
   @@index([ownerId])
-  @@index([documentId])
 }
 
 model RoomParticipant {

@@ -32,9 +32,9 @@ export const hocuspocusServer = new Server({
                     throw new Error('User not found')
                 }
 
-                // Find room by documentId with participants
-                const room = await prisma.room.findFirst({
-                    where: { documentId: documentName },
+                // Find room by id (documentName is now the room.id)
+                const room = await prisma.room.findUnique({
+                    where: { id: documentName },
                     include: {
                         owner: true,
                         participants: true,
@@ -42,7 +42,7 @@ export const hocuspocusServer = new Server({
                 })
 
                 if (!room) {
-                    throw new Error(`Room with document ${documentName} not found`)
+                    throw new Error(`Room ${documentName} not found`)
                 }
 
                 // Check access: users with global read/write/delete or room membership may connect
@@ -125,7 +125,7 @@ export const hocuspocusServer = new Server({
                     throw new Error('Guest session token mismatch')
                 }
 
-                if (guest.room.documentId !== documentName) {
+                if (guest.room.id !== documentName) {
                     throw new Error('Guest session does not match this document')
                 }
 

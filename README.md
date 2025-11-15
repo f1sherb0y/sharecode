@@ -289,6 +289,8 @@ sharecode/
 4. **Awareness**: Tracks user presence (cursor position, selection, user info)
 5. **Database**: Documents are persisted as binary (Uint8Array) in PostgreSQL
 
+**Architecture Note**: As of November 2025, `room.id` (UUID) serves as both the database primary key and the Yjs document identifier. This unified architecture simplifies routing and eliminates the need for separate documentId tracking. When you create a room, its UUID becomes the WebSocket document name for collaboration.
+
 ### Authentication Flow
 
 1. User registers/logs in via REST API

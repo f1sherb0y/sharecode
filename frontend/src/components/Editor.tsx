@@ -130,7 +130,24 @@ export function Editor() {
     // Load room from guest session if in guest mode
     useEffect(() => {
         if (!isGuestMode || !shareSession) return
-        setRoom(shareSession.room as Room)
+        // Convert ShareRoomDetails to Room format
+        const guestRoom: Room = {
+            id: shareSession.room.id,
+            name: shareSession.room.name,
+            language: shareSession.room.language,
+            ownerId: '', // Guest doesn't need owner info
+            allowEdit: shareSession.room.allowEdit,
+            isEnded: shareSession.room.isEnded,
+            endedAt: shareSession.room.endedAt,
+            createdAt: '',
+            updatedAt: '',
+            owner: {
+                id: '',
+                username: '',
+                color: '',
+            },
+        }
+        setRoom(guestRoom)
     }, [isGuestMode, shareSession])
 
     const refreshedShareTokenRef = useRef<string | null>(null)
@@ -150,7 +167,7 @@ export function Editor() {
 
         const loadRoom = async () => {
             try {
-                // roomId is now documentId, need to fetch room by documentId
+                // roomId is the room.id (unified with documentId)
                 const { room } = await api.getRoomByDocumentId(roomId)
                 setRoom(room)
             } catch (err) {
@@ -162,7 +179,7 @@ export function Editor() {
     }, [roomId, isGuestMode])
 
     // Determine document ID and auth token based on mode
-    // roomId in the URL is now the documentId
+    // roomId in the URL is the room.id (unified with documentId)
     const documentId = roomId || ''
     const authToken = isGuestMode
         ? (shareSession?.authToken || '')
@@ -673,7 +690,6 @@ export function Editor() {
                                 e.preventDefault()
                                 if (confirm(t('editor.toolbar.endRoom') + '?')) {
                                     try {
-                                        // Use room.id not documentId
                                         const { room: endedRoom } = await api.endRoom(room.id)
 
                                         // Update local state first

@@ -56,10 +56,10 @@ export async function getPlaybackUpdates(req: Request, res: Response) {
             return res.status(403).json({ error: 'Access denied' })
         }
 
-        // Get all updates for this document
+        // Get all updates for this document (documentId is now room.id)
         const updates = await prisma.documentUpdate.findMany({
             where: {
-                documentId: room.documentId,
+                documentId: room.id,
             },
             orderBy: {
                 timestamp: 'asc',

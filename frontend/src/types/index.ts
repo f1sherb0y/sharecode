@@ -15,7 +15,6 @@ export interface Room {
     id: string
     name: string
     language: string
-    documentId: string
     ownerId: string
     allowEdit: boolean
     isDeleted?: boolean
@@ -77,7 +76,7 @@ export interface ShareRoomSummary {
 }
 
 export interface ShareRoomDetails extends ShareRoomSummary {
-    documentId: string
+    documentId: string  // Keep for backwards compatibility, same as id
     allowEdit: boolean
 }
 

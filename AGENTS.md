@@ -114,20 +114,25 @@ User
 └── Relations: ownedRooms, rooms (participants)
 
 Room
-├── id, name, language, documentId
+├── id (UUID - also serves as documentId for Yjs)
+├── name, language
 ├── scheduledTime?, duration?
 ├── isEnded, endedAt, isDeleted
 └── Relations: owner, participants
 
 DocumentUpdate (playback data)
-├── id, documentId, update (Bytes)
+├── id, documentId (references Room.id)
+├── update (Bytes)
 ├── timestamp, userId
 └── Index: (documentId, timestamp)
 
 Document (Y.js persistence)
-├── id, name (documentId), data (Bytes)
+├── id, name (references Room.id)
+├── data (Bytes)
 └── Stores compiled Y.Doc state
 ```
+
+**Architecture Note**: As of November 2025, `Room.id` is unified with `documentId`. Previously, these were separate fields, which caused routing confusion and API errors. Now `room.id` serves as both the database primary key and the Yjs document identifier, simplifying the architecture.
 
 ### Key Technical Decisions
 

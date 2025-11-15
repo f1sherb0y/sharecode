@@ -4,7 +4,7 @@ import { prisma } from '../utils/db'
 import { getRandomUserColor } from '../utils/colors'
 import { generateGuestToken, verifyToken } from '../utils/jwt'
 
-function buildShareUrl(token: string, documentId: string) {
+function buildShareUrl(token: string, roomId: string) {
     const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL
     if (!baseUrl) {
         return null
@@ -12,7 +12,7 @@ function buildShareUrl(token: string, documentId: string) {
 
     const normalizedBase = baseUrl.replace(/\/$/, '')
     const useHashRoutes = process.env.FRONTEND_HASH_ROUTER === 'true'
-    const path = useHashRoutes ? `#/room/${documentId}?share=${token}` : `room/${documentId}?share=${token}`
+    const path = useHashRoutes ? `#/room/${roomId}?share=${token}` : `room/${roomId}?share=${token}`
 
     return useHashRoutes
         ? `${normalizedBase}/${path}`
@@ -27,14 +27,14 @@ function ensureAuthorizationHeader(req: Request): string | null {
     return authHeader.substring(7)
 }
 
-function formatShareLink(link: { id: string; token: string; canEdit: boolean; createdAt: Date; guests: { id: string }[]; room: { documentId: string } }) {
+function formatShareLink(link: { id: string; token: string; canEdit: boolean; createdAt: Date; guests: { id: string }[]; room: { id: string } }) {
     return {
         id: link.id,
         token: link.token,
         canEdit: link.canEdit,
         createdAt: link.createdAt,
         guestCount: link.guests.length,
-        shareUrl: buildShareUrl(link.token, link.room.documentId),
+        shareUrl: buildShareUrl(link.token, link.room.id),
     }
 }
 
@@ -49,7 +49,6 @@ export async function createShareLink(req: Request, res: Response) {
             select: {
                 id: true,
                 ownerId: true,
-                documentId: true,
                 isDeleted: true,
                 isEnded: true,
                 allowEdit: true,
@@ -81,7 +80,7 @@ export async function createShareLink(req: Request, res: Response) {
                 guests: true,
                 room: {
                     select: {
-                        documentId: true,
+                        id: true,
                     },
                 },
             },
@@ -124,7 +123,7 @@ export async function listShareLinks(req: Request, res: Response) {
                 },
                 room: {
                     select: {
-                        documentId: true,
+                        id: true,
                     },
                 },
             },
@@ -246,7 +245,6 @@ export async function joinShareLink(req: Request, res: Response) {
                         id: true,
                         name: true,
                         language: true,
-                        documentId: true,
                         allowEdit: true,
                         isDeleted: true,
                         isEnded: true,
@@ -304,7 +302,7 @@ export async function joinShareLink(req: Request, res: Response) {
                 id: shareLink.room.id,
                 name: shareLink.room.name,
                 language: shareLink.room.language,
-                documentId: shareLink.room.documentId,
+                documentId: shareLink.room.id,
                 allowEdit: shareLink.room.allowEdit,
                 isEnded: shareLink.room.isEnded,
                 endedAt: shareLink.room.endedAt,
@@ -336,7 +334,6 @@ export async function getGuestSession(req: Request, res: Response) {
                         id: true,
                         name: true,
                         language: true,
-                        documentId: true,
                         allowEdit: true,
                         isDeleted: true,
                         isEnded: true,
@@ -384,7 +381,7 @@ export async function getGuestSession(req: Request, res: Response) {
                 id: guest.room.id,
                 name: guest.room.name,
                 language: guest.room.language,
-                documentId: guest.room.documentId,
+                documentId: guest.room.id,
                 allowEdit: guest.room.allowEdit,
                 isEnded: guest.room.isEnded,
                 endedAt: guest.room.endedAt,

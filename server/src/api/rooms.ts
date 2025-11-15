@@ -1,7 +1,6 @@
 import type { Request, Response } from 'express'
 import { prisma } from '../utils/db'
 import { hocuspocusServer } from '../hocuspocus/server'
-import { randomBytes } from 'crypto'
 
 export async function getAllUsersForRoomCreation(req: Request, res: Response) {
     try {
@@ -62,10 +61,6 @@ function hasGlobalDelete(user: AuthUser): boolean {
     return user.canDeleteAllRooms
 }
 
-function generateDocumentId(): string {
-    return randomBytes(16).toString('hex')
-}
-
 export async function createRoom(req: Request, res: Response) {
     try {
         const userId = (req as any).userId
@@ -79,12 +74,9 @@ export async function createRoom(req: Request, res: Response) {
             return res.status(400).json({ error: 'Unsupported language' })
         }
 
-        const documentId = generateDocumentId()
-
         const roomData: any = {
             name,
             language,
-            documentId,
             ownerId: userId,
         }
 
@@ -271,51 +263,13 @@ export async function getRoom(req: Request, res: Response) {
 }
 
 export async function getRoomByDocumentId(req: Request, res: Response) {
-    try {
-        const authUser = getAuthUser(req)
-        const userId = authUser.id
-        const { documentId } = req.params
-
-        const room = await prisma.room.findFirst({
-            where: { documentId },
-            include: {
-                owner: {
-                    select: {
-                        id: true,
-                        username: true,
-                        color: true,
-                    },
-                },
-                participants: {
-                    include: {
-                        user: {
-                            select: {
-                                id: true,
-                                username: true,
-                                color: true,
-                            },
-                        },
-                    },
-                },
-            },
-        })
-
-        if (!room) {
-            return res.status(404).json({ error: 'Room not found' })
-        }
-
-        const isOwner = room.ownerId === userId
-        const isParticipant = room.participants.some(p => p.userId === userId)
-
-        if (!hasGlobalRead(authUser) && !isOwner && !isParticipant) {
-            return res.status(403).json({ error: 'Access denied' })
-        }
-
-        res.json({ room })
-    } catch (error) {
-        console.error('Get room by documentId error:', error)
-        res.status(500).json({ error: 'Internal server error' })
+    // documentId is now the same as roomId, so just remap the parameter and call getRoom
+    const { documentId } = req.params
+    if (!documentId) {
+        return res.status(400).json({ error: 'Document ID is required' })
     }
+    req.params.roomId = documentId
+    return getRoom(req, res)
 }
 
 export async function updateRoom(req: Request, res: Response) {
@@ -487,6 +441,10 @@ export async function endRoom(req: Request, res: Response) {
         const userId = authUser.id
         const { roomId } = req.params
 
+        if (!roomId) {
+            return res.status(400).json({ error: 'Room ID is required' })
+        }
+
         const room = await prisma.room.findUnique({
             where: { id: roomId },
         })
@@ -509,7 +467,8 @@ export async function endRoom(req: Request, res: Response) {
         })
 
         // Notify all connected collaborators via stateless WebSocket message
-        broadcastRoomEnded(room.documentId, updatedRoom.endedAt)
+        // room.id is now the documentId
+        broadcastRoomEnded(roomId, updatedRoom.endedAt)
 
         res.json({ room: updatedRoom })
     } catch (error) {
