@@ -366,11 +366,26 @@ export function Editor() {
                         username: state.user.name,
                         color: colors.color,
                         colorLight: colors.colorLight,
-                        cursor: state.cursor,
+                        // Don't include cursor in state to prevent re-renders on every mouse move
+                        // cursor: state.cursor,
                     })
                 }
             })
-            setRemoteUsers(users)
+
+            // Only update if the users array has changed (deep comparison of relevant fields)
+            setRemoteUsers(prev => {
+                if (prev.length !== users.length) return users
+
+                const hasChanged = users.some((u, i) => {
+                    const p = prev[i]
+                    return p.clientId !== u.clientId ||
+                        p.username !== u.username ||
+                        p.color !== u.color ||
+                        p.colorLight !== u.colorLight
+                })
+
+                return hasChanged ? users : prev
+            })
         }
 
         provider.awareness.on('change', updateRemoteUsers)

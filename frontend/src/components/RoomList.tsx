@@ -69,13 +69,16 @@ export function RoomList() {
             setIsLoading(true)
             const { rooms } = await api.getRooms()
 
-            // Smart sorting: expired last, others by scheduledTime (earliest first)
+            // Smart sorting: ended/expired last, others by scheduledTime (earliest first)
             const sortedRooms = rooms.sort((a: any, b: any) => {
-                // 1. Expired rooms go to the end
-                if (a.isExpired && !b.isExpired) return 1
-                if (!a.isExpired && b.isExpired) return -1
+                // 1. Ended or Expired rooms go to the end
+                const aInactive = a.isEnded || a.isExpired
+                const bInactive = b.isEnded || b.isExpired
 
-                // 2. Both expired or both not expired
+                if (aInactive && !bInactive) return 1
+                if (!aInactive && bInactive) return -1
+
+                // 2. Both inactive or both active
                 // If both have scheduledTime, sort by it (earliest first)
                 if (a.scheduledTime && b.scheduledTime) {
                     return new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
@@ -395,7 +398,7 @@ export function RoomList() {
                                     className="room-card"
                                     onClick={() => !room.isEnded && handleJoinRoom(room.id)}
                                     style={{
-                                        opacity: room.isExpired ? 0.5 : 1,
+                                        opacity: (room.isExpired || room.isEnded) ? 0.5 : 1,
                                         cursor: room.isEnded ? 'default' : 'pointer',
                                     }}
                                 >
