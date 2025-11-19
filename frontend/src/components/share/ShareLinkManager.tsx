@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../lib/api'
-import type { ShareLink } from '../types'
+import { api } from '../../lib/api'
+import type { ShareLink } from '../../types'
 
 interface ShareLinkManagerProps {
     roomId: string

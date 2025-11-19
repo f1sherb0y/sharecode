@@ -83,7 +83,7 @@
       "expired": "[Expired]",
       "delete": "Delete",
       "deleteConfirm": "Delete room \"{{name}}\"?",
-      "viewPlayback": "View Playback"
+      "viewPlayback": "Playback"
     }
   },
   "editor": {

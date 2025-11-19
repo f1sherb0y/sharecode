@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ThemeToggle } from './ThemeToggle'
 import { api } from '../lib/api'
+import { Navbar } from '../components/layout/Navbar'
 import type { User, Room, Role } from '../types'
 
 type PermissionState = {
@@ -134,7 +134,7 @@ export function Admin() {
     const [isCreating, setIsCreating] = useState(false)
     const [editedUsers, setEditedUsers] = useState<Record<string, EditableUserState>>({})
     const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
-    const { user, logout } = useAuth()
+    const { user } = useAuth()
     const navigate = useNavigate()
     const isSuperuser = user?.role === 'superuser'
     const roleOptions: Role[] = ['user', 'admin', 'superuser']
@@ -342,20 +342,14 @@ export function Admin() {
 
     return (
         <div className="room-page">
-            <div className="room-topbar">
-                <div className="room-topbar-inner">
-                    <h1 className="room-topbar-title">{t('admin.title')}</h1>
-                    <div className="room-topbar-actions">
-                        <button className="toolbar-button" onClick={() => navigate('/rooms')}>
-                            {t('admin.backToRooms')}
-                        </button>
-                        <button className="toolbar-button" onClick={logout}>
-                            {t('common.logout')}
-                        </button>
-                        <ThemeToggle />
-                    </div>
-                </div>
-            </div>
+            <Navbar
+                title={t('admin.title')}
+                rightContent={
+                    <button className="toolbar-button" onClick={() => navigate('/rooms')}>
+                        {t('admin.backToRooms')}
+                    </button>
+                }
+            />
 
             <div className="container room-content">
                 {error && <div className="error-message" style={{ marginTop: '1rem' }}>{error}</div>}

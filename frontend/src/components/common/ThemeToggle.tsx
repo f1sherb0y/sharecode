@@ -1,5 +1,5 @@
 import { Moon, Sun } from 'lucide-react'
-import { useTheme } from '../contexts/ThemeContext'
+import { useTheme } from '../../contexts/ThemeContext'
 
 export function ThemeToggle() {
     const { theme, toggleTheme } = useTheme()
@@ -10,7 +10,7 @@ export function ThemeToggle() {
             onClick={toggleTheme}
             title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
         >
-            {theme === 'light' ? <Moon size={24} strokeWidth={2} /> : <Sun size={24} strokeWidth={2} />}
+            {theme === 'light' ? <Moon size={20} strokeWidth={2} /> : <Sun size={20} strokeWidth={2} />}
         </button>
     )
 }

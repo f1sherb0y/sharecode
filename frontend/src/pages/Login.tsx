@@ -3,8 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Settings } from 'lucide-react'
-import { ThemeToggle } from './ThemeToggle'
-import { LanguageSwitcher } from './LanguageSwitcher'
+import { ThemeToggle } from '../components/common/ThemeToggle'
+import { LanguageSwitcher } from '../components/common/LanguageSwitcher'
 
 export function Login() {
     const [username, setUsername] = useState('')

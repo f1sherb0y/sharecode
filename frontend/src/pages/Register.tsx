@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ThemeToggle } from './ThemeToggle'
-import { LanguageSwitcher } from './LanguageSwitcher'
+import { ThemeToggle } from '../components/common/ThemeToggle'
+import { LanguageSwitcher } from '../components/common/LanguageSwitcher'
 import { api } from '../lib/api'
 
 export function Register() {

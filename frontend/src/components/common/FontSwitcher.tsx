@@ -1,4 +1,4 @@
-import { useFont, type EditorFont } from '../contexts/FontContext'
+import { useFont, type EditorFont } from '../../contexts/FontContext'
 
 const FONTS: Array<{ value: EditorFont; label: string }> = [
     { value: 'JetBrains Mono', label: 'JetBrains Mono' },

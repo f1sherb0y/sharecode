@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { ThemeToggle } from './ThemeToggle'
-import { LanguageSwitcher } from './LanguageSwitcher'
 import { createPortal } from 'react-dom'
 import { api } from '../lib/api'
 import type { Room, Language, User } from '../types'
-import { ShareLinkManager } from './ShareLinkManager'
+import { ShareLinkManager } from '../components/share/ShareLinkManager'
+import { Play, Trash2, Share2, Calendar, Clock, User as UserIconSmall } from 'lucide-react'
+import { Navbar } from '../components/layout/Navbar'
 
 const LANGUAGES: Language[] = [
     'javascript',
@@ -37,11 +37,8 @@ export function RoomList() {
     const [pendingUserSelection, setPendingUserSelection] = useState<{ userId: string; canEdit: boolean }[]>([])
     const [userSearchTerm, setUserSearchTerm] = useState('')
     const [shareModalRoom, setShareModalRoom] = useState<{ id: string; name: string } | null>(null)
-    const { user, logout } = useAuth()
+    const { user } = useAuth()
     const navigate = useNavigate()
-
-    // Check if running in Tauri desktop environment
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
     const formatUserRole = (role?: string) => {
         if (role === 'superuser') return t('common.superuser')
@@ -200,43 +197,21 @@ export function RoomList() {
 
     return (
         <div className="room-page">
-            <div className="room-topbar">
-                <div className="room-topbar-inner">
-                    <h1 className="room-topbar-title">ShareCode</h1>
-                    <div className="room-topbar-actions">
-                        <span style={{ color: 'var(--text-secondary)' }}>{t('rooms.welcome')}, {user?.username}</span>
-                        {(user?.role === 'admin' || user?.role === 'superuser') && (
-                            <button className="toolbar-button" onClick={() => navigate('/admin')}>
-                                {t('common.admin')}
-                            </button>
-                        )}
-                        {isTauri && (
-                            <button className="toolbar-button" onClick={() => navigate('/settings')}>
-                                {t('common.settings')}
-                            </button>
-                        )}
-                        <button className="toolbar-button" onClick={logout}>
-                            {t('common.logout')}
-                        </button>
-                        <LanguageSwitcher />
-                        <ThemeToggle />
-                    </div>
-                </div>
-            </div>
+            <Navbar />
 
             <div className="container room-content">
-                {error && <div className="error-message" style={{ marginTop: '1rem' }}>{error}</div>}
+                {error && <div className="error-message mt-4">{error}</div>}
 
-                <div style={{ marginBottom: '1.5rem' }}>
+                <div className="mb-6">
                     <button onClick={() => setShowCreate(!showCreate)}>
                         {showCreate ? t('rooms.cancel') : '+ ' + t('rooms.createButton')}
                     </button>
                 </div>
 
                 {showCreate && (
-                    <div className="card" style={{ marginBottom: '2rem' }}>
+                    <div className="card mb-6">
                         <h3>{t('rooms.create.title')}</h3>
-                        <form className="auth-form" onSubmit={handleCreateRoom} style={{ marginTop: '1rem' }}>
+                        <form className="auth-form mt-4" onSubmit={handleCreateRoom}>
                             <div className="form-group">
                                 <label className="form-label">{t('rooms.create.name')}</label>
                                 <input
@@ -268,7 +243,7 @@ export function RoomList() {
                                     onChange={(e) => setScheduledTime(e.target.value)}
                                     min={new Date().toISOString().slice(0, 16)}
                                 />
-                                <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                <small className="text-sm text-secondary">
                                     {t('rooms.create.scheduledTimeHint')}
                                 </small>
                             </div>
@@ -286,54 +261,26 @@ export function RoomList() {
                             {availableUsers.length > 0 && (
                                 <div className="form-group">
                                     <label className="form-label">{t('rooms.create.allowedUsers')}</label>
-                                    <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+                                    <small className="text-sm text-secondary block mb-2">
                                         {t('rooms.create.allowedUsersHint')}
                                     </small>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
                                         {selectedUsers.map(selection => {
                                             const userInfo = availableUsers.find(u => u.id === selection.userId)
                                             return (
-                                                <div
-                                                    key={selection.userId}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.375rem',
-                                                        padding: '0.375rem 0.5rem',
-                                                        border: '1px solid var(--border)',
-                                                        borderRadius: '6px',
-                                                        backgroundColor: 'var(--bg-secondary)',
-                                                        fontSize: '0.875rem'
-                                                    }}
-                                                >
-                                                    <span style={{ fontWeight: 600 }}>{userInfo?.username ?? t('rooms.create.unknownUser')}</span>
+                                                <div key={selection.userId} className="user-tag">
+                                                    <span className="font-semibold">{userInfo?.username ?? t('rooms.create.unknownUser')}</span>
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleUserEditPermission(selection.userId)}
-                                                        style={{
-                                                            border: `1px solid ${selection.canEdit ? 'var(--accent)' : 'var(--border)'}`,
-                                                            background: selection.canEdit ? 'var(--accent-muted)' : 'var(--bg-hover)',
-                                                            color: selection.canEdit ? 'var(--accent-text)' : 'var(--text-secondary)',
-                                                            padding: '0.1875rem 0.5rem',
-                                                            borderRadius: '6px',
-                                                            cursor: 'pointer',
-                                                            fontSize: '0.75rem',
-                                                            lineHeight: 1.1,
-                                                        }}
+                                                        className={`user-tag-btn ${selection.canEdit ? 'active' : ''}`}
                                                     >
                                                         {selection.canEdit ? t('rooms.create.canEdit') : t('rooms.create.canView')}
                                                     </button>
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleUserSelection(selection.userId)}
-                                                        style={{
-                                                            border: 'none',
-                                                            background: 'transparent',
-                                                            color: 'var(--text-secondary)',
-                                                            cursor: 'pointer',
-                                                            fontSize: '1rem',
-                                                            lineHeight: 1,
-                                                        }}
+                                                        className="user-tag-remove"
                                                         aria-label={t('rooms.create.removeUser')}
                                                     >
                                                         ×
@@ -362,12 +309,12 @@ export function RoomList() {
                                         </button>
                                     </div>
                                     {selectedUsers.length === 0 && (
-                                        <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.5rem', display: 'block' }}>
+                                        <small className="text-sm text-secondary block mt-2">
                                             {t('rooms.create.noAllowedUsers')}
                                         </small>
                                     )}
                                     {selectedUsers.length > 0 && (
-                                        <small style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '0.5rem', display: 'block' }}>
+                                        <small className="text-sm text-secondary block mt-2">
                                             {t('rooms.create.selectedUsers', { count: selectedUsers.length })}
                                         </small>
                                     )}
@@ -391,44 +338,47 @@ export function RoomList() {
                     </div>
                 ) : (
                     <div>
-                        <h2>{t('rooms.title')}</h2>
-                        <div className="room-grid">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 style={{ margin: 0 }}>{t('rooms.title')}</h2>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" style={{ gridAutoRows: '1fr' }}>
                             {rooms.map((room: any) => (
                                 <div
                                     key={room.id}
-                                    className="room-card"
+                                    className="bg-[var(--bg-card)] border border-[var(--border)] rounded-lg p-3 shadow-sm hover:shadow-md hover:border-[var(--accent)] transition-all relative group"
                                     onClick={() => !room.isEnded && handleJoinRoom(room.id)}
                                     style={{
-                                        opacity: (room.isExpired || room.isEnded) ? 0.5 : 1,
+                                        opacity: (room.isExpired || room.isEnded) ? 0.7 : 1,
                                         cursor: room.isEnded ? 'default' : 'pointer',
+                                        display: 'grid',
+                                        gridTemplateRows: '3fr 2fr 6fr 4fr',
+                                        gap: '0.25rem',
+                                        height: '100%',
                                     }}
                                 >
-                                    <div className="room-header">
-                                        <div>
-                                            <h3 className="room-title">
-                                                {room.name}{' '}
-                                                {room.isOwner && <span style={{ color: 'var(--accent)' }}>{t('rooms.list.owned')}</span>}
-                                                {room.isEnded && <span style={{ color: 'var(--error)' }}> {t('rooms.list.ended')}</span>}
-                                                {room.isExpired && !room.isEnded && <span style={{ color: 'var(--text-secondary)' }}> {t('rooms.list.expired')}</span>}
+                                    {/* Header with title and action buttons */}
+                                    <div className="flex justify-between items-start gap-2">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-base font-bold m-0 truncate text-[var(--text-primary)] leading-tight" title={room.name}>
+                                                {room.name}
                                             </h3>
-                                            <div className="language-badge">{room.language}</div>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <div className="flex gap-1 flex-shrink-0">
                                             {room.isOwner && !room.isEnded && (
                                                 <button
-                                                    className="btn-secondary"
+                                                    className="p-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] border-0 cursor-pointer transition-colors"
                                                     onClick={(e) => {
                                                         e.stopPropagation()
                                                         setShareModalRoom({ id: room.id, name: room.name })
                                                     }}
-                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                                                    title={t('share.manager.openPanel')}
                                                 >
-                                                    {t('share.manager.openPanel')}
+                                                    <Share2 size={14} />
                                                 </button>
                                             )}
                                             {(room.isOwner || user?.canDeleteAllRooms) && !room.isEnded && (
                                                 <button
-                                                    className="btn-danger"
+                                                    className="p-1 rounded hover:bg-[var(--danger)] hover:text-white text-[var(--text-secondary)] border-0 cursor-pointer transition-colors"
                                                     onClick={async (e) => {
                                                         e.stopPropagation()
                                                         if (confirm(t('rooms.list.deleteConfirm', { name: room.name }))) {
@@ -440,32 +390,69 @@ export function RoomList() {
                                                             }
                                                         }
                                                     }}
-                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                                                    title={t('rooms.list.delete')}
                                                 >
-                                                    {t('rooms.list.delete')}
+                                                    <Trash2 size={14} />
                                                 </button>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="room-meta">
-                                        <div>{t('rooms.list.owner')}: {room.owner.username}</div>
-                                        <div>{t('rooms.list.created')}: {new Date(room.createdAt).toLocaleDateString()}</div>
+
+                                    {/* Badges */}
+                                    <div className="flex flex-wrap gap-2">
+                                        <span className="language-badge text-[10px] px-1.5 py-0.5 uppercase tracking-wide font-semibold">{room.language}</span>
+                                        {room.isOwner && <span className="text-xs px-1.5 items-center inline-flex py-0.5 rounded bg-[var(--bg-hover)] text-[var(--accent)] font-medium">{t('rooms.list.owned')}</span>}
+                                    </div>
+
+                                    {/* Metadata */}
+                                    <div className="text-xs text-[var(--text-secondary)] space-y-1.5 flex flex-col justify-start">
+                                        <div className="flex items-center gap-2">
+                                            <UserIconSmall size={12} className="flex-shrink-0" />
+                                            <span className="truncate">{room.owner.username}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Calendar size={12} className="flex-shrink-0" />
+                                            <span>{new Date(room.createdAt).toLocaleDateString()}</span>
+                                        </div>
                                         {room.scheduledTime && (
-                                            <div>{t('rooms.list.scheduled')}: {new Date(room.scheduledTime).toLocaleString()}</div>
+                                            <div className="flex items-center gap-2">
+                                                <Clock size={12} className="flex-shrink-0" />
+                                                <span className="truncate">{new Date(room.scheduledTime).toLocaleString()}</span>
+                                            </div>
                                         )}
-                                        {room.duration && <div>{t('rooms.list.duration')}: {room.duration} {t('rooms.list.durationUnit')}</div>}
-                                        {room.participants && room.participants.length > 0 && (
-                                            <div>{room.participants.length + 1} {t('rooms.list.participants')}</div>
-                                        )}
+                                    </div>
+
+                                    {/* Footer */}
+                                    <div className="pt-3 border-t border-[var(--border)] flex justify-between items-center">
+                                        <div className="text-xs font-medium">
+                                            {room.isEnded ? (
+                                                <span className="text-[var(--text-secondary)]">{t('rooms.list.ended')}</span>
+                                            ) : (
+                                                <span className="text-[var(--success)] flex items-center gap-1.5">
+                                                    <span className="relative flex h-2 w-2 flex-shrink-0">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--success)]"></span>
+                                                    </span>
+                                                    <span>Live</span>
+                                                    {room.participants && room.participants.length > 0 && (
+                                                        <span className="text-[var(--text-secondary)] font-normal">
+                                                            ({room.participants.length + 1})
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            )}
+                                        </div>
+
                                         {room.isEnded && (
                                             <button
+                                                className="flex items-center gap-1.5 text-xs bg-[var(--bg-hover)] hover:bg-[var(--border)] px-2.5 py-1.5 rounded transition-colors border-0 cursor-pointer text-[var(--text-primary)] font-medium"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     navigate(`/playback/${room.id}`)
                                                 }}
-                                                style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}
                                             >
-                                                {t('rooms.list.viewPlayback')}
+                                                <Play size={12} />
+                                                <span>{t('rooms.list.viewPlayback')}</span>
                                             </button>
                                         )}
                                     </div>
@@ -479,49 +466,18 @@ export function RoomList() {
             {isUserModalOpen && typeof document !== 'undefined' && createPortal(
                 <div
                     className="modal-overlay"
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000,
-                        padding: '1rem',
-                    }}
                     onClick={(event) => {
                         if (event.target === event.currentTarget) {
                             closeUserSelectionModal()
                         }
                     }}
                 >
-                    <div
-                        className="modal-content"
-                        style={{
-                            background: 'var(--bg-card)',
-                            color: 'var(--text-primary)',
-                            borderRadius: '6px',
-                            width: '100%',
-                            maxWidth: '480px',
-                            maxHeight: '80vh',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-                            border: '1px solid var(--border)',
-                            position: 'relative',
-                            zIndex: 10001,
-                        }}
-                    >
-                        <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid var(--border)' }}>
-                            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>{t('rooms.create.selectUsersTitle')}</h4>
-                            <p style={{ marginTop: '0.375rem', marginBottom: 0, color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
-                                {t('rooms.create.selectUsersDescription')}
-                            </p>
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h4>{t('rooms.create.selectUsersTitle')}</h4>
+                            <p>{t('rooms.create.selectUsersDescription')}</p>
                         </div>
-                        <div style={{ padding: '0.75rem 1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1 }}>
+                        <div className="modal-body gap-2">
                             <input
                                 type="text"
                                 value={userSearchTerm}
@@ -621,35 +577,21 @@ export function RoomList() {
                                 </div>
                             )}
                         </div>
-                        <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '0.625rem' }}>
-                            <button
-                                type="button"
-                                onClick={closeUserSelectionModal}
-                                style={{
-                                    border: '1px solid var(--border)',
-                                    background: 'transparent',
-                                    color: 'var(--text-secondary)',
-                                    padding: '0.5rem 0.875rem',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '0.8125rem',
-                                    minHeight: '36px',
-                                }}
-                            >
-                                {t('rooms.create.modalCancel')}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={confirmPendingSelection}
-                                style={{
-                                    padding: '0.5rem 0.875rem',
-                                    fontSize: '0.8125rem',
-                                    minHeight: '36px',
-                                }}
-                            >
-                                {t('rooms.create.modalConfirm')}
-                            </button>
-                        </div>
+                    </div>
+                    <div className="modal-footer">
+                        <button
+                            type="button"
+                            onClick={closeUserSelectionModal}
+                            className="btn-secondary"
+                        >
+                            {t('rooms.create.modalCancel')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={confirmPendingSelection}
+                        >
+                            {t('rooms.create.modalConfirm')}
+                        </button>
                     </div>
                 </div>,
                 document.body
@@ -658,19 +600,6 @@ export function RoomList() {
             {shareModalRoom && typeof document !== 'undefined' && createPortal(
                 <div
                     className="modal-overlay"
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000,
-                        padding: '1rem',
-                    }}
                     onClick={(event) => {
                         if (event.target === event.currentTarget) {
                             setShareModalRoom(null)
@@ -678,20 +607,8 @@ export function RoomList() {
                     }}
                 >
                     <div
-                        className="modal-content"
-                        style={{
-                            background: 'var(--bg-card)',
-                            color: 'var(--text-primary)',
-                            borderRadius: '6px',
-                            width: 'min(720px, 100%)',
-                            maxHeight: '85vh',
-                            overflowY: 'auto',
-                            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-                            border: '1px solid var(--border)',
-                            position: 'relative',
-                            zIndex: 10001,
-                            padding: '1.5rem',
-                        }}
+                        className="modal-content large"
+                        style={{ padding: '1.5rem', overflowY: 'auto' }}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <ShareLinkManager

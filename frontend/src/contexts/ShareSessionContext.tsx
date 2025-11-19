@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getGuestSession } from '../lib/shareApi'
 import type { ShareSession, ShareGuest, ShareRoomDetails } from '../types'
-import { ShareJoin } from '../components/ShareJoin'
+import { ShareJoin } from '../components/share/ShareJoin'
 
 interface ShareSessionContextValue {
     shareToken: string

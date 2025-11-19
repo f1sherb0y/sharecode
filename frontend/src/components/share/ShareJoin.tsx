@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { fetchShareInfo, joinShare } from '../lib/shareApi'
-import { useShareSession } from '../contexts/ShareSessionContext'
+import { fetchShareInfo, joinShare } from '../../lib/shareApi'
+import { useShareSession } from '../../contexts/ShareSessionContext'
 
 export function ShareJoin({ onJoined }: { onJoined?: () => void }) {
     const { shareToken, session, setSession, clearSession, refreshSession } = useShareSession()
@@ -62,7 +62,7 @@ export function ShareJoin({ onJoined }: { onJoined?: () => void }) {
         if (!session) return
         if (sessionRefreshTokenRef.current === session.authToken) return
         sessionRefreshTokenRef.current = session.authToken
-        refreshSession().catch((err) => {
+        refreshSession().catch((err: any) => {
             console.error('Failed to refresh share session', err)
         })
     }, [session, refreshSession])

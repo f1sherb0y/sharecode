@@ -8,17 +8,16 @@ import { useTheme } from '../contexts/ThemeContext'
 import { useFont } from '../contexts/FontContext'
 import { useShareSession } from '../contexts/ShareSessionContext'
 import { useYjsProvider } from '../hooks/useYjsProvider'
-import { ThemeToggle } from './ThemeToggle'
-import { LanguageSwitcher } from './LanguageSwitcher'
-import { FontSwitcher } from './FontSwitcher'
-import { ConnectedIcon, DisconnectedIcon, SyncedIcon, SyncingIcon } from './StatusIcons'
+import { FontSwitcher } from '../components/common/FontSwitcher'
+import { ConnectedIcon, DisconnectedIcon, SyncedIcon, SyncingIcon } from '../components/common/StatusIcons'
 import { api } from '../lib/api'
 import type { Room, RemoteUser, Language } from '../types'
-import { ShareLinkManager } from './ShareLinkManager'
+import { ShareLinkManager } from '../components/share/ShareLinkManager'
 import { createPortal } from 'react-dom'
 import 'monaco-editor/min/vs/editor/editor.main.css'
 import { MonacoBinding } from '../lib/MonacoBinding'
 import { loadMonaco } from '../lib/monacoLoader'
+import { Navbar } from '../components/layout/Navbar'
 
 interface UserColorScheme {
     color: string
@@ -622,22 +621,22 @@ export function Editor() {
 
         return (
             <div className="editor-container">
-                <div className="editor-header">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <button
-                            className="toolbar-button"
-                            onClick={() => navigate(backPath)}
-                        >
-                            ← {t('common.back')}
-                        </button>
-                        <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
-                        <span className="language-badge">{room.language}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <LanguageSwitcher />
-                        <ThemeToggle />
-                    </div>
-                </div>
+                <Navbar
+                    title={null}
+                    fullWidth={true}
+                    leftContent={
+                        <>
+                            <button
+                                className="toolbar-button"
+                                onClick={() => navigate(backPath)}
+                            >
+                                ← {t('common.back')}
+                            </button>
+                            <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
+                            <span className="language-badge">{room.language}</span>
+                        </>
+                    }
+                />
 
                 <div className="editor-ended">
                     <div className="editor-ended-card">
@@ -673,83 +672,86 @@ export function Editor() {
 
     return (
         <div className="editor-container">
-            {/* Header */}
-            <div className="editor-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <button
-                        className="toolbar-button"
-                        onClick={() => navigate(backPath)}
-                    >
-                        ← {t('common.back')}
-                    </button>
-                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
-                    {isOwner ? (
-                        <select
-                            className="toolbar-select"
-                            value={room.language}
-                            onChange={(e) => handleLanguageChange(e.target.value as Language)}
-                            disabled={isChangingLanguage}
-                        >
-                            {LANGUAGES.map((lang) => (
-                                <option key={lang} value={lang}>
-                                    {lang}
-                                </option>
-                            ))}
-                        </select>
-                    ) : (
-                        <span className="language-badge">{room.language}</span>
-                    )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    {isOwner && !room.isEnded && (
+            <Navbar
+                title={null}
+                fullWidth={true}
+                leftContent={
+                    <>
                         <button
-                            className="btn-secondary"
-                            onClick={(event) => {
-                                event.preventDefault()
-                                setIsShareModalOpen(true)
-                            }}
+                            className="toolbar-button"
+                            onClick={() => navigate(backPath)}
                         >
-                            {t('share.manager.openPanel')}
+                            ← {t('common.back')}
                         </button>
-                    )}
-                    {isOwner && !room.isEnded && (
-                        <button
-                            className="btn-danger"
-                            onClick={async (e) => {
-                                e.preventDefault()
-                                if (confirm(t('editor.toolbar.endRoom') + '?')) {
-                                    try {
-                                        const { room: endedRoom } = await api.endRoom(room.id)
+                        <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
+                        {isOwner ? (
+                            <select
+                                className="toolbar-select"
+                                value={room.language}
+                                onChange={(e) => handleLanguageChange(e.target.value as Language)}
+                                disabled={isChangingLanguage}
+                            >
+                                {LANGUAGES.map((lang) => (
+                                    <option key={lang} value={lang}>
+                                        {lang}
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            <span className="language-badge">{room.language}</span>
+                        )}
+                    </>
+                }
+                rightContent={
+                    <>
+                        {isOwner && !room.isEnded && (
+                            <button
+                                className="btn-secondary"
+                                onClick={(event) => {
+                                    event.preventDefault()
+                                    setIsShareModalOpen(true)
+                                }}
+                            >
+                                {t('share.manager.openPanel')}
+                            </button>
+                        )}
+                        {isOwner && !room.isEnded && (
+                            <button
+                                className="btn-danger"
+                                onClick={async (e) => {
+                                    e.preventDefault()
+                                    if (confirm(t('editor.toolbar.endRoom') + '?')) {
+                                        try {
+                                            const { room: endedRoom } = await api.endRoom(room.id)
 
-                                        // Update local state first
-                                        setRoom(endedRoom)
+                                            // Update local state first
+                                            setRoom(endedRoom)
 
-                                        // Broadcast to other users
-                                        provider?.awareness?.setLocalStateField('roomStatus', 'ended')
-                                        provider?.awareness?.setLocalStateField(
-                                            'roomEndedAt',
-                                            endedRoom?.endedAt ?? new Date().toISOString()
-                                        )
+                                            // Broadcast to other users
+                                            provider?.awareness?.setLocalStateField('roomStatus', 'ended')
+                                            provider?.awareness?.setLocalStateField(
+                                                'roomEndedAt',
+                                                endedRoom?.endedAt ?? new Date().toISOString()
+                                            )
 
-                                        // Then navigate
-                                        navigate('/rooms')
-                                    } catch (err) {
-                                        setError(err instanceof Error ? err.message : 'Failed to end room')
+                                            // Then navigate
+                                            navigate('/rooms')
+                                        } catch (err) {
+                                            setError(err instanceof Error ? err.message : 'Failed to end room')
+                                        }
                                     }
-                                }
-                            }}
-                        >
-                            {t('editor.toolbar.endRoom')}
-                        </button>
-                    )}
-                    <LanguageSwitcher />
-                    <FontSwitcher />
-                    <ThemeToggle />
-                </div>
-            </div>
+                                }}
+                            >
+                                {t('editor.toolbar.endRoom')}
+                            </button>
+                        )}
+                        <FontSwitcher />
+                    </>
+                }
+            />
 
             {/* Editor */}
-            <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div>
                 <div ref={editorRef} style={{ height: '100%' }} />
             </div>
 
@@ -831,19 +833,6 @@ export function Editor() {
             {isShareModalOpen && typeof document !== 'undefined' && createPortal(
                 <div
                     className="modal-overlay"
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10000,
-                        padding: '1rem',
-                    }}
                     onClick={(event) => {
                         if (event.target === event.currentTarget) {
                             setIsShareModalOpen(false)
@@ -851,20 +840,8 @@ export function Editor() {
                     }}
                 >
                     <div
-                        className="modal-content"
-                        style={{
-                            background: 'var(--bg-card)',
-                            color: 'var(--text-primary)',
-                            borderRadius: '6px',
-                            width: 'min(720px, 100%)',
-                            maxHeight: '85vh',
-                            overflowY: 'auto',
-                            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-                            border: '1px solid var(--border)',
-                            position: 'relative',
-                            zIndex: 10001,
-                            padding: '1.5rem',
-                        }}
+                        className="modal-content large"
+                        style={{ padding: '1.5rem', overflowY: 'auto' }}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <ShareLinkManager
