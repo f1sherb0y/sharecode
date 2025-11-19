@@ -11,7 +11,7 @@ A real-time collaborative code editing platform built with React, CodeMirror, Yj
 - 👁️ See other users' cursors and selections in real-time
 - 🔄 Follow mode - follow another user's viewport
 - 💾 Persistent document storage with PostgreSQL
-- 🔒 Room-based access control
+- 🔒 Room-based access control (including strict session locking for ended rooms)
 - 🔑 Fine-grained room permissions (read/write/delete all) with superuser, admin, and user roles
 - 🔗 Guest share links with configurable view/edit permissions
 

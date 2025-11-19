@@ -333,9 +333,17 @@ monacoModelRef.current?.setValue(ytext.toString())
 **Problem**: "Back to Login" button incorrect when accessed from Rooms
 **Solution**: Use `navigate(-1)` for smart browser history-based navigation
 
+### Challenge 8: Sorting Stability & Stale UI
+**Problem**: Users seeing different UI versions or incorrect sorting order on deployment.
+**Solution**: 
+- Sorting algorithm fixed to copy array before sorting (avoid in-place mutations).
+- Nginx configured to *never* cache `index.html` while caching assets aggressively (cache busting).
+- Added `Cache-Control` meta tags to `index.html` as a fail-safe.
+
 ## Best Practices Applied
 
 ### Security
+- **Strict Session Locking**: Ended rooms are completely inaccessible to normal participants (read access revoked).
 - JWT-based authentication with secure secret
 - Password hashing with bcrypt (10 rounds)
 - Admin middleware for protected routes
