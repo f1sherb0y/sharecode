@@ -70,7 +70,8 @@ export function RoomList() {
             const { rooms } = await api.getRooms()
 
             // Smart sorting: ended/expired last, others by scheduledTime (earliest first)
-            const sortedRooms = rooms.sort((a: any, b: any) => {
+            // Use [...rooms] to create a shallow copy before sorting to avoid mutating original array
+            const sortedRooms = [...rooms].sort((a: any, b: any) => {
                 // 1. Ended or Expired rooms go to the end
                 const aInactive = a.isEnded || a.isExpired
                 const bInactive = b.isEnded || b.isExpired
