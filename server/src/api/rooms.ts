@@ -146,6 +146,7 @@ export async function getRooms(req: Request, res: Response) {
         }
 
         // Users without global read access only see rooms they own or participate in
+        // For participants, they can only see the room if it hasn't ended
         if (!hasGlobalRead(authUser)) {
             whereClause.OR = [
                 { ownerId: userId },
@@ -155,6 +156,7 @@ export async function getRooms(req: Request, res: Response) {
                             userId: userId,
                         },
                     },
+                    isEnded: false,
                 },
             ]
         }
@@ -250,9 +252,15 @@ export async function getRoom(req: Request, res: Response) {
 
         const isOwner = room.ownerId === userId
         const isParticipant = room.participants.some(p => p.userId === userId)
+        const isAdmin = authUser.role === 'admin' || authUser.role === 'superuser' || hasGlobalRead(authUser)
 
-        if (!hasGlobalRead(authUser) && !isOwner && !isParticipant) {
+        if (!isAdmin && !isOwner && !isParticipant) {
             return res.status(403).json({ error: 'Access denied' })
+        }
+
+        // Strict security: Ended rooms can only be viewed by owner or admin
+        if (room.isEnded && !isOwner && !isAdmin) {
+            return res.status(403).json({ error: 'Room has ended and is no longer accessible' })
         }
 
         res.json({ room })
@@ -372,6 +380,10 @@ export async function joinRoom(req: Request, res: Response) {
 
         if (!room) {
             return res.status(404).json({ error: 'Room not found' })
+        }
+
+        if (room.isEnded) {
+            return res.status(403).json({ error: 'Cannot join an ended room' })
         }
 
         // Check if already a participant
