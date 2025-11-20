@@ -78,7 +78,7 @@
       "duration": "Duration",
       "durationUnit": "min",
       "participants": "participants",
-      "owned": "(Owned)",
+      "owned": "Owned",
       "ended": "[Ended]",
       "expired": "[Expired]",
       "delete": "Delete",
