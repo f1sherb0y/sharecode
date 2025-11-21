@@ -36,19 +36,21 @@ export function Navbar({
     return (
         <div className="room-topbar">
             <div className="room-topbar-inner" style={fullWidth ? { maxWidth: '100%' } : undefined}>
-                <div className="flex items-center gap-4">
-                    <div
-                        className="room-topbar-title cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={handleTitleClick}
-                    >
-                        {typeof title === 'string' ? (
-                            <span className="text-xl font-bold m-0 leading-none logo-text">
-                                {title}
-                            </span>
-                        ) : (
-                            title
-                        )}
-                    </div>
+                <div className="flex items-center gap-2 sm:gap-4">
+                    {title && (
+                        <div
+                            className="room-topbar-title cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={handleTitleClick}
+                        >
+                            {typeof title === 'string' ? (
+                                <span className="text-xl font-bold m-0 leading-none logo-text">
+                                    {title}
+                                </span>
+                            ) : (
+                                title
+                            )}
+                        </div>
+                    )}
                     {leftContent}
                 </div>
 

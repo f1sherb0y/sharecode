@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Settings, LogOut, Shield, User as UserIcon, ChevronDown } from 'lucide-react'
+import { Settings, LogOut, Shield, User as UserIcon } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import type { Role } from '../../types'
 
@@ -47,7 +47,6 @@ export function UserMenu() {
                 >
                     {user.username ? user.username.substring(0, 2).toUpperCase() : <UserIcon size={20} />}
                 </div>
-                <ChevronDown size={16} style={{ color: 'var(--text-primary)' }} />
             </button>
 
             {isOpen && (

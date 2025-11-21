@@ -356,7 +356,7 @@ export function Admin() {
 
                 {/* Users Section */}
                 <div style={{ marginBottom: '3rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <h2 style={{ margin: 0 }}>{t('admin.users.title')}</h2>
                         <button
                             onClick={() => {
