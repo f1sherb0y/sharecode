@@ -105,6 +105,11 @@
       "description": "The session is finished. You can reach out to the room owner if you need the playback recording or access to the next session.",
       "endedAt": "Ended at {{time}}",
       "back": "Back to rooms"
+    },
+    "font": {
+      "increaseSize": "Increase font size",
+      "decreaseSize": "Decrease font size",
+      "selectFont": "Select editor font"
     }
   },
   "admin": {

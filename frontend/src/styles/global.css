@@ -792,9 +792,11 @@ select:focus {
 .user-menu-btn {
     display: flex;
     align-items: center;
-    gap: 0.25rem; /* Reduced gap */
+    gap: 0.25rem;
+    /* Reduced gap */
     height: 32px;
-    padding: 0 0.25rem; /* Reduced padding */
+    padding: 0 0.25rem;
+    /* Reduced padding */
     border-radius: 32px;
     border: 1px solid transparent;
     background-color: transparent;
@@ -1165,6 +1167,13 @@ select:focus {
         /* Touch-friendly */
     }
 
+    /* Reset min-height for toolbar buttons */
+    .room-topbar button,
+    .status-bar button,
+    .editor-header button {
+        min-height: auto;
+    }
+
     /* Admin tables - stack vertically */
     .admin-table-container {
         overflow-x: auto;
@@ -1389,18 +1398,21 @@ select:focus {
     position: absolute;
     top: 100%;
     right: 0;
-    margin-top: 0.25rem; /* Reduced margin */
+    margin-top: 0.25rem;
+    /* Reduced margin */
     background-color: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 6px;
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    min-width: 160px; /* Reduced min-width */
+    min-width: 160px;
+    /* Reduced min-width */
     z-index: 50;
     overflow: hidden;
 }
 
 .dropdown-header {
-    padding: 0.5rem 0.75rem; /* Reduced padding */
+    padding: 0.5rem 0.75rem;
+    /* Reduced padding */
     border-bottom: 1px solid var(--border);
 }
 
@@ -1428,7 +1440,8 @@ select:focus {
     align-items: center;
     gap: 0.75rem;
     width: 100%;
-    padding: 0.5rem 0.75rem; /* Reduced padding */
+    padding: 0.5rem 0.75rem;
+    /* Reduced padding */
     text-align: left;
     background: transparent;
     border: none;
@@ -1441,7 +1454,8 @@ select:focus {
 .dropdown-divider {
     height: 1px;
     background-color: var(--border);
-    margin: 0.125rem 0; /* Reduced margin */
+    margin: 0.125rem 0;
+    /* Reduced margin */
 }
 
 /* Chrome 120+ exposes ::picker for popup styling - commented out due to build issues */

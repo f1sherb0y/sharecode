@@ -4,7 +4,9 @@ export type EditorFont = 'JetBrains Mono' | 'Julia Mono'
 
 interface FontContextType {
     font: EditorFont
+    fontSize: number
     setFont: (font: EditorFont) => void
+    setFontSize: (size: number) => void
 }
 
 const FontContext = createContext<FontContextType | undefined>(undefined)
@@ -15,13 +17,24 @@ export const FontProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return (savedFont as EditorFont) || 'Julia Mono'
     })
 
+    const [fontSize, setFontSizeState] = useState<number>(() => {
+        const savedSize = localStorage.getItem('editor-font-size')
+        return savedSize ? parseInt(savedSize, 10) : 14
+    })
+
     const setFont = (newFont: EditorFont) => {
         setFontState(newFont)
         localStorage.setItem('editor-font', newFont)
     }
 
+    const setFontSize = (newSize: number) => {
+        const size = Math.max(8, Math.min(32, newSize)) // Clamp between 8 and 32
+        setFontSizeState(size)
+        localStorage.setItem('editor-font-size', String(size))
+    }
+
     return (
-        <FontContext.Provider value={{ font, setFont }}>
+        <FontContext.Provider value={{ font, fontSize, setFont, setFontSize }}>
             {children}
         </FontContext.Provider>
     )

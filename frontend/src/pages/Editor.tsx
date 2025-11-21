@@ -79,7 +79,7 @@ export function Editor() {
     const { roomId } = useParams<{ roomId: string }>()
     const { user, token } = useAuth()
     const { theme } = useTheme()
-    const { font } = useFont()
+    const { font, fontSize } = useFont()
     const { t } = useTranslation()
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
@@ -268,7 +268,7 @@ export function Editor() {
                     fontFamily: font === 'Julia Mono'
                         ? 'JuliaMono, JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace'
                         : 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
-                    fontSize: 14,
+                    fontSize: fontSize,
                     theme: theme === 'dark' ? 'vs-dark' : 'vs',
                     readOnly: isGuestMode && !shareSession?.guest.canEdit,
                 })
@@ -337,8 +337,8 @@ export function Editor() {
         const fontFamily = font === 'Julia Mono'
             ? 'JuliaMono, JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace'
             : 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace'
-        monacoEditorRef.current.updateOptions({ fontFamily })
-    }, [font])
+        monacoEditorRef.current.updateOptions({ fontFamily, fontSize })
+    }, [font, fontSize])
 
     useEffect(() => {
         if (!monacoEditorRef.current) return
@@ -754,9 +754,6 @@ export function Editor() {
                                 <span className="hidden sm:inline">{t('editor.toolbar.endRoom')}</span>
                             </button>
                         )}
-                        <div className="hidden sm:block">
-                            <FontSwitcher />
-                        </div>
                     </>
                 }
             />
@@ -829,6 +826,9 @@ export function Editor() {
                     </div>
                 </div>
                 <div className="status-indicators">
+                    <div className="flex items-center mr-2 border-r border-[var(--border)] pr-2">
+                        <FontSwitcher />
+                    </div>
                     <div
                         className="status-badge"
                         style={{ color: isConnected ? 'var(--success)' : 'var(--danger)' }}

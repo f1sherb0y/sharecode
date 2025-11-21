@@ -105,6 +105,11 @@
       "description": "本次会话已经结束。如需查看回放或继续协作，请联系房主或管理员获取下一步安排。",
       "endedAt": "结束时间：{{time}}",
       "back": "返回房间列表"
+    },
+    "font": {
+      "increaseSize": "增大字号",
+      "decreaseSize": "减小字号",
+      "selectFont": "选择字体"
     }
   },
   "admin": {
