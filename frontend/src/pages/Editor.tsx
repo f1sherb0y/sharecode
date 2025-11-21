@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import * as Y from 'yjs'
 import type * as Monaco from 'monaco-editor'
+import { ArrowLeft, Share2, Power, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { useFont } from '../contexts/FontContext'
@@ -627,13 +628,15 @@ export function Editor() {
                     leftContent={
                         <>
                             <button
-                                className="toolbar-button"
+                                className="toolbar-button flex items-center gap-2"
                                 onClick={() => navigate(backPath)}
+                                title={t('common.back')}
                             >
-                                ← {t('common.back')}
+                                <ArrowLeft size={16} />
+                                <span className="hidden sm:inline">{t('common.back')}</span>
                             </button>
-                            <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
-                            <span className="language-badge">{room.language}</span>
+                            <span className="font-semibold text-base truncate max-w-[100px] sm:max-w-xs">{room.name}</span>
+                            <span className="language-badge shrink-0">{room.language}</span>
                         </>
                     }
                 />
@@ -678,15 +681,17 @@ export function Editor() {
                 leftContent={
                     <>
                         <button
-                            className="toolbar-button"
+                            className="toolbar-button flex items-center gap-2"
                             onClick={() => navigate(backPath)}
+                            title={t('common.back')}
                         >
-                            ← {t('common.back')}
+                            <ArrowLeft size={16} />
+                            <span className="hidden sm:inline">{t('common.back')}</span>
                         </button>
-                        <span style={{ fontWeight: 600, fontSize: '1rem' }}>{room.name}</span>
+                        <span className="font-semibold text-base truncate max-w-[80px] sm:max-w-xs">{room.name}</span>
                         {isOwner ? (
                             <select
-                                className="toolbar-select"
+                                className="toolbar-select max-w-[100px] sm:max-w-none"
                                 value={room.language}
                                 onChange={(e) => handleLanguageChange(e.target.value as Language)}
                                 disabled={isChangingLanguage}
@@ -698,7 +703,7 @@ export function Editor() {
                                 ))}
                             </select>
                         ) : (
-                            <span className="language-badge">{room.language}</span>
+                            <span className="language-badge shrink-0">{room.language}</span>
                         )}
                     </>
                 }
@@ -706,18 +711,20 @@ export function Editor() {
                     <>
                         {isOwner && !room.isEnded && (
                             <button
-                                className="btn-secondary"
+                                className="btn-secondary flex items-center gap-2"
                                 onClick={(event) => {
                                     event.preventDefault()
                                     setIsShareModalOpen(true)
                                 }}
+                                title={t('share.manager.openPanel')}
                             >
-                                {t('share.manager.openPanel')}
+                                <Share2 size={16} />
+                                <span className="hidden sm:inline">{t('share.manager.openPanel')}</span>
                             </button>
                         )}
                         {isOwner && !room.isEnded && (
                             <button
-                                className="btn-danger"
+                                className="btn-danger flex items-center gap-2"
                                 onClick={async (e) => {
                                     e.preventDefault()
                                     if (confirm(t('editor.toolbar.endRoom') + '?')) {
@@ -741,11 +748,15 @@ export function Editor() {
                                         }
                                     }
                                 }}
+                                title={t('editor.toolbar.endRoom')}
                             >
-                                {t('editor.toolbar.endRoom')}
+                                <Power size={16} />
+                                <span className="hidden sm:inline">{t('editor.toolbar.endRoom')}</span>
                             </button>
                         )}
-                        <FontSwitcher />
+                        <div className="hidden sm:block">
+                            <FontSwitcher />
+                        </div>
                     </>
                 }
             />
@@ -758,8 +769,10 @@ export function Editor() {
             {/* Bottom Status Bar with Users */}
             <div className="status-bar">
                 <div className="status-users">
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                        {t('editor.toolbar.users')} ({remoteUsers.length + 1}):
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }} className="flex items-center gap-1">
+                        <Users size={14} />
+                        <span className="hidden sm:inline">{t('editor.toolbar.users')} ({remoteUsers.length + 1}):</span>
+                        <span className="sm:hidden">({remoteUsers.length + 1}):</span>
                     </span>
                     <div className="user-list-inline">
                         {/* Current user */}
@@ -841,7 +854,6 @@ export function Editor() {
                 >
                     <div
                         className="modal-content large"
-                        style={{ padding: '1.5rem', overflowY: 'auto' }}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <ShareLinkManager

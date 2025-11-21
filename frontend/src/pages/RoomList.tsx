@@ -608,7 +608,6 @@ export function RoomList() {
                 >
                     <div
                         className="modal-content large"
-                        style={{ padding: '1.5rem', overflowY: 'auto' }}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <ShareLinkManager
