@@ -34,6 +34,24 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Development",
+    "shortDescription": "Real-time collaborative code editing",
+    "longDescription": "ShareCode is a real-time collaborative code editor with live cursors, syntax highlighting, and session playback. Perfect for pair programming, code reviews, and teaching.",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "deb": {
+        "section": "devel"
+      },
+      "rpm": {
+        "release": "1"
+      }
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "timestampUrl": null
+    }
   }
 }
