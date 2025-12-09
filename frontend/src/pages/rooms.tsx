@@ -361,7 +361,7 @@ function RoomCard({ room, currentUserId, onDelete, onPlayback, onClick }: RoomCa
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 mt-2 pt-2 border-t">
+        <div className="flex items-center gap-1 mt-2 pt-2 border-t min-h-[36px]">
           {isOwner && !room.isEnded && (
             <Button
               variant="ghost"

@@ -283,13 +283,13 @@ export function PlaybackPage() {
       {/* Header */}
       <header className="flex items-center justify-between h-12 px-4 border-b bg-background shrink-0">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/rooms')}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate('/rooms')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <span className="font-medium mr-3">Playback: {room?.name}</span>
           <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">{room?.language}</Badge>
         </div>
-        <ThemeToggle />
+        <ThemeToggle className="h-8 w-8" />
       </header>
 
       {/* Editor */}

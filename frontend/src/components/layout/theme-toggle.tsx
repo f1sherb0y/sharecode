@@ -2,8 +2,13 @@ import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { useThemeStore } from '@/stores'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 
-export function ThemeToggle() {
+interface ThemeToggleProps {
+  className?: string
+}
+
+export function ThemeToggle({ className }: ThemeToggleProps) {
   const { theme, toggleTheme } = useThemeStore()
   const { t } = useTranslation()
 
@@ -13,6 +18,7 @@ export function ThemeToggle() {
       size="icon"
       onClick={toggleTheme}
       aria-label={t('common.toggleTheme')}
+      className={cn(className)}
     >
       {theme === 'light' ? (
         <Moon className="h-5 w-5" />
