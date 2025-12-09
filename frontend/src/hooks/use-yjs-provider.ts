@@ -18,6 +18,7 @@ export function useYjsProvider(
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null)
   const [ydoc] = useState(() => new Y.Doc())
   const [ytext] = useState(() => ydoc.getText('codemirror'))
+  const [ymeta] = useState(() => ydoc.getMap('meta'))
   const [isConnected, setIsConnected] = useState(false)
   const [isSynced, setIsSynced] = useState(false)
   const providerRef = useRef<HocuspocusProvider | null>(null)
@@ -72,6 +73,7 @@ export function useYjsProvider(
     provider,
     ydoc,
     ytext,
+    ymeta,
     isConnected,
     isSynced,
   }

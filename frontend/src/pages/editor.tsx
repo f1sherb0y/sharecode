@@ -139,7 +139,7 @@ export function EditorPage() {
   }, [])
 
   const shouldConnectWs = !!wsToken && !!wsDocumentId && !roomEnded && !(effectiveRoom?.isEnded)
-  const { provider, ydoc, ytext, isConnected, isSynced } = useYjsProvider(
+  const { provider, ydoc, ytext, ymeta, isConnected, isSynced } = useYjsProvider(
     shouldConnectWs ? wsDocumentId : '',
     shouldConnectWs ? wsToken : '',
     handleStatelessMessage
@@ -394,6 +394,39 @@ export function EditorPage() {
     }
   }, [remoteUsers, followingUser])
 
+  // Listen for language changes from ymeta (synced via Yjs)
+  useEffect(() => {
+    if (!ymeta) return
+
+    const handleMetaChange = () => {
+      const newLanguage = ymeta.get('language') as Language | undefined
+      if (newLanguage && newLanguage !== effectiveRoom?.language) {
+        // Update local room state
+        if (room) {
+          setRoom((prev) => prev ? { ...prev, language: newLanguage } : prev)
+        }
+        if (guestSession) {
+          setGuestSession({
+            ...guestSession,
+            room: { ...guestSession.room, language: newLanguage }
+          })
+        }
+        // Update Monaco editor language
+        if (monacoRef.current && monacoModelRef.current) {
+          monacoRef.current.editor.setModelLanguage(
+            monacoModelRef.current,
+            monacoLanguageIds[newLanguage] ?? 'javascript'
+          )
+        }
+      }
+    }
+
+    ymeta.observe(handleMetaChange)
+    return () => {
+      ymeta.unobserve(handleMetaChange)
+    }
+  }, [ymeta, effectiveRoom?.language, room, guestSession, setGuestSession])
+
   // Update language (owner only)
   const handleLanguageChange = useCallback(
     async (language: Language) => {
@@ -402,6 +435,11 @@ export function EditorPage() {
       try {
         const { room: updatedRoom } = await api.updateRoom(roomId, { language })
         setRoom(updatedRoom)
+
+        // Sync language via Yjs shared state
+        if (ymeta) {
+          ymeta.set('language', language)
+        }
 
         if (monacoRef.current && monacoModelRef.current) {
           monacoRef.current.editor.setModelLanguage(
@@ -413,7 +451,7 @@ export function EditorPage() {
         console.error('Failed to update language:', err)
       }
     },
-    [roomId, isOwner]
+    [roomId, isOwner, ymeta]
   )
 
   // End room (owner only)
