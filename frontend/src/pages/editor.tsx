@@ -552,7 +552,7 @@ export function EditorPage() {
         {/* Toolbar */}
         <header className="flex items-center justify-between h-12 px-2 sm:px-4 border-b bg-background shrink-0 gap-2 overflow-hidden">
           <div className="flex items-center gap-2 min-w-0 shrink">
-            <Button variant="ghost" size="icon" className="shrink-0" onClick={handleBack}>
+            <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <span className="font-medium truncate max-w-[100px] sm:max-w-[200px] mr-3">{effectiveRoom.name}</span>
@@ -606,7 +606,7 @@ export function EditorPage() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hidden sm:inline-flex">
+                <Button variant="ghost" size="icon" className="hidden sm:inline-flex h-8 w-8">
                   <Type className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -623,7 +623,7 @@ export function EditorPage() {
             {/* Remote users */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1">
+                <Button variant="ghost" size="sm" className="gap-1 h-8">
                   <Users className="h-4 w-4" />
                   <span>{remoteUsers.length + 1}</span>
                 </Button>
@@ -667,7 +667,7 @@ export function EditorPage() {
             {isOwner && (
               <Popover open={showShareManager} onOpenChange={setShowShareManager}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="icon" className="sm:w-auto sm:px-3">
+                  <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3">
                     <Share2 className="h-4 w-4 sm:mr-1" />
                     <span className="hidden sm:inline">{t('editor.toolbar.share')}</span>
                   </Button>
@@ -680,7 +680,7 @@ export function EditorPage() {
 
             {/* End room button (owner only) */}
             {isOwner && (
-              <Button variant="destructive" size="icon" className="sm:w-auto sm:px-3" onClick={handleEndRoom} disabled={isEnding}>
+              <Button variant="destructive" size="sm" className="h-8 px-2 sm:px-3" onClick={handleEndRoom} disabled={isEnding}>
                 <StopCircle className="h-4 w-4 sm:mr-1" />
                 <span className="hidden sm:inline">{t('editor.toolbar.endRoom')}</span>
               </Button>
@@ -688,7 +688,7 @@ export function EditorPage() {
 
             {/* Leave button (guest only) */}
             {isGuestMode && (
-              <Button variant="outline" size="icon" className="sm:w-auto sm:px-3" onClick={handleGuestLeave}>
+              <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={handleGuestLeave}>
                 <LogOut className="h-4 w-4 sm:mr-1" />
                 <span className="hidden sm:inline">{t('share.editor.leaveButton')}</span>
               </Button>

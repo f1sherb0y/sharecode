@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
 interface PopoverProps {
@@ -14,52 +15,77 @@ interface PopoverTriggerProps {
 
 interface PopoverContentProps extends React.HTMLAttributes<HTMLDivElement> {
   align?: 'start' | 'center' | 'end'
-  sideOffset?: number
 }
 
 const PopoverContext = React.createContext<{
   open: boolean
   onOpenChange: (open: boolean) => void
+  triggerRef: React.RefObject<HTMLSpanElement | null>
 }>({
   open: false,
   onOpenChange: () => {},
+  triggerRef: { current: null },
 })
 
 function Popover({ open, onOpenChange, children }: PopoverProps) {
+  const triggerRef = React.useRef<HTMLSpanElement>(null)
   return (
-    <PopoverContext.Provider value={{ open, onOpenChange }}>
+    <PopoverContext.Provider value={{ open, onOpenChange, triggerRef }}>
       <div className="relative">{children}</div>
     </PopoverContext.Provider>
   )
 }
 
-function PopoverTrigger({ asChild, children }: PopoverTriggerProps) {
-  const { open, onOpenChange } = React.useContext(PopoverContext)
+function PopoverTrigger({ children }: PopoverTriggerProps) {
+  const { open, onOpenChange, triggerRef } = React.useContext(PopoverContext)
 
-  if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement<{ onClick?: () => void }>, {
-      onClick: () => onOpenChange(!open),
-    })
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onOpenChange(!open)
   }
 
   return (
-    <button type="button" onClick={() => onOpenChange(!open)}>
+    <span ref={triggerRef} onClick={handleClick} className="inline-block cursor-pointer">
       {children}
-    </button>
+    </span>
   )
 }
 
 function PopoverContent({ className, align = 'center', children, ...props }: PopoverContentProps) {
-  const { open, onOpenChange } = React.useContext(PopoverContext)
+  const { open, onOpenChange, triggerRef } = React.useContext(PopoverContext)
   const contentRef = React.useRef<HTMLDivElement>(null)
+  const [position, setPosition] = React.useState({ top: 0, left: 0 })
+
+  React.useEffect(() => {
+    if (!open || !triggerRef.current) return
+
+    const trigger = triggerRef.current
+    const rect = trigger.getBoundingClientRect()
+
+    let left = rect.left
+    if (align === 'center') {
+      left = rect.left + rect.width / 2
+    } else if (align === 'end') {
+      left = rect.right
+    }
+
+    setPosition({
+      top: rect.bottom + 8,
+      left,
+    })
+  }, [open, align, triggerRef])
 
   React.useEffect(() => {
     if (!open) return
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (contentRef.current && !contentRef.current.contains(event.target as Node)) {
-        const trigger = contentRef.current.previousElementSibling
-        if (trigger && trigger.contains(event.target as Node)) return
+      if (
+        contentRef.current &&
+        !contentRef.current.contains(event.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(event.target as Node)
+      ) {
         onOpenChange(false)
       }
     }
@@ -75,24 +101,24 @@ function PopoverContent({ className, align = 'center', children, ...props }: Pop
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [open, onOpenChange])
+  }, [open, onOpenChange, triggerRef])
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div
       ref={contentRef}
-      className={cn(
-        'absolute z-50 mt-2',
-        align === 'start' && 'left-0',
-        align === 'center' && 'left-1/2 -translate-x-1/2',
-        align === 'end' && 'right-0',
-        className
-      )}
+      className={cn('fixed z-50', className)}
+      style={{
+        top: position.top,
+        left: position.left,
+        transform: align === 'center' ? 'translateX(-50%)' : align === 'end' ? 'translateX(-100%)' : undefined,
+      }}
       {...props}
     >
       {children}
-    </div>
+    </div>,
+    document.body
   )
 }
 
