@@ -32,7 +32,7 @@ export const hocuspocusServer = new Server({
                     throw new Error('User not found')
                 }
 
-                // Find room by id (documentName is now the room.id)
+                // Find room by id (documentName is the room.id)
                 const room = await prisma.room.findUnique({
                     where: { id: documentName },
                     include: {
@@ -82,6 +82,8 @@ export const hocuspocusServer = new Server({
                     where: { id: user.id },
                     data: { lastSeen: new Date() },
                 })
+
+                logger.debug(`[Auth] User ${user.username} authenticated for document ${documentName} (canEdit: ${canEdit})`)
 
                 // Return context for other hooks
                 return {
@@ -148,6 +150,8 @@ export const hocuspocusServer = new Server({
                     },
                 })
 
+                logger.debug(`[Auth] Guest ${guest.displayName} authenticated for document ${documentName} (canEdit: ${effectiveCanEdit})`)
+
                 return {
                     sessionType: 'guest',
                     guest: {
@@ -201,10 +205,10 @@ export const hocuspocusServer = new Server({
     async onChange(data) {
         const { documentName, context } = data
         if (context?.sessionType === 'user' && context.user) {
-            logger.debug(`Document ${documentName} changed by ${context.user.username}`)
+            logger.debug(`[Sync] Document ${documentName} changed by ${context.user.username}`)
         }
         if (context?.sessionType === 'guest' && context.guest) {
-            logger.debug(`Document ${documentName} changed by guest ${context.guest.displayName}`)
+            logger.debug(`[Sync] Document ${documentName} changed by guest ${context.guest.displayName}`)
         }
     },
 })

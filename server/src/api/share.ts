@@ -208,7 +208,7 @@ export async function getShareInfo(req: Request, res: Response) {
                 canEdit: shareLink.canEdit,
                 effectiveCanEdit,
                 createdAt: shareLink.createdAt,
-                shareUrl: buildShareUrl(shareLink.token),
+                shareUrl: buildShareUrl(shareLink.token, shareLink.room.id),
             },
             room: {
                 id: shareLink.room.id,

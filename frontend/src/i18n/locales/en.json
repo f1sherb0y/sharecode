@@ -91,7 +91,8 @@
       "follow": "Follow",
       "following": "Following",
       "endRoom": "End Room",
-      "users": "Users"
+      "users": "Users",
+      "share": "Share"
     },
     "status": {
       "connected": "Connected",

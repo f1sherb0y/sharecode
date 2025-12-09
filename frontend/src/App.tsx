@@ -1,81 +1,131 @@
-import { HashRouter, BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { ThemeProvider } from './contexts/ThemeContext'
-import { FontProvider } from './contexts/FontContext'
-import { Login } from './pages/Login'
-import { Register } from './pages/Register'
-import { RoomList } from './pages/RoomList'
-import { Editor } from './pages/Editor'
-import { Admin } from './pages/Admin'
-import { RoomPlayback } from './pages/RoomPlayback'
-import { Settings } from './pages/Settings'
-import { ShareSessionProvider } from './contexts/ShareSessionContext'
+import { useEffect } from 'react'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { TooltipProvider } from '@/components/ui'
+import {
+  LoginPage,
+  RegisterPage,
+  RoomsPage,
+  EditorPage,
+  AdminPage,
+  PlaybackPage,
+  SettingsPage,
+} from '@/pages'
+import { useAuthStore, useThemeStore } from '@/stores'
+import { isTauriApp } from '@/lib/tauri'
+import { Spinner } from '@/components/ui'
 
-// Detect if running in Tauri desktop environment
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-const Router = isTauri ? HashRouter : BrowserRouter
-
-// Check if registration is allowed (build-time environment variable)
-const ALLOW_REGISTRATION = import.meta.env.VITE_ALLOW_REGISTRATION !== 'false'
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60,
+      retry: 1,
+    },
+  },
+})
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isInitialized } = useAuthStore()
 
-  if (isLoading) {
-    return <div style={{ padding: '20px' }}>Loading...</div>
+  if (!isInitialized || isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner size="lg" />
+      </div>
+    )
   }
 
-  return user ? <>{children}</> : <Navigate to="/login" />
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <>{children}</>
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isInitialized } = useAuthStore()
 
-  if (isLoading) {
-    return <div style={{ padding: '20px' }}>Loading...</div>
+  if (!isInitialized || isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner size="lg" />
+      </div>
+    )
   }
 
-  return user ? <Navigate to="/rooms" /> : <>{children}</>
+  if (user) {
+    return <Navigate to="/rooms" replace />
+  }
+
+  return <>{children}</>
+}
+
+// RoomRoute allows both authenticated users and guests with share tokens
+function RoomRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading, isInitialized } = useAuthStore()
+  const [searchParams] = useSearchParams()
+  const shareToken = searchParams.get('share')
+
+  if (!isInitialized || isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+
+  // Allow access if user is authenticated OR has a share token
+  if (!user && !shareToken) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <>{children}</>
 }
 
 function AppRoutes() {
   return (
     <Routes>
+      {/* Public routes */}
       <Route
         path="/login"
         element={
           <PublicRoute>
-            <Login />
+            <LoginPage />
           </PublicRoute>
         }
       />
-      {ALLOW_REGISTRATION && (
-        <Route
-          path="/register"
-          element={
-            <PublicRoute>
-              <Register />
-            </PublicRoute>
-          }
-        />
-      )}
+      <Route
+        path="/register"
+        element={
+          <PublicRoute>
+            <RegisterPage />
+          </PublicRoute>
+        }
+      />
+      <Route path="/settings" element={<SettingsPage />} />
+
+      {/* Protected routes */}
       <Route
         path="/rooms"
         element={
           <PrivateRoute>
-            <RoomList />
+            <RoomsPage />
           </PrivateRoute>
         }
       />
       <Route
         path="/room/:roomId"
-        element={<RoomRoute />}
+        element={
+          <RoomRoute>
+            <EditorPage />
+          </RoomRoute>
+        }
       />
       <Route
         path="/admin"
         element={
           <PrivateRoute>
-            <Admin />
+            <AdminPage />
           </PrivateRoute>
         }
       />
@@ -83,56 +133,48 @@ function AppRoutes() {
         path="/playback/:roomId"
         element={
           <PrivateRoute>
-            <RoomPlayback />
+            <PlaybackPage />
           </PrivateRoute>
         }
       />
-      <Route
-        path="/settings"
-        element={<Settings />}
-      />
-      <Route path="/" element={<Navigate to="/rooms" />} />
+
+      {/* Redirect root to rooms or login */}
+      <Route path="/" element={<Navigate to="/rooms" replace />} />
+
+      {/* Catch-all redirect */}
+      <Route path="*" element={<Navigate to="/rooms" replace />} />
     </Routes>
   )
 }
 
-function RoomRoute() {
-  const { roomId } = useParams<{ roomId: string }>()
-  const [searchParams] = useSearchParams()
-  const shareToken = searchParams.get('share')
+function AppContent() {
+  const { initialize } = useAuthStore()
+  const { theme } = useThemeStore()
 
-  if (!roomId) {
-    return <Navigate to="/login" />
-  }
+  useEffect(() => {
+    initialize()
+  }, [initialize])
 
-  // If there's a share token, this is a guest accessing via share link
-  if (shareToken) {
-    return (
-      <ShareSessionProvider shareToken={shareToken} roomId={roomId}>
-        <Editor />
-      </ShareSessionProvider>
-    )
-  }
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
 
-  // Otherwise, this is an authenticated user
+  const Router = isTauriApp() ? HashRouter : BrowserRouter
+
   return (
-    <PrivateRoute>
-      <Editor />
-    </PrivateRoute>
+    <Router>
+      <TooltipProvider>
+        <AppRoutes />
+      </TooltipProvider>
+    </Router>
   )
 }
 
-function App() {
+export function App() {
   return (
-    <Router>
-      <ThemeProvider>
-        <FontProvider>
-          <AuthProvider>
-            <AppRoutes />
-          </AuthProvider>
-        </FontProvider>
-      </ThemeProvider>
-    </Router>
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
+    </QueryClientProvider>
   )
 }
 

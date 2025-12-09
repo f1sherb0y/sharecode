@@ -263,7 +263,18 @@ export async function getRoom(req: Request, res: Response) {
             return res.status(403).json({ error: 'Room has ended and is no longer accessible' })
         }
 
-        res.json({ room })
+        // Compute canEdit permission
+        const userParticipant = room.participants.find(p => p.userId === userId)
+        const canEdit = hasGlobalWrite(authUser) || isOwner || (userParticipant?.canEdit ?? false)
+
+        res.json({
+            room: {
+                ...room,
+                isMember: isOwner || isParticipant,
+                isOwner,
+                canEdit,
+            }
+        })
     } catch (error) {
         console.error('Get room error:', error)
         res.status(500).json({ error: 'Internal server error' })

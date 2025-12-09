@@ -41,42 +41,8 @@ import {
 const app = express()
 const PORT = parseInt(process.env.PORT || '3001')
 
-// Middleware
-const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:4173',
-    process.env.FRONTEND_URL,
-].filter(Boolean) as string[]
-
-app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, etc.)
-        if (!origin) {
-            callback(null, true)
-            return
-        }
-
-        // Check if origin is in allowed list
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true)
-            return
-        }
-
-        // For production with reverse proxy, also check if origin matches domain
-        const domain = process.env.DOMAIN
-        if (domain && (origin === `https://${domain}` || origin === `http://${domain}`)) {
-            callback(null, true)
-            return
-        }
-
-        logger.warn(`CORS blocked origin: ${origin}`)
-        logger.warn(`Allowed origins: ${allowedOrigins.join(', ')}`)
-        if (domain) logger.warn(`Domain: ${domain}`)
-        callback(new Error('Not allowed by CORS'))
-    },
-    credentials: true,
-}))
+// Middleware - allow all origins
+app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 app.use(requestLogger)
 
@@ -133,7 +99,7 @@ async function startServer() {
     httpServer.listen(PORT, () => {
         logger.heading('Unified server (REST + WebSocket) running on port ' + PORT)
         logger.info(`   REST API: http://localhost:${PORT}`)
-        logger.info(`   WebSocket: ws://localhost:${PORT}/ws`)
+        logger.info(`   WebSocket: ws://localhost:${PORT}/api/ws`)
         logger.info(`   Log Level: ${process.env.LOG_LEVEL || 'info'}`)
     })
 }

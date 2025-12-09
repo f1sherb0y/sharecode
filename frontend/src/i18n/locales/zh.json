@@ -91,7 +91,8 @@
       "follow": "跟随",
       "following": "跟随中",
       "endRoom": "结束房间",
-      "users": "用户"
+      "users": "用户",
+      "share": "分享"
     },
     "status": {
       "connected": "已连接",

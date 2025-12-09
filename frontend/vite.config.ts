@@ -1,33 +1,44 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { resolve } from 'path'
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    react(),
-  ],
+const host = process.env.TAURI_DEV_HOST
+const backendUrl = process.env.VITE_API_URL || 'http://localhost:3000'
 
-  // Tauri expects a fixed port, fail if that port is not available
+export default defineConfig(async () => ({
+  plugins: [react(), tailwindcss()],
+
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, './src'),
+    },
+  },
+
+  clearScreen: false,
+
   server: {
     port: 5173,
     strictPort: true,
+    host: true, // Expose to LAN
+    hmr: host ? { protocol: 'ws', host, port: 5173 } : undefined,
+    watch: {
+      ignored: ['**/src-tauri/**'],
+    },
+    proxy: {
+      '/api': {
+        target: backendUrl,
+        changeOrigin: true,
+        ws: true,
+      },
+    },
   },
-
-  // to make use of `TAURI_DEBUG` and other env variables
-  // https://tauri.studio/v1/guides/environment-variables
-  envPrefix: ['VITE_', 'TAURI_'],
 
   build: {
-    // Tauri uses Chromium on Windows and WebKit on macOS and Linux
-    target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
-    // don't minify for debug builds
-    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
-    // produce sourcemaps for debug builds
-    sourcemap: !!process.env.TAURI_DEBUG,
+    target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
+    minify: !process.env.TAURI_ENV_DEBUG ? 'oxc' : false,
+    sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },
 
-  // prevent vite from obscuring rust errors
-  clearScreen: false,
-})
+  envPrefix: ['VITE_', 'TAURI_'],
+}))

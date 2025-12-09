@@ -1,0 +1,7 @@
+export { LoginPage } from './login'
+export { RegisterPage } from './register'
+export { RoomsPage } from './rooms'
+export { EditorPage } from './editor'
+export { AdminPage } from './admin'
+export { PlaybackPage } from './playback'
+export { SettingsPage } from './settings'

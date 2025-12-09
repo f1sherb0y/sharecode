@@ -4,10 +4,10 @@ const globalForPrisma = globalThis as unknown as {
     prisma: PrismaClient | undefined
 }
 
-// Only log queries in debug mode
-const logLevel = process.env.LOG_LEVEL === 'debug'
+// Only log errors by default, hide query logs to reduce noise
+const logLevel = process.env.PRISMA_LOG === 'true'
     ? ['query', 'error', 'warn']
-    : ['error', 'warn']
+    : ['error']
 
 export const prisma =
     globalForPrisma.prisma ??
