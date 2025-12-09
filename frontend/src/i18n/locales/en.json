@@ -79,8 +79,8 @@
       "durationUnit": "min",
       "participants": "participants",
       "owned": "Owned",
-      "ended": "[Ended]",
-      "expired": "[Expired]",
+      "ended": "Ended",
+      "expired": "Expired",
       "delete": "Delete",
       "deleteConfirm": "Delete room \"{{name}}\"?",
       "viewPlayback": "Playback"

@@ -245,10 +245,10 @@ export function AdminPage() {
         )}
 
         {/* Users Section */}
-        <Card className="mb-8">
-          <CardHeader>
+        <Card className="mb-6">
+          <CardHeader className="py-3">
             <div className="flex items-center justify-between">
-              <CardTitle>{t('admin.users.title')}</CardTitle>
+              <CardTitle className="text-base">{t('admin.users.title')}</CardTitle>
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm">
@@ -325,21 +325,21 @@ export function AdminPage() {
               </Dialog>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0 px-2 sm:px-6">
             {isLoadingUsers ? (
-              <div className="flex justify-center py-8">
+              <div className="flex justify-center py-6">
                 <Spinner />
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto -mx-2 sm:mx-0">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left">
-                      <th className="p-2 font-medium">{t('admin.users.table.username')}</th>
-                      <th className="p-2 font-medium">{t('admin.users.table.email')}</th>
-                      <th className="p-2 font-medium">{t('admin.users.table.role')}</th>
-                      <th className="p-2 font-medium">{t('admin.users.table.created')}</th>
-                      <th className="p-2 font-medium">{t('admin.users.table.actions')}</th>
+                      <th className="px-2 py-1.5 font-medium">{t('admin.users.table.username')}</th>
+                      <th className="px-2 py-1.5 font-medium hidden sm:table-cell">{t('admin.users.table.email')}</th>
+                      <th className="px-2 py-1.5 font-medium">{t('admin.users.table.role')}</th>
+                      <th className="px-2 py-1.5 font-medium hidden md:table-cell">{t('admin.users.table.created')}</th>
+                      <th className="px-2 py-1.5 font-medium">{t('admin.users.table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -351,15 +351,18 @@ export function AdminPage() {
 
                       return (
                         <tr key={u.id} className="border-b">
-                          <td className="p-2">{u.username}</td>
-                          <td className="p-2 text-muted-foreground">{u.email ?? '-'}</td>
-                          <td className="p-2">
+                          <td className="px-2 py-1.5">
+                            <div>{u.username}</div>
+                            <div className="text-xs text-muted-foreground sm:hidden">{u.email ?? '-'}</div>
+                          </td>
+                          <td className="px-2 py-1.5 text-muted-foreground hidden sm:table-cell">{u.email ?? '-'}</td>
+                          <td className="px-2 py-1.5">
                             {isSuperuser && u.id !== user?.id ? (
                               <Select
                                 value={edits?.role ?? u.role}
                                 onValueChange={(v) => updateEditedUser(u.id, { role: v as Role })}
                               >
-                                <SelectTrigger className="w-32 h-8">
+                                <SelectTrigger className="w-24 sm:w-28 h-7 text-xs">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -371,27 +374,29 @@ export function AdminPage() {
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <Badge variant="secondary">{roleDisplay(u.role)}</Badge>
+                              <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">{roleDisplay(u.role)}</Badge>
                             )}
                           </td>
-                          <td className="p-2 text-muted-foreground">{formatDate(u.createdAt ?? '')}</td>
-                          <td className="p-2">
-                            <div className="flex items-center gap-2">
+                          <td className="px-2 py-1.5 text-muted-foreground hidden md:table-cell">{formatDate(u.createdAt ?? '')}</td>
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center gap-1">
                               {hasChanges(u.id) && (
                                 <Button
                                   size="sm"
                                   variant="outline"
+                                  className="h-7 px-2 text-xs"
                                   onClick={() => handleUpdateUser(u.id)}
                                   disabled={savingUserId === u.id}
                                 >
-                                  <Save className="h-3 w-3 mr-1" />
-                                  {savingUserId === u.id ? t('admin.users.table.updating') : t('admin.users.table.update')}
+                                  <Save className="h-3 w-3 sm:mr-1" />
+                                  <span className="hidden sm:inline">{savingUserId === u.id ? t('admin.users.table.updating') : t('admin.users.table.update')}</span>
                                 </Button>
                               )}
                               {canDelete && (
                                 <Button
                                   size="sm"
                                   variant="destructive"
+                                  className="h-7 px-2"
                                   onClick={() => handleDeleteUser(u.id, u.username)}
                                 >
                                   <Trash2 className="h-3 w-3" />
@@ -411,45 +416,49 @@ export function AdminPage() {
 
         {/* Rooms Section */}
         <Card>
-          <CardHeader>
-            <CardTitle>{t('admin.rooms.title')}</CardTitle>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0 px-2 sm:px-6">
             {isLoadingRooms ? (
-              <div className="flex justify-center py-8">
+              <div className="flex justify-center py-6">
                 <Spinner />
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto -mx-2 sm:mx-0">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left">
-                      <th className="p-2 font-medium">{t('admin.rooms.table.name')}</th>
-                      <th className="p-2 font-medium">{t('admin.rooms.table.owner')}</th>
-                      <th className="p-2 font-medium">{t('admin.rooms.table.language')}</th>
-                      <th className="p-2 font-medium">{t('admin.rooms.table.status')}</th>
-                      <th className="p-2 font-medium">{t('admin.rooms.table.created')}</th>
-                      <th className="p-2 font-medium">{t('admin.rooms.table.actions')}</th>
+                      <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.name')}</th>
+                      <th className="px-2 py-1.5 font-medium hidden sm:table-cell">{t('admin.rooms.table.owner')}</th>
+                      <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.language')}</th>
+                      <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.status')}</th>
+                      <th className="px-2 py-1.5 font-medium hidden md:table-cell">{t('admin.rooms.table.created')}</th>
+                      <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rooms.map((room) => (
                       <tr key={room.id} className="border-b">
-                        <td className="p-2">{room.name}</td>
-                        <td className="p-2 text-muted-foreground">{room.owner.username}</td>
-                        <td className="p-2">
-                          <Badge variant="secondary">{room.language}</Badge>
+                        <td className="px-2 py-1.5">
+                          <div>{room.name}</div>
+                          <div className="text-xs text-muted-foreground sm:hidden">{room.owner.username}</div>
                         </td>
-                        <td className="p-2">
-                          <Badge variant={room.isEnded ? 'destructive' : 'success'}>
+                        <td className="px-2 py-1.5 text-muted-foreground hidden sm:table-cell">{room.owner.username}</td>
+                        <td className="px-2 py-1.5">
+                          <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">{room.language}</Badge>
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Badge variant={room.isEnded ? 'destructive' : 'success'} className="rounded-sm text-xs px-1.5 py-0">
                             {room.isEnded ? t('admin.rooms.table.statusEnded') : t('admin.rooms.table.statusActive')}
                           </Badge>
                         </td>
-                        <td className="p-2 text-muted-foreground">{formatDate(room.createdAt)}</td>
-                        <td className="p-2">
+                        <td className="px-2 py-1.5 text-muted-foreground hidden md:table-cell">{formatDate(room.createdAt)}</td>
+                        <td className="px-2 py-1.5">
                           <Button
                             size="sm"
                             variant="destructive"
+                            className="h-7 px-2"
                             onClick={() => handleDeleteRoom(room.id, room.name)}
                           >
                             <Trash2 className="h-3 w-3" />

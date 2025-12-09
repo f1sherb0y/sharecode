@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ShareGuest, ShareRoomDetails, ShareSession } from '@/types'
+import type { ShareSession } from '@/types'
 import { getGuestSession } from '@/api'
 
 interface GuestState {

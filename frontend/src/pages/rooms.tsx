@@ -311,7 +311,7 @@ function RoomCard({ room, currentUserId, onDelete, onPlayback, onClick }: RoomCa
   return (
     <Card
       className={cn(
-        'cursor-pointer transition-colors hover:border-primary/50',
+        'cursor-pointer transition-colors hover:border-primary/50 flex flex-col',
         room.isEnded && 'opacity-60'
       )}
       onClick={onClick}
@@ -319,7 +319,7 @@ function RoomCard({ room, currentUserId, onDelete, onPlayback, onClick }: RoomCa
       <CardHeader className="p-3 pb-2">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium line-clamp-1">{room.name}</CardTitle>
-          <Badge variant={room.isEnded ? 'secondary' : 'default'} className="shrink-0 text-xs px-1.5 py-0">
+          <Badge variant={room.isEnded ? 'secondary' : 'default'} className="shrink-0 text-xs px-1.5 py-0 rounded-sm">
             {room.language}
           </Badge>
         </div>
@@ -332,8 +332,8 @@ function RoomCard({ room, currentUserId, onDelete, onPlayback, onClick }: RoomCa
           )}
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-3 pt-0">
-        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+      <CardContent className="p-3 pt-0 flex flex-col flex-1">
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground flex-1">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <Users className="h-3 w-3" />
@@ -354,7 +354,7 @@ function RoomCard({ room, currentUserId, onDelete, onPlayback, onClick }: RoomCa
           )}
 
           {room.isEnded && (
-            <Badge variant="destructive" className="w-fit text-xs px-1.5 py-0">
+            <Badge variant="destructive" className="w-fit text-xs px-1.5 py-0 rounded-sm">
               {t('rooms.list.ended')}
             </Badge>
           )}

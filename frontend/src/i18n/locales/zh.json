@@ -79,8 +79,8 @@
       "durationUnit": "分钟",
       "participants": "参与者",
       "owned": "我的",
-      "ended": "【已结束】",
-      "expired": "【已过期】",
+      "ended": "已结束",
+      "expired": "已过期",
       "delete": "删除",
       "deleteConfirm": "删除房间 \"{{name}}\"？",
       "viewPlayback": "查看回放"

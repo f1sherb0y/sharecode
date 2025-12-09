@@ -74,7 +74,6 @@ export function EditorPage() {
 
   // Determine session type
   const isGuestMode = !!shareToken
-  const hasValidGuestSession = isGuestMode && guestSession?.shareToken === shareToken && guestSession?.authToken
 
   // State
   const [room, setRoom] = useState<Room | null>(null)
@@ -556,7 +555,7 @@ export function EditorPage() {
             <Button variant="ghost" size="icon" className="shrink-0" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <span className="font-medium truncate max-w-[100px] sm:max-w-[200px]">{effectiveRoom.name}</span>
+            <span className="font-medium truncate max-w-[100px] sm:max-w-[200px] mr-3">{effectiveRoom.name}</span>
 
             {isOwner ? (
               <Select value={effectiveRoom.language} onValueChange={(v) => handleLanguageChange(v as Language)}>
@@ -572,12 +571,12 @@ export function EditorPage() {
                 </SelectContent>
               </Select>
             ) : (
-              <Badge variant="secondary" className="shrink-0">{effectiveRoom.language}</Badge>
+              <Badge variant="secondary" className="shrink-0 rounded-sm text-xs px-1.5 py-0">{effectiveRoom.language}</Badge>
             )}
 
             {/* Guest mode indicator - hidden on small screens */}
             {isGuestMode && (
-              <Badge variant="outline" className="hidden sm:inline-flex shrink-0">
+              <Badge variant="outline" className="hidden sm:inline-flex shrink-0 rounded-sm text-xs px-1.5 py-0">
                 {canEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}
               </Badge>
             )}
