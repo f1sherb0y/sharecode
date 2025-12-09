@@ -43,8 +43,6 @@ services:
   frontend:
     build:
       context: ./frontend
-      args:
-        VITE_ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
     restart: unless-stopped
     depends_on:
       - server
