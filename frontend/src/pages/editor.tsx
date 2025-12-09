@@ -39,6 +39,7 @@ import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { generateUserColor, cn } from '@/lib/utils'
 import type { Room, Language, RemoteUser, ShareLinkInfo, ShareRoomSummary } from '@/types'
 import type * as Monaco from 'monaco-editor'
+import * as Y from 'yjs'
 
 import 'monaco-editor/min/vs/editor/editor.main.css'
 
@@ -138,7 +139,7 @@ export function EditorPage() {
   }, [])
 
   const shouldConnectWs = !!wsToken && !!wsDocumentId && !roomEnded && !(effectiveRoom?.isEnded)
-  const { provider, ytext, isConnected, isSynced } = useYjsProvider(
+  const { provider, ydoc, ytext, isConnected, isSynced } = useYjsProvider(
     shouldConnectWs ? wsDocumentId : '',
     shouldConnectWs ? wsToken : '',
     handleStatelessMessage
@@ -354,7 +355,7 @@ export function EditorPage() {
 
   // Follow user feature - scroll to their cursor position
   useEffect(() => {
-    if (!followingUser || !provider?.awareness) return
+    if (!followingUser || !provider?.awareness || !ydoc) return
     if (!monacoRef.current || !monacoEditorRef.current || !monacoModelRef.current) return
 
     const scrollToUser = () => {
@@ -363,8 +364,12 @@ export function EditorPage() {
       if (!state?.cursor?.head) return
 
       try {
-        const head = state.cursor.head as number
-        const position = monacoModelRef.current!.getPositionAt(head)
+        // Convert RelativePosition to absolute position
+        const headRelative = state.cursor.head as Y.RelativePosition
+        const headAbs = Y.createAbsolutePositionFromRelativePosition(headRelative, ydoc)
+        if (!headAbs) return
+
+        const position = monacoModelRef.current!.getPositionAt(headAbs.index)
         monacoEditorRef.current!.revealPositionInCenter(
           position,
           monacoRef.current!.editor.ScrollType.Smooth
@@ -380,7 +385,7 @@ export function EditorPage() {
     return () => {
       provider.awareness?.off('change', scrollToUser)
     }
-  }, [followingUser, provider])
+  }, [followingUser, provider, ydoc])
 
   // Stop following if user disconnects
   useEffect(() => {
