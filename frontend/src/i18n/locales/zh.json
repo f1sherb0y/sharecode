@@ -299,5 +299,20 @@
     "loading": "加载中...",
     "error": "错误",
     "success": "成功"
+  },
+  "codeRunner": {
+    "title": "代码运行器",
+    "run": "运行",
+    "running": "运行中...",
+    "executing": "正在执行代码...",
+    "input": "输入 (stdin)",
+    "inputPlaceholder": "输入程序所需的数据...",
+    "output": "输出",
+    "noOutput": "暂无输出。运行代码后查看结果。",
+    "unsupportedLanguage": "不支持运行 \"{{language}}\" 语言的代码。",
+    "emptyCode": "请先编写代码再运行。",
+    "executionFailed": "代码执行失败，请重试。",
+    "attachBottom": "贴靠底部",
+    "attachRight": "贴靠右侧"
   }
 }

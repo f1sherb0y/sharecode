@@ -10,6 +10,7 @@ import type {
   ShareRoomDetails,
   PlaybackData,
   Language,
+  CodeExecutionResult,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
 
@@ -235,6 +236,114 @@ class ApiClient {
   // Playback
   async getPlaybackUpdates(roomId: string): Promise<PlaybackData> {
     return this.request<PlaybackData>(`/api/rooms/${roomId}/playback/updates`)
+  }
+
+  // Code Execution
+  async executeCode(
+    sourceCode: string,
+    languageId: number,
+    stdin?: string
+  ): Promise<CodeExecutionResult> {
+    // Use mock API for testing when VITE_MOCK_CODE_RUNNER is set
+    if (import.meta.env.VITE_MOCK_CODE_RUNNER === 'true') {
+      return this.mockExecuteCode(sourceCode, languageId, stdin)
+    }
+
+    return this.request<CodeExecutionResult>('/api/code/execute', {
+      method: 'POST',
+      body: JSON.stringify({
+        source_code: sourceCode,
+        language_id: languageId,
+        stdin: stdin || '',
+      }),
+    })
+  }
+
+  // Mock code execution for testing UI flow
+  private async mockExecuteCode(
+    sourceCode: string,
+    languageId: number,
+    stdin?: string
+  ): Promise<CodeExecutionResult> {
+    // Simulate network delay (1-3 seconds)
+    const delay = 1000 + Math.random() * 2000
+    await new Promise(resolve => setTimeout(resolve, delay))
+
+    // Simulate different outcomes based on code content
+    const code = sourceCode.toLowerCase()
+
+    // Simulate compilation error
+    if (code.includes('syntax error') || code.includes('compile error')) {
+      return {
+        output: '',
+        error: 'SyntaxError: Unexpected token at line 1\n  File "<stdin>", line 1\n    syntax error here\n    ^\nCompilation failed.',
+        status: 'Compilation Error',
+        statusId: 6,
+        isSuccess: false,
+        time: '0.001',
+        memory: 1024,
+      }
+    }
+
+    // Simulate runtime error
+    if (code.includes('runtime error') || code.includes('throw') || code.includes('raise')) {
+      return {
+        output: '',
+        error: 'RuntimeError: Division by zero\n  at main (line 5)\n  at <module> (line 10)',
+        status: 'Runtime Error (NZEC)',
+        statusId: 11,
+        isSuccess: false,
+        time: '0.05',
+        memory: 2048,
+      }
+    }
+
+    // Simulate timeout
+    if (code.includes('infinite') || code.includes('while true') || code.includes('while(true)')) {
+      return {
+        output: '',
+        error: 'Time Limit Exceeded: Program execution took longer than 10 seconds',
+        status: 'Time Limit Exceeded',
+        statusId: 5,
+        isSuccess: false,
+        time: '10.0',
+        memory: 8192,
+      }
+    }
+
+    // Generate mock output based on language
+    const languageNames: Record<number, string> = {
+      63: 'JavaScript', 74: 'TypeScript', 71: 'Python', 62: 'Java',
+      54: 'C++', 73: 'Rust', 60: 'Go', 68: 'PHP',
+    }
+    const langName = languageNames[languageId] || 'Unknown'
+
+    // Simulate successful execution
+    let output = `[Mock Output - ${langName}]\n`
+
+    // Echo stdin if provided
+    if (stdin?.trim()) {
+      output += `Input received: ${stdin}\n`
+    }
+
+    // Add some mock output
+    output += `Hello, World!\n`
+    output += `Code length: ${sourceCode.length} characters\n`
+    output += `Execution completed successfully.\n`
+
+    return {
+      output,
+      error: '',
+      status: 'Accepted',
+      statusId: 3,
+      isSuccess: true,
+      time: (0.01 + Math.random() * 0.1).toFixed(3),
+      memory: Math.floor(1024 + Math.random() * 4096),
+    }
+  }
+
+  async getCodeLanguages(): Promise<{ languages: Array<{ name: string; id: number }> }> {
+    return this.request<{ languages: Array<{ name: string; id: number }> }>('/api/code/languages')
   }
 }
 

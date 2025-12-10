@@ -299,5 +299,20 @@
     "loading": "Loading...",
     "error": "Error",
     "success": "Success"
+  },
+  "codeRunner": {
+    "title": "Code Runner",
+    "run": "Run",
+    "running": "Running...",
+    "executing": "Executing code...",
+    "input": "Input (stdin)",
+    "inputPlaceholder": "Enter input for your program...",
+    "output": "Output",
+    "noOutput": "No output yet. Run your code to see results.",
+    "unsupportedLanguage": "Language \"{{language}}\" is not supported for execution.",
+    "emptyCode": "Please write some code before running.",
+    "executionFailed": "Code execution failed. Please try again.",
+    "attachBottom": "Attach to bottom",
+    "attachRight": "Attach to right"
   }
 }

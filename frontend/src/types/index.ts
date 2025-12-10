@@ -136,3 +136,13 @@ export interface PlaybackData {
   endTime: string | null
   duration: number
 }
+
+export interface CodeExecutionResult {
+  output: string
+  error: string
+  status: string
+  statusId: number
+  isSuccess: boolean
+  time?: string
+  memory?: number
+}

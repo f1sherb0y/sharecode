@@ -37,6 +37,7 @@ import {
     joinShareLink,
     getGuestSession,
 } from './api/share'
+import { executeCode, getLanguages, checkJudge0Health } from './api/code'
 
 const app = express()
 const PORT = parseInt(process.env.PORT || '3001')
@@ -87,6 +88,11 @@ app.get('/api/rooms/:roomId/playback/updates', authMiddleware, getPlaybackUpdate
 app.get('/api/share/session', getGuestSession)
 app.get('/api/share/:token', getShareInfo)
 app.post('/api/share/:token/join', joinShareLink)
+
+// Code execution routes
+app.post('/api/code/execute', authMiddleware, executeCode)
+app.get('/api/code/languages', getLanguages)
+app.get('/api/code/health', checkJudge0Health)
 
 // Create HTTP server and integrate Hocuspocus
 const httpServer = createServer(app)

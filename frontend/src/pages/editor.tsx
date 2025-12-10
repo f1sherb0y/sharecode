@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Users, Wifi, WifiOff, RefreshCw, Check, StopCircle, Minus, Plus, Type, Share2, LogOut } from 'lucide-react'
+import { ArrowLeft, Users, Wifi, WifiOff, RefreshCw, Check, StopCircle, Minus, Plus, Type, Share2, LogOut, Play, Loader2 } from 'lucide-react'
 import {
   Button,
   Badge,
@@ -36,6 +36,7 @@ import { useYjsProvider, type StatelessMessage } from '@/hooks'
 import { loadMonaco } from '@/lib/monaco-loader'
 import { MonacoBinding } from '@/lib/monaco-binding'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
+import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
 import { generateUserColor, cn } from '@/lib/utils'
 import type { Room, Language, RemoteUser, ShareLinkInfo, ShareRoomSummary } from '@/types'
 import type * as Monaco from 'monaco-editor'
@@ -94,6 +95,7 @@ export function EditorPage() {
   const [guestEmail, setGuestEmail] = useState('')
   const [isJoiningAsGuest, setIsJoiningAsGuest] = useState(false)
   const [guestJoinError, setGuestJoinError] = useState('')
+  const [codeRunnerPosition, setCodeRunnerPosition] = useState<'bottom' | 'right'>('bottom')
 
   // Current user info (authenticated or guest)
   const currentUser = isGuestMode && guestSession
@@ -129,6 +131,8 @@ export function EditorPage() {
   const monacoEditorRef = useRef<MonacoEditorInstance | null>(null)
   const monacoModelRef = useRef<MonacoModel | null>(null)
   const bindingRef = useRef<MonacoBinding | null>(null)
+  const codeRunnerRef = useRef<CodeRunnerPanelRef>(null)
+  const [isCodeRunning, setIsCodeRunning] = useState(false)
 
   // Handle stateless messages (room ended, etc.)
   const handleStatelessMessage = useCallback((message: StatelessMessage) => {
@@ -479,6 +483,22 @@ export function EditorPage() {
     }
   }
 
+  // Get code from editor for execution
+  const getCode = useCallback(() => {
+    return monacoEditorRef.current?.getValue() ?? ''
+  }, [])
+
+  // Run code via the code runner panel
+  const handleRunCode = useCallback(async () => {
+    if (!codeRunnerRef.current || !canEdit) return
+    setIsCodeRunning(true)
+    try {
+      await codeRunnerRef.current.run()
+    } finally {
+      setIsCodeRunning(false)
+    }
+  }, [canEdit])
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -706,6 +726,29 @@ export function EditorPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Run code button (editors only) */}
+            {canEdit && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 px-2 sm:px-3"
+                    onClick={handleRunCode}
+                    disabled={isCodeRunning}
+                  >
+                    {isCodeRunning ? (
+                      <Loader2 className="h-4 w-4 animate-spin sm:mr-1" />
+                    ) : (
+                      <Play className="h-4 w-4 sm:mr-1" />
+                    )}
+                    <span className="hidden sm:inline">{t('codeRunner.run')}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('codeRunner.run')}</TooltipContent>
+              </Tooltip>
+            )}
+
             {/* Share button (owner only) */}
             {isOwner && (
               <Popover open={showShareManager} onOpenChange={setShowShareManager}>
@@ -739,9 +782,41 @@ export function EditorPage() {
           </div>
         </header>
 
-        {/* Editor */}
-        <div className="flex-1 overflow-hidden">
-          <div ref={editorRef} className="h-full w-full" />
+        {/* Main content area */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Editor + Bottom Panel container */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Editor */}
+            <div className="flex-1 overflow-hidden">
+              <div ref={editorRef} className="h-full w-full" />
+            </div>
+
+            {/* Code Runner Panel - Bottom */}
+            {codeRunnerPosition === 'bottom' && (
+              <CodeRunnerPanel
+                ref={codeRunnerRef}
+                language={effectiveRoom.language}
+                getCode={getCode}
+                canEdit={canEdit}
+                ymeta={ymeta}
+                position="bottom"
+                onPositionChange={setCodeRunnerPosition}
+              />
+            )}
+          </div>
+
+          {/* Code Runner Panel - Right */}
+          {codeRunnerPosition === 'right' && (
+            <CodeRunnerPanel
+              ref={codeRunnerRef}
+              language={effectiveRoom.language}
+              getCode={getCode}
+              canEdit={canEdit}
+              ymeta={ymeta}
+              position="right"
+              onPositionChange={setCodeRunnerPosition}
+            />
+          )}
         </div>
 
         {/* Status bar */}
