@@ -75,26 +75,8 @@ services:
         condition: service_started
     ports:
       - "2358:2358"
-    environment:
-      RAILS_ENV: development
-      RAILS_MAX_THREADS: 8
-      SECRET_KEY_BASE: dev-secret-key-base-change-in-production
-      POSTGRES_HOST: judge0-db
-      POSTGRES_DB: judge0
-      POSTGRES_USER: judge0
-      POSTGRES_PASSWORD: judge0_dev_password
-      REDIS_URL: redis://judge0-redis:6379/0
-      ENABLE_WAIT_RESULT: "true"
-      ENABLE_BATCHED_SUBMISSIONS: "true"
-      MAX_QUEUE_SIZE: 100
-      CPU_TIME_LIMIT: 10
-      CPU_EXTRA_TIME: 5
-      WALL_TIME_LIMIT: 20
-      MEMORY_LIMIT: 256000
-      MAX_PROCESSES_AND_OR_THREADS: 60
-      ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
-      ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
-      MAINTENANCE_MODE: "false"
+    env_file:
+      - ./judge0.conf
     privileged: true
 
   judge0-worker:
@@ -104,24 +86,8 @@ services:
     depends_on:
       - judge0-server
     command: ["./scripts/workers"]
-    environment:
-      RAILS_ENV: development
-      RAILS_MAX_THREADS: 8
-      SECRET_KEY_BASE: dev-secret-key-base-change-in-production
-      POSTGRES_HOST: judge0-db
-      POSTGRES_DB: judge0
-      POSTGRES_USER: judge0
-      POSTGRES_PASSWORD: judge0_dev_password
-      REDIS_URL: redis://judge0-redis:6379/0
-      ENABLE_WAIT_RESULT: "true"
-      ENABLE_BATCHED_SUBMISSIONS: "true"
-      CPU_TIME_LIMIT: 10
-      CPU_EXTRA_TIME: 5
-      WALL_TIME_LIMIT: 20
-      MEMORY_LIMIT: 256000
-      MAX_PROCESSES_AND_OR_THREADS: 60
-      ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
-      ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+    env_file:
+      - ./judge0.conf
     privileged: true
 
 networks:
