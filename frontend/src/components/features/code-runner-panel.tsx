@@ -7,28 +7,28 @@ import { cn } from '@/lib/utils'
 import type * as Y from 'yjs'
 import type { Language } from '@/types'
 
-// Language ID mapping for Judge0
-const LANGUAGE_ID_MAP: Record<string, number> = {
-  'c': 50,
-  'cpp': 54,
-  'csharp': 51,
-  'go': 60,
-  'java': 62,
-  'javascript': 63,
-  'typescript': 74,
-  'python': 71,
-  'rust': 73,
-  'ruby': 72,
-  'php': 68,
-  'swift': 83,
-  'kotlin': 78,
-  'scala': 81,
-  'r': 80,
-  'perl': 85,
-  'lua': 64,
-  'haskell': 61,
-  'bash': 46,
-  'sql': 82,
+// Language name mapping for Piston API
+const LANGUAGE_ID_MAP: Record<string, string> = {
+  'c': 'c',
+  'cpp': 'cpp',
+  'csharp': 'csharp',
+  'go': 'go',
+  'java': 'java',
+  'javascript': 'javascript',
+  'typescript': 'typescript',
+  'python': 'python',
+  'rust': 'rust',
+  'ruby': 'ruby',
+  'php': 'php',
+  'swift': 'swift',
+  'kotlin': 'kotlin',
+  'scala': 'scala',
+  'r': 'r',
+  'perl': 'perl',
+  'lua': 'lua',
+  'haskell': 'haskell',
+  'bash': 'bash',
+  'sql': 'sql',
 }
 
 const MIN_PANEL_SIZE = 120

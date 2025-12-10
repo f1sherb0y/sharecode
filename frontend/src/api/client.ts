@@ -241,7 +241,7 @@ class ApiClient {
   // Code Execution
   async executeCode(
     sourceCode: string,
-    languageId: number,
+    languageId: string,
     stdin?: string
   ): Promise<CodeExecutionResult> {
     return this.request<CodeExecutionResult>('/api/code/execute', {
@@ -254,8 +254,8 @@ class ApiClient {
     })
   }
 
-  async getCodeLanguages(): Promise<{ languages: Array<{ name: string; id: number }> }> {
-    return this.request<{ languages: Array<{ name: string; id: number }> }>('/api/code/languages')
+  async getCodeLanguages(): Promise<{ languages: Array<{ name: string; id: string }> }> {
+    return this.request<{ languages: Array<{ name: string; id: string }> }>('/api/code/languages')
   }
 }
 
