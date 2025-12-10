@@ -1,34 +1,58 @@
 #!/bin/bash
-# Install common programming languages for Piston
+# Install language runtimes in Piston via API
+# Usage: ./install-languages.sh [PISTON_URL]
 
-set -e
+PISTON_URL="${1:-http://localhost:2000}"
 
-echo "Installing language runtimes..."
+echo "Installing languages to Piston at $PISTON_URL"
+echo "This may take several minutes..."
+
+install_lang() {
+    local lang=$1
+    echo -n "Installing $lang... "
+    result=$(curl -s -X POST "$PISTON_URL/api/v2/packages" \
+        -H "Content-Type: application/json" \
+        -d "{\"language\": \"$lang\", \"version\": \"*\"}" 2>&1)
+
+    if echo "$result" | grep -q '"language"'; then
+        echo "OK"
+    else
+        echo "FAILED: $result"
+    fi
+}
 
 # Wait for API to be ready
-sleep 5
+echo "Waiting for Piston API..."
+for i in {1..30}; do
+    if curl -s "$PISTON_URL/api/v2/runtimes" > /dev/null 2>&1; then
+        echo "API is ready!"
+        break
+    fi
+    sleep 2
+done
 
-CLI="/piston/cli/index.js"
+# Install common languages
+install_lang "python"
+install_lang "javascript"
+install_lang "typescript"
+install_lang "java"
+install_lang "c"
+install_lang "c++"
+install_lang "go"
+install_lang "rust"
+install_lang "ruby"
+install_lang "php"
+install_lang "bash"
+install_lang "lua"
+install_lang "perl"
+install_lang "kotlin"
+install_lang "scala"
+install_lang "swift"
+install_lang "haskell"
+install_lang "csharp"
+install_lang "sqlite3"
 
-# Core languages
-$CLI ppman install python
-$CLI ppman install javascript
-$CLI ppman install typescript
-$CLI ppman install java
-$CLI ppman install c
-$CLI ppman install c++
-$CLI ppman install go
-$CLI ppman install rust
-$CLI ppman install ruby
-$CLI ppman install php
-$CLI ppman install bash
-$CLI ppman install lua
-$CLI ppman install perl
-$CLI ppman install swift
-$CLI ppman install kotlin
-$CLI ppman install scala
-$CLI ppman install csharp
-$CLI ppman install haskell
-$CLI ppman install r
-
-echo "Language installation complete!"
+echo ""
+echo "Installation complete!"
+echo "Installed runtimes:"
+curl -s "$PISTON_URL/api/v2/runtimes" | grep -o '"language":"[^"]*"' | sort -u
