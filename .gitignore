@@ -9,6 +9,10 @@ node_modules/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+
+# Production configs (contain secrets)
+docker-compose.production.yml
 
 # Build outputs
 dist/
