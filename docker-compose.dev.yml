@@ -36,6 +36,94 @@ services:
     depends_on:
       - postgres
 
+  # ===========================
+  # Judge0 Code Execution
+  # ===========================
+  judge0-db:
+    image: postgres:17-alpine
+    container_name: sharecode-judge0-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0_dev_password
+      POSTGRES_DB: judge0
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./data/judge0-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U judge0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  judge0-redis:
+    image: redis:7-alpine
+    container_name: sharecode-judge0-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - ./data/judge0-redis:/data
+
+  judge0-server:
+    image: judge0/judge0:1.13.1
+    container_name: sharecode-judge0-server
+    restart: unless-stopped
+    depends_on:
+      judge0-db:
+        condition: service_healthy
+      judge0-redis:
+        condition: service_started
+    ports:
+      - "2358:2358"
+    environment:
+      RAILS_ENV: development
+      RAILS_MAX_THREADS: 8
+      SECRET_KEY_BASE: dev-secret-key-base-change-in-production
+      POSTGRES_HOST: judge0-db
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0_dev_password
+      REDIS_URL: redis://judge0-redis:6379/0
+      ENABLE_WAIT_RESULT: "true"
+      ENABLE_BATCHED_SUBMISSIONS: "true"
+      MAX_QUEUE_SIZE: 100
+      CPU_TIME_LIMIT: 10
+      CPU_EXTRA_TIME: 5
+      WALL_TIME_LIMIT: 20
+      MEMORY_LIMIT: 256000
+      MAX_PROCESSES_AND_OR_THREADS: 60
+      ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
+      ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+      MAINTENANCE_MODE: "false"
+    privileged: true
+
+  judge0-worker:
+    image: judge0/judge0:1.13.1
+    container_name: sharecode-judge0-worker
+    restart: unless-stopped
+    depends_on:
+      - judge0-server
+    command: ["./scripts/workers"]
+    environment:
+      RAILS_ENV: development
+      RAILS_MAX_THREADS: 8
+      SECRET_KEY_BASE: dev-secret-key-base-change-in-production
+      POSTGRES_HOST: judge0-db
+      POSTGRES_DB: judge0
+      POSTGRES_USER: judge0
+      POSTGRES_PASSWORD: judge0_dev_password
+      REDIS_URL: redis://judge0-redis:6379/0
+      ENABLE_WAIT_RESULT: "true"
+      ENABLE_BATCHED_SUBMISSIONS: "true"
+      CPU_TIME_LIMIT: 10
+      CPU_EXTRA_TIME: 5
+      WALL_TIME_LIMIT: 20
+      MEMORY_LIMIT: 256000
+      MAX_PROCESSES_AND_OR_THREADS: 60
+      ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
+      ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+    privileged: true
+
 networks:
   default:
     name: sharecode-network
