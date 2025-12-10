@@ -281,7 +281,7 @@ export function RoomsPage() {
               <RoomCard
                 key={room.id}
                 room={room}
-                currentUserId={user?.id}
+                currentUser={user ?? undefined}
                 onDelete={() => handleDeleteRoom(room.id, room.name)}
                 onPlayback={() => navigate(`/playback/${room.id}`)}
                 onClick={() => navigate(`/room/${room.id}`)}
@@ -296,16 +296,18 @@ export function RoomsPage() {
 
 interface RoomCardProps {
   room: Room
-  currentUserId?: string
+  currentUser?: User
   onDelete: () => void
   onPlayback: () => void
   onClick: () => void
 }
 
-function RoomCard({ room, currentUserId, onDelete, onPlayback, onClick }: RoomCardProps) {
+function RoomCard({ room, currentUser, onDelete, onPlayback, onClick }: RoomCardProps) {
   const { t } = useTranslation()
 
-  const isOwner = room.ownerId === currentUserId
+  const isOwner = room.ownerId === currentUser?.id
+  const isPrivileged = currentUser?.role === 'admin' || currentUser?.role === 'superuser' ||
+    currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
   const participantCount = (room.participants?.length ?? 0) + 1
 
   return (
@@ -375,7 +377,7 @@ function RoomCard({ room, currentUserId, onDelete, onPlayback, onClick }: RoomCa
             </Button>
           )}
 
-          {room.isEnded && isOwner && (
+          {room.isEnded && (isOwner || isPrivileged) && (
             <Button
               variant="ghost"
               size="sm"

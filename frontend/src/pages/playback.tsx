@@ -121,9 +121,10 @@ export function PlaybackPage() {
         setRoom(room)
 
         const isOwner = room.ownerId === user.id
-        const isAdminOrSuper = user.role === 'admin' || user.role === 'superuser'
+        const isPrivileged = user.role === 'admin' || user.role === 'superuser' ||
+          user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
 
-        if (!isOwner && !isAdminOrSuper) {
+        if (!isOwner && !isPrivileged) {
           setError(t('playback.accessDenied'))
           setIsLoading(false)
           return
