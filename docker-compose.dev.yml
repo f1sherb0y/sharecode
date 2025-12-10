@@ -37,66 +37,17 @@ services:
       - postgres
 
   # ===========================
-  # Judge0 Code Execution
+  # Piston Code Execution
   # ===========================
-  judge0-db:
-    image: postgres:17-alpine
-    container_name: sharecode-judge0-db
+  piston:
+    image: ghcr.io/engineer-man/piston
+    container_name: sharecode-piston
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: judge0
-      POSTGRES_PASSWORD: judge0_dev_password
-      POSTGRES_DB: judge0
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes:
-      - ./data/judge0-postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U judge0"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  judge0-redis:
-    image: redis:7-alpine
-    container_name: sharecode-judge0-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    volumes:
-      - ./data/judge0-redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  judge0-server:
-    image: judge0/judge0:1.13.1
-    container_name: sharecode-judge0-server
-    restart: unless-stopped
-    depends_on:
-      judge0-db:
-        condition: service_healthy
-      judge0-redis:
-        condition: service_healthy
+    privileged: true
     ports:
-      - "2358:2358"
-    env_file:
-      - ./judge0.conf
-    privileged: true
-
-  judge0-worker:
-    image: judge0/judge0:1.13.1
-    container_name: sharecode-judge0-worker
-    restart: unless-stopped
-    depends_on:
-      judge0-server:
-        condition: service_started
-      judge0-redis:
-        condition: service_healthy
-    command: ["./scripts/workers"]
-    env_file:
-      - ./judge0.conf
-    privileged: true
+      - "2000:2000"
+    volumes:
+      - ./data/piston:/piston/packages
 
 networks:
   default:
