@@ -1,11 +1,9 @@
-version: "3.9"
-
 services:
   # ===========================
   # Database Services
   # ===========================
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: sharecode
@@ -23,7 +21,7 @@ services:
 
   # Judge0 Database (separate from app database)
   judge0-db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: judge0
@@ -48,6 +46,11 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - judge0_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - backend
 
@@ -58,7 +61,7 @@ services:
       judge0-db:
         condition: service_healthy
       judge0-redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       RAILS_ENV: production
       RAILS_MAX_THREADS: 8
@@ -67,7 +70,8 @@ services:
       POSTGRES_DB: judge0
       POSTGRES_USER: judge0
       POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD:-judge0secret}
-      REDIS_URL: redis://judge0-redis:6379/0
+      REDIS_HOST: judge0-redis
+      REDIS_PORT: 6379
       ENABLE_WAIT_RESULT: "true"
       ENABLE_BATCHED_SUBMISSIONS: "true"
       MAX_QUEUE_SIZE: 100
@@ -75,9 +79,12 @@ services:
       CPU_EXTRA_TIME: 5
       WALL_TIME_LIMIT: 20
       MEMORY_LIMIT: 256000
+      STACK_LIMIT: 128000
       MAX_PROCESSES_AND_OR_THREADS: 60
+      MAX_FILE_SIZE: 4096
       ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
       ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+      ENABLE_NETWORK: "false"
       MAINTENANCE_MODE: "false"
       AUTHN_HEADER: X-Auth-Token
       AUTHN_TOKEN: ${JUDGE0_AUTH_TOKEN:-}
@@ -93,7 +100,10 @@ services:
     image: judge0/judge0:1.13.1
     restart: unless-stopped
     depends_on:
-      - judge0-server
+      judge0-server:
+        condition: service_started
+      judge0-redis:
+        condition: service_healthy
     command: ["./scripts/workers"]
     environment:
       RAILS_ENV: production
@@ -103,16 +113,20 @@ services:
       POSTGRES_DB: judge0
       POSTGRES_USER: judge0
       POSTGRES_PASSWORD: ${JUDGE0_DB_PASSWORD:-judge0secret}
-      REDIS_URL: redis://judge0-redis:6379/0
+      REDIS_HOST: judge0-redis
+      REDIS_PORT: 6379
       ENABLE_WAIT_RESULT: "true"
       ENABLE_BATCHED_SUBMISSIONS: "true"
       CPU_TIME_LIMIT: 10
       CPU_EXTRA_TIME: 5
       WALL_TIME_LIMIT: 20
       MEMORY_LIMIT: 256000
+      STACK_LIMIT: 128000
       MAX_PROCESSES_AND_OR_THREADS: 60
+      MAX_FILE_SIZE: 4096
       ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
       ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+      ENABLE_NETWORK: "false"
     privileged: true
     networks:
       - backend
@@ -147,6 +161,11 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # Empty values = use relative URLs (same-origin)
+        VITE_API_URL: ""
+        VITE_WS_URL: ""
+        VITE_ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
     restart: unless-stopped
     depends_on:
       - server
