@@ -30,19 +30,13 @@ interface PistonResult {
         stdout: string
         stderr: string
         output: string
-        code: number | null
+        code: number
         signal: string | null
-        message?: string | null
-        status?: string | null
-    }
-    compile?: {
-        stdout: string
-        stderr: string
-        output: string
-        code: number | null
-        signal: string | null
-        message?: string | null
-        status?: string | null
+        message: string | null
+        status: string | null
+        memory: number
+        cpu_time: number
+        wall_time: number
     }
 }
 
@@ -53,7 +47,11 @@ interface PistonRuntime {
     runtime?: string
 }
 
-// Language name mapping (editor language -> piston language)
+// Language name mapping (editor language -> piston runtime language)
+// Note: Piston package names may differ from runtime names
+// e.g., "gcc" package provides "c" and "c++" runtimes
+//       "node" package provides "javascript" runtime
+//       "mono" package provides "csharp" runtime
 export const LANGUAGE_MAP: Record<string, string> = {
     'c': 'c',
     'cpp': 'c++',
@@ -202,46 +200,18 @@ export async function executeCode(req: Request, res: Response) {
                 content: source_code,
             }],
             stdin: stdin || '',
-            run_timeout: 10000,      // 10 seconds
-            compile_timeout: 10000,  // 10 seconds
-            run_memory_limit: -1,    // No limit (let Piston defaults handle it)
-            compile_memory_limit: -1,
+            run_timeout: 3000,       // 3 seconds (Piston default max)
+            compile_timeout: 3000,   // 3 seconds (Piston default max)
         }
 
         const result = await pistonRequest<PistonResult>('/execute', 'POST', pistonReq)
 
-        // Format response to match frontend expectations
-        const output = result.run?.stdout || ''
-        const compileError = result.compile?.stderr || result.compile?.output || ''
-        const runError = result.run?.stderr || ''
-        const error = compileError || runError
-
-        // Determine status
-        let status = 'Accepted'
-        let statusId = 3  // Success
-        let isSuccess = true
-
-        if (result.compile?.code !== null && result.compile?.code !== 0) {
-            status = 'Compilation Error'
-            statusId = 6
-            isSuccess = false
-        } else if (result.run?.signal) {
-            status = `Runtime Error (${result.run.signal})`
-            statusId = 11
-            isSuccess = false
-        } else if (result.run?.code !== null && result.run?.code !== 0) {
-            status = 'Runtime Error'
-            statusId = 11
-            isSuccess = false
-        } else if (result.run?.status === 'TO') {
-            status = 'Time Limit Exceeded'
-            statusId = 5
-            isSuccess = false
-        } else if (result.run?.message) {
-            status = result.run.message
-            statusId = 11
-            isSuccess = false
-        }
+        // Piston puts everything in run, no separate compile field
+        const output = result.run.stdout
+        const error = result.run.stderr
+        const isSuccess = result.run.code === 0
+        const status = isSuccess ? 'Accepted' : 'Runtime Error'
+        const statusId = isSuccess ? 3 : 11
 
         res.json({
             output,
@@ -249,8 +219,8 @@ export async function executeCode(req: Request, res: Response) {
             status,
             statusId,
             isSuccess,
-            time: null,  // Piston doesn't return execution time in the same format
-            memory: null,
+            time: (result.run.wall_time / 1000).toFixed(3),  // ms to seconds
+            memory: Math.round(result.run.memory / 1024),    // bytes to KB
         })
     } catch (error) {
         logger.error('Code execution error:', error)

@@ -159,11 +159,6 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
       setStatus(codeRunner.status || 'idle')
       setExecTime(codeRunner.time)
       setExecMemory(codeRunner.memory)
-
-      // Auto-expand when there's output
-      if (codeRunner.stdout || codeRunner.stderr) {
-        setIsExpanded(true)
-      }
     }
 
     ymeta.observe(handleMetaChange)

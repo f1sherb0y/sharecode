@@ -32,25 +32,25 @@ for i in {1..30}; do
 done
 
 # Install common languages
-install_lang "python"
-install_lang "javascript"
-install_lang "typescript"
-install_lang "java"
-install_lang "c"
-install_lang "c++"
-install_lang "go"
-install_lang "rust"
-install_lang "ruby"
-install_lang "php"
-install_lang "bash"
-install_lang "lua"
-install_lang "perl"
-install_lang "kotlin"
-install_lang "scala"
-install_lang "swift"
-install_lang "haskell"
-install_lang "csharp"
-install_lang "sqlite3"
+# Note: Package names differ from language names in some cases
+install_lang "python"       # python
+install_lang "node"         # javascript/node.js
+install_lang "typescript"   # typescript
+install_lang "java"         # java
+install_lang "gcc"          # c and c++
+install_lang "go"           # go
+install_lang "rust"         # rust
+install_lang "ruby"         # ruby
+install_lang "php"          # php
+install_lang "bash"         # bash
+install_lang "lua"          # lua
+install_lang "perl"         # perl
+install_lang "kotlin"       # kotlin
+install_lang "scala"        # scala
+install_lang "swift"        # swift
+install_lang "haskell"      # haskell
+install_lang "mono"         # c# (csharp)
+install_lang "sqlite3"      # sqlite3
 
 echo ""
 echo "Installation complete!"
