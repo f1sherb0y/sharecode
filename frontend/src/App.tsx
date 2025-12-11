@@ -12,7 +12,11 @@ import {
   SettingsPage,
 } from '@/pages'
 import { useAuthStore, useThemeStore } from '@/stores'
-import { isTauriApp, setScreenCaptureProtection, setTaskbarVisibility } from '@/lib/tauri'
+import {
+  isTauriApp,
+  getStealthSettings,
+  applyStealthSettings,
+} from '@/lib/tauri'
 import { Spinner } from '@/components/ui'
 
 const queryClient = new QueryClient({
@@ -159,28 +163,20 @@ function AppContent() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  // Apply privacy settings on startup for Tauri app
+  // Apply stealth settings on startup for Tauri app
   useEffect(() => {
     if (!isTauriApp()) return
 
-    const applyPrivacySettings = async () => {
+    const initStealth = async () => {
       try {
-        const saved = localStorage.getItem('sharecode_settings')
-        if (saved) {
-          const settings = JSON.parse(saved)
-          if (settings.hideFromCapture) {
-            await setScreenCaptureProtection(true)
-          }
-          if (settings.hideFromTaskbar) {
-            await setTaskbarVisibility(false)
-          }
-        }
+        const settings = getStealthSettings()
+        await applyStealthSettings(settings)
       } catch (error) {
-        console.error('Failed to apply privacy settings:', error)
+        console.error('Failed to apply stealth settings:', error)
       }
     }
 
-    applyPrivacySettings()
+    initStealth()
   }, [])
 
   const Router = isTauriApp() ? HashRouter : BrowserRouter

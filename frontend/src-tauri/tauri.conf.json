@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "ShareCode",
         "width": 1200,
         "height": 800,
