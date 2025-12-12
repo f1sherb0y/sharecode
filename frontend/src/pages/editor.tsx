@@ -84,7 +84,10 @@ export function EditorPage() {
   const [error, setError] = useState('')
   const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
   const [isEnding, setIsEnding] = useState(false)
-  const [followingUser, setFollowingUser] = useState<number | null>(null)
+  // Follow target is local-only UI state.
+  // Prefer stable userId when available so follow survives reconnects.
+  const [followingUserId, setFollowingUserId] = useState<string | null>(null)
+  const [followingClientId, setFollowingClientId] = useState<number | null>(null)
   const [showShareManager, setShowShareManager] = useState(false)
   const [roomEnded, setRoomEnded] = useState(false)
   const [roomEndedAt, setRoomEndedAt] = useState<string | null>(null)
@@ -359,12 +362,30 @@ export function EditorPage() {
 
   // Follow user feature - scroll to their cursor position
   useEffect(() => {
-    if (!followingUser || !provider?.awareness || !ydoc) return
+    if ((followingUserId == null && followingClientId == null) || !provider?.awareness || !ydoc) return
     if (!monacoRef.current || !monacoEditorRef.current || !monacoModelRef.current) return
 
     const scrollToUser = () => {
       if (!provider.awareness) return
-      const state = provider.awareness.getStates().get(followingUser)
+      let targetClientId: number | null = null
+      const localClientId = provider.awareness.clientID
+
+      if (followingUserId != null) {
+        provider.awareness.getStates().forEach((state, clientId) => {
+          if (targetClientId != null) return
+          if (clientId === localClientId) return
+          const user = state.user as { id?: string } | undefined
+          if (user?.id === followingUserId) {
+            targetClientId = clientId
+          }
+        })
+      } else if (followingClientId != null) {
+        targetClientId = followingClientId
+      }
+
+      if (targetClientId == null) return
+
+      const state = provider.awareness.getStates().get(targetClientId)
       if (!state?.cursor?.head) return
 
       try {
@@ -389,14 +410,17 @@ export function EditorPage() {
     return () => {
       provider.awareness?.off('change', scrollToUser)
     }
-  }, [followingUser, provider, ydoc])
+  }, [followingUserId, followingClientId, provider, ydoc])
 
   // Stop following if user disconnects
   useEffect(() => {
-    if (followingUser && !remoteUsers.some((u) => u.clientId === followingUser)) {
-      setFollowingUser(null)
+    // Only auto-clear clientId-based follow when we are connected.
+    // Stable userId follow is kept so it can resume after transient disconnects.
+    if (!isConnected) return
+    if (followingClientId != null && !remoteUsers.some((u) => u.clientId === followingClientId)) {
+      setFollowingClientId(null)
     }
-  }, [remoteUsers, followingUser])
+  }, [remoteUsers, followingClientId, isConnected])
 
   // Listen for language changes from ymeta (synced via Yjs)
   useEffect(() => {
@@ -701,12 +725,28 @@ export function EditorPage() {
                   <span className="text-sm truncate">{currentUser?.username} ({t('share.editor.you')})</span>
                 </div>
                 {remoteUsers.map((u) => {
-                  const isFollowing = followingUser === u.clientId
+                  const isFollowing =
+                    (followingUserId != null && u.id != null && followingUserId === u.id) ||
+                    (followingUserId == null && followingClientId != null && followingClientId === u.clientId)
                   return (
                     <div
                       key={u.clientId}
                       className="px-2 py-1.5 flex items-center justify-between gap-2 hover:bg-accent rounded-sm cursor-pointer"
-                      onClick={() => setFollowingUser(isFollowing ? null : u.clientId)}
+                      onClick={() => {
+                        if (isFollowing) {
+                          setFollowingUserId(null)
+                          setFollowingClientId(null)
+                          return
+                        }
+
+                        if (u.id) {
+                          setFollowingUserId(u.id)
+                          setFollowingClientId(null)
+                        } else {
+                          setFollowingClientId(u.clientId)
+                          setFollowingUserId(null)
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
