@@ -50,6 +50,17 @@ export const hocuspocusServer = new Server({
                 const participant = room.participants.find(p => p.userId === user.id)
                 const canReadGlobally = user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
                 const canWriteGlobally = user.canWriteAllRooms || user.canDeleteAllRooms
+                const isPrivileged = user.role === 'admin' || user.role === 'superuser' || canReadGlobally
+
+                if (room.isDeleted) {
+                    throw new Error('Room is no longer available')
+                }
+
+                // Enforce strict ended-room access. Only owner or privileged users may connect.
+                // Ended rooms are always read-only.
+                if (room.isEnded && !isOwner && !isPrivileged) {
+                    throw new Error('Room has ended and is no longer accessible')
+                }
                 const hasAccess = canReadGlobally || isOwner || participant
 
                 if (!hasAccess) {
@@ -57,7 +68,7 @@ export const hocuspocusServer = new Server({
                 }
 
                 const participantCanEdit = participant?.canEdit ?? false
-                const canEdit = canWriteGlobally || isOwner || participantCanEdit
+                const canEdit = room.isEnded ? false : (canWriteGlobally || isOwner || participantCanEdit)
 
                 const connection = (data as any).connection
                 if (!canEdit && connection) {
@@ -66,7 +77,7 @@ export const hocuspocusServer = new Server({
 
                 // Auto-add user as participant if they're not already (and not owner)
                 // This applies when accessing via direct link or rejoining
-                if (!isOwner && !participant) {
+                if (!room.isEnded && !isOwner && !participant) {
                     await prisma.roomParticipant.create({
                         data: {
                             roomId: room.id,

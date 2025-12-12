@@ -125,6 +125,14 @@ export function EditorPage() {
     ? guestSession?.guest.canEdit ?? false
     : hasWriteAllPermission || isOwner || effectiveRoom?.canEdit === true
 
+  const hasGlobalReadPermission = !isGuestMode && !!user && (
+    user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
+  )
+  const isPrivileged = !isGuestMode && !!user && (
+    user.role === 'admin' || user.role === 'superuser' || hasGlobalReadPermission
+  )
+  const canViewPlayback = !isGuestMode && (isOwner || isPrivileged)
+
   // Token for WebSocket connection
   const wsToken = isGuestMode ? (guestSession?.authToken ?? '') : (authToken ?? '')
   const wsDocumentId = roomId ?? ''
@@ -208,6 +216,14 @@ export function EditorPage() {
 
     loadRoom()
   }, [roomId, user, isGuestMode])
+
+  // Redirect to playback when entering an ended room, if user has access.
+  useEffect(() => {
+    if (!roomId) return
+    if ((effectiveRoom?.isEnded || roomEnded) && canViewPlayback) {
+      navigate(`/playback/${roomId}`, { replace: true })
+    }
+  }, [roomId, effectiveRoom?.isEnded, roomEnded, canViewPlayback, navigate])
 
   // Handle guest join
   const handleGuestJoin = async (e: React.FormEvent) => {

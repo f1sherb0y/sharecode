@@ -309,6 +309,15 @@ function RoomCard({ room, currentUser, onDelete, onPlayback, onClick }: RoomCard
   const isPrivileged = currentUser?.role === 'admin' || currentUser?.role === 'superuser' ||
     currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
   const participantCount = (room.participants?.length ?? 0) + 1
+  const canViewPlayback = room.isEnded && (isOwner || isPrivileged)
+
+  const handleOpen = () => {
+    if (canViewPlayback) {
+      onPlayback()
+    } else {
+      onClick()
+    }
+  }
 
   return (
     <Card
@@ -316,7 +325,7 @@ function RoomCard({ room, currentUser, onDelete, onPlayback, onClick }: RoomCard
         'cursor-pointer transition-colors hover:border-primary/50 flex flex-col',
         room.isEnded && 'opacity-60'
       )}
-      onClick={onClick}
+      onClick={handleOpen}
     >
       <CardHeader className="p-3 pb-2">
         <div className="flex items-start justify-between gap-2">
