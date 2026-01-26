@@ -92,7 +92,10 @@
       "following": "Following",
       "endRoom": "End Room",
       "users": "Users",
-      "share": "Share"
+      "share": "Share",
+      "blink": "Blink Selection",
+      "code": "Code",
+      "canvas": "Canvas"
     },
     "status": {
       "connected": "Connected",

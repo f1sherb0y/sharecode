@@ -92,7 +92,10 @@
       "following": "跟随中",
       "endRoom": "结束房间",
       "users": "用户",
-      "share": "分享"
+      "share": "分享",
+      "blink": "闪烁选区",
+      "code": "代码",
+      "canvas": "画板"
     },
     "status": {
       "connected": "已连接",

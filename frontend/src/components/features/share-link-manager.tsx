@@ -1,23 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Trash2, X } from 'lucide-react'
-import { Button, Badge, Spinner } from '@/components/ui'
+import { Copy, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { 
+  Button, 
+  Badge, 
+  Spinner,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle, 
+} from '@/components/ui'
 import { api } from '@/api'
 import { isTauriApp } from '@/lib/tauri'
 import type { ShareLink } from '@/types'
 
 interface ShareLinkManagerProps {
   roomId: string
-  onClose: () => void
 }
 
-export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
+export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
   const { t } = useTranslation()
   const [links, setLinks] = useState<ShareLink[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
+  const [linkToDelete, setLinkToDelete] = useState<ShareLink | null>(null)
 
   const loadLinks = useCallback(async () => {
     try {
@@ -39,25 +49,34 @@ export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
     try {
       setIsCreating(true)
       setError('')
-      setInfo('')
       const { shareLink } = await api.createShareLink(roomId, canEdit)
       setLinks((prev) => [shareLink, ...prev])
-      setInfo(t('share.manager.created'))
+      toast.success(t('share.manager.created'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create share link')
+      const msg = err instanceof Error ? err.message : 'Failed to create share link'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setIsCreating(false)
     }
   }
 
-  const deleteLink = async (shareLink: ShareLink) => {
-    if (!confirm(t('share.manager.deleteConfirm'))) return
+  const handleDeleteClick = (shareLink: ShareLink) => {
+    setLinkToDelete(shareLink)
+  }
+
+  const confirmDeleteLink = async () => {
+    if (!linkToDelete) return
 
     try {
-      await api.deleteShareLink(roomId, shareLink.id)
-      setLinks((prev) => prev.filter((link) => link.id !== shareLink.id))
+      await api.deleteShareLink(roomId, linkToDelete.id)
+      setLinks((prev) => prev.filter((link) => link.id !== linkToDelete.id))
+      setLinkToDelete(null)
+      toast.success('Share link deleted')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete share link')
+      const msg = err instanceof Error ? err.message : 'Failed to delete share link'
+      setError(msg)
+      toast.error(msg)
     }
   }
 
@@ -65,9 +84,9 @@ export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
     const shareUrl = resolveShareUrl(shareLink.token, roomId, shareLink.shareUrl)
     try {
       await navigator.clipboard.writeText(shareUrl)
-      setInfo(t('share.manager.copied'))
+      toast.success(t('share.manager.copied'))
     } catch {
-      setError(t('share.manager.copyFailed'))
+      toast.error(t('share.manager.copyFailed'))
     }
   }
 
@@ -81,16 +100,10 @@ export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
   )
 
   return (
-    <div className="w-80 p-4 bg-popover border rounded-lg shadow-lg">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-sm">{t('share.manager.title')}</h3>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground mb-3">{t('share.manager.description')}</p>
+    <div className="w-full">
+      <p className="text-sm text-muted-foreground mb-4">{t('share.manager.description')}</p>
 
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-2 mb-4">
         <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => createLink(false)} disabled={isCreating}>
           {t('share.manager.createView')}
         </Button>
@@ -100,19 +113,18 @@ export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
       </div>
 
       {error && <p className="text-xs text-destructive mb-2">{error}</p>}
-      {info && <p className="text-xs text-success mb-2">{info}</p>}
 
       {isLoading ? (
         <div className="flex justify-center py-4">
           <Spinner size="sm" />
         </div>
       ) : resolvedLinks.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{t('share.manager.empty')}</p>
+        <p className="text-sm text-muted-foreground py-2 text-center">{t('share.manager.empty')}</p>
       ) : (
-        <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
           {resolvedLinks.map((link) => (
-            <div key={link.id} className="p-2 border rounded-md bg-muted/50">
-              <div className="flex items-center justify-between mb-1">
+            <div key={link.id} className="p-3 border rounded-md bg-muted/50">
+              <div className="flex items-center justify-between mb-2">
                 <Badge variant={link.canEdit ? 'default' : 'secondary'} className="text-xs px-1.5 py-0">
                   {link.canEdit ? t('share.manager.editLabel') : t('share.manager.viewLabel')}
                 </Badge>
@@ -120,7 +132,7 @@ export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
                   <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyLink(link)}>
                     <Copy className="h-3 w-3" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteLink(link)}>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDeleteClick(link)}>
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
@@ -133,6 +145,25 @@ export function ShareLinkManager({ roomId, onClose }: ShareLinkManagerProps) {
           ))}
         </div>
       )}
+
+      <Dialog open={!!linkToDelete} onOpenChange={(open) => !open && setLinkToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('share.manager.deleteTitle', 'Delete Share Link')}</DialogTitle>
+            <DialogDescription>
+              {t('share.manager.deleteConfirm')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkToDelete(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteLink}>
+              {t('common.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

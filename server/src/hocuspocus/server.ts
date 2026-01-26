@@ -2,6 +2,7 @@ import { Server } from '@hocuspocus/server'
 import type { Server as HttpServer, IncomingMessage } from 'http'
 import type { Duplex } from 'stream'
 import type { WebSocket } from 'ws'
+import * as decoding from 'lib0/decoding'
 import { databaseExtension } from './extensions/database'
 import { updatesExtension } from './extensions/updates'
 import { prisma } from '../utils/db'
@@ -226,6 +227,24 @@ export const hocuspocusServer = new Server({
 
 export function startHocuspocusServer(httpServer: HttpServer) {
     const wsPath = '/api/ws'
+
+    hocuspocusServer.webSocketServer.on('connection', (ws: WebSocket) => {
+        ws.on('message', (data, isBinary) => {
+            if (!isBinary) return
+            try {
+                const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer)
+                const decoder = decoding.createDecoder(new Uint8Array(buffer))
+                const documentName = decoding.readVarString(decoder)
+                const messageType = decoding.readVarUint(decoder)
+                const payloadLen = decoder.arr.length - decoder.pos
+                logger.debug(
+                    `[WS-RAW] doc=${documentName} type=${messageType} payloadLen=${payloadLen} dataLen=${buffer.length}`
+                )
+            } catch (error) {
+                logger.debug('[WS-RAW] failed to decode message', error)
+            }
+        })
+    })
 
     const handleUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
         const { url } = request

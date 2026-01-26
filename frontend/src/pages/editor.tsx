@@ -1,7 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Users, Wifi, WifiOff, RefreshCw, Check, StopCircle, Minus, Plus, Type, Share2, LogOut, Play, Loader2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  Users,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Check,
+  StopCircle,
+  Minus,
+  Plus,
+  Type,
+  Share2,
+  LogOut,
+  Play,
+  Loader2,
+  MoreVertical,
+  Sparkles,
+  FileCode,
+  Brush,
+} from 'lucide-react'
+import * as Y from 'yjs'
 import {
   Button,
   Badge,
@@ -14,14 +34,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
   Spinner,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
   Card,
   CardHeader,
   CardTitle,
@@ -29,416 +48,132 @@ import {
   CardContent,
   Input,
   Label,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui'
-import { api, fetchShareInfo, joinShare } from '@/api'
-import { useAuthStore, useThemeStore, useFontStore, useGuestStore } from '@/stores'
-import { useYjsProvider, type StatelessMessage } from '@/hooks'
-import { loadMonaco } from '@/lib/monaco-loader'
-import { MonacoBinding } from '@/lib/monaco-binding'
+import { useAuthStore, useFontStore, useGuestStore, useThemeStore } from '@/stores'
+import { useEditorRoom, useMonacoEditor, useEditorAwareness, useYjsProvider, useTldrawStore, type StatelessMessage } from '@/hooks'
+import { CanvasView } from '@/components/features/canvas-view'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
 import { generateUserColor, cn } from '@/lib/utils'
-import type { Room, Language, RemoteUser, ShareLinkInfo, ShareRoomSummary } from '@/types'
-import type * as Monaco from 'monaco-editor'
-import * as Y from 'yjs'
-
-import 'monaco-editor/min/vs/editor/editor.main.css'
-
-type MonacoModule = typeof Monaco
-type MonacoEditorInstance = Monaco.editor.IStandaloneCodeEditor
-type MonacoModel = Monaco.editor.ITextModel
+import type { Language } from '@/types'
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
 
-const monacoLanguageIds: Record<Language, string> = {
-  javascript: 'javascript',
-  typescript: 'typescript',
-  python: 'python',
-  java: 'java',
-  cpp: 'cpp',
-  rust: 'rust',
-  go: 'go',
-  php: 'php',
-}
-
 export function EditorPage() {
-  const { roomId } = useParams<{ roomId: string }>()
-  const [searchParams] = useSearchParams()
-  const shareToken = searchParams.get('share')
   const navigate = useNavigate()
   const { t } = useTranslation()
-
-  // Stores
-  const { user, token: authToken } = useAuthStore()
-  const { session: guestSession, setSession: setGuestSession, clearSession: clearGuestSession, initialize: initializeGuestSession } = useGuestStore()
-  const { theme } = useThemeStore()
+  const { token: authToken } = useAuthStore()
+  const { session: guestSession } = useGuestStore()
   const { font, fontSize, increaseFontSize, decreaseFontSize, setFont } = useFontStore()
-
-  // Determine session type
-  const isGuestMode = !!shareToken
-
-  // State
-  const [room, setRoom] = useState<Room | null>(null)
-  const [shareInfo, setShareInfo] = useState<{ share: ShareLinkInfo; room: ShareRoomSummary } | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
-  const [isEnding, setIsEnding] = useState(false)
-  // Follow target is local-only UI state.
-  // Prefer stable userId when available so follow survives reconnects.
-  const [followingUserId, setFollowingUserId] = useState<string | null>(null)
-  const [followingClientId, setFollowingClientId] = useState<number | null>(null)
+  const { theme } = useThemeStore()
   const [showShareManager, setShowShareManager] = useState(false)
-  const [roomEnded, setRoomEnded] = useState(false)
-  const [roomEndedAt, setRoomEndedAt] = useState<string | null>(null)
-
-  // Guest join form state
-  const [showGuestJoinForm, setShowGuestJoinForm] = useState(false)
-  const [guestDisplayName, setGuestDisplayName] = useState('')
-  const [guestEmail, setGuestEmail] = useState('')
-  const [isJoiningAsGuest, setIsJoiningAsGuest] = useState(false)
-  const [guestJoinError, setGuestJoinError] = useState('')
   const [codeRunnerPosition, setCodeRunnerPosition] = useState<'bottom' | 'right'>('bottom')
-
-  // Current user info (authenticated or guest)
-  const currentUser = isGuestMode && guestSession
-    ? { id: guestSession.guest.id, username: guestSession.guest.displayName, color: guestSession.guest.color }
-    : user
-
-  // Room info (from API or guest session)
-  const effectiveRoom = isGuestMode && guestSession?.room
-    ? {
-        id: guestSession.room.id,
-        name: guestSession.room.name,
-        language: guestSession.room.language,
-        isEnded: guestSession.room.isEnded || roomEnded,
-        canEdit: guestSession.guest.canEdit,
-        isOwner: false,
-        ownerId: '',
-      } as Room
-    : room
-
-  // Permission checks
-  const isOwner = !isGuestMode && (effectiveRoom?.isOwner ?? effectiveRoom?.ownerId === user?.id)
-  const hasWriteAllPermission = !isGuestMode && (user?.canWriteAllRooms ?? false)
-  const canEdit = isGuestMode
-    ? guestSession?.guest.canEdit ?? false
-    : hasWriteAllPermission || isOwner || effectiveRoom?.canEdit === true
-
-  const hasGlobalReadPermission = !isGuestMode && !!user && (
-    user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
-  )
-  const isPrivileged = !isGuestMode && !!user && (
-    user.role === 'admin' || user.role === 'superuser' || hasGlobalReadPermission
-  )
-  const canViewPlayback = !isGuestMode && (isOwner || isPrivileged)
-
-  // Token for WebSocket connection
-  const wsToken = isGuestMode ? (guestSession?.authToken ?? '') : (authToken ?? '')
-  const wsDocumentId = roomId ?? ''
-
-  const editorRef = useRef<HTMLDivElement>(null)
-  const monacoRef = useRef<MonacoModule | null>(null)
-  const monacoEditorRef = useRef<MonacoEditorInstance | null>(null)
-  const monacoModelRef = useRef<MonacoModel | null>(null)
-  const bindingRef = useRef<MonacoBinding | null>(null)
-  const codeRunnerRef = useRef<CodeRunnerPanelRef>(null)
   const [isCodeRunning, setIsCodeRunning] = useState(false)
+  const [activeDoc, setActiveDoc] = useState<'code' | 'canvas'>('code')
+  
+  // State for End Room Dialog
+  const [isEndRoomDialogOpen, setIsEndRoomDialogOpen] = useState(false)
 
-  // Handle stateless messages (room ended, etc.)
+  // 1. Room & Auth Hook
+  const {
+    roomId,
+    effectiveRoom,
+    currentUser,
+    isLoading,
+    error: roomError,
+    isGuestMode,
+    canEdit,
+    isOwner,
+    roomEnded,
+    roomEndedAt,
+    shareInfo,
+    showGuestJoinForm,
+    guestDisplayName,
+    setGuestDisplayName,
+    guestEmail,
+    setGuestEmail,
+    isJoiningAsGuest,
+    guestJoinError,
+    handleGuestJoin,
+    handleGuestLeave,
+    handleEndRoom,
+    handleLanguageChange: updateRoomLanguage,
+    isEnding,
+    setRoom,
+    setRoomEnded,
+    setRoomEndedAt,
+  } = useEditorRoom()
+
+  const [localError, setLocalError] = useState('')
+  const displayError = roomError || localError
+
   const handleStatelessMessage = useCallback((message: StatelessMessage) => {
     if (message.type === 'room-status' && message.status === 'ended') {
       setRoomEnded(true)
       setRoomEndedAt(message.endedAt ?? null)
     }
-  }, [])
+  }, [setRoomEnded, setRoomEndedAt])
 
+  const wsToken = isGuestMode ? (guestSession?.authToken ?? '') : (authToken ?? '')
+  const wsDocumentId = roomId ?? ''
   const shouldConnectWs = !!wsToken && !!wsDocumentId && !roomEnded && !(effectiveRoom?.isEnded)
+
   const { provider, ydoc, ytext, ymeta, isConnected, isSynced } = useYjsProvider(
     shouldConnectWs ? wsDocumentId : '',
     shouldConnectWs ? wsToken : '',
     handleStatelessMessage
   )
 
-  // Initialize guest session if we have a share token
-  useEffect(() => {
-    if (!shareToken || !roomId) return
+  const { store: tldrawStore, ready: tldrawReady } = useTldrawStore({
+    ydoc,
+    provider,
+    isSynced,
+    user: currentUser,
+  })
 
-    const init = async () => {
-      setIsLoading(true)
-      try {
-        // Try to restore existing session
-        const hasSession = await initializeGuestSession(shareToken)
-        if (hasSession) {
-          setIsLoading(false)
-          return
-        }
+  // 3. Monaco Hook
+  const {
+    editorRef,
+    monacoEditorRef,
+    monacoModelRef,
+    monacoRef,
+    updateLanguage
+  } = useMonacoEditor({
+    effectiveRoom,
+    ytext,
+    provider,
+    canEdit,
+    currentUser,
+    roomEnded,
+    showGuestJoinForm,
+    setError: setLocalError
+  })
 
-        // No valid session, fetch share info and show join form
-        const info = await fetchShareInfo(shareToken)
-        setShareInfo(info)
+  // 4. Awareness Hook
+  const {
+    remoteUsers,
+    followingUserId,
+    setFollowingUserId,
+    followingClientId,
+    setFollowingClientId
+  } = useEditorAwareness({
+    provider,
+    ydoc,
+    monacoRef,
+    monacoEditorRef,
+    monacoModelRef
+  })
 
-        if (info.room.isEnded) {
-          setRoomEnded(true)
-          setRoomEndedAt(info.room.endedAt ?? null)
-        } else {
-          setShowGuestJoinForm(true)
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load share information')
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  // Code Runner Ref
+  const codeRunnerRef = useRef<CodeRunnerPanelRef>(null)
 
-    init()
-  }, [shareToken, roomId, initializeGuestSession])
-
-  // Load room data for authenticated users
-  useEffect(() => {
-    if (isGuestMode || !roomId || !user) return
-
-    const loadRoom = async () => {
-      try {
-        setIsLoading(true)
-        const { room } = await api.getRoom(roomId)
-        setRoom(room)
-        if (room.isEnded) {
-          setRoomEnded(true)
-          setRoomEndedAt(room.endedAt ?? null)
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load room')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadRoom()
-  }, [roomId, user, isGuestMode])
-
-  // Redirect to playback when entering an ended room, if user has access.
-  useEffect(() => {
-    if (!roomId) return
-    if ((effectiveRoom?.isEnded || roomEnded) && canViewPlayback) {
-      navigate(`/playback/${roomId}`, { replace: true })
-    }
-  }, [roomId, effectiveRoom?.isEnded, roomEnded, canViewPlayback, navigate])
-
-  // Handle guest join
-  const handleGuestJoin = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!shareToken || !guestDisplayName.trim()) {
-      setGuestJoinError(t('share.join.validationName'))
-      return
-    }
-
-    try {
-      setIsJoiningAsGuest(true)
-      setGuestJoinError('')
-
-      const result = await joinShare(shareToken, {
-        username: guestDisplayName.trim(),
-        email: guestEmail.trim() || undefined,
-      })
-
-      setGuestSession({
-        shareToken,
-        authToken: result.token,
-        guest: result.guest,
-        room: result.room,
-      })
-
-      setShowGuestJoinForm(false)
-    } catch (err) {
-      setGuestJoinError(err instanceof Error ? err.message : 'Failed to join room')
-    } finally {
-      setIsJoiningAsGuest(false)
-    }
-  }
-
-  // Handle guest leave
-  const handleGuestLeave = () => {
-    clearGuestSession()
-    navigate('/')
-  }
-
-  // Initialize Monaco editor and bind Yjs
-  useEffect(() => {
-    if (!effectiveRoom || !editorRef.current || !provider || monacoEditorRef.current) return
-    if (effectiveRoom.isEnded || roomEnded) return
-    if (showGuestJoinForm) return
-
-    let isCancelled = false
-
-    loadMonaco()
-      .then((monaco) => {
-        if (isCancelled || !editorRef.current) return
-        monacoRef.current = monaco
-
-        const languageId = monacoLanguageIds[effectiveRoom.language] ?? 'javascript'
-        const model = monaco.editor.createModel(ytext.toString(), languageId)
-        model.setEOL(monaco.editor.EndOfLineSequence.LF)
-        monacoModelRef.current = model
-
-        const editor = monaco.editor.create(editorRef.current, {
-          model,
-          automaticLayout: true,
-          minimap: { enabled: false },
-          wordWrap: 'on',
-          readOnly: !canEdit,
-          scrollBeyondLastLine: false,
-          fontFamily: font,
-          fontSize,
-          theme: theme === 'dark' ? 'vs-dark' : 'vs',
-          padding: { top: 16, bottom: 16 },
-        })
-        monacoEditorRef.current = editor
-
-        // Create binding immediately after editor
-        bindingRef.current = new MonacoBinding(
-          editor,
-          model,
-          ytext,
-          provider.awareness!,
-          monaco
-        )
-
-        // Set local user in awareness
-        const userColor = currentUser?.color || generateUserColor(currentUser?.id).color
-        const userColorLight = generateUserColor(currentUser?.id).colorLight
-        provider.awareness!.setLocalStateField('user', {
-          id: currentUser?.id,
-          username: currentUser?.username ?? 'Anonymous',
-          color: userColor,
-          colorLight: userColorLight,
-        })
-
-        editor.focus()
-      })
-      .catch((err) => {
-        console.error('Failed to load Monaco:', err)
-        setError('Failed to initialize editor')
-      })
-
-    return () => {
-      isCancelled = true
-    }
-  }, [effectiveRoom, provider, ytext, currentUser, theme, font, fontSize, showGuestJoinForm, roomEnded, canEdit])
-
-  // Update remote users from awareness
-  useEffect(() => {
-    if (!provider?.awareness) return
-
-    const updateRemoteUsers = () => {
-      const states = provider.awareness!.getStates()
-      const localClientId = provider.awareness!.clientID
-      const users: RemoteUser[] = []
-
-      states.forEach((state, clientId) => {
-        if (clientId === localClientId) return
-        if (!state.user) return
-
-        const userData = state.user as Omit<RemoteUser, 'clientId'>
-        users.push({
-          clientId,
-          ...userData,
-        })
-      })
-
-      setRemoteUsers(users)
-    }
-
-    provider.awareness.on('change', updateRemoteUsers)
-    updateRemoteUsers()
-
-    return () => {
-      provider.awareness?.off('change', updateRemoteUsers)
-    }
-  }, [provider])
-
-  // Update Monaco theme when theme changes
-  useEffect(() => {
-    if (!monacoRef.current) return
-    monacoRef.current.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs')
-  }, [theme])
-
-  // Update Monaco font settings
-  useEffect(() => {
-    if (!monacoEditorRef.current) return
-    monacoEditorRef.current.updateOptions({ fontFamily: font, fontSize })
-  }, [font, fontSize])
-
-  // Update readOnly when canEdit changes
-  useEffect(() => {
-    if (!monacoEditorRef.current) return
-    monacoEditorRef.current.updateOptions({ readOnly: !canEdit })
-  }, [canEdit])
-
-  // Follow user feature - scroll to their cursor position
-  useEffect(() => {
-    if ((followingUserId == null && followingClientId == null) || !provider?.awareness || !ydoc) return
-    if (!monacoRef.current || !monacoEditorRef.current || !monacoModelRef.current) return
-
-    const scrollToUser = () => {
-      if (!provider.awareness) return
-      let targetClientId: number | null = null
-      const localClientId = provider.awareness.clientID
-
-      if (followingUserId != null) {
-        provider.awareness.getStates().forEach((state, clientId) => {
-          if (targetClientId != null) return
-          if (clientId === localClientId) return
-          const user = state.user as { id?: string } | undefined
-          if (user?.id === followingUserId) {
-            targetClientId = clientId
-          }
-        })
-      } else if (followingClientId != null) {
-        targetClientId = followingClientId
-      }
-
-      if (targetClientId == null) return
-
-      const state = provider.awareness.getStates().get(targetClientId)
-      if (!state?.cursor?.head) return
-
-      try {
-        // Convert RelativePosition to absolute position
-        const headRelative = state.cursor.head as Y.RelativePosition
-        const headAbs = Y.createAbsolutePositionFromRelativePosition(headRelative, ydoc)
-        if (!headAbs) return
-
-        const position = monacoModelRef.current!.getPositionAt(headAbs.index)
-        monacoEditorRef.current!.revealPositionInCenter(
-          position,
-          monacoRef.current!.editor.ScrollType.Smooth
-        )
-      } catch (err) {
-        console.error('Error following user:', err)
-      }
-    }
-
-    scrollToUser()
-    provider.awareness.on('change', scrollToUser)
-
-    return () => {
-      provider.awareness?.off('change', scrollToUser)
-    }
-  }, [followingUserId, followingClientId, provider, ydoc])
-
-  // Stop following if user disconnects
-  useEffect(() => {
-    // Only auto-clear clientId-based follow when we are connected.
-    // Stable userId follow is kept so it can resume after transient disconnects.
-    if (!isConnected) return
-    if (followingClientId != null && !remoteUsers.some((u) => u.clientId === followingClientId)) {
-      setFollowingClientId(null)
-    }
-  }, [remoteUsers, followingClientId, isConnected])
-
-  // Listen for language changes from ymeta (synced via Yjs)
+  // Listen for language changes from ymeta
   useEffect(() => {
     if (!ymeta) return
 
@@ -446,22 +181,9 @@ export function EditorPage() {
       const newLanguage = ymeta.get('language') as Language | undefined
       if (newLanguage && newLanguage !== effectiveRoom?.language) {
         // Update local room state
-        if (room) {
-          setRoom((prev) => prev ? { ...prev, language: newLanguage } : prev)
-        }
-        if (guestSession) {
-          setGuestSession({
-            ...guestSession,
-            room: { ...guestSession.room, language: newLanguage }
-          })
-        }
-        // Update Monaco editor language
-        if (monacoRef.current && monacoModelRef.current) {
-          monacoRef.current.editor.setModelLanguage(
-            monacoModelRef.current,
-            monacoLanguageIds[newLanguage] ?? 'javascript'
-          )
-        }
+        setRoom((prev) => prev ? { ...prev, language: newLanguage } : prev)
+        // Update Editor Language
+        updateLanguage(newLanguage)
       }
     }
 
@@ -469,52 +191,15 @@ export function EditorPage() {
     return () => {
       ymeta.unobserve(handleMetaChange)
     }
-  }, [ymeta, effectiveRoom?.language, room, guestSession, setGuestSession])
+  }, [ymeta, effectiveRoom?.language, setRoom, updateLanguage])
 
-  // Update language (owner only)
-  const handleLanguageChange = useCallback(
-    async (language: Language) => {
-      if (!roomId || !isOwner) return
+  // Wrapper for language change to update both API and Yjs
+  const onLanguageChange = async (lang: Language) => {
+    await updateRoomLanguage(lang, ymeta)
+    updateLanguage(lang)
+  }
 
-      try {
-        const { room: updatedRoom } = await api.updateRoom(roomId, { language })
-        setRoom(updatedRoom)
-
-        // Sync language via Yjs shared state
-        if (ymeta) {
-          ymeta.set('language', language)
-        }
-
-        if (monacoRef.current && monacoModelRef.current) {
-          monacoRef.current.editor.setModelLanguage(
-            monacoModelRef.current,
-            monacoLanguageIds[language] ?? 'javascript'
-          )
-        }
-      } catch (err) {
-        console.error('Failed to update language:', err)
-      }
-    },
-    [roomId, isOwner, ymeta]
-  )
-
-  // End room (owner only)
-  const handleEndRoom = useCallback(async () => {
-    if (!roomId || !isOwner) return
-    if (!confirm('Are you sure you want to end this room?')) return
-
-    setIsEnding(true)
-    try {
-      await api.endRoom(roomId)
-      navigate('/rooms')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to end room')
-    } finally {
-      setIsEnding(false)
-    }
-  }, [roomId, isOwner, navigate])
-
-  // Handle back navigation
+  // Back Navigation
   const handleBack = () => {
     if (isGuestMode) {
       navigate('/')
@@ -523,12 +208,11 @@ export function EditorPage() {
     }
   }
 
-  // Get code from editor for execution
+  // Code Runner
   const getCode = useCallback(() => {
     return monacoEditorRef.current?.getValue() ?? ''
-  }, [])
+  }, [monacoEditorRef])
 
-  // Run code via the code runner panel
   const handleRunCode = useCallback(async () => {
     if (!codeRunnerRef.current || !canEdit) return
     setIsCodeRunning(true)
@@ -539,16 +223,42 @@ export function EditorPage() {
     }
   }, [canEdit])
 
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      bindingRef.current?.destroy()
-      monacoEditorRef.current?.dispose()
-      monacoModelRef.current?.dispose()
-    }
-  }, [])
+  const handleBlink = useCallback(() => {
+    if (!provider?.awareness || !monacoEditorRef.current || !monacoModelRef.current) return
 
-  // Loading state
+    const selection = monacoEditorRef.current.getSelection()
+    if (!selection) return
+
+    const model = monacoModelRef.current
+    const anchorOffset = model.getOffsetAt({
+      lineNumber: selection.startLineNumber,
+      column: selection.startColumn,
+    })
+    const headOffset = model.getOffsetAt({
+      lineNumber: selection.endLineNumber,
+      column: selection.endColumn,
+    })
+
+    provider.awareness.setLocalStateField('blink', {
+      anchor: Y.createRelativePositionFromTypeIndex(ytext, anchorOffset),
+      head: Y.createRelativePositionFromTypeIndex(ytext, headOffset),
+      ts: Date.now(),
+    })
+  }, [provider, monacoEditorRef, monacoModelRef, ytext])
+
+  const canBlink =
+    activeDoc === 'code' &&
+    !!provider?.awareness &&
+    !!monacoEditorRef.current &&
+    !!monacoModelRef.current
+
+  useEffect(() => {
+    if (activeDoc === 'code') {
+      monacoEditorRef.current?.layout()
+    }
+  }, [activeDoc, monacoEditorRef])
+
+  // Loading View
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -557,17 +267,17 @@ export function EditorPage() {
     )
   }
 
-  // Error state
-  if (error) {
+  // Error View
+  if (displayError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <p className="text-destructive">{error}</p>
+        <p className="text-destructive">{displayError}</p>
         <Button onClick={handleBack}>{t('common.back')}</Button>
       </div>
     )
   }
 
-  // Guest join form
+  // Guest Join Form
   if (showGuestJoinForm && shareInfo) {
     return (
       <div className="flex items-center justify-center min-h-screen p-4">
@@ -623,7 +333,7 @@ export function EditorPage() {
     )
   }
 
-  // Room ended state
+  // Room Ended View
   if (effectiveRoom?.isEnded || roomEnded) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-4 text-center">
@@ -640,28 +350,22 @@ export function EditorPage() {
     )
   }
 
-  // No room loaded
-  if (!effectiveRoom) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spinner size="lg" />
-      </div>
-    )
-  }
+  if (!effectiveRoom) return null
 
   return (
     <TooltipProvider>
       <div className="flex flex-col h-screen">
         {/* Toolbar */}
-        <header className="flex items-center justify-between h-12 px-2 sm:px-4 border-b bg-background shrink-0 gap-2 overflow-hidden">
+        <header className="flex items-center justify-between h-14 px-2 sm:px-4 border-b bg-background shrink-0 gap-2 overflow-hidden">
+          {/* Left: Back + Title + Language */}
           <div className="flex items-center gap-2 min-w-0 shrink">
             <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <span className="font-medium truncate max-w-[100px] sm:max-w-[200px] mr-3">{effectiveRoom.name}</span>
+            <span className="font-medium truncate max-w-[100px] sm:max-w-[200px] mr-2">{effectiveRoom.name}</span>
 
             {isOwner ? (
-              <Select value={effectiveRoom.language} onValueChange={(v) => handleLanguageChange(v as Language)}>
+              <Select value={effectiveRoom.language} onValueChange={(v) => onLanguageChange(v as Language)}>
                 <SelectTrigger className="w-24 sm:w-32 h-8 shrink-0">
                   <SelectValue />
                 </SelectTrigger>
@@ -677,17 +381,39 @@ export function EditorPage() {
               <Badge variant="secondary" className="shrink-0 rounded-sm text-xs px-1.5 py-0">{effectiveRoom.language}</Badge>
             )}
 
-            {/* Guest mode indicator - hidden on small screens */}
-            {isGuestMode && (
+            <div className="hidden sm:flex items-center rounded-md border bg-muted/40 p-0.5 ml-1">
+              <Button
+                variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setActiveDoc('code')}
+              >
+                <FileCode className="h-3.5 w-3.5 sm:mr-1" />
+                <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
+              </Button>
+              <Button
+                variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setActiveDoc('canvas')}
+              >
+                <Brush className="h-3.5 w-3.5 sm:mr-1" />
+                <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
+              </Button>
+            </div>
+
+             {isGuestMode && (
               <Badge variant="outline" className="hidden sm:inline-flex shrink-0 rounded-sm text-xs px-1.5 py-0">
                 {canEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}
               </Badge>
             )}
           </div>
 
+          {/* Right: Actions */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {/* Font controls */}
-            <div className="hidden sm:flex items-center gap-1 border rounded-md">
+            
+            {/* Desktop: Font Controls */}
+            <div className="hidden md:flex items-center gap-1 border rounded-md mr-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={decreaseFontSize}>
@@ -707,9 +433,10 @@ export function EditorPage() {
               </Tooltip>
             </div>
 
+            {/* Desktop: Font Family */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hidden sm:inline-flex h-8 w-8">
+                <Button variant="ghost" size="icon" className="hidden md:inline-flex h-8 w-8 mr-2">
                   <Type className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -717,13 +444,12 @@ export function EditorPage() {
                 <DropdownMenuItem onClick={() => setFont('JetBrains Mono')}>
                   JetBrains Mono {font === 'JetBrains Mono' && <Check className="h-4 w-4 ml-2" />}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setFont('Julia Mono')}>
-                  Julia Mono {font === 'Julia Mono' && <Check className="h-4 w-4 ml-2" />}
+                                  <DropdownMenuItem onClick={() => setFont('JuliaMono')}>                  Julia Mono {font === 'Julia Mono' && <Check className="h-4 w-4 ml-2" />}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Remote users */}
+            {/* Users Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-1 h-8">
@@ -731,124 +457,253 @@ export function EditorPage() {
                   <span>{remoteUsers.length + 1}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <div className="px-2 py-1.5 text-sm font-medium">{t('editor.toolbar.users')}</div>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  {t('editor.toolbar.users')}
+                </DropdownMenuLabel>
+                
+                {/* Current User */}
                 <div className="px-2 py-1.5 flex items-center gap-2">
                   <div
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: currentUser?.color || generateUserColor(currentUser?.id).color }}
                   />
-                  <span className="text-sm truncate">{currentUser?.username} ({t('share.editor.you')})</span>
+                  <span className="text-sm truncate flex-1">{currentUser?.username} ({t('share.editor.you')})</span>
                 </div>
+                
+                <DropdownMenuSeparator />
+                
+                {/* Remote Users */}
+                {remoteUsers.length === 0 && (
+                   <div className="px-2 py-2 text-xs text-muted-foreground text-center">
+                     No other users connected
+                   </div>
+                )}
+                
                 {remoteUsers.map((u) => {
                   const isFollowing =
                     (followingUserId != null && u.id != null && followingUserId === u.id) ||
                     (followingUserId == null && followingClientId != null && followingClientId === u.clientId)
+                  const toggleFollow = () => {
+                    if (isFollowing) {
+                      setFollowingUserId(null)
+                      setFollowingClientId(null)
+                    } else {
+                      if (u.id) setFollowingUserId(u.id)
+                      else setFollowingClientId(u.clientId)
+                    }
+                  }
                   return (
-                    <div
+                    <DropdownMenuItem
                       key={u.clientId}
-                      className="px-2 py-1.5 flex items-center justify-between gap-2 hover:bg-accent rounded-sm cursor-pointer"
-                      onClick={() => {
-                        if (isFollowing) {
-                          setFollowingUserId(null)
-                          setFollowingClientId(null)
-                          return
-                        }
-
-                        if (u.id) {
-                          setFollowingUserId(u.id)
-                          setFollowingClientId(null)
-                        } else {
-                          setFollowingClientId(u.clientId)
-                          setFollowingUserId(null)
-                        }
-                      }}
+                      className="gap-2 cursor-pointer"
+                      onClick={toggleFollow}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
-                        <span className="text-sm truncate">{u.username}</span>
-                      </div>
-                      <span
-                        className={cn(
-                          'text-xs shrink-0',
-                          isFollowing ? 'text-primary font-medium' : 'text-muted-foreground'
-                        )}
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
+                      <span className="truncate flex-1">{u.username || 'Anonymous'}</span>
+                      <Button
+                        variant={isFollowing ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          toggleFollow()
+                        }}
                       >
                         {isFollowing ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
-                      </span>
-                    </div>
+                      </Button>
+                    </DropdownMenuItem>
                   )
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Run code button (editors only) */}
+            {/* Blink Selection */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleBlink}
+                  disabled={!canBlink}
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('editor.toolbar.blink')}</TooltipContent>
+            </Tooltip>
+
+            {/* Run Code (Visible on all sizes if editable) */}
             {canEdit && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="h-8 px-2 sm:px-3"
-                    onClick={handleRunCode}
-                    disabled={isCodeRunning}
-                  >
-                    {isCodeRunning ? (
-                      <Loader2 className="h-4 w-4 animate-spin sm:mr-1" />
-                    ) : (
-                      <Play className="h-4 w-4 sm:mr-1" />
-                    )}
-                    <span className="hidden sm:inline">{t('codeRunner.run')}</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('codeRunner.run')}</TooltipContent>
-              </Tooltip>
-            )}
-
-            {/* Share button (owner only) */}
-            {isOwner && (
-              <Popover open={showShareManager} onOpenChange={setShowShareManager}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3">
-                    <Share2 className="h-4 w-4 sm:mr-1" />
-                    <span className="hidden sm:inline">{t('editor.toolbar.share')}</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end">
-                  <ShareLinkManager roomId={roomId!} onClose={() => setShowShareManager(false)} />
-                </PopoverContent>
-              </Popover>
-            )}
-
-            {/* End room button (owner only) */}
-            {isOwner && (
-              <Button variant="destructive" size="sm" className="h-8 px-2 sm:px-3" onClick={handleEndRoom} disabled={isEnding}>
-                <StopCircle className="h-4 w-4 sm:mr-1" />
-                <span className="hidden sm:inline">{t('editor.toolbar.endRoom')}</span>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-8 px-2 sm:px-3"
+                onClick={handleRunCode}
+                disabled={isCodeRunning}
+              >
+                {isCodeRunning ? (
+                  <Loader2 className="h-4 w-4 animate-spin sm:mr-1" />
+                ) : (
+                  <Play className="h-4 w-4 sm:mr-1" />
+                )}
+                <span className="hidden sm:inline">{t('codeRunner.run')}</span>
               </Button>
             )}
 
-            {/* Leave button (guest only) */}
+            {/* Desktop: Share & End Room Buttons */}
+            {isOwner && (
+              <div className="hidden md:flex items-center gap-2">
+                <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowShareManager(true)}>
+                  <Share2 className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden xl:inline">{t('editor.toolbar.share')}</span>
+                </Button>
+
+                <Button variant="destructive" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setIsEndRoomDialogOpen(true)}>
+                  <StopCircle className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden xl:inline">{t('editor.toolbar.endRoom')}</span>
+                </Button>
+              </div>
+            )}
+
+            {/* Desktop: Leave Room (Guest) */}
             {isGuestMode && (
-              <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={handleGuestLeave}>
+              <Button variant="outline" size="sm" className="hidden md:flex h-8 px-2 sm:px-3" onClick={handleGuestLeave}>
                 <LogOut className="h-4 w-4 sm:mr-1" />
-                <span className="hidden sm:inline">{t('share.editor.leaveButton')}</span>
+                <span className="hidden xl:inline">{t('share.editor.leaveButton')}</span>
               </Button>
             )}
+
+            {/* Mobile: More Menu (Dropdown) */}
+            <div className="md:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {/* Font Controls Group */}
+                  <DropdownMenuLabel>Font Size</DropdownMenuLabel>
+                  <div className="flex items-center justify-between px-2 py-1">
+                     <Button variant="outline" size="icon" className="h-6 w-6" onClick={decreaseFontSize}>
+                        <Minus className="h-3 w-3" />
+                     </Button>
+                     <span className="text-xs">{fontSize}</span>
+                     <Button variant="outline" size="icon" className="h-6 w-6" onClick={increaseFontSize}>
+                        <Plus className="h-3 w-3" />
+                     </Button>
+                  </div>
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem onClick={() => setActiveDoc('code')}>
+                    <FileCode className="h-4 w-4 mr-2" />
+                    {t('editor.toolbar.code')}
+                    {activeDoc === 'code' && <Check className="h-3 w-3 ml-auto" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveDoc('canvas')}>
+                    <Brush className="h-4 w-4 mr-2" />
+                    {t('editor.toolbar.canvas')}
+                    {activeDoc === 'canvas' && <Check className="h-3 w-3 ml-auto" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem onClick={handleBlink} disabled={!canBlink}>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    {t('editor.toolbar.blink')}
+                  </DropdownMenuItem>
+
+                  {isOwner && (
+                    <>
+                      <DropdownMenuItem onClick={() => setShowShareManager(true)}>
+                        <Share2 className="h-4 w-4 mr-2" />
+                        {t('editor.toolbar.share')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => setIsEndRoomDialogOpen(true)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <StopCircle className="h-4 w-4 mr-2" />
+                        {t('editor.toolbar.endRoom')}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  {isGuestMode && (
+                    <DropdownMenuItem onClick={handleGuestLeave}>
+                      <LogOut className="h-4 w-4 mr-2" />
+                      {t('share.editor.leaveButton')}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </header>
 
-        {/* Main content area */}
+        {/* End Room Confirmation Dialog */}
+        <Dialog open={isEndRoomDialogOpen} onOpenChange={setIsEndRoomDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('editor.toolbar.endRoom')}</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to end this session? All participants will be disconnected.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEndRoomDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => {
+                  handleEndRoom()
+                  setIsEndRoomDialogOpen(false)
+                }}
+                disabled={isEnding}
+              >
+                {isEnding ? <Loader2 className="h-4 w-4 animate-spin" /> : 'End Session'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Share Manager Dialog */}
+        <Dialog open={showShareManager} onOpenChange={setShowShareManager}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('editor.toolbar.share')}</DialogTitle>
+            </DialogHeader>
+            <div className="py-2">
+              <ShareLinkManager roomId={roomId!} />
+            </div>
+          </DialogContent>
+        </Dialog>
+
+
+        {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Editor + Bottom Panel container */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Editor */}
             <div className="flex-1 overflow-hidden">
-              <div ref={editorRef} className="h-full w-full" />
+              <div className={cn('h-full w-full', activeDoc === 'code' ? '' : 'hidden')}>
+                <div ref={editorRef} className="h-full w-full" />
+              </div>
+              {activeDoc === 'canvas' && (
+                <CanvasView
+                  store={tldrawStore}
+                  ready={tldrawReady}
+                  canEdit={canEdit}
+                  theme={theme}
+                  provider={provider}
+                  followUserId={followingUserId}
+                  followClientId={followingClientId}
+                  followEnabled={activeDoc === 'canvas'}
+                />
+              )}
             </div>
 
-            {/* Code Runner Panel - Bottom */}
-            {codeRunnerPosition === 'bottom' && (
+            {activeDoc === 'code' && codeRunnerPosition === 'bottom' && (
               <CodeRunnerPanel
                 ref={codeRunnerRef}
                 language={effectiveRoom.language}
@@ -861,9 +716,8 @@ export function EditorPage() {
             )}
           </div>
 
-          {/* Code Runner Panel - Right */}
-          {codeRunnerPosition === 'right' && (
-            <CodeRunnerPanel
+          {activeDoc === 'code' && codeRunnerPosition === 'right' && (
+             <CodeRunnerPanel
               ref={codeRunnerRef}
               language={effectiveRoom.language}
               getCode={getCode}
@@ -875,19 +729,19 @@ export function EditorPage() {
           )}
         </div>
 
-        {/* Status bar */}
+        {/* Footer */}
         <footer className="flex items-center justify-between h-8 px-4 border-t bg-muted/50 text-xs text-muted-foreground shrink-0">
           <div className="flex items-center gap-4">
             <div className={cn('flex items-center gap-1', isConnected ? 'text-success' : 'text-destructive')}>
               {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-              <span>{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
+              <span className="hidden sm:inline">{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
             </div>
             <div className="flex items-center gap-1">
               {isSynced ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
-              <span>{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
+              <span className="hidden sm:inline">{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
             </div>
             {isGuestMode && guestSession && (
-              <span className="text-muted-foreground">
+              <span className="text-muted-foreground truncate max-w-[150px]">
                 {t('share.editor.connectedAs', { name: guestSession.guest.displayName })}
               </span>
             )}

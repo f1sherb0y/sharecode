@@ -1,12 +1,16 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-type FontFamily = 'JetBrains Mono' | 'Julia Mono'
+export const SELECTABLE_FONTS = ['JetBrains Mono', 'JuliaMono'] as const
+type SelectableFont = (typeof SELECTABLE_FONTS)[number]
+
+const FONT_FALLBACK_STACK =
+  "'Fira Code', 'DejaVu Sans Mono', 'Liberation Mono', 'ui-monospace', 'monospace'"
 
 interface FontState {
-  font: FontFamily
+  font: string
   fontSize: number
-  setFont: (font: FontFamily) => void
+  setFont: (font: SelectableFont) => void
   setFontSize: (size: number) => void
   increaseFontSize: () => void
   decreaseFontSize: () => void
@@ -19,10 +23,12 @@ const FONT_SIZE_STEP = 2
 export const useFontStore = create<FontState>()(
   persist(
     (set, get) => ({
-      font: 'JetBrains Mono',
+      font: `'JetBrains Mono', ${FONT_FALLBACK_STACK}`,
       fontSize: 14,
 
-      setFont: (font: FontFamily) => set({ font }),
+      setFont: (font: SelectableFont) => {
+        set({ font: `'${font}', ${FONT_FALLBACK_STACK}` })
+      },
 
       setFontSize: (size: number) => {
         const clampedSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size))

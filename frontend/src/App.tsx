@@ -18,6 +18,7 @@ import {
   applyStealthSettings,
 } from '@/lib/tauri'
 import { Spinner } from '@/components/ui'
+import { Toaster } from 'sonner'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -185,6 +186,7 @@ function AppContent() {
     <Router>
       <TooltipProvider>
         <AppRoutes />
+        <Toaster />
       </TooltipProvider>
     </Router>
   )

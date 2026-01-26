@@ -19,6 +19,7 @@ import {
   Spinner,
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -67,6 +68,10 @@ export function AdminPage() {
   const [newRole, setNewRole] = useState<Role>('user')
   const [newPermissions, setNewPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
   const [isCreating, setIsCreating] = useState(false)
+
+  // Delete states
+  const [userToDelete, setUserToDelete] = useState<{ id: string; username: string } | null>(null)
+  const [roomToDelete, setRoomToDelete] = useState<{ id: string; name: string } | null>(null)
 
   // Edit tracking
   const [editedUsers, setEditedUsers] = useState<Map<string, { role: Role } & PermissionState>>(new Map())
@@ -169,22 +174,30 @@ export function AdminPage() {
     }
   }
 
-  const handleDeleteUser = async (userId: string, username: string) => {
-    if (!confirm(t('admin.users.deleteConfirm', { username }))) return
+  const handleDeleteUser = (userId: string, username: string) => {
+    setUserToDelete({ id: userId, username })
+  }
 
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return
     try {
-      await api.deleteUser(userId)
+      await api.deleteUser(userToDelete.id)
+      setUserToDelete(null)
       loadUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user')
     }
   }
 
-  const handleDeleteRoom = async (roomId: string, roomName: string) => {
-    if (!confirm(t('admin.rooms.deleteConfirm', { name: roomName }))) return
+  const handleDeleteRoom = (roomId: string, roomName: string) => {
+    setRoomToDelete({ id: roomId, name: roomName })
+  }
 
+  const confirmDeleteRoom = async () => {
+    if (!roomToDelete) return
     try {
-      await api.deleteRoomAdmin(roomId)
+      await api.deleteRoomAdmin(roomToDelete.id)
+      setRoomToDelete(null)
       loadRooms()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete room')
@@ -240,6 +253,46 @@ export function AdminPage() {
       />
 
       <PageContainer>
+        {/* Delete User Dialog */}
+        <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('admin.users.deleteTitle', 'Delete User')}</DialogTitle>
+              <DialogDescription>
+                {t('admin.users.deleteConfirm', { username: userToDelete?.username })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setUserToDelete(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteUser}>
+                {t('common.delete')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Room Dialog */}
+        <Dialog open={!!roomToDelete} onOpenChange={(open) => !open && setRoomToDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('admin.rooms.deleteTitle', 'Delete Room')}</DialogTitle>
+              <DialogDescription>
+                {t('admin.rooms.deleteConfirm', { name: roomToDelete?.name })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRoomToDelete(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteRoom}>
+                {t('common.delete')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {error && (
           <div className="mb-4 p-4 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
         )}

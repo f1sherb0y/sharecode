@@ -30,6 +30,7 @@ import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores'
 import { cn, formatDate } from '@/lib/utils'
+import { ShareLinkManager } from '@/components/features/share-link-manager'
 import type { Room, Language, User } from '@/types'
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
@@ -50,6 +51,12 @@ export function RoomsPage() {
   const [scheduledTime, setScheduledTime] = useState('')
   const [duration, setDuration] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+
+  // Delete dialog state
+  const [roomToDelete, setRoomToDelete] = useState<{ id: string; name: string } | null>(null)
+  
+  // Share dialog state
+  const [roomToShare, setRoomToShare] = useState<{ id: string; name: string } | null>(null)
 
   // User selection for room access
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
@@ -116,11 +123,20 @@ export function RoomsPage() {
     setSelectedUsers([])
   }
 
-  const handleDeleteRoom = async (roomId: string, roomName: string) => {
-    if (!confirm(t('rooms.list.deleteConfirm', { name: roomName }))) return
+  const handleDeleteRoom = (roomId: string, roomName: string) => {
+    setRoomToDelete({ id: roomId, name: roomName })
+  }
+
+  const handleShareRoom = (roomId: string, roomName: string) => {
+    setRoomToShare({ id: roomId, name: roomName })
+  }
+
+  const confirmDeleteRoom = async () => {
+    if (!roomToDelete) return
 
     try {
-      await api.deleteRoom(roomId)
+      await api.deleteRoom(roomToDelete.id)
+      setRoomToDelete(null)
       loadRooms()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete room')
@@ -262,6 +278,39 @@ export function RoomsPage() {
         }
       />
 
+      <Dialog open={!!roomToDelete} onOpenChange={(open) => !open && setRoomToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('rooms.list.deleteTitle', 'Delete Room')}</DialogTitle>
+            <DialogDescription>
+              {t('rooms.list.deleteConfirm', { name: roomToDelete?.name })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoomToDelete(null)}>
+              {t('rooms.cancel')}
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteRoom}>
+              {t('rooms.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share Dialog */}
+      <Dialog open={!!roomToShare} onOpenChange={(open) => !open && setRoomToShare(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('share.manager.title')}</DialogTitle>
+          </DialogHeader>
+          {roomToShare && (
+             <div className="py-2">
+               <ShareLinkManager roomId={roomToShare.id} />
+             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <PageContainer>
         {error && (
           <div className="mb-4 p-4 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
@@ -283,6 +332,7 @@ export function RoomsPage() {
                 room={room}
                 currentUser={user ?? undefined}
                 onDelete={() => handleDeleteRoom(room.id, room.name)}
+                onShare={() => handleShareRoom(room.id, room.name)}
                 onPlayback={() => navigate(`/playback/${room.id}`)}
                 onClick={() => navigate(`/room/${room.id}`)}
               />
@@ -298,11 +348,12 @@ interface RoomCardProps {
   room: Room
   currentUser?: User
   onDelete: () => void
+  onShare: () => void
   onPlayback: () => void
   onClick: () => void
 }
 
-function RoomCard({ room, currentUser, onDelete, onPlayback, onClick }: RoomCardProps) {
+function RoomCard({ room, currentUser, onDelete, onShare, onPlayback, onClick }: RoomCardProps) {
   const { t } = useTranslation()
 
   const isOwner = room.ownerId === currentUser?.id
@@ -380,6 +431,7 @@ function RoomCard({ room, currentUser, onDelete, onPlayback, onClick }: RoomCard
               className="h-7 px-2"
               onClick={(e) => {
                 e.stopPropagation()
+                onShare()
               }}
             >
               <Share2 className="h-3 w-3" />
