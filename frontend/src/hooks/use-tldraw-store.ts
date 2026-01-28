@@ -58,7 +58,7 @@ function createAssetStore(ydoc: Y.Doc) {
       }
       return typeof src === 'string' ? src : ''
     },
-    remove(asset: any) {
+    async remove(asset: any) {
       ydoc.transact(() => {
         assets.delete(asset.id)
       })
@@ -102,7 +102,8 @@ export function useTldrawStore({
   }, [userAtom, user?.color, user?.username, clientId])
 
   useEffect(() => {
-    if (!ydoc || !provider || !isSynced || !store || !userAtom || !clientId) {
+    const awareness = provider?.awareness
+    if (!ydoc || !provider || !awareness || !isSynced || !store || !userAtom || !clientId) {
       setReady(false)
       return
     }
@@ -200,10 +201,10 @@ export function useTldrawStore({
     const disposePresence = react('sync presence to awareness', () => {
       const presence = presenceDerivation.get()
       if (!presence) return
-      provider.awareness.setLocalStateField('presence', presence)
-      const localState = provider.awareness.getLocalState() as { user?: Record<string, unknown> } | null
+      awareness.setLocalStateField('presence', presence)
+      const localState = awareness.getLocalState() as { user?: Record<string, unknown> } | null
       const prevUser = (localState?.user ?? {}) as Record<string, unknown>
-      provider.awareness.setLocalStateField('user', {
+      awareness.setLocalStateField('user', {
         ...prevUser,
         username: prevUser.username ?? presence.userName,
         name: prevUser.name ?? presence.userName,
@@ -213,7 +214,7 @@ export function useTldrawStore({
     unsubs.push(disposePresence)
 
     const handleAwarenessUpdate = (update: { added: number[]; updated: number[]; removed: number[] }) => {
-      const states = provider.awareness.getStates() as Map<number, { presence?: TLInstancePresence }>
+      const states = awareness.getStates() as Map<number, { presence?: TLInstancePresence }>
 
       const toRemove: TLInstancePresence['id'][] = []
       const toPut: TLInstancePresence[] = []
@@ -244,8 +245,8 @@ export function useTldrawStore({
       })
     }
 
-    provider.awareness.on('update', handleAwarenessUpdate)
-    unsubs.push(() => provider.awareness.off('update', handleAwarenessUpdate))
+    awareness.on('update', handleAwarenessUpdate)
+    unsubs.push(() => awareness.off('update', handleAwarenessUpdate))
 
     // Initialize store from yjs or seed yjs from store
     if (yRecords.size > 0) {
