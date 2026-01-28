@@ -1,0 +1,31 @@
+[package]
+name = "sharecode-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "tls-native-tls", "uuid", "chrono"] }
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+bcrypt = "0.18"
+thiserror = "2"
+bytes = "1"
+futures-util = "0.3"
+rand = "0.9"
+base64 = "0.22"
+flate2 = "1"
+reqwest = { version = "0.13", features = ["json"] }
+hex = "0.4"
+
+# TODO: confirm latest yrs version before first build.
+yrs = { version = "0.25", features = ["sync"] }
