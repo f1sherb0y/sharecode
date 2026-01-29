@@ -15,19 +15,13 @@ ENV CARGO_TARGET_DIR=/app/target
 # 1) Cache dependencies
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src && printf "fn main() {}\n" > src/main.rs
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
-    cargo build --release
+RUN cargo build --release
 
 # 2) Build actual sources
 RUN rm -rf src
 COPY src ./src
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
-    cargo build --release \
+RUN cargo build --release \
     && cp /app/target/release/sharecode-server /app/sharecode-server
 
 FROM debian:bookworm-slim AS runner

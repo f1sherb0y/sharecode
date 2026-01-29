@@ -8,9 +8,7 @@ ENV BUN_INSTALL_CACHE_DIR=/root/.bun/install/cache
 COPY package.json bun.lock ./
 
 # Install dependencies
-RUN --mount=type=cache,target=/root/.bun \
-    --mount=type=cache,target=/root/.cache/bun \
-    bun install --frozen-lockfile
+RUN bun install --frozen-lockfile
 
 # Copy source
 COPY . .
@@ -21,9 +19,7 @@ ARG VITE_WS_URL
 ARG VITE_ALLOW_REGISTRATION
 
 # Build the app
-RUN --mount=type=cache,target=/root/.bun \
-    --mount=type=cache,target=/root/.cache/bun \
-    bun run build
+RUN bun run build
 
 # Production stage
 FROM nginx:alpine
