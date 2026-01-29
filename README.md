@@ -1,6 +1,6 @@
 # ShareCode - Collaborative Code Editor
 
-A real-time collaborative code editing platform built with React, CodeMirror, Yjs, and Hocuspocus.
+A real-time collaborative code editing platform built with React, Monaco/CodeMirror, and Yjs.
 
 ## Features
 
@@ -26,10 +26,10 @@ A real-time collaborative code editing platform built with React, CodeMirror, Yj
 - React Router for navigation
 
 ### Backend
-- Bun runtime
-- Hocuspocus Server (WebSocket server for Yjs)
-- Express (REST API)
-- Prisma ORM
+- Rust (Tokio)
+- Axum (REST API)
+- Custom Yjs sync server (yrs)
+- SQLx
 - PostgreSQL database
 - JWT authentication
 - bcrypt for password hashing
@@ -37,9 +37,9 @@ A real-time collaborative code editing platform built with React, CodeMirror, Yj
 ## Prerequisites
 
 ### For Local Development
-- Bun installed
+- Bun installed (frontend)
+- Rust toolchain (backend)
 - PostgreSQL database running
-- Node.js 18+ (for some dependencies)
 
 ### For Docker Deployment
 - Docker and Docker Compose installed
@@ -122,7 +122,7 @@ docker compose exec postgres psql -U sharecode_app -d sharecode
 
 ### 1. Database Setup
 
-Make sure PostgreSQL is running. Update the connection string in `server/.env`:
+Make sure PostgreSQL is running. Update the connection string in `server-rs/.env`:
 
 ```env
 DATABASE_URL="postgresql://postgres:password@localhost:5432/sharecode?schema=public"
@@ -131,19 +131,13 @@ DATABASE_URL="postgresql://postgres:password@localhost:5432/sharecode?schema=pub
 ### 2. Server Setup
 
 ```bash
-cd server
+cd server-rs
 
-# Install dependencies
-bun install
-
-# Generate Prisma client
-bun run db:generate
-
-# Run database migrations
-bun run db:migrate
+# Build (optional)
+cargo build
 
 # Start the server
-bun run dev
+cargo run
 ```
 
 The server will start on port 3001:
@@ -168,7 +162,7 @@ The frontend will be available at http://localhost:5173
 
 ### Server (.env)
 
-For local development, create `server/.env` based on `server/.env.example`:
+For local development, create `server-rs/.env` with the following values:
 
 ```env
 # Database
@@ -183,8 +177,20 @@ PORT=3001
 # Frontend URL (for CORS)
 FRONTEND_URL="http://localhost:5173"
 
+# App URL (optional, for absolute links)
+APP_URL="http://localhost:5173"
+
+# WebSocket router mode for desktop apps (HashRouter)
+FRONTEND_HASH_ROUTER=false
+
 # Logging - Options: debug, info, warn, error (default: info)
 LOG_LEVEL="info"
+
+# Allow registration (default true)
+ALLOW_REGISTRATION=true
+
+# Code execution (Piston)
+PISTON_URL="http://localhost:2000"
 
 # Superuser credentials - CHANGE THESE IN PRODUCTION
 ADMIN_USERNAME="admin"
@@ -238,8 +244,13 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `POST /api/admin/users` - Create a new user with role + global permissions (admin limited to normal users, superuser for all)
 - `PATCH /api/admin/users/:id` - Update role or global permissions
 - `DELETE /api/admin/users/:id` - Soft delete a user (admins can only remove normal users)
+
+### Superuser Only
 - `GET /api/admin/rooms` - List all rooms
-- `DELETE /api/admin/rooms/:id` - Force-delete a room (requires delete-all permission or superuser)
+- `DELETE /api/admin/rooms/:id` - Force-delete a room
+- `GET /api/admin/storage/db-size` - Database size summary
+- `GET /api/admin/storage/playback` - Playback storage per room
+- `POST /api/admin/rooms/:id/playback/compress` - Compress playback to 1s resolution
 
 ## Supported Languages
 
@@ -266,16 +277,13 @@ sharecode/
 │   │   ├── App.tsx
 │   │   └── main.tsx
 │   └── package.json
-├── server/                    # Backend server
+├── server-rs/                 # Backend server (Rust/Axum)
 │   ├── src/
-│   │   ├── api/              # REST API endpoints
-│   │   ├── hocuspocus/       # WebSocket server
-│   │   ├── middleware/       # Express middleware
-│   │   ├── utils/            # Utilities
-│   │   └── index.ts
-│   ├── prisma/
-│   │   └── schema.prisma     # Database schema
-│   └── package.json
+│   │   ├── routes/           # REST API routes
+│   │   ├── ws/               # WebSocket protocol + sync
+│   │   ├── core/             # Auth/config/state
+│   │   └── main.rs
+│   └── Cargo.toml
 └── README.md
 ```
 
@@ -296,7 +304,7 @@ sharecode/
 1. User registers/logs in via REST API
 2. Server returns JWT token
 3. Token is stored in localStorage
-4. Token is passed to Hocuspocus for WebSocket authentication
+4. Token is passed to the WebSocket server for authentication
 5. Token is included in REST API requests
 
 ### Room Access Control
@@ -312,30 +320,7 @@ sharecode/
   - **Admin** — manages regular users and can write all rooms
   - **User** — controls personal rooms and any room the owner explicitly shares
 - Users must be authenticated to access rooms and their permission flags are validated on every REST/WebSocket request
-- Hocuspocus verifies access on every WebSocket connection and auto-adds participants with read-only or read/write access based on their permissions
-
-## Development
-
-### Run Database Migrations
-
-```bash
-cd server
-bun run db:migrate
-```
-
-### View Database in Prisma Studio
-
-```bash
-cd server
-bun run db:studio
-```
-
-### Generate Prisma Client
-
-```bash
-cd server
-bun run db:generate
-```
+- The WebSocket server verifies access on every connection and auto-adds participants with read-only or read/write access based on their permissions
 
 ## License
 

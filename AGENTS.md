@@ -19,11 +19,11 @@
 - **Desktop**: Tauri 2.0 (Rust backend)
 
 ### Backend
-- **Runtime**: Bun
-- **Framework**: Express
-- **WebSocket**: Hocuspocus (Y.js WebSocket provider)
+- **Runtime**: Rust (Tokio)
+- **Framework**: Axum
+- **WebSocket**: Custom Yjs sync (yrs)
 - **Database**: PostgreSQL
-- **ORM**: Prisma
+- **ORM**: SQLx (query builder)
 - **Authentication**: JWT + bcrypt
 - **Deployment**: Docker + Docker Compose
 
@@ -44,7 +44,7 @@
 - **User profiles**: Color-coded users for easy identification
 
 ### 3. Room Management
-- **Public rooms**: All authenticated users can see and join any room
+- **Room visibility**: Only owners and explicit participants can see/join rooms (admins/superusers can see all)
 - **Room ownership**: Creators maintain admin rights (delete, end session)
 - **Language support**: 8 programming languages with syntax highlighting
   - JavaScript, TypeScript, Python, Java, C++, Rust, Go, PHP
@@ -94,12 +94,12 @@
 ### Unified Server Architecture
 ```
 Single HTTP Server (Port 3001)
-├── REST API (Express routes)
+├── REST API (Axum routes)
 │   ├── /api/auth/* - Authentication
 │   ├── /api/rooms/* - Room CRUD
 │   ├── /api/admin/* - Admin operations
 │   └── /api/rooms/:id/playback/* - Playback data
-└── WebSocket Server (Hocuspocus at /ws)
+└── WebSocket Server (Yjs sync at /api/ws)
     ├── Document sync
     ├── Awareness protocol
     └── Update capture
@@ -181,14 +181,14 @@ Document (Y.js persistence)
 
 ### 1. Study Phase
 - Analyzed y-codemirror.next integration patterns
-- Read Hocuspocus documentation and examples
+- Read Yjs/yrs sync protocol documentation and examples
 - Created comprehensive notes in `notes/` directory
 
 ### 2. Core Implementation
 - Set up project structure (frontend + server folders)
 - Implemented authentication and room management
 - Integrated Monaco Editor with Yjs (custom awareness + selection bridge)
-- Established WebSocket connection via Hocuspocus
+- Established WebSocket sync via custom yrs protocol
 
 ### 3. Feature Additions
 - Role hierarchy (superuser/admin/user) with fine-grained permissions
@@ -354,7 +354,7 @@ monacoModelRef.current?.setValue(ytext.toString())
 - Client-side playback reconstruction
 - Gzip compression for data transfer
 - Database indexes on critical fields
-- Connection pooling via Prisma
+- Connection pooling via SQLx
 - Smart component re-rendering
 
 ### Code Quality
@@ -379,10 +379,8 @@ monacoModelRef.current?.setValue(ytext.toString())
 docker-compose up postgres
 
 # Terminal 2: Start server
-cd server
-bun install
-bunx prisma migrate dev
-bun src/index.ts
+cd server-rs
+cargo run
 
 # Terminal 3: Start frontend
 cd frontend
@@ -475,7 +473,7 @@ VITE_WS_URL=ws://localhost:3001/ws
 
 2. **Phase 2**: Collaboration Features (Day 1-2)
    - Monaco + Yjs integration (custom binding)
-   - Hocuspocus WebSocket server
+   - Custom Yjs sync server (yrs)
    - Real-time cursor tracking
    - Follow mode implementation
 
@@ -527,9 +525,10 @@ VITE_WS_URL=ws://localhost:3001/ws
 Built with assistance from AI (Cline/Claude), leveraging:
 - [Yjs](https://docs.yjs.dev/) - CRDT framework
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) - Code editor
-- [Hocuspocus](https://tiptap.dev/hocuspocus) - WebSocket provider
-- [Prisma](https://www.prisma.io/) - Database ORM
-- [Bun](https://bun.sh/) - JavaScript runtime
+- [Axum](https://github.com/tokio-rs/axum) - Rust web framework
+- [SQLx](https://github.com/launchbadge/sqlx) - Async SQL toolkit
+- [Tokio](https://tokio.rs/) - Async runtime
+- [Bun](https://bun.sh/) - Frontend tooling/runtime
 
 ## License
 

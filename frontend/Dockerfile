@@ -2,12 +2,15 @@
 FROM oven/bun:1 AS builder
 
 WORKDIR /app
+ENV BUN_INSTALL_CACHE_DIR=/root/.bun/install/cache
 
 # Copy package files
 COPY package.json bun.lock ./
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun \
+    --mount=type=cache,target=/root/.cache/bun \
+    bun install --frozen-lockfile
 
 # Copy source
 COPY . .
@@ -18,7 +21,9 @@ ARG VITE_WS_URL
 ARG VITE_ALLOW_REGISTRATION
 
 # Build the app
-RUN bun run build
+RUN --mount=type=cache,target=/root/.bun \
+    --mount=type=cache,target=/root/.cache/bun \
+    bun run build
 
 # Production stage
 FROM nginx:alpine

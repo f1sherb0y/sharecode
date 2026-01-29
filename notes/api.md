@@ -1,6 +1,6 @@
-# ShareCode API (original backend)
+# ShareCode API (original backend, deprecated)
 
-This documents the original Node/Express backend routes as implemented in `server/src/index.ts` and `server/src/api/*`.
+This documents the original Node/Express backend routes (the Bun server has been removed from the repo).
 Each endpoint includes: path, params (and structure), operation, and checks/constraints.
 
 ## Health & Config
