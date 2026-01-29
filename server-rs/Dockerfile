@@ -15,7 +15,8 @@ COPY src ./src
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --release --locked
+    cargo build --release --locked \
+    && cp /app/target/release/sharecode-server /app/sharecode-server
 
 FROM debian:bookworm-slim AS runner
 WORKDIR /app
@@ -25,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/sharecode-server /app/sharecode-server
+COPY --from=builder /app/sharecode-server /app/sharecode-server
 
 EXPOSE 3001
 

@@ -11,6 +11,7 @@ COPY package.json bun.lock ./
 
 # Install dependencies
 RUN --mount=type=cache,target=/root/.bun/install/cache \
+    --mount=type=cache,target=/root/.cache/bun \
     bun install --frozen-lockfile
 
 # Copy source
@@ -23,6 +24,7 @@ ARG VITE_ALLOW_REGISTRATION
 
 # Build the app
 RUN --mount=type=cache,target=/root/.bun/install/cache \
+    --mount=type=cache,target=/root/.cache/bun \
     bun run build
 
 # Production stage
