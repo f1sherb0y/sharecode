@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Play, Pause, SkipBack, SkipForward } from 'lucide-react'
+import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush } from 'lucide-react'
 import * as Y from 'yjs'
 import pako from 'pako'
+import { createTLStore, defaultShapeUtils, loadSnapshot, type TLRecord, type TLStore } from 'tldraw'
 import {
   Button,
   Badge,
@@ -19,6 +20,7 @@ import { api } from '@/api'
 import { useAuthStore, useThemeStore } from '@/stores'
 import { loadMonaco } from '@/lib/monaco-loader'
 import { formatTime } from '@/lib/utils'
+import { CanvasView } from '@/components/features/canvas-view'
 import type { Room, Language } from '@/types'
 import type * as Monaco from 'monaco-editor'
 
@@ -47,6 +49,23 @@ interface Update {
   userId: string | null
 }
 
+function normalizeAssetRecord(record: TLRecord, assets: Map<string, string>): TLRecord {
+  if ((record as any).typeName !== 'asset') return record
+  const props = (record as any).props
+  if (!props || typeof props.src !== 'string') return record
+  const src = props.src as string
+  if (!src.startsWith('yjs:')) return record
+  const resolved = assets.get(src.slice(4)) ?? ''
+  if (resolved === src) return record
+  return {
+    ...(record as any),
+    props: {
+      ...props,
+      src: resolved,
+    },
+  } as TLRecord
+}
+
 function base64ToUint8Array(base64: string): Uint8Array {
   const binaryString = atob(base64)
   const bytes = new Uint8Array(binaryString.length)
@@ -70,6 +89,7 @@ export function PlaybackPage() {
 
   const [room, setRoom] = useState<Room | null>(null)
   const [updates, setUpdates] = useState<Update[]>([])
+  const [activeDoc, setActiveDoc] = useState<'code' | 'canvas'>('code')
   const [startMs, setStartMs] = useState(0)
   const [endMs, setEndMs] = useState(0)
   const [currentTimestamp, setCurrentTimestamp] = useState(0)
@@ -77,18 +97,37 @@ export function PlaybackPage() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [canvasStore, setCanvasStore] = useState<TLStore | null>(null)
+  const [canvasReady, setCanvasReady] = useState(false)
 
   const editorRef = useRef<HTMLDivElement>(null)
   const monacoRef = useRef<MonacoModule | null>(null)
   const monacoEditorRef = useRef<MonacoEditorInstance | null>(null)
   const monacoModelRef = useRef<MonacoModel | null>(null)
+  const assetMapRef = useRef<Map<string, string>>(new Map())
 
-  const getContentAtTimestamp = useCallback(
+  const assetStore = useMemo(
+    () => ({
+      async upload() {
+        throw new Error('Playback is read-only')
+      },
+      resolve(asset: any) {
+        const src = asset?.props?.src ?? asset?.src ?? ''
+        if (typeof src === 'string' && src.startsWith('yjs:')) {
+          return assetMapRef.current.get(src.slice(4)) ?? ''
+        }
+        return typeof src === 'string' ? src : ''
+      },
+      async remove() {
+        // no-op for playback
+      },
+    }),
+    []
+  )
+
+  const getDocAtTimestamp = useCallback(
     (timestamp: number) => {
-      if (updates.length === 0) return ''
-
       const tempDoc = new Y.Doc()
-      const ytext = tempDoc.getText('codemirror')
 
       updates
         .filter((u) => u.timestampMs <= timestamp)
@@ -100,9 +139,33 @@ export function PlaybackPage() {
           }
         })
 
-      return ytext.toString()
+      return tempDoc
     },
     [updates]
+  )
+
+  const updateCanvasFromDoc = useCallback(
+    (doc: Y.Doc) => {
+      if (!canvasStore) return
+      const yRecords = doc.getMap<TLRecord>('tldraw-records')
+      const yAssets = doc.getMap<string>('tldraw-assets')
+
+      const assets = new Map<string, string>()
+      yAssets.forEach((value, key) => {
+        assets.set(key, value)
+      })
+      assetMapRef.current = assets
+
+      const originalRecords = Array.from(yRecords.values()) as TLRecord[]
+      const normalizedRecords = originalRecords.map((record) => normalizeAssetRecord(record, assets))
+      const snapshot = {
+        schema: canvasStore.schema.serialize(),
+        store: Object.fromEntries(normalizedRecords.map((record) => [record.id, record])),
+      }
+      loadSnapshot(canvasStore, { document: snapshot })
+      setCanvasReady(true)
+    },
+    [canvasStore]
   )
 
   // Load room and updates
@@ -209,8 +272,9 @@ export function PlaybackPage() {
         })
         monacoEditorRef.current = editor
 
-        const initialContent = getContentAtTimestamp(currentTimestamp)
-        model.setValue(initialContent)
+        const initialDoc = getDocAtTimestamp(currentTimestamp)
+        const ytext = initialDoc.getText('codemirror')
+        model.setValue(ytext.toString())
         editor.focus()
       })
       .catch((err) => {
@@ -221,7 +285,17 @@ export function PlaybackPage() {
     return () => {
       isCancelled = true
     }
-  }, [room, updates, theme, getContentAtTimestamp, currentTimestamp])
+  }, [room, updates, theme, getDocAtTimestamp, currentTimestamp])
+
+  // Initialize canvas store
+  useEffect(() => {
+    if (canvasStore || updates.length === 0) return
+    const store = createTLStore({
+      shapeUtils: defaultShapeUtils,
+      assets: assetStore,
+    })
+    setCanvasStore(store)
+  }, [canvasStore, updates.length, assetStore])
 
   // Cleanup
   useEffect(() => {
@@ -239,10 +313,16 @@ export function PlaybackPage() {
 
   // Update content at timestamp
   useEffect(() => {
-    if (!monacoModelRef.current) return
-    const content = getContentAtTimestamp(currentTimestamp)
-    monacoModelRef.current.setValue(content)
-  }, [currentTimestamp, getContentAtTimestamp])
+    if (updates.length === 0) return
+    const doc = getDocAtTimestamp(currentTimestamp)
+
+    if (monacoModelRef.current) {
+      const ytext = doc.getText('codemirror')
+      monacoModelRef.current.setValue(ytext.toString())
+    }
+
+    updateCanvasFromDoc(doc)
+  }, [currentTimestamp, updates.length, getDocAtTimestamp, updateCanvasFromDoc])
 
   // Auto-play
   useEffect(() => {
@@ -290,12 +370,48 @@ export function PlaybackPage() {
           <span className="font-medium mr-3">Playback: {room?.name}</span>
           <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">{room?.language}</Badge>
         </div>
-        <ThemeToggle className="h-8 w-8" />
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-md border bg-muted/40 p-0.5">
+            <Button
+              variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setActiveDoc('code')}
+            >
+              <FileCode className="h-3.5 w-3.5 sm:mr-1" />
+              <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
+            </Button>
+            <Button
+              variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setActiveDoc('canvas')}
+            >
+              <Brush className="h-3.5 w-3.5 sm:mr-1" />
+              <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
+            </Button>
+          </div>
+          <ThemeToggle className="h-8 w-8" />
+        </div>
       </header>
 
       {/* Editor */}
       <div className="flex-1 overflow-hidden">
-        <div ref={editorRef} className="h-full w-full" />
+        <div className={`h-full w-full ${activeDoc === 'code' ? '' : 'hidden'}`}>
+          <div ref={editorRef} className="h-full w-full" />
+        </div>
+        {activeDoc === 'canvas' && (
+          <CanvasView
+            store={canvasStore}
+            ready={canvasReady}
+            canEdit={false}
+            theme={theme}
+            provider={null}
+            followUserId={null}
+            followClientId={null}
+            followEnabled={false}
+          />
+        )}
       </div>
 
       {/* Playback controls */}
