@@ -35,8 +35,10 @@ struct RoomOwnerRow {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct RoomEndedRow {
+struct RoomJoinRow {
+    owner_id: String,
     is_ended: bool,
+    is_deleted: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -341,13 +343,11 @@ pub async fn get_room(
         || has_global_read(&auth_user);
 
     if !is_admin && !is_owner && !is_participant {
-        return Err(ApiError::forbidden("Access denied"));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     if room.is_ended && !is_owner && !is_admin {
-        return Err(ApiError::forbidden(
-            "Room has ended and is no longer accessible",
-        ));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     let user_participant = participants.iter().find(|p| p.user_id == auth_user.id);
@@ -416,11 +416,21 @@ pub async fn update_room(
 
     let participants = fetch_participants(&state, &room.id).await?;
     let is_owner = room.owner_id == auth_user.id;
+    let is_participant = participants.iter().any(|p| p.user_id == auth_user.id);
+    let is_privileged = auth_user.role == "admin"
+        || auth_user.role == "superuser"
+        || has_global_read(&auth_user);
+
+    if !is_owner && !is_participant && !is_privileged {
+        return Err(ApiError::not_found("Room not found"));
+    }
+
     let participant = participants.iter().find(|p| p.user_id == auth_user.id);
-    let can_edit = has_global_write(&auth_user) || is_owner || participant.map(|p| p.can_edit).unwrap_or(false);
+    let can_edit =
+        has_global_write(&auth_user) || is_owner || participant.map(|p| p.can_edit).unwrap_or(false);
 
     if !can_edit {
-        return Err(ApiError::forbidden("Not authorized to modify this room"));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     let name = payload.name.filter(|value| !value.is_empty());
@@ -486,7 +496,7 @@ pub async fn delete_room(
     };
 
     if room.owner_id != auth_user.id && !has_global_delete(&auth_user) {
-        return Err(ApiError::forbidden("Not authorized to delete this room"));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     sqlx::query(r#"DELETE FROM "Room" WHERE id = $1"#)
@@ -507,9 +517,9 @@ pub async fn join_room(
         return Err(ApiError::bad_request("Room ID is required"));
     }
 
-    let room = sqlx::query_as::<_, RoomEndedRow>(
+    let room = sqlx::query_as::<_, RoomJoinRow>(
         r#"
-        SELECT "isEnded" as is_ended
+        SELECT "ownerId" as owner_id, "isEnded" as is_ended, "isDeleted" as is_deleted
         FROM "Room"
         WHERE id = $1
         "#
@@ -520,12 +530,12 @@ pub async fn join_room(
     .map_err(|err| db_error(err, "Failed to load room"))?;
 
     let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
+        Some(room) if !room.is_deleted => room,
+        _ => return Err(ApiError::not_found("Room not found")),
     };
 
     if room.is_ended {
-        return Err(ApiError::forbidden("Cannot join an ended room"));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     let existing = sqlx::query_scalar::<_, i64>(
@@ -541,6 +551,12 @@ pub async fn join_room(
     .fetch_optional(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to check participant"))?;
+
+    let is_owner = room.owner_id == auth_user.id;
+
+    if !is_owner && existing.is_none() {
+        return Err(ApiError::not_found("Room not found"));
+    }
 
     if existing.is_some() {
         return Err(ApiError::bad_request("Already a participant"));
@@ -585,6 +601,24 @@ pub async fn leave_room(
         return Err(ApiError::bad_request("Owner cannot leave room"));
     }
 
+    let membership = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT 1
+        FROM "RoomParticipant"
+        WHERE "roomId" = $1 AND "userId" = $2
+        LIMIT 1
+        "#,
+    )
+    .bind(&room_id)
+    .bind(&auth_user.id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to check room membership"))?;
+
+    if membership.is_none() {
+        return Err(ApiError::not_found("Room not found"));
+    }
+
     sqlx::query(
         r#"
         DELETE FROM "RoomParticipant"
@@ -627,7 +661,7 @@ pub async fn end_room(
     };
 
     if room.owner_id != auth_user.id && !has_global_delete(&auth_user) {
-        return Err(ApiError::forbidden("Not authorized to end this room"));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     let updated = sqlx::query_as::<_, RoomWithOwnerRow>(

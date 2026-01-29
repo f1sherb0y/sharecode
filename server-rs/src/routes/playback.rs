@@ -44,17 +44,17 @@ pub async fn get_playback_updates(
         None => return Err(ApiError::not_found("Room not found")),
     };
 
-    if !room.is_ended {
-        return Err(ApiError::bad_request("Room has not ended yet"));
-    }
-
     let is_owner = room.owner_id == auth_user.id;
     let is_privileged = auth_user.role == "admin"
         || auth_user.role == "superuser"
         || has_global_read(&auth_user);
 
     if !is_owner && !is_privileged {
-        return Err(ApiError::forbidden("Access denied"));
+        return Err(ApiError::not_found("Room not found"));
+    }
+
+    if !room.is_ended {
+        return Err(ApiError::bad_request("Room has not ended yet"));
     }
 
     let updates = sqlx::query_as::<_, DocumentUpdateRow>(

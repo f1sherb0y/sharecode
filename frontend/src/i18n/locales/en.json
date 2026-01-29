@@ -176,7 +176,8 @@
         "loading": "Loading rooms..."
       },
       "deleteTitle": "Delete Room",
-      "deleteConfirm": "Delete room \"{{name}}\"?"
+      "deleteConfirm": "Delete room \"{{name}}\"?",
+      "superuserOnly": "Room and storage management is available to superusers only."
     },
     "storage": {
       "title": "Storage Management",

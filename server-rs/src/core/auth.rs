@@ -230,7 +230,7 @@ where
         async move {
             let user = AuthUser::from_request_parts(parts, state).await?;
             if user.role != "admin" && user.role != "superuser" {
-                return Err(ApiError::forbidden("Admin access required"));
+                return Err(ApiError::not_found("Not found"));
             }
             Ok(AdminUser(user))
         }

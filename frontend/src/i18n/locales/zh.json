@@ -176,7 +176,8 @@
         "loading": "加载房间中..."
       },
       "deleteTitle": "删除房间",
-      "deleteConfirm": "删除房间 \"{{name}}\"？"
+      "deleteConfirm": "删除房间 \"{{name}}\"？",
+      "superuserOnly": "房间与存储管理仅超级管理员可用。"
     },
     "storage": {
       "title": "存储管理",

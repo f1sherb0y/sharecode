@@ -75,7 +75,7 @@ pub async fn create_share_link(
     };
 
     if room.owner_id != auth_user.id {
-        return Err(ApiError::forbidden("Only the room owner can create share links"));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     if room.is_ended {
@@ -140,7 +140,7 @@ pub async fn list_share_links(
     };
 
     if room.owner_id != auth_user.id {
-        return Err(ApiError::forbidden("Only the room owner can view share links"));
+        return Err(ApiError::not_found("Room not found"));
     }
 
     let share_links = sqlx::query_as::<_, ShareLinkSummaryRow>(
@@ -193,7 +193,7 @@ pub async fn delete_share_link(
     };
 
     if share_link.owner_id != auth_user.id {
-        return Err(ApiError::forbidden("Only the room owner can delete share links"));
+        return Err(ApiError::not_found("Share link not found"));
     }
 
     sqlx::query(r#"DELETE FROM "RoomShareLink" WHERE id = $1"#)

@@ -195,15 +195,15 @@ pub async fn create_user(
     }
 
     if auth_user.role == "admin" && requested_role != "user" {
-        return Err(ApiError::forbidden("Admins can only create normal users"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if auth_user.role != "superuser" && requested_role == "superuser" {
-        return Err(ApiError::forbidden("Only superusers can create other superusers"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if auth_user.role != "superuser" && requested_role == "admin" {
-        return Err(ApiError::forbidden("Only superusers can create admins"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     let existing_user = sqlx::query_scalar::<_, i64>(
@@ -343,13 +343,11 @@ pub async fn update_user(
     };
 
     if target_user.id == auth_user.id && requested_role.is_some() && requested_role != Some("superuser") {
-        return Err(ApiError::forbidden(
-            "Cannot change your own role to a non-superuser role",
-        ));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if auth_user.role == "admin" && target_user.role != "user" {
-        return Err(ApiError::forbidden("Admins can manage normal users only"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if let Some(role) = requested_role {
@@ -358,18 +356,16 @@ pub async fn update_user(
         }
 
         if auth_user.role != "superuser" {
-            return Err(ApiError::forbidden("Only superusers can change roles"));
+            return Err(ApiError::not_found("Not found"));
         }
     }
 
     if requested_role == Some("superuser") && auth_user.role != "superuser" {
-        return Err(ApiError::forbidden("Only superusers can promote to superuser"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if has_permission_changes && auth_user.role != "superuser" && target_user.role != "user" {
-        return Err(ApiError::forbidden(
-            "Admins can only update permissions for normal users",
-        ));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if target_user.role == "superuser" && requested_role.is_some() && requested_role != Some("superuser") {
@@ -381,7 +377,7 @@ pub async fn update_user(
         .map_err(|err| db_error(err, "Failed to count superusers"))?;
 
         if superuser_count <= 1 {
-            return Err(ApiError::forbidden("Cannot remove the last superuser"));
+            return Err(ApiError::not_found("Not found"));
         }
     }
 
@@ -467,16 +463,16 @@ pub async fn delete_user(
     };
 
     if user.id == auth_user.id {
-        return Err(ApiError::forbidden("Cannot delete your own account"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if auth_user.role == "admin" && user.role != "user" {
-        return Err(ApiError::forbidden("Admins can only delete normal users"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if user.role == "superuser" {
         if auth_user.role != "superuser" {
-            return Err(ApiError::forbidden("Only superusers can delete another superuser"));
+            return Err(ApiError::not_found("Not found"));
         }
 
         let superuser_count = sqlx::query_scalar::<_, i64>(
@@ -487,12 +483,12 @@ pub async fn delete_user(
         .map_err(|err| db_error(err, "Failed to count superusers"))?;
 
         if superuser_count <= 1 {
-            return Err(ApiError::forbidden("Cannot delete the last superuser"));
+            return Err(ApiError::not_found("Not found"));
         }
     }
 
     if user.role == "admin" && auth_user.role != "superuser" {
-        return Err(ApiError::forbidden("Only superusers can delete admins"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     if user.role == "admin" {
@@ -504,7 +500,7 @@ pub async fn delete_user(
         .map_err(|err| db_error(err, "Failed to count admins"))?;
 
         if admin_count <= 1 {
-            return Err(ApiError::forbidden("Cannot delete the last admin user"));
+            return Err(ApiError::not_found("Not found"));
         }
     }
 
@@ -525,8 +521,12 @@ pub async fn delete_user(
 
 pub async fn get_all_rooms(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    AdminUser(auth_user): AdminUser,
 ) -> Result<Json<Value>, ApiError> {
+    if auth_user.role != "superuser" {
+        return Err(ApiError::not_found("Not found"));
+    }
+
     let rooms = sqlx::query_as::<_, RoomAdminRow>(
         r#"
         SELECT
@@ -596,8 +596,12 @@ pub async fn get_all_rooms(
 
 pub async fn get_db_storage_size(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    AdminUser(auth_user): AdminUser,
 ) -> Result<Json<Value>, ApiError> {
+    if auth_user.role != "superuser" {
+        return Err(ApiError::not_found("Not found"));
+    }
+
     let size = sqlx::query_as::<_, DbSizeRow>(
         r#"
         SELECT
@@ -617,8 +621,12 @@ pub async fn get_db_storage_size(
 
 pub async fn get_room_playback_sizes(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    AdminUser(auth_user): AdminUser,
 ) -> Result<Json<Value>, ApiError> {
+    if auth_user.role != "superuser" {
+        return Err(ApiError::not_found("Not found"));
+    }
+
     let rows = sqlx::query_as::<_, PlaybackSizeRow>(
         r#"
         SELECT
@@ -658,9 +666,13 @@ pub async fn get_room_playback_sizes(
 
 pub async fn compress_room_playback(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    if auth_user.role != "superuser" {
+        return Err(ApiError::not_found("Not found"));
+    }
+
     let room = sqlx::query_as::<_, RoomStatusRow>(
         r#"
         SELECT id, "isEnded" as is_ended, "isDeleted" as is_deleted
@@ -804,8 +816,8 @@ pub async fn delete_room(
     AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    if !auth_user.can_delete_all_rooms && auth_user.role != "superuser" {
-        return Err(ApiError::forbidden("Delete-all-rooms permission required"));
+    if auth_user.role != "superuser" {
+        return Err(ApiError::not_found("Not found"));
     }
 
     sqlx::query(

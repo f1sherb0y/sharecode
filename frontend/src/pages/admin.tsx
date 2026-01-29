@@ -100,9 +100,15 @@ export function AdminPage() {
       return
     }
     loadUsers()
-    loadRooms()
-    loadStorage()
-    loadPlaybackSizes()
+    if (user.role === 'superuser') {
+      loadRooms()
+      loadStorage()
+      loadPlaybackSizes()
+    } else {
+      setIsLoadingRooms(false)
+      setIsLoadingStorage(false)
+      setIsLoadingPlaybackSizes(false)
+    }
   }, [user, navigate])
 
   const loadUsers = async () => {
@@ -571,163 +577,174 @@ export function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Rooms Section */}
-        <Card>
-          <CardHeader className="py-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={refreshStorage}
-                disabled={isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes}
-              >
-                <RefreshCw className="h-4 w-4 mr-1" />
-                {t('admin.storage.refresh')}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0 px-2 sm:px-6">
-            {isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes ? (
-              <div className="flex justify-center py-6">
-                <Spinner />
+        {/* Rooms + Storage Section */}
+        {isSuperuser ? (
+          <Card>
+            <CardHeader className="py-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={refreshStorage}
+                  disabled={isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes}
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  {t('admin.storage.refresh')}
+                </Button>
               </div>
-            ) : (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-4">
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">{t('admin.storage.dbSize')}</div>
-                    <div className="text-lg font-semibold">{dbSize?.pretty ?? '--'}</div>
-                    {dbSize && (
-                      <div className="text-xs text-muted-foreground">{formatBytes(dbSize.bytes)}</div>
-                    )}
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">{t('admin.storage.playbackTotal')}</div>
-                    <div className="text-lg font-semibold">
-                      {formatBytes(playbackSizes.reduce((sum, room) => sum + room.bytes, 0))}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {t('admin.storage.roomsTracked', { count: playbackSizes.length })}
-                    </div>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">{t('admin.storage.endedRooms')}</div>
-                    <div className="text-lg font-semibold">
-                      {playbackSizes.filter((room) => room.isEnded).length}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {t('admin.storage.totalUpdates', {
-                        count: playbackSizes.reduce((sum, room) => sum + room.updateCount, 0),
-                      })}
-                    </div>
-                  </div>
+            </CardHeader>
+            <CardContent className="pt-0 px-2 sm:px-6">
+              {isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes ? (
+                <div className="flex justify-center py-6">
+                  <Spinner />
                 </div>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-4">
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground">{t('admin.storage.dbSize')}</div>
+                      <div className="text-lg font-semibold">{dbSize?.pretty ?? '--'}</div>
+                      {dbSize && (
+                        <div className="text-xs text-muted-foreground">{formatBytes(dbSize.bytes)}</div>
+                      )}
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground">{t('admin.storage.playbackTotal')}</div>
+                      <div className="text-lg font-semibold">
+                        {formatBytes(playbackSizes.reduce((sum, room) => sum + room.bytes, 0))}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {t('admin.storage.roomsTracked', { count: playbackSizes.length })}
+                      </div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-xs text-muted-foreground">{t('admin.storage.endedRooms')}</div>
+                      <div className="text-lg font-semibold">
+                        {playbackSizes.filter((room) => room.isEnded).length}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {t('admin.storage.totalUpdates', {
+                          count: playbackSizes.reduce((sum, room) => sum + room.updateCount, 0),
+                        })}
+                      </div>
+                    </div>
+                  </div>
 
-                {storageNotice && (
-                  <div className="mb-3 text-xs text-muted-foreground">{storageNotice}</div>
-                )}
+                  {storageNotice && (
+                    <div className="mb-3 text-xs text-muted-foreground">{storageNotice}</div>
+                  )}
 
-                <div className="overflow-x-auto -mx-2 sm:mx-0">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left">
-                        <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.name')}</th>
-                        <th className="px-2 py-1.5 font-medium hidden sm:table-cell">{t('admin.rooms.table.owner')}</th>
-                        <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.language')}</th>
-                        <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.status')}</th>
-                        <th className="px-2 py-1.5 font-medium hidden lg:table-cell">
-                          {t('admin.storage.table.endedAt')}
-                        </th>
-                        <th className="px-2 py-1.5 font-medium hidden md:table-cell">
-                          {t('admin.rooms.table.created')}
-                        </th>
-                        <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.updates')}</th>
-                        <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.size')}</th>
-                        <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rooms.map((room) => {
-                        const playback = playbackByRoomId.get(room.id)
-                        const updates = playback?.updateCount ?? 0
-                        const sizeBytes = playback?.bytes ?? 0
-                        const endedAt = playback?.endedAt ?? room.endedAt ?? null
-                        const isEnded = playback?.isEnded ?? room.isEnded ?? false
-                        const canCompress = isEnded && updates > 0
+                  <div className="overflow-x-auto -mx-2 sm:mx-0">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left">
+                          <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.name')}</th>
+                          <th className="px-2 py-1.5 font-medium hidden sm:table-cell">{t('admin.rooms.table.owner')}</th>
+                          <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.language')}</th>
+                          <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.status')}</th>
+                          <th className="px-2 py-1.5 font-medium hidden lg:table-cell">
+                            {t('admin.storage.table.endedAt')}
+                          </th>
+                          <th className="px-2 py-1.5 font-medium hidden md:table-cell">
+                            {t('admin.rooms.table.created')}
+                          </th>
+                          <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.updates')}</th>
+                          <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.size')}</th>
+                          <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.actions')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rooms.map((room) => {
+                          const playback = playbackByRoomId.get(room.id)
+                          const updates = playback?.updateCount ?? 0
+                          const sizeBytes = playback?.bytes ?? 0
+                          const endedAt = playback?.endedAt ?? room.endedAt ?? null
+                          const isEnded = playback?.isEnded ?? room.isEnded ?? false
+                          const canCompress = isEnded && updates > 0
 
-                        return (
-                          <tr key={room.id} className="border-b">
-                            <td className="px-2 py-1.5">
-                              <div>{room.name}</div>
-                              <div className="text-xs text-muted-foreground sm:hidden">{room.owner.username}</div>
-                            </td>
-                            <td className="px-2 py-1.5 text-muted-foreground hidden sm:table-cell">
-                              {room.owner.username}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">
-                                {room.language}
-                              </Badge>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <Badge
-                                variant={isEnded ? 'destructive' : 'success'}
-                                className="rounded-sm text-xs px-1.5 py-0"
-                              >
-                                {isEnded ? t('admin.rooms.table.statusEnded') : t('admin.rooms.table.statusActive')}
-                              </Badge>
-                            </td>
-                            <td className="px-2 py-1.5 text-muted-foreground hidden lg:table-cell">
-                              {endedAt ? formatDateTime(endedAt) : '-'}
-                            </td>
-                            <td className="px-2 py-1.5 text-muted-foreground hidden md:table-cell">
-                              {formatDate(room.createdAt)}
-                            </td>
-                            <td className="px-2 py-1.5">{updates}</td>
-                            <td className="px-2 py-1.5">{formatBytes(sizeBytes)}</td>
-                            <td className="px-2 py-1.5">
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2"
-                                  disabled={!canCompress || compressingRoomId === room.id}
-                                  onClick={() =>
-                                    setRoomToCompress({
-                                      id: room.id,
-                                      name: room.name,
-                                      isEnded,
-                                      endedAt,
-                                      updateCount: updates,
-                                      bytes: sizeBytes,
-                                    })
-                                  }
+                          return (
+                            <tr key={room.id} className="border-b">
+                              <td className="px-2 py-1.5">
+                                <div>{room.name}</div>
+                                <div className="text-xs text-muted-foreground sm:hidden">{room.owner.username}</div>
+                              </td>
+                              <td className="px-2 py-1.5 text-muted-foreground hidden sm:table-cell">
+                                {room.owner.username}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">
+                                  {room.language}
+                                </Badge>
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <Badge
+                                  variant={isEnded ? 'destructive' : 'success'}
+                                  className="rounded-sm text-xs px-1.5 py-0"
                                 >
-                                  {compressingRoomId === room.id
-                                    ? t('admin.storage.compressing')
-                                    : t('admin.storage.compressButton')}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="h-7 px-2"
-                                  onClick={() => handleDeleteRoom(room.id, room.name)}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                                  {isEnded ? t('admin.rooms.table.statusEnded') : t('admin.rooms.table.statusActive')}
+                                </Badge>
+                              </td>
+                              <td className="px-2 py-1.5 text-muted-foreground hidden lg:table-cell">
+                                {endedAt ? formatDateTime(endedAt) : '-'}
+                              </td>
+                              <td className="px-2 py-1.5 text-muted-foreground hidden md:table-cell">
+                                {formatDate(room.createdAt)}
+                              </td>
+                              <td className="px-2 py-1.5">{updates}</td>
+                              <td className="px-2 py-1.5">{formatBytes(sizeBytes)}</td>
+                              <td className="px-2 py-1.5">
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2"
+                                    disabled={!canCompress || compressingRoomId === room.id}
+                                    onClick={() =>
+                                      setRoomToCompress({
+                                        id: room.id,
+                                        name: room.name,
+                                        isEnded,
+                                        endedAt,
+                                        updateCount: updates,
+                                        bytes: sizeBytes,
+                                      })
+                                    }
+                                  >
+                                    {compressingRoomId === room.id
+                                      ? t('admin.storage.compressing')
+                                      : t('admin.storage.compressButton')}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 px-2"
+                                    onClick={() => handleDeleteRoom(room.id, room.name)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 px-2 sm:px-6">
+              <p className="text-sm text-muted-foreground">{t('admin.rooms.superuserOnly')}</p>
+            </CardContent>
+          </Card>
+        )}
       </PageContainer>
     </div>
   )

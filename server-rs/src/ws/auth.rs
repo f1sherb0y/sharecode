@@ -76,16 +76,11 @@ async fn authenticate_user(
 
     let room = match room {
         Some(room) => room,
-        None => {
-            return Err(format!(
-                "Authentication failed: Room {} not found",
-                document_name
-            ))
-        }
+        None => return Err("Authentication failed: Access denied".to_string()),
     };
 
     if room.is_deleted {
-        return Err("Authentication failed: Room is no longer available".to_string());
+        return Err("Authentication failed: Access denied".to_string());
     }
 
     let participant = sqlx::query_as::<_, WsParticipantRow>(
@@ -109,15 +104,12 @@ async fn authenticate_user(
         user.role == "admin" || user.role == "superuser" || can_read_globally;
 
     if room.is_ended && !is_owner && !is_privileged {
-        return Err("Authentication failed: Room has ended and is no longer accessible".to_string());
+        return Err("Authentication failed: Access denied".to_string());
     }
 
     let has_access = can_read_globally || is_owner || participant.is_some();
     if !has_access {
-        return Err(
-            "Authentication failed: Access denied: You do not have permission to access this room"
-                .to_string(),
-        );
+        return Err("Authentication failed: Access denied".to_string());
     }
 
     let participant_can_edit = participant.as_ref().map(|p| p.can_edit).unwrap_or(false);

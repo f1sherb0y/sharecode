@@ -38,7 +38,7 @@ pub async fn register(
     Json(payload): Json<RegisterPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
     if !state.config.allow_registration {
-        return Err(ApiError::forbidden("Registration is currently disabled"));
+        return Err(ApiError::not_found("Not found"));
     }
 
     let username = payload.username.unwrap_or_default();
