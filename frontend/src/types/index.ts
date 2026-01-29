@@ -137,6 +137,29 @@ export interface PlaybackData {
   duration: number
 }
 
+export interface DbStorageSize {
+  bytes: number
+  pretty: string
+}
+
+export interface RoomPlaybackSize {
+  id: string
+  name: string
+  isEnded: boolean
+  endedAt?: string | null
+  updateCount: number
+  bytes: number
+}
+
+export interface PlaybackCompressionResult {
+  roomId: string
+  originalUpdates: number
+  compressedUpdates: number
+  originalBytes: number
+  compressedBytes: number
+  savedBytes: number
+}
+
 export interface CodeExecutionResult {
   output: string
   error: string

@@ -129,7 +129,7 @@ export function useEditorRoom(): EditorRoomState {
           setShowGuestJoinForm(true)
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load share information')
+        setError(err instanceof Error ? err.message : t('share.join.loadFailed'))
       } finally {
         setIsLoading(false)
       }
@@ -195,7 +195,7 @@ export function useEditorRoom(): EditorRoomState {
 
       setShowGuestJoinForm(false)
     } catch (err) {
-      setGuestJoinError(err instanceof Error ? err.message : 'Failed to join room')
+      setGuestJoinError(err instanceof Error ? err.message : t('share.join.joinFailed'))
     } finally {
       setIsJoiningAsGuest(false)
     }

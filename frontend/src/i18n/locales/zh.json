@@ -157,6 +157,7 @@
         "deleteAll": "删除全部房间",
         "hint": "删除权限包含结束和编辑权限，编辑权限包含读取权限。"
       },
+      "deleteTitle": "删除用户",
       "deleteConfirm": "删除用户 \"{{username}}\"？"
     },
     "rooms": {
@@ -174,7 +175,30 @@
         "delete": "删除",
         "loading": "加载房间中..."
       },
+      "deleteTitle": "删除房间",
       "deleteConfirm": "删除房间 \"{{name}}\"？"
+    },
+    "storage": {
+      "title": "存储管理",
+      "refresh": "刷新",
+      "dbSize": "数据库大小",
+      "playbackTotal": "回放占用",
+      "roomsTracked": "共 {{count}} 个房间",
+      "endedRooms": "已结束房间",
+      "totalUpdates": "{{count}} 条更新",
+      "compressTitle": "压缩回放",
+      "compressConfirm": "将 \"{{name}}\" 的回放按 1 秒分辨率压缩？这会减少占用但回放更粗糙。",
+      "compressButton": "压缩",
+      "compressing": "压缩中...",
+      "compressResult": "已压缩 \"{{name}}\"：{{original}} → {{compressed}} 条，节省 {{saved}}。",
+      "table": {
+        "name": "房间",
+        "status": "状态",
+        "endedAt": "结束时间",
+        "updates": "更新数",
+        "size": "占用",
+        "actions": "操作"
+      }
     }
   },
   "playback": {
@@ -238,23 +262,29 @@
       "createView": "创建仅查看链接",
       "createEdit": "创建可编辑链接",
       "loading": "加载分享链接中...",
+      "loadFailed": "加载分享链接失败。",
       "empty": "还没有分享链接，立即创建一个邀请访客吧。",
       "copy": "复制链接",
       "copied": "链接已复制",
       "copyFailed": "无法复制链接，请手动复制。",
       "delete": "删除",
+      "deleteTitle": "删除分享链接",
       "deleteConfirm": "确定删除该分享链接？",
+      "deleteFailed": "删除分享链接失败。",
       "editLabel": "可编辑",
       "viewLabel": "仅查看",
       "guests": "活跃访客：{{count}}",
       "close": "关闭",
       "openPanel": "分享房间",
       "hidePanel": "收起分享面板",
-      "created": "已创建新的分享链接！"
+      "created": "已创建新的分享链接！",
+      "createFailed": "创建分享链接失败。",
+      "deleted": "分享链接已删除。"
     },
     "join": {
       "title": "加入分享房间",
       "loading": "正在加载分享信息...",
+      "loadFailed": "加载分享信息失败。",
       "descriptionEdit": "输入信息即可加入并共同协作。",
       "descriptionView": "输入信息即可实时观看会话。",
       "ended": "此房间已不可用。",
@@ -269,7 +299,8 @@
       "emailHint": "邮箱仅用于本次会话的身份标识。",
       "validationName": "请输入显示名称。",
       "joining": "加入中...",
-      "joinButton": "加入房间"
+      "joinButton": "加入房间",
+      "joinFailed": "加入房间失败。"
     },
     "editor": {
       "loading": "正在加载访客会话...",

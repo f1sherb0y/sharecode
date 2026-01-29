@@ -63,6 +63,7 @@ pub(crate) struct DocumentState {
     pub(crate) awareness: Awareness,
     connections: RwLock<HashMap<ConnectionId, mpsc::UnboundedSender<Message>>>,
     pub(crate) snapshot: Arc<Mutex<SnapshotDebounce>>,
+    pub(crate) update_batch: Arc<Mutex<UpdateBatch>>,
 }
 
 impl DocumentState {
@@ -92,6 +93,7 @@ impl DocumentState {
             awareness: Awareness::new(doc),
             connections: RwLock::new(HashMap::new()),
             snapshot: Arc::new(Mutex::new(SnapshotDebounce::new())),
+            update_batch: Arc::new(Mutex::new(UpdateBatch::new())),
         })
     }
 
@@ -135,6 +137,28 @@ impl SnapshotDebounce {
             running: false,
         }
     }
+}
+
+pub(crate) struct UpdateBatch {
+    pub(crate) pending: Vec<PendingUpdate>,
+    pub(crate) last_update: Instant,
+    pub(crate) running: bool,
+}
+
+impl UpdateBatch {
+    pub(crate) fn new() -> Self {
+        Self {
+            pending: Vec::new(),
+            last_update: Instant::now(),
+            running: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct PendingUpdate {
+    pub(crate) update: Vec<u8>,
+    pub(crate) actor_id: Option<String>,
 }
 
 pub(crate) struct SessionState {

@@ -6,8 +6,11 @@ use axum::{
     Json,
 };
 use bcrypt::hash;
+use chrono::{NaiveDateTime, Timelike};
 use serde_json::{json, Value};
+use sqlx::QueryBuilder;
 use uuid::Uuid;
+use yrs::merge_updates_v1;
 
 use crate::{
     auth::AdminUser,
@@ -16,10 +19,39 @@ use crate::{
     models::{RoomAdminRow, RoomParticipantWithUserRow, UserPublicRow, UserRow},
     state::AppState,
     utils::colors::random_user_color,
-    utils::time::to_iso_string,
+    utils::time::{to_iso_string, to_iso_string_opt},
 };
 
 const VALID_ROLES: [&str; 3] = ["user", "admin", "superuser"];
+
+#[derive(sqlx::FromRow)]
+struct DbSizeRow {
+    bytes: i64,
+    pretty: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct PlaybackSizeRow {
+    id: String,
+    name: String,
+    is_ended: bool,
+    ended_at: Option<NaiveDateTime>,
+    update_count: i64,
+    bytes: i64,
+}
+
+#[derive(sqlx::FromRow)]
+struct PlaybackUpdateRow {
+    update: Vec<u8>,
+    timestamp: NaiveDateTime,
+    user_id: Option<String>,
+}
+
+struct CompressedBucket {
+    timestamp: NaiveDateTime,
+    update: Vec<u8>,
+    user_id: Option<String>,
+}
 
 #[derive(Clone, Copy)]
 struct PermissionFlags {
@@ -562,6 +594,211 @@ pub async fn get_all_rooms(
     Ok(Json(json!({ "rooms": response })))
 }
 
+pub async fn get_db_storage_size(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> Result<Json<Value>, ApiError> {
+    let size = sqlx::query_as::<_, DbSizeRow>(
+        r#"
+        SELECT
+            pg_database_size(current_database())::bigint as bytes,
+            pg_size_pretty(pg_database_size(current_database())) as pretty
+        "#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load database size"))?;
+
+    Ok(Json(json!({
+        "bytes": size.bytes,
+        "pretty": size.pretty,
+    })))
+}
+
+pub async fn get_room_playback_sizes(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> Result<Json<Value>, ApiError> {
+    let rows = sqlx::query_as::<_, PlaybackSizeRow>(
+        r#"
+        SELECT
+            r.id,
+            r.name,
+            r."isEnded" as is_ended,
+            r."endedAt" as ended_at,
+            COUNT(du.id) as update_count,
+            COALESCE(SUM(octet_length(du.update)), 0) as bytes
+        FROM "Room" r
+        LEFT JOIN "DocumentUpdate" du ON du."documentId" = r.id
+        WHERE r."isDeleted" = false
+        GROUP BY r.id, r.name, r."isEnded", r."endedAt"
+        ORDER BY bytes DESC
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load playback storage sizes"))?;
+
+    let response = rows
+        .into_iter()
+        .map(|row| {
+            json!({
+                "id": row.id,
+                "name": row.name,
+                "isEnded": row.is_ended,
+                "endedAt": to_iso_string_opt(row.ended_at),
+                "updateCount": row.update_count,
+                "bytes": row.bytes,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(Json(json!({ "rooms": response })))
+}
+
+pub async fn compress_room_playback(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(room_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let room = sqlx::query_as::<_, RoomStatusRow>(
+        r#"
+        SELECT id, "isEnded" as is_ended, "isDeleted" as is_deleted
+        FROM "Room"
+        WHERE id = $1
+        "#,
+    )
+    .bind(&room_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load room"))?;
+
+    let room = match room {
+        Some(room) => room,
+        None => return Err(ApiError::not_found("Room not found")),
+    };
+
+    if room.is_deleted {
+        return Err(ApiError::not_found("Room not found"));
+    }
+
+    if !room.is_ended {
+        return Err(ApiError::bad_request("Room has not ended yet"));
+    }
+
+    let updates = sqlx::query_as::<_, PlaybackUpdateRow>(
+        r#"
+        SELECT update, timestamp, "userId" as user_id
+        FROM "DocumentUpdate"
+        WHERE "documentId" = $1
+        ORDER BY timestamp ASC
+        "#,
+    )
+    .bind(&room_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load playback updates"))?;
+
+    let original_count = updates.len() as i64;
+    let original_bytes = updates.iter().map(|u| u.update.len() as i64).sum::<i64>();
+
+    if updates.is_empty() {
+        return Ok(Json(json!({
+            "roomId": room_id,
+            "originalUpdates": original_count,
+            "compressedUpdates": 0,
+            "originalBytes": original_bytes,
+            "compressedBytes": 0,
+            "savedBytes": 0,
+        })));
+    }
+
+    let mut buckets: Vec<CompressedBucket> = Vec::new();
+    let mut pending: Vec<PlaybackUpdateRow> = Vec::new();
+    let mut current_bucket: Option<NaiveDateTime> = None;
+
+    for row in updates {
+        let bucket_time = row
+            .timestamp
+            .with_nanosecond(0)
+            .unwrap_or(row.timestamp);
+        if current_bucket.is_none() {
+            current_bucket = Some(bucket_time);
+        }
+        if Some(bucket_time) != current_bucket {
+            let bucket_time = current_bucket.unwrap();
+            let merged = merge_bucket_updates(&pending)?;
+            let user_id = merge_bucket_user_id(&pending);
+            buckets.push(CompressedBucket {
+                timestamp: bucket_time,
+                update: merged,
+                user_id,
+            });
+            pending.clear();
+            current_bucket = Some(bucket_time);
+        }
+        pending.push(row);
+    }
+
+    if !pending.is_empty() {
+        let bucket_time = current_bucket.unwrap_or_else(|| pending[0].timestamp);
+        let merged = merge_bucket_updates(&pending)?;
+        let user_id = merge_bucket_user_id(&pending);
+        buckets.push(CompressedBucket {
+            timestamp: bucket_time,
+            update: merged,
+            user_id,
+        });
+    }
+
+    let compressed_count = buckets.len() as i64;
+    let compressed_bytes = buckets.iter().map(|b| b.update.len() as i64).sum::<i64>();
+
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|err| db_error(err, "Failed to start compression transaction"))?;
+
+    sqlx::query(r#"DELETE FROM "DocumentUpdate" WHERE "documentId" = $1"#)
+        .bind(&room_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| db_error(err, "Failed to clear playback updates"))?;
+
+    if !buckets.is_empty() {
+        let mut builder = QueryBuilder::new(
+            r#"INSERT INTO "DocumentUpdate" (id, "documentId", update, "userId", timestamp) "#,
+        );
+        builder.push_values(&buckets, |mut row, bucket| {
+            let id = Uuid::new_v4().to_string();
+            row.push_bind(id)
+                .push_bind(&room_id)
+                .push_bind(&bucket.update)
+                .push_bind(&bucket.user_id)
+                .push_bind(bucket.timestamp);
+        });
+        builder
+            .build()
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| db_error(err, "Failed to insert compressed updates"))?;
+    }
+
+    tx.commit()
+        .await
+        .map_err(|err| db_error(err, "Failed to commit compression transaction"))?;
+
+    Ok(Json(json!({
+        "roomId": room_id,
+        "originalUpdates": original_count,
+        "compressedUpdates": compressed_count,
+        "originalBytes": original_bytes,
+        "compressedBytes": compressed_bytes,
+        "savedBytes": original_bytes - compressed_bytes,
+    })))
+}
+
 pub async fn delete_room(
     State(state): State<AppState>,
     AdminUser(auth_user): AdminUser,
@@ -585,6 +822,35 @@ pub async fn delete_room(
     .map_err(|err| db_error(err, "Failed to delete room"))?;
 
     Ok(Json(json!({ "message": "Room deleted successfully" })))
+}
+
+#[derive(sqlx::FromRow)]
+struct RoomStatusRow {
+    id: String,
+    is_ended: bool,
+    is_deleted: bool,
+}
+
+fn merge_bucket_updates(pending: &[PlaybackUpdateRow]) -> Result<Vec<u8>, ApiError> {
+    if pending.len() == 1 {
+        return Ok(pending[0].update.clone());
+    }
+
+    merge_updates_v1(pending.iter().map(|entry| entry.update.as_slice()))
+        .map_err(|err| ApiError::internal(format!("Failed to merge updates: {err}")))
+}
+
+fn merge_bucket_user_id(pending: &[PlaybackUpdateRow]) -> Option<String> {
+    let mut current: Option<&str> = None;
+    for entry in pending {
+        match (current, entry.user_id.as_deref()) {
+            (None, None) => {}
+            (None, Some(id)) => current = Some(id),
+            (Some(existing), Some(id)) if existing == id => {}
+            _ => return None,
+        }
+    }
+    current.map(|id| id.to_string())
 }
 
 fn user_to_json(user: &UserPublicRow) -> Value {

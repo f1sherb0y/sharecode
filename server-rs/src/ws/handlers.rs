@@ -4,14 +4,14 @@ use hex::encode as hex_encode;
 use futures_util::{SinkExt, StreamExt};
 use sqlx::PgPool;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 use yrs::{
     sync::{awareness::AwarenessUpdate, protocol::SyncMessage},
     updates::decoder::{Decode, DecoderV1},
     updates::encoder::Encode,
-    ReadTxn, StateVector, Transact, Update,
+    merge_updates_v1, ReadTxn, StateVector, Transact, Update,
 };
 use yrs::encoding::write::Write as _;
 
@@ -28,7 +28,7 @@ use super::{
         AUTH_AUTHENTICATED, AUTH_PERMISSION_DENIED, AUTH_TOKEN, MSG_AWARENESS, MSG_AUTH, MSG_CLOSE,
         MSG_QUERY_AWARENESS, MSG_STATELESS, MSG_SYNC, MSG_SYNC_STATUS,
     },
-    state::{ConnectionId, DocumentState, SessionState, WsError},
+    state::{ConnectionId, DocumentState, PendingUpdate, SessionState, WsError},
 };
 
 pub(crate) async fn handle_socket(socket: WebSocket, state: AppState) {
@@ -328,7 +328,9 @@ async fn handle_update_message(
 
     if !is_empty {
         let actor_id = session.actor_id.clone();
-        store_update(&state.db, document_name, &update, actor_id.as_deref()).await?;
+        doc_state
+            .queue_update(state.db.clone(), document_name.to_string(), update, actor_id)
+            .await;
         doc_state
             .schedule_snapshot(state.db.clone(), document_name.to_string())
             .await;
@@ -470,6 +472,73 @@ async fn store_update(
     Ok(())
 }
 
+async fn flush_pending_updates(
+    db: &PgPool,
+    document_name: &str,
+    pending: Vec<PendingUpdate>,
+) -> Result<(), WsError> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+
+    if pending.len() == 1 {
+        let entry = pending.into_iter().next().unwrap();
+        return store_update(
+            db,
+            document_name,
+            &entry.update,
+            entry.actor_id.as_deref(),
+        )
+        .await;
+    }
+
+    let mut actor_id: Option<String> = None;
+    let mut mixed_actor = false;
+    for entry in pending.iter() {
+        match (actor_id.as_deref(), entry.actor_id.as_deref()) {
+            (None, Some(id)) => actor_id = Some(id.to_string()),
+            (Some(existing), Some(id)) if existing == id => {}
+            (None, None) => {}
+            _ => {
+                mixed_actor = true;
+                break;
+            }
+        }
+    }
+    if mixed_actor {
+        actor_id = None;
+    }
+
+    match merge_updates_v1(pending.iter().map(|entry| entry.update.as_slice())) {
+        Ok(merged) => {
+            store_update(
+                db,
+                document_name,
+                &merged,
+                actor_id.as_deref(),
+            )
+            .await
+        }
+        Err(err) => {
+            tracing::error!(
+                document_name = %document_name,
+                error = %err,
+                "ws update merge failed; falling back to individual inserts"
+            );
+            for entry in pending {
+                store_update(
+                    db,
+                    document_name,
+                    &entry.update,
+                    entry.actor_id.as_deref(),
+                )
+                .await?;
+            }
+            Ok(())
+        }
+    }
+}
+
 async fn store_document_state(
     db: &PgPool,
     document_name: &str,
@@ -553,6 +622,57 @@ impl DocumentState {
                 if guard.last_update.elapsed() >= Duration::from_secs(1) {
                     guard.running = false;
                     break;
+                }
+            }
+        });
+    }
+
+    pub(crate) async fn queue_update(
+        self: &Arc<Self>,
+        db: PgPool,
+        document_name: String,
+        update: Vec<u8>,
+        actor_id: Option<String>,
+    ) {
+        let batch = Arc::clone(&self.update_batch);
+        {
+            let mut guard = batch.lock().await;
+            guard.pending.push(PendingUpdate { update, actor_id });
+            guard.last_update = Instant::now();
+            if guard.running {
+                return;
+            }
+            guard.running = true;
+        }
+
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(1));
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                let pending = {
+                    let mut guard = batch.lock().await;
+                    if guard.pending.is_empty() {
+                        if guard.last_update.elapsed() >= Duration::from_secs(1) {
+                            guard.running = false;
+                            return;
+                        }
+                        Vec::new()
+                    } else {
+                        std::mem::take(&mut guard.pending)
+                    }
+                };
+
+                if pending.is_empty() {
+                    continue;
+                }
+
+                if let Err(err) = flush_pending_updates(&db, &document_name, pending).await {
+                    tracing::error!(
+                        document_name = %document_name,
+                        error = %err,
+                        "ws document update batch persist failed"
+                    );
                 }
             }
         });

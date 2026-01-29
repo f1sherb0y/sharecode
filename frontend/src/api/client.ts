@@ -9,6 +9,9 @@ import type {
   ShareRoomSummary,
   ShareRoomDetails,
   PlaybackData,
+  DbStorageSize,
+  RoomPlaybackSize,
+  PlaybackCompressionResult,
   Language,
   CodeExecutionResult,
 } from '@/types'
@@ -230,6 +233,20 @@ class ApiClient {
   async deleteRoomAdmin(roomId: string): Promise<{ message: string }> {
     return this.request<{ message: string }>(`/api/admin/rooms/${roomId}`, {
       method: 'DELETE',
+    })
+  }
+
+  async getDbStorageSize(): Promise<DbStorageSize> {
+    return this.request<DbStorageSize>('/api/admin/storage/db-size')
+  }
+
+  async getRoomPlaybackSizes(): Promise<{ rooms: RoomPlaybackSize[] }> {
+    return this.request<{ rooms: RoomPlaybackSize[] }>('/api/admin/storage/playback')
+  }
+
+  async compressRoomPlayback(roomId: string): Promise<PlaybackCompressionResult> {
+    return this.request<PlaybackCompressionResult>(`/api/admin/rooms/${roomId}/playback/compress`, {
+      method: 'POST',
     })
   }
 

@@ -157,6 +157,7 @@
         "deleteAll": "Delete all rooms",
         "hint": "Delete implies end + write access, write implies read."
       },
+      "deleteTitle": "Delete User",
       "deleteConfirm": "Delete user \"{{username}}\"?"
     },
     "rooms": {
@@ -174,7 +175,30 @@
         "delete": "Delete",
         "loading": "Loading rooms..."
       },
+      "deleteTitle": "Delete Room",
       "deleteConfirm": "Delete room \"{{name}}\"?"
+    },
+    "storage": {
+      "title": "Storage Management",
+      "refresh": "Refresh",
+      "dbSize": "Database Size",
+      "playbackTotal": "Playback Storage",
+      "roomsTracked": "{{count}} rooms tracked",
+      "endedRooms": "Ended Rooms",
+      "totalUpdates": "{{count}} updates",
+      "compressTitle": "Compress Playback",
+      "compressConfirm": "Compress playback for \"{{name}}\" to 1s resolution? This reduces storage but makes playback less granular.",
+      "compressButton": "Compress",
+      "compressing": "Compressing...",
+      "compressResult": "Compressed \"{{name}}\": {{original}} -> {{compressed}} updates, saved {{saved}}.",
+      "table": {
+        "name": "Room",
+        "status": "Status",
+        "endedAt": "Ended At",
+        "updates": "Updates",
+        "size": "Size",
+        "actions": "Actions"
+      }
     }
   },
   "playback": {
@@ -238,23 +262,29 @@
       "createView": "Create view-only link",
       "createEdit": "Create edit link",
       "loading": "Loading share links...",
+      "loadFailed": "Failed to load share links.",
       "empty": "No share links yet. Create one to invite guests.",
       "copy": "Copy link",
       "copied": "Link copied to clipboard",
       "copyFailed": "Could not copy link. Please copy manually.",
       "delete": "Delete",
+      "deleteTitle": "Delete Share Link",
       "deleteConfirm": "Delete this share link?",
+      "deleteFailed": "Failed to delete share link.",
       "editLabel": "Can edit",
       "viewLabel": "View only",
       "guests": "Active guests: {{count}}",
       "close": "Close",
       "openPanel": "Share room",
       "hidePanel": "Hide share panel",
-      "created": "Share link created!"
+      "created": "Share link created!",
+      "createFailed": "Failed to create share link.",
+      "deleted": "Share link deleted."
     },
     "join": {
       "title": "Join Shared Room",
       "loading": "Loading share information...",
+      "loadFailed": "Failed to load share information.",
       "descriptionEdit": "Enter your details to join and collaborate in this room.",
       "descriptionView": "Enter your details to watch this session in real time.",
       "ended": "This room is no longer available.",
@@ -269,7 +299,8 @@
       "emailHint": "Email is only used for identification within this session.",
       "validationName": "Please enter a display name.",
       "joining": "Joining...",
-      "joinButton": "Join room"
+      "joinButton": "Join room",
+      "joinFailed": "Failed to join room."
     },
     "editor": {
       "loading": "Loading shared session...",

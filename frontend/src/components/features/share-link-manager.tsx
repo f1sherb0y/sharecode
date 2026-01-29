@@ -35,11 +35,11 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
       const { shareLinks } = await api.listShareLinks(roomId)
       setLinks(shareLinks)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load share links')
+      setError(err instanceof Error ? err.message : t('share.manager.loadFailed'))
     } finally {
       setIsLoading(false)
     }
-  }, [roomId])
+  }, [roomId, t])
 
   useEffect(() => {
     loadLinks()
@@ -53,7 +53,7 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
       setLinks((prev) => [shareLink, ...prev])
       toast.success(t('share.manager.created'))
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create share link'
+      const msg = err instanceof Error ? err.message : t('share.manager.createFailed')
       setError(msg)
       toast.error(msg)
     } finally {
@@ -72,9 +72,9 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
       await api.deleteShareLink(roomId, linkToDelete.id)
       setLinks((prev) => prev.filter((link) => link.id !== linkToDelete.id))
       setLinkToDelete(null)
-      toast.success('Share link deleted')
+      toast.success(t('share.manager.deleted'))
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete share link'
+      const msg = err instanceof Error ? err.message : t('share.manager.deleteFailed')
       setError(msg)
       toast.error(msg)
     }
@@ -149,7 +149,7 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
       <Dialog open={!!linkToDelete} onOpenChange={(open) => !open && setLinkToDelete(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('share.manager.deleteTitle', 'Delete Share Link')}</DialogTitle>
+            <DialogTitle>{t('share.manager.deleteTitle')}</DialogTitle>
             <DialogDescription>
               {t('share.manager.deleteConfirm')}
             </DialogDescription>

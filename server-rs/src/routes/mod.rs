@@ -44,6 +44,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/admin/users/{id}", delete(admin::delete_user))
         .route("/api/admin/rooms", get(admin::get_all_rooms))
         .route("/api/admin/rooms/{id}", delete(admin::delete_room))
+        .route("/api/admin/storage/db-size", get(admin::get_db_storage_size))
+        .route("/api/admin/storage/playback", get(admin::get_room_playback_sizes))
+        .route(
+            "/api/admin/rooms/{id}/playback/compress",
+            post(admin::compress_room_playback),
+        )
         // Playback
         .route("/api/rooms/{roomId}/playback/updates", get(playback::get_playback_updates))
         // Share
