@@ -9,20 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Use BuildKit cache mounts for incremental builds
-ENV CARGO_TARGET_DIR=/app/target
-
-# 1) Cache dependencies
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src && printf "fn main() {}\n" > src/main.rs
-RUN cargo build --release
-
-# 2) Build actual sources
-RUN rm -rf src
 COPY src ./src
 
-RUN cargo build --release \
-    && cp /app/target/release/sharecode-server /app/sharecode-server
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --locked
 
 FROM debian:bookworm-slim AS runner
 WORKDIR /app
@@ -32,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/sharecode-server /app/sharecode-server
+COPY --from=builder /app/target/release/sharecode-server /app/sharecode-server
 
 EXPOSE 3001
 
