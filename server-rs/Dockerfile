@@ -10,13 +10,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock ./
+
+# Create dummy source to build dependencies
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs
+
+# Build dependencies
+# We mount the registry to speed up downloads, but we do NOT mount target
+# so that the compiled dependencies are saved in this Docker layer.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo build --release --locked
+
+# Remove dummy source
+RUN rm -rf src
+
 COPY src ./src
+
+# Touch main.rs to prevent cached timestamp issues (optional but safe)
+RUN touch src/main.rs
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/app/target \
     cargo build --release --locked \
-    && cp /app/target/release/sharecode-server /app/sharecode-server
+    && cp target/release/sharecode-server /app/sharecode-server
 
 FROM debian:bookworm-slim AS runner
 WORKDIR /app
