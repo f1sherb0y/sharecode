@@ -144,6 +144,8 @@
         "email": "Email",
         "role": "Role",
         "permissions": "Permissions",
+        "read": "Read",
+        "write": "Write",
         "created": "Created",
         "actions": "Actions",
         "delete": "Delete",

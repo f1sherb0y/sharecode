@@ -521,12 +521,8 @@ pub async fn delete_user(
 
 pub async fn get_all_rooms(
     State(state): State<AppState>,
-    AdminUser(auth_user): AdminUser,
+    AdminUser(_auth_user): AdminUser,
 ) -> Result<Json<Value>, ApiError> {
-    if auth_user.role != "superuser" {
-        return Err(ApiError::not_found("Not found"));
-    }
-
     let rooms = sqlx::query_as::<_, RoomAdminRow>(
         r#"
         SELECT
@@ -813,13 +809,9 @@ pub async fn compress_room_playback(
 
 pub async fn delete_room(
     State(state): State<AppState>,
-    AdminUser(auth_user): AdminUser,
+    AdminUser(_auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    if auth_user.role != "superuser" {
-        return Err(ApiError::not_found("Not found"));
-    }
-
     sqlx::query(
         r#"
         UPDATE "Room"

@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  Checkbox,
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
@@ -93,6 +94,7 @@ export function AdminPage() {
   const [compressingRoomId, setCompressingRoomId] = useState<string | null>(null)
 
   const isSuperuser = user?.role === 'superuser'
+  const isAdmin = user?.role === 'admin'
 
   useEffect(() => {
     if (!user || (user.role !== 'admin' && user.role !== 'superuser')) {
@@ -100,12 +102,13 @@ export function AdminPage() {
       return
     }
     loadUsers()
-    if (user.role === 'superuser') {
+    if (user.role === 'superuser' || user.role === 'admin') {
       loadRooms()
+    }
+    if (user.role === 'superuser') {
       loadStorage()
       loadPlaybackSizes()
     } else {
-      setIsLoadingRooms(false)
       setIsLoadingStorage(false)
       setIsLoadingPlaybackSizes(false)
     }
@@ -501,6 +504,9 @@ export function AdminPage() {
                       <th className="px-2 py-1.5 font-medium">{t('admin.users.table.username')}</th>
                       <th className="px-2 py-1.5 font-medium hidden sm:table-cell">{t('admin.users.table.email')}</th>
                       <th className="px-2 py-1.5 font-medium">{t('admin.users.table.role')}</th>
+                      <th className="px-2 py-1.5 font-medium text-center w-12">{t('admin.users.table.read')}</th>
+                      <th className="px-2 py-1.5 font-medium text-center w-12">{t('admin.users.table.write')}</th>
+                      <th className="px-2 py-1.5 font-medium text-center w-12">{t('admin.users.table.delete')}</th>
                       <th className="px-2 py-1.5 font-medium hidden md:table-cell">{t('admin.users.table.created')}</th>
                       <th className="px-2 py-1.5 font-medium">{t('admin.users.table.actions')}</th>
                     </tr>
@@ -540,6 +546,33 @@ export function AdminPage() {
                               <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">{roleDisplay(u.role)}</Badge>
                             )}
                           </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <Checkbox
+                              checked={edits?.canReadAllRooms ?? u.canReadAllRooms}
+                              onCheckedChange={(checked) =>
+                                updateEditedUser(u.id, { canReadAllRooms: checked as boolean })
+                              }
+                              disabled={!isSuperuser || u.role === 'superuser'}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <Checkbox
+                              checked={edits?.canWriteAllRooms ?? u.canWriteAllRooms}
+                              onCheckedChange={(checked) =>
+                                updateEditedUser(u.id, { canWriteAllRooms: checked as boolean })
+                              }
+                              disabled={!isSuperuser || u.role === 'superuser'}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <Checkbox
+                              checked={edits?.canDeleteAllRooms ?? u.canDeleteAllRooms}
+                              onCheckedChange={(checked) =>
+                                updateEditedUser(u.id, { canDeleteAllRooms: checked as boolean })
+                              }
+                              disabled={!isSuperuser || u.role === 'superuser'}
+                            />
+                          </td>
                           <td className="px-2 py-1.5 text-muted-foreground hidden md:table-cell">{formatDate(u.createdAt ?? '')}</td>
                           <td className="px-2 py-1.5">
                             <div className="flex items-center gap-1">
@@ -578,7 +611,7 @@ export function AdminPage() {
         </Card>
 
         {/* Rooms + Storage Section */}
-        {isSuperuser ? (
+        {isSuperuser || isAdmin ? (
           <Card>
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
@@ -601,6 +634,7 @@ export function AdminPage() {
                 </div>
               ) : (
                 <>
+                  {isSuperuser && (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-4">
                     <div className="rounded-md border p-3">
                       <div className="text-xs text-muted-foreground">{t('admin.storage.dbSize')}</div>
@@ -630,6 +664,7 @@ export function AdminPage() {
                       </div>
                     </div>
                   </div>
+                  )}
 
                   {storageNotice && (
                     <div className="mb-3 text-xs text-muted-foreground">{storageNotice}</div>
