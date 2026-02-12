@@ -34,10 +34,11 @@ import { ShareLinkManager } from '@/components/features/share-link-manager'
 import type { Room, Language, User, PaginationMeta, RoomActiveness } from '@/types'
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
-const PAGE_SIZE = 12
+const DEFAULT_PAGE_SIZE = 20
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const EMPTY_PAGINATION: PaginationMeta = {
   page: 1,
-  pageSize: PAGE_SIZE,
+  pageSize: DEFAULT_PAGE_SIZE,
   total: 0,
   totalPages: 0,
   hasNext: false,
@@ -54,6 +55,7 @@ export function RoomsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [ownerFilter, setOwnerFilter] = useState('all')
   const [activenessFilter, setActivenessFilter] = useState<RoomActiveness>('all')
 
@@ -83,14 +85,14 @@ export function RoomsPage() {
 
   useEffect(() => {
     loadRooms()
-  }, [page, ownerFilter, activenessFilter])
+  }, [page, pageSize, ownerFilter, activenessFilter])
 
   const loadRooms = async () => {
     try {
       setIsLoading(true)
       const { rooms, pagination } = await api.getRooms({
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
         ownerId: ownerFilter === 'all' ? undefined : ownerFilter,
         activeness: activenessFilter,
       })
@@ -373,7 +375,7 @@ export function RoomsPage() {
           <div className="mb-4 p-4 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
         )}
 
-        <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
+        <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
             <div className="space-y-1">
               <Label>{t('rooms.filters.owner')}</Label>
               <Select
@@ -412,6 +414,27 @@ export function RoomsPage() {
                   <SelectItem value="all">{t('rooms.filters.allActiveness')}</SelectItem>
                   <SelectItem value="active">{t('rooms.filters.active')}</SelectItem>
                   <SelectItem value="ended">{t('rooms.filters.ended')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>{t('rooms.pagination.pageSize')}</Label>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(value) => {
+                  setPageSize(Number(value))
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

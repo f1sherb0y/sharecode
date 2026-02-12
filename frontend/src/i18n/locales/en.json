@@ -100,6 +100,7 @@
     },
     "pagination": {
       "total": "{{count}} room(s)",
+      "pageSize": "Items per page",
       "prev": "Previous",
       "next": "Next",
       "page": "Page {{page}} / {{totalPages}}"
