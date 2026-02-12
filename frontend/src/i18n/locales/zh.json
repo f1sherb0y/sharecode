@@ -44,6 +44,10 @@
       "name": "房间名称",
       "namePlaceholder": "输入房间名称",
       "language": "编程语言",
+      "company": "公司（可选）",
+      "companyPlaceholder": "例如：OpenAI",
+      "position": "职位（可选）",
+      "positionPlaceholder": "例如：前端工程师",
       "scheduledTime": "计划时间（可选）",
       "scheduledTimePlaceholder": "年-月-日 时:分",
       "scheduledTimeHint": "格式：年-月-日 时:分（例如：2024-12-31 14:30）",
@@ -79,11 +83,26 @@
       "durationUnit": "分钟",
       "participants": "参与者",
       "owned": "我的",
+      "manage": "管理房间",
       "ended": "已结束",
       "expired": "已过期",
       "delete": "删除",
       "deleteConfirm": "删除房间 \"{{name}}\"？",
       "viewPlayback": "查看回放"
+    },
+    "filters": {
+      "owner": "所有者",
+      "allOwners": "全部所有者",
+      "activeness": "活跃状态",
+      "allActiveness": "全部",
+      "active": "活跃",
+      "ended": "已结束"
+    },
+    "pagination": {
+      "total": "共 {{count}} 个房间",
+      "prev": "上一页",
+      "next": "下一页",
+      "page": "第 {{page}} / {{totalPages}} 页"
     }
   },
   "editor": {

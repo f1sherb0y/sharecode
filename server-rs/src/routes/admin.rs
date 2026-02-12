@@ -1,10 +1,4 @@
-use axum::{
-    extract::Path,
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Path, extract::State, http::StatusCode, response::IntoResponse, Json};
 use bcrypt::hash;
 use chrono::{NaiveDateTime, Timelike};
 use serde_json::{json, Value};
@@ -115,9 +109,15 @@ struct PermissionFlagsUpdate {
 
 fn merge_permissions(current: PermissionFlags, updates: PermissionFlagsUpdate) -> PermissionFlags {
     PermissionFlags {
-        can_read_all_rooms: updates.can_read_all_rooms.unwrap_or(current.can_read_all_rooms),
-        can_write_all_rooms: updates.can_write_all_rooms.unwrap_or(current.can_write_all_rooms),
-        can_delete_all_rooms: updates.can_delete_all_rooms.unwrap_or(current.can_delete_all_rooms),
+        can_read_all_rooms: updates
+            .can_read_all_rooms
+            .unwrap_or(current.can_read_all_rooms),
+        can_write_all_rooms: updates
+            .can_write_all_rooms
+            .unwrap_or(current.can_write_all_rooms),
+        can_delete_all_rooms: updates
+            .can_delete_all_rooms
+            .unwrap_or(current.can_delete_all_rooms),
     }
 }
 
@@ -181,10 +181,22 @@ pub async fn create_user(
     AdminUser(auth_user): AdminUser,
     Json(payload): Json<Value>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let username = payload.get("username").and_then(|v| v.as_str()).unwrap_or("");
-    let password = payload.get("password").and_then(|v| v.as_str()).unwrap_or("");
-    let email = payload.get("email").and_then(|v| v.as_str()).map(|v| v.to_string());
-    let requested_role = payload.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+    let username = payload
+        .get("username")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let password = payload
+        .get("password")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let email = payload
+        .get("email")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+    let requested_role = payload
+        .get("role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("user");
 
     if username.is_empty() || password.is_empty() {
         return Err(ApiError::bad_request("Username and password are required"));
@@ -206,34 +218,32 @@ pub async fn create_user(
         return Err(ApiError::not_found("Not found"));
     }
 
-    let existing_user = sqlx::query_scalar::<_, i64>(
-        r#"SELECT 1 FROM "User" WHERE username = $1 LIMIT 1"#,
-    )
-    .bind(username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to check username"))?;
+    let existing_user =
+        sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE username = $1 LIMIT 1"#)
+            .bind(username)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|err| db_error(err, "Failed to check username"))?;
 
     if existing_user.is_some() {
         return Err(ApiError::bad_request("Username already taken"));
     }
 
     if let Some(ref email_value) = email {
-        let existing_email = sqlx::query_scalar::<_, i64>(
-            r#"SELECT 1 FROM "User" WHERE email = $1 LIMIT 1"#,
-        )
-        .bind(email_value)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to check email"))?;
+        let existing_email =
+            sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE email = $1 LIMIT 1"#)
+                .bind(email_value)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|err| db_error(err, "Failed to check email"))?;
 
         if existing_email.is_some() {
             return Err(ApiError::bad_request("Email already in use"));
         }
     }
 
-    let hashed_password =
-        hash(password, 10).map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
+    let hashed_password = hash(password, 10)
+        .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
 
     let requested_permissions = extract_permission_input(&payload);
     let permissions = default_permissions_for_role(requested_role, requested_permissions);
@@ -269,7 +279,10 @@ pub async fn create_user(
     .await
     .map_err(|err| db_error(err, "Failed to create user"))?;
 
-    Ok((StatusCode::CREATED, Json(json!({ "user": user_to_json(&user) }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "user": user_to_json(&user) })),
+    ))
 }
 
 pub async fn get_all_users(
@@ -342,7 +355,10 @@ pub async fn update_user(
         _ => return Err(ApiError::not_found("User not found")),
     };
 
-    if target_user.id == auth_user.id && requested_role.is_some() && requested_role != Some("superuser") {
+    if target_user.id == auth_user.id
+        && requested_role.is_some()
+        && requested_role != Some("superuser")
+    {
         return Err(ApiError::not_found("Not found"));
     }
 
@@ -368,7 +384,10 @@ pub async fn update_user(
         return Err(ApiError::not_found("Not found"));
     }
 
-    if target_user.role == "superuser" && requested_role.is_some() && requested_role != Some("superuser") {
+    if target_user.role == "superuser"
+        && requested_role.is_some()
+        && requested_role != Some("superuser")
+    {
         let superuser_count = sqlx::query_scalar::<_, i64>(
             r#"SELECT COUNT(*) FROM "User" WHERE role = 'superuser' AND "isDeleted" = false"#,
         )
@@ -509,7 +528,7 @@ pub async fn delete_user(
         UPDATE "User"
         SET "isDeleted" = true
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(&user_id)
     .execute(&state.db)
@@ -529,6 +548,8 @@ pub async fn get_all_rooms(
             r.id,
             r.name,
             r.language,
+            r.company,
+            r.position,
             r."ownerId" as owner_id,
             r."allowEdit" as allow_edit,
             r."isDeleted" as is_deleted,
@@ -557,6 +578,8 @@ pub async fn get_all_rooms(
             "id": room.id,
             "name": room.name,
             "language": room.language,
+            "company": room.company,
+            "position": room.position,
             "ownerId": room.owner_id,
             "allowEdit": room.allow_edit,
             "isDeleted": room.is_deleted,
@@ -726,10 +749,7 @@ pub async fn compress_room_playback(
     let mut current_bucket: Option<NaiveDateTime> = None;
 
     for row in updates {
-        let bucket_time = row
-            .timestamp
-            .with_nanosecond(0)
-            .unwrap_or(row.timestamp);
+        let bucket_time = row.timestamp.with_nanosecond(0).unwrap_or(row.timestamp);
         if current_bucket.is_none() {
             current_bucket = Some(bucket_time);
         }
@@ -818,7 +838,7 @@ pub async fn delete_room(
         SET "isDeleted" = true,
             "updatedAt" = NOW()
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(&room_id)
     .execute(&state.db)

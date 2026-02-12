@@ -10,6 +10,8 @@ export type Language =
   | 'go'
   | 'php'
 
+export type RoomActiveness = 'all' | 'active' | 'ended'
+
 export interface User {
   id: string
   email: string | null
@@ -27,6 +29,8 @@ export interface Room {
   id: string
   name: string
   language: Language
+  company?: string | null
+  position?: string | null
   ownerId: string
   allowEdit: boolean
   isDeleted?: boolean
@@ -46,6 +50,15 @@ export interface Room {
   isOwner?: boolean
   canEdit?: boolean
   isExpired?: boolean
+}
+
+export interface PaginationMeta {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  hasNext: boolean
+  hasPrev: boolean
 }
 
 export interface RoomParticipant {

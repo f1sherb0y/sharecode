@@ -16,6 +16,7 @@ export interface EditorRoomState {
   isGuestMode: boolean
   canEdit: boolean
   isOwner: boolean
+  canManageRoom: boolean
   isPrivileged: boolean
   canViewPlayback: boolean
   roomEnded: boolean
@@ -97,6 +98,9 @@ export function useEditorRoom(): EditorRoomState {
   const canEdit = isGuestMode
     ? guestSession?.guest.canEdit ?? false
     : hasWriteAllPermission || isOwner || effectiveRoom?.canEdit === true
+  const canManageRoom = !isGuestMode && !!user && (
+    isOwner || user.role === 'superuser' || user.canDeleteAllRooms
+  )
 
   const hasGlobalReadPermission = !isGuestMode && !!user && (
     user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
@@ -207,7 +211,7 @@ export function useEditorRoom(): EditorRoomState {
   }
 
   const handleEndRoom = useCallback(async () => {
-    if (!roomId || !isOwner) return
+    if (!roomId || !canManageRoom) return
     
     // We will let the UI handle the confirmation dialog now, or keep it simple here.
     // The requirement was to use Radix UI Dialog. 
@@ -224,7 +228,7 @@ export function useEditorRoom(): EditorRoomState {
     } finally {
       setIsEnding(false)
     }
-  }, [roomId, isOwner, navigate])
+  }, [roomId, canManageRoom, navigate])
 
   const handleLanguageChange = useCallback(
     async (language: Language, ymeta: any) => {
@@ -255,6 +259,7 @@ export function useEditorRoom(): EditorRoomState {
     isGuestMode,
     canEdit,
     isOwner,
+    canManageRoom,
     isPrivileged,
     canViewPlayback,
     roomEnded,

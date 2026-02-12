@@ -31,9 +31,18 @@ import { api } from '@/api'
 import { useAuthStore } from '@/stores'
 import { cn, formatDate } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
-import type { Room, Language, User } from '@/types'
+import type { Room, Language, User, PaginationMeta, RoomActiveness } from '@/types'
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
+const PAGE_SIZE = 12
+const EMPTY_PAGINATION: PaginationMeta = {
+  page: 1,
+  pageSize: PAGE_SIZE,
+  total: 0,
+  totalPages: 0,
+  hasNext: false,
+  hasPrev: false,
+}
 
 export function RoomsPage() {
   const { t } = useTranslation()
@@ -41,13 +50,19 @@ export function RoomsPage() {
   const { user } = useAuthStore()
 
   const [rooms, setRooms] = useState<Room[]>([])
+  const [pagination, setPagination] = useState<PaginationMeta>(EMPTY_PAGINATION)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+  const [ownerFilter, setOwnerFilter] = useState('all')
+  const [activenessFilter, setActivenessFilter] = useState<RoomActiveness>('all')
 
   // Create room form state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomLanguage, setNewRoomLanguage] = useState<Language>('javascript')
+  const [newRoomCompany, setNewRoomCompany] = useState('')
+  const [newRoomPosition, setNewRoomPosition] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [duration, setDuration] = useState('')
   const [isCreating, setIsCreating] = useState(false)
@@ -59,24 +74,32 @@ export function RoomsPage() {
   const [roomToShare, setRoomToShare] = useState<{ id: string; name: string } | null>(null)
 
   // User selection for room access
-  const [availableUsers, setAvailableUsers] = useState<User[]>([])
+  const [allUsers, setAllUsers] = useState<User[]>([])
   const [selectedUsers, setSelectedUsers] = useState<Array<{ userId: string; canEdit: boolean }>>([])
 
   useEffect(() => {
-    loadRooms()
     loadUsers()
   }, [])
+
+  useEffect(() => {
+    loadRooms()
+  }, [page, ownerFilter, activenessFilter])
 
   const loadRooms = async () => {
     try {
       setIsLoading(true)
-      const { rooms } = await api.getRooms()
-      // Sort: active rooms first, then by creation date
-      const sorted = rooms.sort((a, b) => {
-        if (a.isEnded !== b.isEnded) return a.isEnded ? 1 : -1
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      const { rooms, pagination } = await api.getRooms({
+        page,
+        pageSize: PAGE_SIZE,
+        ownerId: ownerFilter === 'all' ? undefined : ownerFilter,
+        activeness: activenessFilter,
       })
-      setRooms(sorted)
+      setRooms(rooms)
+      setPagination(pagination ?? EMPTY_PAGINATION)
+
+      if (pagination && rooms.length === 0 && pagination.totalPages > 0 && page > pagination.totalPages) {
+        setPage(pagination.totalPages)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load rooms')
     } finally {
@@ -87,7 +110,7 @@ export function RoomsPage() {
   const loadUsers = async () => {
     try {
       const { users } = await api.getAllUsersForRoomCreation()
-      setAvailableUsers(users.filter((u) => u.id !== user?.id))
+      setAllUsers(users)
     } catch {
       // Non-critical error
     }
@@ -103,7 +126,9 @@ export function RoomsPage() {
         newRoomLanguage,
         scheduledTime || undefined,
         duration ? parseInt(duration, 10) : undefined,
-        selectedUsers.length > 0 ? selectedUsers : undefined
+        selectedUsers.length > 0 ? selectedUsers : undefined,
+        newRoomCompany || undefined,
+        newRoomPosition || undefined
       )
       setIsCreateOpen(false)
       resetForm()
@@ -118,6 +143,8 @@ export function RoomsPage() {
   const resetForm = () => {
     setNewRoomName('')
     setNewRoomLanguage('javascript')
+    setNewRoomCompany('')
+    setNewRoomPosition('')
     setScheduledTime('')
     setDuration('')
     setSelectedUsers([])
@@ -159,6 +186,8 @@ export function RoomsPage() {
     )
   }
 
+  const availableUsers = allUsers.filter((u) => u.id !== user?.id)
+
   return (
     <div className="flex flex-col min-h-screen">
       <Navbar
@@ -177,73 +206,101 @@ export function RoomsPage() {
                   <DialogTitle>{t('rooms.create.title')}</DialogTitle>
                   <DialogDescription>{t('rooms.create.allowedUsersHint')}</DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="roomName">{t('rooms.create.name')}</Label>
+                <div className="grid gap-3 py-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="roomName" className="text-xs">{t('rooms.create.name')}</Label>
                     <Input
                       id="roomName"
+                      className="h-9 text-xs"
                       value={newRoomName}
                       onChange={(e) => setNewRoomName(e.target.value)}
                       placeholder={t('rooms.create.namePlaceholder')}
                       required
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>{t('rooms.create.language')}</Label>
-                    <Select value={newRoomLanguage} onValueChange={(v) => setNewRoomLanguage(v as Language)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LANGUAGES.map((lang) => (
-                          <SelectItem key={lang} value={lang}>
-                            {lang}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">{t('rooms.create.language')}</Label>
+                      <Select value={newRoomLanguage} onValueChange={(v) => setNewRoomLanguage(v as Language)}>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LANGUAGES.map((lang) => (
+                            <SelectItem key={lang} value={lang}>
+                              {lang}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="roomCompany" className="text-xs">{t('rooms.create.company')}</Label>
+                      <Input
+                        id="roomCompany"
+                        className="h-9 text-xs"
+                        value={newRoomCompany}
+                        onChange={(e) => setNewRoomCompany(e.target.value)}
+                        placeholder={t('rooms.create.companyPlaceholder')}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="scheduledTime">{t('rooms.create.scheduledTime')}</Label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="roomPosition" className="text-xs">{t('rooms.create.position')}</Label>
+                      <Input
+                        id="roomPosition"
+                        className="h-9 text-xs"
+                        value={newRoomPosition}
+                        onChange={(e) => setNewRoomPosition(e.target.value)}
+                        placeholder={t('rooms.create.positionPlaceholder')}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="duration" className="text-xs">{t('rooms.create.duration')}</Label>
+                      <Input
+                        id="duration"
+                        className="h-9 text-xs"
+                        type="number"
+                        value={duration}
+                        onChange={(e) => setDuration(e.target.value)}
+                        placeholder={t('rooms.create.durationPlaceholder')}
+                        min="1"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="scheduledTime" className="text-xs">{t('rooms.create.scheduledTime')}</Label>
                     <Input
                       id="scheduledTime"
+                      className="h-9 text-xs"
                       type="datetime-local"
                       value={scheduledTime}
                       onChange={(e) => setScheduledTime(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="duration">{t('rooms.create.duration')}</Label>
-                    <Input
-                      id="duration"
-                      type="number"
-                      value={duration}
-                      onChange={(e) => setDuration(e.target.value)}
-                      placeholder={t('rooms.create.durationPlaceholder')}
-                      min="1"
-                    />
-                  </div>
                   {availableUsers.length > 0 && (
-                    <div className="space-y-2">
-                      <Label>{t('rooms.create.allowedUsers')}</Label>
-                      <div className="border rounded-md max-h-40 overflow-y-auto">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">{t('rooms.create.allowedUsers')}</Label>
+                      <div className="border rounded-md max-h-32 overflow-y-auto">
                         {availableUsers.map((u) => {
                           const selected = selectedUsers.find((s) => s.userId === u.id)
                           return (
                             <div
                               key={u.id}
                               className={cn(
-                                'flex items-center justify-between px-3 py-2 hover:bg-accent cursor-pointer',
+                                'flex items-center justify-between px-2.5 py-1.5 hover:bg-accent cursor-pointer',
                                 selected && 'bg-accent/50'
                               )}
                               onClick={() => toggleUserSelection(u.id)}
                             >
-                              <span className="text-sm">{u.username}</span>
+                              <span className="text-xs">{u.username}</span>
                               {selected && (
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
+                                  className="h-6 px-2 text-xs"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     toggleUserCanEdit(u.id)
@@ -316,6 +373,53 @@ export function RoomsPage() {
           <div className="mb-4 p-4 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
         )}
 
+        <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
+            <div className="space-y-1">
+              <Label>{t('rooms.filters.owner')}</Label>
+              <Select
+                value={ownerFilter}
+                onValueChange={(value) => {
+                  setOwnerFilter(value)
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('rooms.filters.allOwners')}</SelectItem>
+                  {allUsers.map((roomUser) => (
+                    <SelectItem key={roomUser.id} value={roomUser.id}>
+                      {roomUser.username}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>{t('rooms.filters.activeness')}</Label>
+              <Select
+                value={activenessFilter}
+                onValueChange={(value) => {
+                  setActivenessFilter(value as RoomActiveness)
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('rooms.filters.allActiveness')}</SelectItem>
+                  <SelectItem value="active">{t('rooms.filters.active')}</SelectItem>
+                  <SelectItem value="ended">{t('rooms.filters.ended')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-sm text-muted-foreground lg:pb-1 lg:text-right">
+              {t('rooms.pagination.total', { count: pagination.total })}
+            </div>
+        </div>
+
         {isLoading ? (
           <div className="flex justify-center items-center py-12">
             <Spinner size="lg" />
@@ -339,6 +443,30 @@ export function RoomsPage() {
             ))}
           </div>
         )}
+
+        {!isLoading && pagination.totalPages > 0 && (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!pagination.hasPrev}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            >
+              {t('rooms.pagination.prev')}
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {t('rooms.pagination.page', { page: pagination.page, totalPages: pagination.totalPages })}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!pagination.hasNext}
+              onClick={() => setPage((prev) => prev + 1)}
+            >
+              {t('rooms.pagination.next')}
+            </Button>
+          </div>
+        )}
       </PageContainer>
     </div>
   )
@@ -359,6 +487,7 @@ function RoomCard({ room, currentUser, onDelete, onShare, onPlayback, onClick }:
   const isOwner = room.ownerId === currentUser?.id
   const isPrivileged = currentUser?.role === 'admin' || currentUser?.role === 'superuser' ||
     currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
+  const canManageRoom = isOwner || currentUser?.role === 'superuser' || currentUser?.canDeleteAllRooms
   const participantCount = (room.participants?.length ?? 0) + 1
   const canViewPlayback = room.isEnded && (isOwner || isPrivileged)
 
@@ -387,15 +516,20 @@ function RoomCard({ room, currentUser, onDelete, onShare, onPlayback, onClick }:
         </div>
         <CardDescription className="flex items-center gap-1 text-xs">
           <span>{room.owner.username}</span>
-          {isOwner && (
+          {canManageRoom && (
             <Badge variant="outline" className="ml-1 text-xs px-1 py-0">
-              {t('rooms.list.owned')}
+              {isOwner ? t('rooms.list.owned') : t('rooms.list.manage')}
             </Badge>
           )}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-3 pt-0 flex flex-col flex-1">
         <div className="flex flex-col gap-1 text-xs text-muted-foreground flex-1">
+          {(room.company || room.position) && (
+            <div className="truncate">
+              {[room.company, room.position].filter(Boolean).join(' • ')}
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <Users className="h-3 w-3" />
@@ -424,7 +558,7 @@ function RoomCard({ room, currentUser, onDelete, onShare, onPlayback, onClick }:
 
         {/* Actions */}
         <div className="flex items-center gap-1 mt-2 pt-2 border-t min-h-[36px]">
-          {isOwner && !room.isEnded && (
+          {canManageRoom && !room.isEnded && (
             <Button
               variant="ghost"
               size="sm"
@@ -453,7 +587,7 @@ function RoomCard({ room, currentUser, onDelete, onShare, onPlayback, onClick }:
             </Button>
           )}
 
-          {isOwner && (
+          {canManageRoom && (
             <Button
               variant="ghost"
               size="sm"

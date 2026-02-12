@@ -12,6 +12,7 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::{GuestSessionWithRoomRow, ShareLinkSummaryRow, ShareLinkWithRoomRow},
+    permissions::has_global_delete,
     state::AppState,
     utils::colors::random_user_color,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -62,7 +63,7 @@ pub async fn create_share_link(
                "isEnded" as is_ended, "allowEdit" as allow_edit
         FROM "Room"
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(&room_id)
     .fetch_optional(&state.db)
@@ -74,7 +75,7 @@ pub async fn create_share_link(
         _ => return Err(ApiError::not_found("Room not found")),
     };
 
-    if room.owner_id != auth_user.id {
+    if !can_manage_room_shares(&auth_user, &room.owner_id) {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -127,7 +128,7 @@ pub async fn list_share_links(
         SELECT id, "ownerId" as owner_id
         FROM "Room"
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(&room_id)
     .fetch_optional(&state.db)
@@ -139,7 +140,7 @@ pub async fn list_share_links(
         None => return Err(ApiError::not_found("Room not found")),
     };
 
-    if room.owner_id != auth_user.id {
+    if !can_manage_room_shares(&auth_user, &room.owner_id) {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -180,7 +181,7 @@ pub async fn delete_share_link(
         FROM "RoomShareLink" l
         JOIN "Room" r ON r.id = l."roomId"
         WHERE l.id = $1
-        "#
+        "#,
     )
     .bind(&share_link_id)
     .fetch_optional(&state.db)
@@ -192,7 +193,7 @@ pub async fn delete_share_link(
         _ => return Err(ApiError::not_found("Share link not found")),
     };
 
-    if share_link.owner_id != auth_user.id {
+    if !can_manage_room_shares(&auth_user, &share_link.owner_id) {
         return Err(ApiError::not_found("Share link not found"));
     }
 
@@ -238,7 +239,8 @@ pub async fn get_share_info(
         _ => return Err(ApiError::not_found("Share link not found")),
     };
 
-    let effective_can_edit = share_link.can_edit && share_link.room_allow_edit && !share_link.room_is_ended;
+    let effective_can_edit =
+        share_link.can_edit && share_link.room_allow_edit && !share_link.room_is_ended;
 
     Ok(Json(json!({
         "share": {
@@ -264,11 +266,7 @@ pub async fn join_share_link(
     Json(payload): Json<JoinSharePayload>,
 ) -> Result<impl IntoResponse, ApiError> {
     let username = payload.username.unwrap_or_default().trim().to_string();
-    let email = payload
-        .email
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let email = payload.email.unwrap_or_default().trim().to_string();
 
     let normalized_email = if email.is_empty() { None } else { Some(email) };
 
@@ -442,7 +440,7 @@ pub async fn get_guest_session(
         UPDATE "GuestSession"
         SET "lastActive" = $2, "canEdit" = $3
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(&guest.id)
     .bind(chrono::Utc::now().naive_utc())
@@ -500,6 +498,10 @@ fn build_share_url(state: &AppState, token: &str, room_id: &str) -> Option<Strin
         format!("room/{room_id}?share={token}")
     };
     Some(format!("{normalized}/{path}"))
+}
+
+fn can_manage_room_shares(auth_user: &AuthUser, owner_id: &str) -> bool {
+    auth_user.id == owner_id || auth_user.role == "superuser" || has_global_delete(auth_user)
 }
 
 fn random_token_hex(bytes: usize) -> String {

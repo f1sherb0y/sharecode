@@ -44,6 +44,10 @@
       "name": "Room Name",
       "namePlaceholder": "Enter room name",
       "language": "Language",
+      "company": "Company (optional)",
+      "companyPlaceholder": "e.g., OpenAI",
+      "position": "Position (optional)",
+      "positionPlaceholder": "e.g., Frontend Engineer",
       "scheduledTime": "Scheduled Time (optional)",
       "scheduledTimePlaceholder": "YYYY-MM-DD HH:MM",
       "scheduledTimeHint": "Format: YYYY-MM-DD HH:MM (e.g., 2024-12-31 14:30)",
@@ -79,11 +83,26 @@
       "durationUnit": "min",
       "participants": "participants",
       "owned": "Owned",
+      "manage": "Manage room",
       "ended": "Ended",
       "expired": "Expired",
       "delete": "Delete",
       "deleteConfirm": "Delete room \"{{name}}\"?",
       "viewPlayback": "Playback"
+    },
+    "filters": {
+      "owner": "Owner",
+      "allOwners": "All owners",
+      "activeness": "Activeness",
+      "allActiveness": "All",
+      "active": "Active",
+      "ended": "Ended"
+    },
+    "pagination": {
+      "total": "{{count}} room(s)",
+      "prev": "Previous",
+      "next": "Next",
+      "page": "Page {{page}} / {{totalPages}}"
     }
   },
   "editor": {

@@ -13,6 +13,8 @@ import type {
   RoomPlaybackSize,
   PlaybackCompressionResult,
   Language,
+  RoomActiveness,
+  PaginationMeta,
   CodeExecutionResult,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
@@ -116,16 +118,30 @@ class ApiClient {
     language: Language,
     scheduledTime?: string,
     duration?: number,
-    allowedUsers?: Array<{ userId: string; canEdit: boolean }>
+    allowedUsers?: Array<{ userId: string; canEdit: boolean }>,
+    company?: string,
+    position?: string
   ): Promise<{ room: Room }> {
     return this.request<{ room: Room }>('/api/rooms', {
       method: 'POST',
-      body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers }),
+      body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers, company, position }),
     })
   }
 
-  async getRooms(): Promise<{ rooms: Room[] }> {
-    return this.request<{ rooms: Room[] }>('/api/rooms')
+  async getRooms(params?: {
+    page?: number
+    pageSize?: number
+    ownerId?: string
+    activeness?: RoomActiveness
+  }): Promise<{ rooms: Room[]; pagination: PaginationMeta }> {
+    const query = new URLSearchParams()
+    if (params?.page) query.set('page', String(params.page))
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize))
+    if (params?.ownerId) query.set('ownerId', params.ownerId)
+    if (params?.activeness) query.set('activeness', params.activeness)
+
+    const endpoint = query.toString() ? `/api/rooms?${query.toString()}` : '/api/rooms'
+    return this.request<{ rooms: Room[]; pagination: PaginationMeta }>(endpoint)
   }
 
   async getRoom(roomId: string): Promise<{ room: Room }> {
