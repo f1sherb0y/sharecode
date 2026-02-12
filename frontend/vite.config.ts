@@ -38,6 +38,19 @@ export default defineConfig(async () => ({
     target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
     minify: !process.env.TAURI_ENV_DEBUG ? 'oxc' : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    rollupOptions: {
+      output: {
+        name: 'ShareCodeApp',
+      },
+    },
+  },
+
+  worker: {
+    rollupOptions: {
+      output: {
+        name: 'ShareCodeWorker',
+      },
+    },
   },
 
   envPrefix: ['VITE_', 'TAURI_'],
