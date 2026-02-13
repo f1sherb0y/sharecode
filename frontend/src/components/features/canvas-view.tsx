@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Tldraw, type Editor } from 'tldraw'
 import type { TLStore } from 'tldraw'
 import { Spinner } from '@/components/ui'
@@ -27,12 +27,55 @@ export function CanvasView({
 }: CanvasViewProps) {
   const editorRef = useRef<Editor | null>(null)
   const lastFollowRef = useRef<string | null>(null)
+  const [mountVersion, setMountVersion] = useState(0)
+
+  const applyFollow = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    if (!followEnabled || (!followUserId && followClientId == null)) {
+      if (lastFollowRef.current) {
+        editor.stopFollowingUser()
+        lastFollowRef.current = null
+      }
+      return
+    }
+
+    if (!provider?.awareness) return
+
+    const awareness = provider.awareness
+    let targetClientId: number | null = null
+    const localClientId = awareness.clientID
+
+    if (followUserId != null) {
+      awareness.getStates().forEach((state: any, clientId: number) => {
+        if (clientId === localClientId || targetClientId != null) return
+        if (state?.user?.id === followUserId) {
+          targetClientId = clientId
+        }
+      })
+    } else if (followClientId != null) {
+      targetClientId = followClientId
+    }
+
+    const target = targetClientId != null ? targetClientId.toString() : null
+    if (target === lastFollowRef.current) return
+
+    if (target) {
+      editor.startFollowingUser(target)
+    } else if (lastFollowRef.current) {
+      editor.stopFollowingUser()
+    }
+    lastFollowRef.current = target
+  }, [provider, followUserId, followClientId, followEnabled])
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
     editor.updateInstanceState({ isReadonly: !canEdit })
     editor.user.updateUserPreferences({ colorScheme: theme })
-  }, [canEdit, theme])
+    setMountVersion((value) => value + 1)
+    applyFollow()
+  }, [canEdit, theme, applyFollow])
 
   useEffect(() => {
     if (editorRef.current) {
@@ -47,51 +90,16 @@ export function CanvasView({
   }, [theme])
 
   useEffect(() => {
-    const editor = editorRef.current
-    if (!editor) return
-    if (!followEnabled || (!followUserId && followClientId == null)) {
-      if (lastFollowRef.current) {
-        editor.stopFollowingUser()
-        lastFollowRef.current = null
-      }
-      return
-    }
+    if (!editorRef.current) return
+    applyFollow()
     if (!provider?.awareness) return
 
-    const updateFollow = () => {
-      const awareness = provider.awareness
-      let targetClientId: number | null = null
-      const localClientId = awareness.clientID
-
-      if (followUserId != null) {
-        awareness.getStates().forEach((state: any, clientId: number) => {
-          if (clientId === localClientId || targetClientId != null) return
-          if (state?.user?.id === followUserId) {
-            targetClientId = clientId
-          }
-        })
-      } else if (followClientId != null) {
-        targetClientId = followClientId
-      }
-
-      const target = targetClientId != null ? targetClientId.toString() : null
-      if (target === lastFollowRef.current) return
-
-      if (target) {
-        editor.startFollowingUser(target)
-      } else if (lastFollowRef.current) {
-        editor.stopFollowingUser()
-      }
-      lastFollowRef.current = target
-    }
-
-    updateFollow()
-    provider.awareness.on('change', updateFollow)
+    provider.awareness.on('change', applyFollow)
 
     return () => {
-      provider.awareness.off('change', updateFollow)
+      provider.awareness.off('change', applyFollow)
     }
-  }, [provider, followUserId, followClientId, followEnabled])
+  }, [provider, applyFollow, mountVersion])
 
   if (!store || !ready) {
     return (

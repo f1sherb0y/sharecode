@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import {
@@ -39,6 +39,27 @@ type PermissionState = {
 }
 
 const ROLES: Role[] = ['user', 'admin', 'superuser']
+const ADMIN_SECTIONS = ['all', 'users', 'rooms'] as const
+const ROOM_STATUS_FILTERS = ['all', 'active', 'ended'] as const
+
+type AdminSection = (typeof ADMIN_SECTIONS)[number]
+type RoomStatusFilter = (typeof ROOM_STATUS_FILTERS)[number]
+type UserRoleFilter = Role | 'all'
+
+function parseAdminSection(value: string | null): AdminSection {
+  return ADMIN_SECTIONS.includes((value ?? '') as AdminSection) ? (value as AdminSection) : 'all'
+}
+
+function parseUserRoleFilter(value: string | null): UserRoleFilter {
+  if (value === 'all') return 'all'
+  return ROLES.includes((value ?? '') as Role) ? (value as Role) : 'all'
+}
+
+function parseRoomStatusFilter(value: string | null): RoomStatusFilter {
+  return ROOM_STATUS_FILTERS.includes((value ?? '') as RoomStatusFilter)
+    ? (value as RoomStatusFilter)
+    : 'all'
+}
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -61,7 +82,11 @@ function getInitialPermissionsForRole(role: Role): PermissionState {
 export function AdminPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuthStore()
+  const section = parseAdminSection(searchParams.get('section'))
+  const userRoleFilter = parseUserRoleFilter(searchParams.get('userRole'))
+  const roomStatusFilter = parseRoomStatusFilter(searchParams.get('roomStatus'))
 
   const [users, setUsers] = useState<User[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
@@ -95,6 +120,44 @@ export function AdminPage() {
 
   const isSuperuser = user?.role === 'superuser'
   const isAdmin = user?.role === 'admin'
+  const showUsersSection = section === 'all' || section === 'users'
+  const showRoomsSection = section === 'all' || section === 'rooms'
+
+  const updateAdminParams = useCallback((updates: {
+    section?: AdminSection
+    userRole?: UserRoleFilter
+    roomStatus?: RoomStatusFilter
+  }) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('section', updates.section ?? section)
+      next.set('userRole', updates.userRole ?? userRoleFilter)
+      next.set('roomStatus', updates.roomStatus ?? roomStatusFilter)
+      return next
+    })
+  }, [setSearchParams, section, userRoleFilter, roomStatusFilter])
+
+  useEffect(() => {
+    const normalized = new URLSearchParams(searchParams)
+    let changed = false
+
+    if (normalized.get('section') !== section) {
+      normalized.set('section', section)
+      changed = true
+    }
+    if (normalized.get('userRole') !== userRoleFilter) {
+      normalized.set('userRole', userRoleFilter)
+      changed = true
+    }
+    if (normalized.get('roomStatus') !== roomStatusFilter) {
+      normalized.set('roomStatus', roomStatusFilter)
+      changed = true
+    }
+
+    if (changed) {
+      setSearchParams(normalized, { replace: true })
+    }
+  }, [searchParams, section, userRoleFilter, roomStatusFilter, setSearchParams])
 
   useEffect(() => {
     if (!user || (user.role !== 'admin' && user.role !== 'superuser')) {
@@ -326,6 +389,17 @@ export function AdminPage() {
     return map
   }, [playbackSizes])
 
+  const filteredUsers = useMemo(() => {
+    if (userRoleFilter === 'all') return users
+    return users.filter((u) => u.role === userRoleFilter)
+  }, [users, userRoleFilter])
+
+  const filteredRooms = useMemo(() => {
+    if (roomStatusFilter === 'all') return rooms
+    const ended = roomStatusFilter === 'ended'
+    return rooms.filter((room) => !!room.isEnded === ended)
+  }, [rooms, roomStatusFilter])
+
   return (
     <div className="flex flex-col min-h-screen">
       <Navbar
@@ -410,7 +484,62 @@ export function AdminPage() {
           <div className="mb-4 p-4 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
         )}
 
+        <div className="mb-4 grid gap-2 sm:grid-cols-3 lg:max-w-3xl">
+          <div className="space-y-1">
+            <Label>View</Label>
+            <Select
+              value={section}
+              onValueChange={(value) => updateAdminParams({ section: value as AdminSection })}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="users">{t('admin.users.title')}</SelectItem>
+                <SelectItem value="rooms">{t('admin.rooms.title')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>{t('admin.users.table.role')}</Label>
+            <Select
+              value={userRoleFilter}
+              onValueChange={(value) => updateAdminParams({ userRole: value as UserRoleFilter })}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {ROLES.map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {roleDisplay(role)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>{t('admin.rooms.table.status')}</Label>
+            <Select
+              value={roomStatusFilter}
+              onValueChange={(value) => updateAdminParams({ roomStatus: value as RoomStatusFilter })}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="active">{t('admin.rooms.table.statusActive')}</SelectItem>
+                <SelectItem value="ended">{t('admin.rooms.table.statusEnded')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         {/* Users Section */}
+        {showUsersSection && (
         <Card className="mb-6">
           <CardHeader className="py-3">
             <div className="flex items-center justify-between">
@@ -512,7 +641,7 @@ export function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((u) => {
+                    {filteredUsers.map((u) => {
                       const edits = editedUsers.get(u.id)
                       const canDelete = isSuperuser
                         ? u.id !== user?.id && u.role !== 'superuser'
@@ -603,15 +732,23 @@ export function AdminPage() {
                         </tr>
                       )
                     })}
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td className="px-2 py-3 text-center text-muted-foreground" colSpan={8}>
+                          {t('rooms.list.empty')}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Rooms + Storage Section */}
-        {isSuperuser || isAdmin ? (
+        {showRoomsSection && (isSuperuser || isAdmin) ? (
           <Card>
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
@@ -690,7 +827,7 @@ export function AdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {rooms.map((room) => {
+                        {filteredRooms.map((room) => {
                           const playback = playbackByRoomId.get(room.id)
                           const updates = playback?.updateCount ?? 0
                           const sizeBytes = playback?.bytes ?? 0
@@ -763,6 +900,13 @@ export function AdminPage() {
                             </tr>
                           )
                         })}
+                        {filteredRooms.length === 0 && (
+                          <tr>
+                            <td className="px-2 py-3 text-center text-muted-foreground" colSpan={9}>
+                              {t('rooms.list.empty')}
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -770,7 +914,7 @@ export function AdminPage() {
               )}
             </CardContent>
           </Card>
-        ) : (
+        ) : showRoomsSection ? (
           <Card>
             <CardHeader className="py-3">
               <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
@@ -779,7 +923,7 @@ export function AdminPage() {
               <p className="text-sm text-muted-foreground">{t('admin.rooms.superuserOnly')}</p>
             </CardContent>
           </Card>
-        )}
+        ) : null}
       </PageContainer>
     </div>
   )

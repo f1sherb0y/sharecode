@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush } from 'lucide-react'
 import * as Y from 'yjs'
@@ -39,6 +39,29 @@ const monacoLanguageIds: Record<Language, string> = {
   rust: 'rust',
   go: 'go',
   php: 'php',
+}
+
+const PLAYBACK_DOC_VIEWS = ['code', 'canvas'] as const
+const PLAYBACK_SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const
+
+function parsePlaybackView(value: string | null): 'code' | 'canvas' {
+  return PLAYBACK_DOC_VIEWS.includes((value ?? '') as (typeof PLAYBACK_DOC_VIEWS)[number])
+    ? (value as 'code' | 'canvas')
+    : 'code'
+}
+
+function parsePlaybackSpeed(value: string | null): number {
+  const numeric = Number(value)
+  return PLAYBACK_SPEED_OPTIONS.includes(numeric as (typeof PLAYBACK_SPEED_OPTIONS)[number])
+    ? numeric
+    : 1
+}
+
+function parsePlaybackTimestamp(value: string | null): number | null {
+  if (value == null || value === '') return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return Math.floor(numeric)
 }
 
 interface Update {
@@ -83,18 +106,20 @@ function decompressUpdate(compressedBase64: string): Uint8Array {
 export function PlaybackPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const { theme } = useThemeStore()
 
   const [room, setRoom] = useState<Room | null>(null)
   const [updates, setUpdates] = useState<Update[]>([])
-  const [activeDoc, setActiveDoc] = useState<'code' | 'canvas'>('code')
+  const activeDoc = parsePlaybackView(searchParams.get('view'))
+  const playbackSpeed = parsePlaybackSpeed(searchParams.get('speed'))
+  const urlTimestamp = parsePlaybackTimestamp(searchParams.get('t'))
   const [startMs, setStartMs] = useState(0)
   const [endMs, setEndMs] = useState(0)
   const [currentTimestamp, setCurrentTimestamp] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [canvasStore, setCanvasStore] = useState<TLStore | null>(null)
@@ -124,6 +149,58 @@ export function PlaybackPage() {
     }),
     []
   )
+
+  useEffect(() => {
+    const normalized = new URLSearchParams(searchParams)
+    let changed = false
+
+    if (normalized.get('view') !== activeDoc) {
+      normalized.set('view', activeDoc)
+      changed = true
+    }
+    if (normalized.get('speed') !== String(playbackSpeed)) {
+      normalized.set('speed', String(playbackSpeed))
+      changed = true
+    }
+
+    if (changed) {
+      setSearchParams(normalized, { replace: true })
+    }
+  }, [searchParams, activeDoc, playbackSpeed, setSearchParams])
+
+  useEffect(() => {
+    if (startMs === 0 || endMs === 0 || urlTimestamp == null) return
+    const clamped = Math.min(endMs, Math.max(startMs, urlTimestamp))
+    if (clamped !== currentTimestamp) {
+      setCurrentTimestamp(clamped)
+    }
+  }, [urlTimestamp, startMs, endMs, currentTimestamp])
+
+  useEffect(() => {
+    if (startMs === 0 || endMs === 0) return
+    const clamped = Math.min(endMs, Math.max(startMs, currentTimestamp))
+
+    const syncTimer = window.setTimeout(() => {
+      const timestampValue = String(Math.floor(clamped))
+      if (
+        searchParams.get('view') === activeDoc &&
+        searchParams.get('speed') === String(playbackSpeed) &&
+        searchParams.get('t') === timestampValue
+      ) {
+        return
+      }
+
+      const next = new URLSearchParams(searchParams)
+      next.set('view', activeDoc)
+      next.set('speed', String(playbackSpeed))
+      next.set('t', timestampValue)
+      setSearchParams(next, { replace: true })
+    }, 250)
+
+    return () => {
+      window.clearTimeout(syncTimer)
+    }
+  }, [currentTimestamp, startMs, endMs, searchParams, activeDoc, playbackSpeed, setSearchParams])
 
   const getDocAtTimestamp = useCallback(
     (timestamp: number) => {
@@ -376,7 +453,11 @@ export function PlaybackPage() {
               variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
               size="sm"
               className="h-7 px-2"
-              onClick={() => setActiveDoc('code')}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams)
+                next.set('view', 'code')
+                setSearchParams(next)
+              }}
             >
               <FileCode className="h-3.5 w-3.5 sm:mr-1" />
               <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
@@ -385,7 +466,11 @@ export function PlaybackPage() {
               variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
               size="sm"
               className="h-7 px-2"
-              onClick={() => setActiveDoc('canvas')}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams)
+                next.set('view', 'canvas')
+                setSearchParams(next)
+              }}
             >
               <Brush className="h-3.5 w-3.5 sm:mr-1" />
               <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
@@ -502,7 +587,14 @@ export function PlaybackPage() {
 
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{t('playback.speed')}:</span>
-            <Select value={String(playbackSpeed)} onValueChange={(v) => setPlaybackSpeed(Number(v))}>
+            <Select
+              value={String(playbackSpeed)}
+              onValueChange={(v) => {
+                const next = new URLSearchParams(searchParams)
+                next.set('speed', String(parsePlaybackSpeed(v)))
+                setSearchParams(next)
+              }}
+            >
               <SelectTrigger className="w-20 h-8">
                 <SelectValue />
               </SelectTrigger>

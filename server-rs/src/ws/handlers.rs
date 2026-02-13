@@ -1,31 +1,29 @@
 use axum::extract::ws::{Message, WebSocket};
 use chrono::NaiveDateTime;
-use hex::encode as hex_encode;
 use futures_util::{SinkExt, StreamExt};
+use hex::encode as hex_encode;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use yrs::encoding::write::Write as _;
 use yrs::{
+    merge_updates_v1,
     sync::{awareness::AwarenessUpdate, protocol::SyncMessage},
     updates::decoder::{Decode, DecoderV1},
     updates::encoder::Encode,
-    merge_updates_v1, ReadTxn, StateVector, Transact, Update,
+    ReadTxn, StateVector, Transact, Update,
 };
-use yrs::encoding::write::Write as _;
 
-use crate::{
-    state::AppState,
-    utils::time::to_iso_string,
-};
+use crate::{state::AppState, utils::time::to_iso_string};
 
 use super::{
     auth::authenticate,
     protocol::{
         decode_auth, decode_frame, decode_var_bytes, encode_auth_message, encode_message,
         encode_stateless_message, encode_sync_message, encode_sync_update, encode_var_bytes,
-        AUTH_AUTHENTICATED, AUTH_PERMISSION_DENIED, AUTH_TOKEN, MSG_AWARENESS, MSG_AUTH, MSG_CLOSE,
+        AUTH_AUTHENTICATED, AUTH_PERMISSION_DENIED, AUTH_TOKEN, MSG_AUTH, MSG_AWARENESS, MSG_CLOSE,
         MSG_QUERY_AWARENESS, MSG_STATELESS, MSG_SYNC, MSG_SYNC_STATUS,
     },
     state::{ConnectionId, DocumentState, PendingUpdate, SessionState, WsError},
@@ -46,7 +44,8 @@ pub(crate) async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     });
 
-    let mut sessions: std::collections::HashMap<String, SessionState> = std::collections::HashMap::new();
+    let mut sessions: std::collections::HashMap<String, SessionState> =
+        std::collections::HashMap::new();
 
     while let Some(result) = receiver.next().await {
         let message = match result {
@@ -56,14 +55,9 @@ pub(crate) async fn handle_socket(socket: WebSocket, state: AppState) {
 
         match message {
             Message::Binary(data) => {
-                if let Err(err) = handle_binary_message(
-                    &state,
-                    connection_id,
-                    &outgoing_tx,
-                    &mut sessions,
-                    &data,
-                )
-                .await
+                if let Err(err) =
+                    handle_binary_message(&state, connection_id, &outgoing_tx, &mut sessions, &data)
+                        .await
                 {
                     tracing::error!(error = %err, "ws message handling failed");
                     break;
@@ -149,27 +143,13 @@ async fn handle_binary_message(
             .await?;
         }
         MSG_AWARENESS => {
-            handle_awareness(
-                connection_id,
-                outgoing,
-                session,
-                &document_name,
-                payload,
-            )
-            .await?;
+            handle_awareness(connection_id, outgoing, session, &document_name, payload).await?;
         }
         MSG_QUERY_AWARENESS => {
             handle_query_awareness(outgoing, session, &document_name).await?;
         }
         MSG_STATELESS => {
-            handle_stateless(
-                outgoing,
-                session,
-                &document_name,
-                payload,
-                connection_id,
-            )
-            .await?;
+            handle_stateless(outgoing, session, &document_name, payload, connection_id).await?;
         }
         MSG_CLOSE => {
             let _ = outgoing.send(Message::Close(None));
@@ -197,7 +177,11 @@ async fn handle_auth(
     let token = match token {
         Some(token) => token,
         None => {
-            send_auth_denied(outgoing, document_name, "Authentication failed: No authentication token provided");
+            send_auth_denied(
+                outgoing,
+                document_name,
+                "Authentication failed: No authentication token provided",
+            );
             return Ok(());
         }
     };
@@ -217,7 +201,11 @@ async fn handle_auth(
                 .await;
             session.document = Some(std::sync::Arc::clone(&doc_state));
 
-            let scope = if outcome.read_only { "readonly" } else { "read-write" };
+            let scope = if outcome.read_only {
+                "readonly"
+            } else {
+                "read-write"
+            };
             let auth_reply = encode_auth_message(document_name, AUTH_AUTHENTICATED, Some(scope));
             let _ = outgoing.send(Message::Binary(auth_reply.into()));
 
@@ -226,6 +214,7 @@ async fn handle_auth(
             }
 
             send_sync_step1(outgoing, &doc_state, document_name);
+            send_awareness_snapshot(outgoing, &doc_state, document_name)?;
         }
         Err(reason) => {
             send_auth_denied(outgoing, document_name, &reason);
@@ -323,13 +312,20 @@ async fn handle_update_message(
 
     if !is_empty {
         let update_message = encode_sync_update(document_name, &update);
-        doc_state.broadcast(update_message, Some(connection_id)).await;
+        doc_state
+            .broadcast(update_message, Some(connection_id))
+            .await;
     }
 
     if !is_empty {
         let actor_id = session.actor_id.clone();
         doc_state
-            .queue_update(state.db.clone(), document_name.to_string(), update, actor_id)
+            .queue_update(
+                state.db.clone(),
+                document_name.to_string(),
+                update,
+                actor_id,
+            )
             .await;
         doc_state
             .schedule_snapshot(state.db.clone(), document_name.to_string())
@@ -366,7 +362,9 @@ async fn handle_awareness(
 
     let payload = encode_var_bytes(&update_bytes);
     let awareness_message = encode_message(document_name, MSG_AWARENESS, &payload);
-    doc_state.broadcast(awareness_message, Some(connection_id)).await;
+    doc_state
+        .broadcast(awareness_message, Some(connection_id))
+        .await;
     let _ = outgoing.send(Message::Binary(
         encode_message(document_name, MSG_AWARENESS, &payload).into(),
     ));
@@ -386,8 +384,17 @@ async fn handle_query_awareness(
         return Ok(());
     };
 
-    let update = doc_state.awareness.update().map_err(WsError::Awareness)?;
-    let payload = encode_var_bytes(&update.encode_v1());
+    send_awareness_snapshot(outgoing, doc_state, document_name)?;
+    Ok(())
+}
+
+fn send_awareness_snapshot(
+    outgoing: &mpsc::UnboundedSender<Message>,
+    doc_state: &Arc<DocumentState>,
+    document_name: &str,
+) -> Result<(), WsError> {
+    let awareness_update = doc_state.awareness.update().map_err(WsError::Awareness)?;
+    let payload = encode_var_bytes(&awareness_update.encode_v1());
     let message = encode_message(document_name, MSG_AWARENESS, &payload);
     let _ = outgoing.send(Message::Binary(message.into()));
     Ok(())
@@ -483,13 +490,7 @@ async fn flush_pending_updates(
 
     if pending.len() == 1 {
         let entry = pending.into_iter().next().unwrap();
-        return store_update(
-            db,
-            document_name,
-            &entry.update,
-            entry.actor_id.as_deref(),
-        )
-        .await;
+        return store_update(db, document_name, &entry.update, entry.actor_id.as_deref()).await;
     }
 
     let mut actor_id: Option<String> = None;
@@ -510,15 +511,7 @@ async fn flush_pending_updates(
     }
 
     match merge_updates_v1(pending.iter().map(|entry| entry.update.as_slice())) {
-        Ok(merged) => {
-            store_update(
-                db,
-                document_name,
-                &merged,
-                actor_id.as_deref(),
-            )
-            .await
-        }
+        Ok(merged) => store_update(db, document_name, &merged, actor_id.as_deref()).await,
         Err(err) => {
             tracing::error!(
                 document_name = %document_name,
@@ -526,13 +519,7 @@ async fn flush_pending_updates(
                 "ws update merge failed; falling back to individual inserts"
             );
             for entry in pending {
-                store_update(
-                    db,
-                    document_name,
-                    &entry.update,
-                    entry.actor_id.as_deref(),
-                )
-                .await?;
+                store_update(db, document_name, &entry.update, entry.actor_id.as_deref()).await?;
             }
             Ok(())
         }

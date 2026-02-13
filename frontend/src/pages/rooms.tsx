@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Plus, Users, Clock, Trash2, Play, Calendar, Share2, Pencil } from 'lucide-react'
 import {
@@ -36,6 +36,7 @@ import type { Room, Language, User, PaginationMeta, RoomActiveness } from '@/typ
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
 const DEFAULT_PAGE_SIZE = 20
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+const VALID_ACTIVENESS: RoomActiveness[] = ['all', 'active', 'ended']
 const EMPTY_PAGINATION: PaginationMeta = {
   page: 1,
   pageSize: DEFAULT_PAGE_SIZE,
@@ -63,16 +64,29 @@ function getNextHalfHourBoundaryLocal(): string {
 export function RoomsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuthStore()
 
   const [rooms, setRooms] = useState<Room[]>([])
   const [pagination, setPagination] = useState<PaginationMeta>(EMPTY_PAGINATION)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
-  const [ownerFilter, setOwnerFilter] = useState('all')
-  const [activenessFilter, setActivenessFilter] = useState<RoomActiveness>('all')
+  const page = useMemo(() => {
+    const raw = Number(searchParams.get('page') ?? '')
+    return Number.isInteger(raw) && raw > 0 ? raw : 1
+  }, [searchParams])
+  const pageSize = useMemo(() => {
+    const raw = Number(searchParams.get('pageSize') ?? '')
+    return PAGE_SIZE_OPTIONS.includes(raw) ? raw : DEFAULT_PAGE_SIZE
+  }, [searchParams])
+  const ownerFilter = searchParams.get('ownerId') ?? 'all'
+  const activenessFilter = useMemo<RoomActiveness>(() => {
+    const raw = searchParams.get('activeness')
+    if (raw && VALID_ACTIVENESS.includes(raw as RoomActiveness)) {
+      return raw as RoomActiveness
+    }
+    return 'all'
+  }, [searchParams])
 
   // Create room form state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -104,8 +118,55 @@ export function RoomsPage() {
   }, [])
 
   useEffect(() => {
+    const normalized = new URLSearchParams(searchParams)
+    let changed = false
+
+    if (searchParams.get('page') !== String(page)) {
+      normalized.set('page', String(page))
+      changed = true
+    }
+    if (searchParams.get('pageSize') !== String(pageSize)) {
+      normalized.set('pageSize', String(pageSize))
+      changed = true
+    }
+    if ((searchParams.get('ownerId') ?? 'all') !== ownerFilter) {
+      normalized.set('ownerId', ownerFilter)
+      changed = true
+    }
+    if (searchParams.get('activeness') !== activenessFilter) {
+      normalized.set('activeness', activenessFilter)
+      changed = true
+    }
+
+    if (changed) {
+      setSearchParams(normalized, { replace: true })
+    }
+  }, [searchParams, page, pageSize, ownerFilter, activenessFilter, setSearchParams])
+
+  useEffect(() => {
     loadRooms()
   }, [page, pageSize, ownerFilter, activenessFilter])
+
+  const updateListParams = (updates: {
+    page?: number
+    pageSize?: number
+    ownerId?: string
+    activeness?: RoomActiveness
+  }) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      const nextPage = updates.page ?? page
+      const nextPageSize = updates.pageSize ?? pageSize
+      const nextOwnerId = updates.ownerId ?? ownerFilter
+      const nextActiveness = updates.activeness ?? activenessFilter
+
+      next.set('page', String(Math.max(1, nextPage)))
+      next.set('pageSize', String(PAGE_SIZE_OPTIONS.includes(nextPageSize) ? nextPageSize : DEFAULT_PAGE_SIZE))
+      next.set('ownerId', nextOwnerId)
+      next.set('activeness', nextActiveness)
+      return next
+    })
+  }
 
   const loadRooms = async () => {
     try {
@@ -120,7 +181,7 @@ export function RoomsPage() {
       setPagination(pagination ?? EMPTY_PAGINATION)
 
       if (pagination && rooms.length === 0 && pagination.totalPages > 0 && page > pagination.totalPages) {
-        setPage(pagination.totalPages)
+        updateListParams({ page: pagination.totalPages })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load rooms')
@@ -469,8 +530,10 @@ export function RoomsPage() {
               <Select
                 value={ownerFilter}
                 onValueChange={(value) => {
-                  setOwnerFilter(value)
-                  setPage(1)
+                  updateListParams({
+                    ownerId: value,
+                    page: 1,
+                  })
                 }}
               >
                 <SelectTrigger className="h-9">
@@ -491,8 +554,10 @@ export function RoomsPage() {
               <Select
                 value={activenessFilter}
                 onValueChange={(value) => {
-                  setActivenessFilter(value as RoomActiveness)
-                  setPage(1)
+                  updateListParams({
+                    activeness: value as RoomActiveness,
+                    page: 1,
+                  })
                 }}
               >
                 <SelectTrigger className="h-9">
@@ -510,8 +575,10 @@ export function RoomsPage() {
               <Select
                 value={String(pageSize)}
                 onValueChange={(value) => {
-                  setPageSize(Number(value))
-                  setPage(1)
+                  updateListParams({
+                    pageSize: Number(value),
+                    page: 1,
+                  })
                 }}
               >
                 <SelectTrigger className="h-9">
@@ -562,7 +629,7 @@ export function RoomsPage() {
               variant="outline"
               size="sm"
               disabled={!pagination.hasPrev}
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              onClick={() => updateListParams({ page: Math.max(1, page - 1) })}
             >
               {t('rooms.pagination.prev')}
             </Button>
@@ -573,7 +640,7 @@ export function RoomsPage() {
               variant="outline"
               size="sm"
               disabled={!pagination.hasNext}
-              onClick={() => setPage((prev) => prev + 1)}
+              onClick={() => updateListParams({ page: page + 1 })}
             >
               {t('rooms.pagination.next')}
             </Button>

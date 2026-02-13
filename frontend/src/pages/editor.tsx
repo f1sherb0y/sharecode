@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
@@ -60,25 +60,66 @@ import { useEditorRoom, useMonacoEditor, useEditorAwareness, useYjsProvider, use
 import { CanvasView } from '@/components/features/canvas-view'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
+import { ThemeToggle } from '@/components/layout'
 import { generateUserColor, cn } from '@/lib/utils'
 import type { Language } from '@/types'
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
+const DOC_VIEWS = ['code', 'canvas'] as const
+const RUNNER_POSITIONS = ['bottom', 'right'] as const
+
+function parseDocView(value: string | null): 'code' | 'canvas' {
+  return DOC_VIEWS.includes((value ?? '') as (typeof DOC_VIEWS)[number]) ? (value as 'code' | 'canvas') : 'code'
+}
+
+function parseRunnerPosition(value: string | null): 'bottom' | 'right' {
+  return RUNNER_POSITIONS.includes((value ?? '') as (typeof RUNNER_POSITIONS)[number])
+    ? (value as 'bottom' | 'right')
+    : 'bottom'
+}
 
 export function EditorPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
   const { token: authToken } = useAuthStore()
   const { session: guestSession } = useGuestStore()
   const { font, fontSize, increaseFontSize, decreaseFontSize, setFont } = useFontStore()
   const { theme } = useThemeStore()
   const [showShareManager, setShowShareManager] = useState(false)
-  const [codeRunnerPosition, setCodeRunnerPosition] = useState<'bottom' | 'right'>('bottom')
   const [isCodeRunning, setIsCodeRunning] = useState(false)
-  const [activeDoc, setActiveDoc] = useState<'code' | 'canvas'>('code')
+  const activeDoc = parseDocView(searchParams.get('view'))
+  const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
   
   // State for End Room Dialog
   const [isEndRoomDialogOpen, setIsEndRoomDialogOpen] = useState(false)
+
+  const updateEditorParams = useCallback((updates: { view?: 'code' | 'canvas'; runner?: 'bottom' | 'right' }) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('view', updates.view ?? activeDoc)
+      next.set('runner', updates.runner ?? codeRunnerPosition)
+      return next
+    })
+  }, [setSearchParams, activeDoc, codeRunnerPosition])
+
+  useEffect(() => {
+    const normalized = new URLSearchParams(searchParams)
+    let changed = false
+
+    if (normalized.get('view') !== activeDoc) {
+      normalized.set('view', activeDoc)
+      changed = true
+    }
+    if (normalized.get('runner') !== codeRunnerPosition) {
+      normalized.set('runner', codeRunnerPosition)
+      changed = true
+    }
+
+    if (changed) {
+      setSearchParams(normalized, { replace: true })
+    }
+  }, [searchParams, activeDoc, codeRunnerPosition, setSearchParams])
 
   // 1. Room & Auth Hook
   const {
@@ -387,7 +428,7 @@ export function EditorPage() {
                 variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
                 size="sm"
                 className="h-7 px-2"
-                onClick={() => setActiveDoc('code')}
+                onClick={() => updateEditorParams({ view: 'code' })}
               >
                 <FileCode className="h-3.5 w-3.5 sm:mr-1" />
                 <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
@@ -396,7 +437,7 @@ export function EditorPage() {
                 variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
                 size="sm"
                 className="h-7 px-2"
-                onClick={() => setActiveDoc('canvas')}
+                onClick={() => updateEditorParams({ view: 'canvas' })}
               >
                 <Brush className="h-3.5 w-3.5 sm:mr-1" />
                 <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
@@ -520,6 +561,8 @@ export function EditorPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            <ThemeToggle className="h-8 w-8" />
+
             {/* Blink Selection */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -602,12 +645,12 @@ export function EditorPage() {
                   </div>
                   <DropdownMenuSeparator />
 
-                  <DropdownMenuItem onClick={() => setActiveDoc('code')}>
+                  <DropdownMenuItem onClick={() => updateEditorParams({ view: 'code' })}>
                     <FileCode className="h-4 w-4 mr-2" />
                     {t('editor.toolbar.code')}
                     {activeDoc === 'code' && <Check className="h-3 w-3 ml-auto" />}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setActiveDoc('canvas')}>
+                  <DropdownMenuItem onClick={() => updateEditorParams({ view: 'canvas' })}>
                     <Brush className="h-4 w-4 mr-2" />
                     {t('editor.toolbar.canvas')}
                     {activeDoc === 'canvas' && <Check className="h-3 w-3 ml-auto" />}
@@ -719,7 +762,7 @@ export function EditorPage() {
                 canEdit={canEdit}
                 ymeta={ymeta}
                 position="bottom"
-                onPositionChange={setCodeRunnerPosition}
+                onPositionChange={(position) => updateEditorParams({ runner: position })}
               />
             )}
           </div>
@@ -732,7 +775,7 @@ export function EditorPage() {
               canEdit={canEdit}
               ymeta={ymeta}
               position="right"
-              onPositionChange={setCodeRunnerPosition}
+              onPositionChange={(position) => updateEditorParams({ runner: position })}
             />
           )}
         </div>
