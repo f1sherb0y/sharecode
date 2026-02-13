@@ -588,9 +588,9 @@ pub async fn update_room(
 
     let participants = fetch_participants(&state, &room.id).await?;
     let is_owner = room.owner_id == auth_user.id;
+    let is_superuser = auth_user.role == "superuser";
     let is_participant = participants.iter().any(|p| p.user_id == auth_user.id);
-    let is_privileged =
-        auth_user.role == "admin" || auth_user.role == "superuser" || has_global_read(&auth_user);
+    let is_privileged = auth_user.role == "admin" || is_superuser || has_global_read(&auth_user);
 
     if !is_owner && !is_participant && !is_privileged {
         return Err(ApiError::not_found("Room not found"));
@@ -602,6 +602,11 @@ pub async fn update_room(
         || participant.map(|p| p.can_edit).unwrap_or(false);
 
     if !can_edit {
+        return Err(ApiError::not_found("Room not found"));
+    }
+
+    let rename_requested = payload.name.is_some();
+    if rename_requested && !is_owner && !is_superuser {
         return Err(ApiError::not_found("Room not found"));
     }
 

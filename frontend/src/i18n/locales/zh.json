@@ -88,6 +88,11 @@
       "expired": "已过期",
       "delete": "删除",
       "deleteConfirm": "删除房间 \"{{name}}\"？",
+      "rename": "重命名",
+      "renaming": "重命名中...",
+      "renameTitle": "重命名房间",
+      "renameConfirm": "重命名房间 \"{{name}}\"",
+      "renamePlaceholder": "输入新房间名称",
       "viewPlayback": "查看回放"
     },
     "filters": {

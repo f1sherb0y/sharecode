@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, Users, Clock, Trash2, Play, Calendar, Share2 } from 'lucide-react'
+import { Plus, Users, Clock, Trash2, Play, Calendar, Share2, Pencil } from 'lucide-react'
 import {
   Button,
   Card,
@@ -45,6 +45,21 @@ const EMPTY_PAGINATION: PaginationMeta = {
   hasPrev: false,
 }
 
+function getNextHalfHourBoundaryLocal(): string {
+  const next = new Date()
+  next.setSeconds(0, 0)
+  const minutes = next.getMinutes()
+  const addMinutes = minutes % 30 === 0 ? 30 : 30 - (minutes % 30)
+  next.setMinutes(minutes + addMinutes)
+
+  const year = next.getFullYear()
+  const month = String(next.getMonth() + 1).padStart(2, '0')
+  const day = String(next.getDate()).padStart(2, '0')
+  const hours = String(next.getHours()).padStart(2, '0')
+  const mins = String(next.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${mins}`
+}
+
 export function RoomsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -65,8 +80,8 @@ export function RoomsPage() {
   const [newRoomLanguage, setNewRoomLanguage] = useState<Language>('javascript')
   const [newRoomCompany, setNewRoomCompany] = useState('')
   const [newRoomPosition, setNewRoomPosition] = useState('')
-  const [scheduledTime, setScheduledTime] = useState('')
-  const [duration, setDuration] = useState('')
+  const [scheduledTime, setScheduledTime] = useState(getNextHalfHourBoundaryLocal())
+  const [duration, setDuration] = useState('60')
   const [isCreating, setIsCreating] = useState(false)
 
   // Delete dialog state
@@ -74,6 +89,11 @@ export function RoomsPage() {
   
   // Share dialog state
   const [roomToShare, setRoomToShare] = useState<{ id: string; name: string } | null>(null)
+  
+  // Rename dialog state
+  const [roomToRename, setRoomToRename] = useState<{ id: string; name: string } | null>(null)
+  const [renameRoomName, setRenameRoomName] = useState('')
+  const [isRenaming, setIsRenaming] = useState(false)
 
   // User selection for room access
   const [allUsers, setAllUsers] = useState<User[]>([])
@@ -147,8 +167,8 @@ export function RoomsPage() {
     setNewRoomLanguage('javascript')
     setNewRoomCompany('')
     setNewRoomPosition('')
-    setScheduledTime('')
-    setDuration('')
+    setScheduledTime(getNextHalfHourBoundaryLocal())
+    setDuration('60')
     setSelectedUsers([])
   }
 
@@ -160,6 +180,11 @@ export function RoomsPage() {
     setRoomToShare({ id: roomId, name: roomName })
   }
 
+  const handleRenameRoom = (roomId: string, roomName: string) => {
+    setRoomToRename({ id: roomId, name: roomName })
+    setRenameRoomName(roomName)
+  }
+
   const confirmDeleteRoom = async () => {
     if (!roomToDelete) return
 
@@ -169,6 +194,24 @@ export function RoomsPage() {
       loadRooms()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete room')
+    }
+  }
+
+  const confirmRenameRoom = async () => {
+    if (!roomToRename) return
+    const trimmedName = renameRoomName.trim()
+    if (!trimmedName) return
+
+    try {
+      setIsRenaming(true)
+      await api.updateRoom(roomToRename.id, { name: trimmedName })
+      setRoomToRename(null)
+      setRenameRoomName('')
+      loadRooms()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename room')
+    } finally {
+      setIsRenaming(false)
     }
   }
 
@@ -190,12 +233,20 @@ export function RoomsPage() {
 
   const availableUsers = allUsers.filter((u) => u.id !== user?.id)
 
+  const handleCreateOpenChange = (open: boolean) => {
+    setIsCreateOpen(open)
+    if (open) {
+      setScheduledTime(getNextHalfHourBoundaryLocal())
+      setDuration('60')
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       <Navbar
         title="ShareCode"
         rightContent={
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -356,6 +407,43 @@ export function RoomsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={!!roomToRename}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRoomToRename(null)
+            setRenameRoomName('')
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('rooms.list.renameTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('rooms.list.renameConfirm', { name: roomToRename?.name })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="renameRoomName">{t('rooms.create.name')}</Label>
+            <Input
+              id="renameRoomName"
+              value={renameRoomName}
+              onChange={(e) => setRenameRoomName(e.target.value)}
+              placeholder={t('rooms.list.renamePlaceholder')}
+              maxLength={120}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoomToRename(null)}>
+              {t('rooms.cancel')}
+            </Button>
+            <Button onClick={confirmRenameRoom} disabled={isRenaming || !renameRoomName.trim()}>
+              {isRenaming ? t('rooms.list.renaming') : t('rooms.list.rename')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Share Dialog */}
       <Dialog open={!!roomToShare} onOpenChange={(open) => !open && setRoomToShare(null)}>
         <DialogContent className="max-w-md">
@@ -459,6 +547,7 @@ export function RoomsPage() {
                 room={room}
                 currentUser={user ?? undefined}
                 onDelete={() => handleDeleteRoom(room.id, room.name)}
+                onRename={() => handleRenameRoom(room.id, room.name)}
                 onShare={() => handleShareRoom(room.id, room.name)}
                 onPlayback={() => navigate(`/playback/${room.id}`)}
                 onClick={() => navigate(`/room/${room.id}`)}
@@ -499,18 +588,20 @@ interface RoomCardProps {
   room: Room
   currentUser?: User
   onDelete: () => void
+  onRename: () => void
   onShare: () => void
   onPlayback: () => void
   onClick: () => void
 }
 
-function RoomCard({ room, currentUser, onDelete, onShare, onPlayback, onClick }: RoomCardProps) {
+function RoomCard({ room, currentUser, onDelete, onRename, onShare, onPlayback, onClick }: RoomCardProps) {
   const { t } = useTranslation()
 
   const isOwner = room.ownerId === currentUser?.id
   const isPrivileged = currentUser?.role === 'admin' || currentUser?.role === 'superuser' ||
     currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
   const canManageRoom = isOwner || currentUser?.role === 'superuser' || currentUser?.canDeleteAllRooms
+  const canRenameRoom = isOwner || currentUser?.role === 'superuser'
   const participantCount = (room.participants?.length ?? 0) + 1
   const canViewPlayback = room.isEnded && (isOwner || isPrivileged)
 
@@ -592,6 +683,20 @@ function RoomCard({ room, currentUser, onDelete, onShare, onPlayback, onClick }:
               }}
             >
               <Share2 className="h-3 w-3" />
+            </Button>
+          )}
+
+          {canRenameRoom && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRename()
+              }}
+            >
+              <Pencil className="h-3 w-3" />
             </Button>
           )}
 

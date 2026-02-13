@@ -88,6 +88,11 @@
       "expired": "Expired",
       "delete": "Delete",
       "deleteConfirm": "Delete room \"{{name}}\"?",
+      "rename": "Rename",
+      "renaming": "Renaming...",
+      "renameTitle": "Rename Room",
+      "renameConfirm": "Rename room \"{{name}}\"",
+      "renamePlaceholder": "Enter new room name",
       "viewPlayback": "Playback"
     },
     "filters": {
