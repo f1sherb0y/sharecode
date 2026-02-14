@@ -57,13 +57,6 @@ function parsePlaybackSpeed(value: string | null): number {
     : 1
 }
 
-function parsePlaybackTimestamp(value: string | null): number | null {
-  if (value == null || value === '') return null
-  const numeric = Number(value)
-  if (!Number.isFinite(numeric)) return null
-  return Math.floor(numeric)
-}
-
 interface Update {
   id: string
   timestamp: string
@@ -115,7 +108,6 @@ export function PlaybackPage() {
   const [updates, setUpdates] = useState<Update[]>([])
   const activeDoc = parsePlaybackView(searchParams.get('view'))
   const playbackSpeed = parsePlaybackSpeed(searchParams.get('speed'))
-  const urlTimestamp = parsePlaybackTimestamp(searchParams.get('t'))
   const [startMs, setStartMs] = useState(0)
   const [endMs, setEndMs] = useState(0)
   const [currentTimestamp, setCurrentTimestamp] = useState(0)
@@ -169,38 +161,12 @@ export function PlaybackPage() {
   }, [searchParams, activeDoc, playbackSpeed, setSearchParams])
 
   useEffect(() => {
-    if (startMs === 0 || endMs === 0 || urlTimestamp == null) return
-    const clamped = Math.min(endMs, Math.max(startMs, urlTimestamp))
+    if (startMs === 0 || endMs === 0) return
+    const clamped = Math.min(endMs, Math.max(startMs, currentTimestamp))
     if (clamped !== currentTimestamp) {
       setCurrentTimestamp(clamped)
     }
-  }, [urlTimestamp, startMs, endMs, currentTimestamp])
-
-  useEffect(() => {
-    if (startMs === 0 || endMs === 0) return
-    const clamped = Math.min(endMs, Math.max(startMs, currentTimestamp))
-
-    const syncTimer = window.setTimeout(() => {
-      const timestampValue = String(Math.floor(clamped))
-      if (
-        searchParams.get('view') === activeDoc &&
-        searchParams.get('speed') === String(playbackSpeed) &&
-        searchParams.get('t') === timestampValue
-      ) {
-        return
-      }
-
-      const next = new URLSearchParams(searchParams)
-      next.set('view', activeDoc)
-      next.set('speed', String(playbackSpeed))
-      next.set('t', timestampValue)
-      setSearchParams(next, { replace: true })
-    }, 250)
-
-    return () => {
-      window.clearTimeout(syncTimer)
-    }
-  }, [currentTimestamp, startMs, endMs, searchParams, activeDoc, playbackSpeed, setSearchParams])
+  }, [startMs, endMs, currentTimestamp])
 
   const getDocAtTimestamp = useCallback(
     (timestamp: number) => {
@@ -507,7 +473,7 @@ export function PlaybackPage() {
             type="range"
             min={startMs}
             max={endMs}
-            step={100}
+            step="any"
             value={currentTimestamp}
             onChange={(e) => {
               setCurrentTimestamp(Number(e.target.value))
