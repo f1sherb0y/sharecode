@@ -93,6 +93,9 @@
       "renameTitle": "Rename Room",
       "renameConfirm": "Rename room \"{{name}}\"",
       "renamePlaceholder": "Enter new room name",
+      "pinned": "Pinned",
+      "pin": "Pin room",
+      "unpin": "Unpin room",
       "viewPlayback": "Playback"
     },
     "filters": {

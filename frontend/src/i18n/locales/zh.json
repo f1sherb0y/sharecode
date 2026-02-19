@@ -93,6 +93,9 @@
       "renameTitle": "重命名房间",
       "renameConfirm": "重命名房间 \"{{name}}\"",
       "renamePlaceholder": "输入新房间名称",
+      "pinned": "已置顶",
+      "pin": "置顶房间",
+      "unpin": "取消置顶",
       "viewPlayback": "查看回放"
     },
     "filters": {

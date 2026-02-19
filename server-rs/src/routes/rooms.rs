@@ -8,7 +8,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    auth::AuthUser,
+    auth::{AdminUser, AuthUser},
     db::db_error,
     error::ApiError,
     models::{RoomParticipantWithUserRow, RoomWithOwnerRow, UserSimpleRow},
@@ -68,6 +68,12 @@ pub struct UpdateRoomPayload {
     pub language: Option<String>,
     pub company: Option<String>,
     pub position: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetRoomPinPayload {
+    pub is_pinned: bool,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
@@ -173,6 +179,7 @@ pub async fn create_room(
             position,
             "ownerId" as owner_id,
             "allowEdit" as allow_edit,
+            "isPinned" as is_pinned,
             "isDeleted" as is_deleted,
             "scheduledTime" as scheduled_time,
             duration,
@@ -295,6 +302,7 @@ pub async fn get_rooms(
                 r.position,
                 r."ownerId" as owner_id,
                 r."allowEdit" as allow_edit,
+                r."isPinned" as is_pinned,
                 r."isDeleted" as is_deleted,
                 r."scheduledTime" as scheduled_time,
                 r.duration,
@@ -313,7 +321,7 @@ pub async fn get_rooms(
                 OR ($2::text = 'active' AND r."isEnded" = false)
                 OR ($2::text = 'ended' AND r."isEnded" = true)
               )
-            ORDER BY r."createdAt" DESC, r.id DESC
+            ORDER BY r."isPinned" DESC, r."createdAt" DESC, r.id DESC
             LIMIT $3 OFFSET $4
             "#,
         )
@@ -369,6 +377,7 @@ pub async fn get_rooms(
                 r.position,
                 r."ownerId" as owner_id,
                 r."allowEdit" as allow_edit,
+                r."isPinned" as is_pinned,
                 r."isDeleted" as is_deleted,
                 r."scheduledTime" as scheduled_time,
                 r.duration,
@@ -399,7 +408,7 @@ pub async fn get_rooms(
                 OR ($3::text = 'active' AND r."isEnded" = false)
                 OR ($3::text = 'ended' AND r."isEnded" = true)
               )
-            ORDER BY r."createdAt" DESC, r.id DESC
+            ORDER BY r."isPinned" DESC, r."createdAt" DESC, r.id DESC
             LIMIT $4 OFFSET $5
             "#,
         )
@@ -482,6 +491,7 @@ pub async fn get_room(
             r.position,
             r."ownerId" as owner_id,
             r."allowEdit" as allow_edit,
+            r."isPinned" as is_pinned,
             r."isDeleted" as is_deleted,
             r."scheduledTime" as scheduled_time,
             r.duration,
@@ -562,6 +572,7 @@ pub async fn update_room(
             r.position,
             r."ownerId" as owner_id,
             r."allowEdit" as allow_edit,
+            r."isPinned" as is_pinned,
             r."isDeleted" as is_deleted,
             r."scheduledTime" as scheduled_time,
             r.duration,
@@ -638,6 +649,7 @@ pub async fn update_room(
             position,
             "ownerId" as owner_id,
             "allowEdit" as allow_edit,
+            "isPinned" as is_pinned,
             "isDeleted" as is_deleted,
             "scheduledTime" as scheduled_time,
             duration,
@@ -659,6 +671,84 @@ pub async fn update_room(
     .map_err(|err| db_error(err, "Failed to update room"))?;
 
     Ok(Json(json!({ "room": room_to_json_owner(&updated) })))
+}
+
+pub async fn set_room_pin(
+    State(state): State<AppState>,
+    AdminUser(auth_user): AdminUser,
+    Path(room_id): Path<String>,
+    Json(payload): Json<SetRoomPinPayload>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if room_id.is_empty() {
+        return Err(ApiError::bad_request("Room ID is required"));
+    }
+
+    let room = sqlx::query_as::<_, RoomWithOwnerRow>(
+        r#"
+        UPDATE "Room"
+        SET "isPinned" = $2,
+            "updatedAt" = NOW()
+        WHERE id = $1
+          AND "isDeleted" = false
+        RETURNING
+            id,
+            name,
+            language,
+            company,
+            position,
+            "ownerId" as owner_id,
+            "allowEdit" as allow_edit,
+            "isPinned" as is_pinned,
+            "isDeleted" as is_deleted,
+            "scheduledTime" as scheduled_time,
+            duration,
+            "isEnded" as is_ended,
+            "endedAt" as ended_at,
+            "createdAt" as created_at,
+            "updatedAt" as updated_at,
+            (SELECT username FROM "User" WHERE id = "ownerId") as owner_username,
+            (SELECT color FROM "User" WHERE id = "ownerId") as owner_color
+        "#,
+    )
+    .bind(&room_id)
+    .bind(payload.is_pinned)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to update room pin status"))?;
+
+    let room = match room {
+        Some(room) => room,
+        None => return Err(ApiError::not_found("Room not found")),
+    };
+
+    let participants = fetch_participants(&state, &room.id).await?;
+    let user_participant = participants.iter().find(|p| p.user_id == auth_user.id);
+    let is_owner = room.owner_id == auth_user.id;
+    let is_member = is_owner || user_participant.is_some();
+    let can_edit = is_owner
+        || has_global_write(&auth_user)
+        || user_participant.map(|p| p.can_edit).unwrap_or(false);
+
+    let now = Utc::now().naive_utc();
+    let is_expired = room
+        .scheduled_time
+        .and_then(|scheduled| {
+            room.duration
+                .map(|dur| scheduled + Duration::minutes(dur as i64))
+        })
+        .map(|end_time| end_time < now)
+        .unwrap_or(false);
+
+    Ok(Json(json!({
+        "room": room_to_json_with_flags(
+            &room,
+            participants,
+            is_member,
+            is_owner,
+            can_edit,
+            is_expired,
+        ),
+    })))
 }
 
 pub async fn delete_room(
@@ -867,6 +957,7 @@ pub async fn end_room(
             position,
             "ownerId" as owner_id,
             "allowEdit" as allow_edit,
+            "isPinned" as is_pinned,
             "isDeleted" as is_deleted,
             "scheduledTime" as scheduled_time,
             duration,
@@ -925,6 +1016,7 @@ fn room_to_json_basic(room: &RoomWithOwnerRow) -> serde_json::Value {
         "position": room.position,
         "ownerId": room.owner_id,
         "allowEdit": room.allow_edit,
+        "isPinned": room.is_pinned,
         "isDeleted": room.is_deleted,
         "scheduledTime": to_iso_string_opt(room.scheduled_time),
         "duration": room.duration,

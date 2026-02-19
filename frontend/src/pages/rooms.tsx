@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, Users, Clock, Trash2, Play, Calendar, Share2, Pencil } from 'lucide-react'
+import { Plus, Users, Clock, Trash2, Play, Calendar, Share2, Pencil, Pin, PinOff } from 'lucide-react'
 import {
   Button,
   Card,
@@ -37,6 +37,9 @@ const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cp
 const DEFAULT_PAGE_SIZE = 20
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const VALID_ACTIVENESS: RoomActiveness[] = ['all', 'active', 'ended']
+const ELLIPSIS_LEFT = 'ellipsis-left'
+const ELLIPSIS_RIGHT = 'ellipsis-right'
+type PageButtonItem = number | typeof ELLIPSIS_LEFT | typeof ELLIPSIS_RIGHT
 const EMPTY_PAGINATION: PaginationMeta = {
   page: 1,
   pageSize: DEFAULT_PAGE_SIZE,
@@ -44,6 +47,31 @@ const EMPTY_PAGINATION: PaginationMeta = {
   totalPages: 0,
   hasNext: false,
   hasPrev: false,
+}
+
+function buildPageButtons(currentPage: number, totalPages: number): PageButtonItem[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, idx) => idx + 1)
+  }
+
+  const buttons: PageButtonItem[] = [1]
+  const start = Math.max(2, currentPage - 1)
+  const end = Math.min(totalPages - 1, currentPage + 1)
+
+  if (start > 2) {
+    buttons.push(ELLIPSIS_LEFT)
+  }
+
+  for (let page = start; page <= end; page += 1) {
+    buttons.push(page)
+  }
+
+  if (end < totalPages - 1) {
+    buttons.push(ELLIPSIS_RIGHT)
+  }
+
+  buttons.push(totalPages)
+  return buttons
 }
 
 function getNextHalfHourBoundaryLocal(): string {
@@ -71,6 +99,7 @@ export function RoomsPage() {
   const [pagination, setPagination] = useState<PaginationMeta>(EMPTY_PAGINATION)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [pinUpdatingRoomId, setPinUpdatingRoomId] = useState<string | null>(null)
   const page = useMemo(() => {
     const raw = Number(searchParams.get('page') ?? '')
     return Number.isInteger(raw) && raw > 0 ? raw : 1
@@ -293,12 +322,30 @@ export function RoomsPage() {
   }
 
   const availableUsers = allUsers.filter((u) => u.id !== user?.id)
+  const pageButtons = useMemo(
+    () => buildPageButtons(pagination.page, pagination.totalPages),
+    [pagination.page, pagination.totalPages]
+  )
 
   const handleCreateOpenChange = (open: boolean) => {
     setIsCreateOpen(open)
     if (open) {
       setScheduledTime(getNextHalfHourBoundaryLocal())
       setDuration('60')
+    }
+  }
+
+  const handleTogglePin = async (room: Room) => {
+    if (!user || (user.role !== 'admin' && user.role !== 'superuser')) return
+
+    try {
+      setPinUpdatingRoomId(room.id)
+      await api.setRoomPin(room.id, !room.isPinned)
+      await loadRooms()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update room pin status')
+    } finally {
+      setPinUpdatingRoomId(null)
     }
   }
 
@@ -616,6 +663,8 @@ export function RoomsPage() {
                 onDelete={() => handleDeleteRoom(room.id, room.name)}
                 onRename={() => handleRenameRoom(room.id, room.name)}
                 onShare={() => handleShareRoom(room.id, room.name)}
+                onTogglePin={() => handleTogglePin(room)}
+                isPinUpdating={pinUpdatingRoomId === room.id}
                 onPlayback={() => navigate(`/playback/${room.id}`)}
                 onClick={() => navigate(`/room/${room.id}`)}
               />
@@ -633,9 +682,22 @@ export function RoomsPage() {
             >
               {t('rooms.pagination.prev')}
             </Button>
-            <span className="text-sm text-muted-foreground">
-              {t('rooms.pagination.page', { page: pagination.page, totalPages: pagination.totalPages })}
-            </span>
+            {pageButtons.map((item, index) => (
+              typeof item === 'number' ? (
+                <Button
+                  key={`page-${item}`}
+                  variant={item === pagination.page ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => updateListParams({ page: item })}
+                >
+                  {item}
+                </Button>
+              ) : (
+                <span key={`${item}-${index}`} className="px-1 text-sm text-muted-foreground">
+                  ...
+                </span>
+              )
+            ))}
             <Button
               variant="outline"
               size="sm"
@@ -657,11 +719,23 @@ interface RoomCardProps {
   onDelete: () => void
   onRename: () => void
   onShare: () => void
+  onTogglePin: () => void
+  isPinUpdating: boolean
   onPlayback: () => void
   onClick: () => void
 }
 
-function RoomCard({ room, currentUser, onDelete, onRename, onShare, onPlayback, onClick }: RoomCardProps) {
+function RoomCard({
+  room,
+  currentUser,
+  onDelete,
+  onRename,
+  onShare,
+  onTogglePin,
+  isPinUpdating,
+  onPlayback,
+  onClick,
+}: RoomCardProps) {
   const { t } = useTranslation()
 
   const isOwner = room.ownerId === currentUser?.id
@@ -669,6 +743,7 @@ function RoomCard({ room, currentUser, onDelete, onRename, onShare, onPlayback, 
     currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
   const canManageRoom = isOwner || currentUser?.role === 'superuser' || currentUser?.canDeleteAllRooms
   const canRenameRoom = isOwner || currentUser?.role === 'superuser'
+  const canPinRoom = currentUser?.role === 'admin' || currentUser?.role === 'superuser'
   const participantCount = (room.participants?.length ?? 0) + 1
   const canViewPlayback = room.isEnded && (isOwner || isPrivileged)
 
@@ -697,6 +772,11 @@ function RoomCard({ room, currentUser, onDelete, onRename, onShare, onPlayback, 
         </div>
         <CardDescription className="flex items-center gap-1 text-xs">
           <span>{room.owner.username}</span>
+          {room.isPinned && (
+            <Badge variant="secondary" className="ml-1 text-xs px-1 py-0">
+              {t('rooms.list.pinned')}
+            </Badge>
+          )}
           {canManageRoom && (
             <Badge variant="outline" className="ml-1 text-xs px-1 py-0">
               {isOwner ? t('rooms.list.owned') : t('rooms.list.manage')}
@@ -764,6 +844,22 @@ function RoomCard({ room, currentUser, onDelete, onRename, onShare, onPlayback, 
               }}
             >
               <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+
+          {canPinRoom && (
+            <Button
+              variant={room.isPinned ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2"
+              disabled={isPinUpdating}
+              onClick={(e) => {
+                e.stopPropagation()
+                onTogglePin()
+              }}
+              title={room.isPinned ? t('rooms.list.unpin') : t('rooms.list.pin')}
+            >
+              {room.isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
             </Button>
           )}
 

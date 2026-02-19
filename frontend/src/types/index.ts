@@ -33,6 +33,7 @@ export interface Room {
   position?: string | null
   ownerId: string
   allowEdit: boolean
+  isPinned?: boolean
   isDeleted?: boolean
   scheduledTime?: string | null
   duration?: number | null

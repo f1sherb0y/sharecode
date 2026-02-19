@@ -159,6 +159,13 @@ class ApiClient {
     })
   }
 
+  async setRoomPin(roomId: string, isPinned: boolean): Promise<{ room: Room }> {
+    return this.request<{ room: Room }>(`/api/rooms/${roomId}/pin`, {
+      method: 'PUT',
+      body: JSON.stringify({ isPinned }),
+    })
+  }
+
   async deleteRoom(roomId: string): Promise<{ message: string }> {
     return this.request<{ message: string }>(`/api/rooms/${roomId}`, {
       method: 'DELETE',
