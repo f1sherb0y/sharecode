@@ -26,6 +26,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 RUN rm -rf src
 
 COPY src ./src
+COPY migrations ./migrations
 
 # Touch main.rs to prevent cached timestamp issues (optional but safe)
 RUN touch src/main.rs
