@@ -396,7 +396,7 @@ export function EditorPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col min-h-screen h-dvh overflow-x-clip">
         {/* Toolbar */}
         <header className="flex items-center justify-between h-14 px-2 sm:px-4 border-b bg-background shrink-0 gap-2 overflow-hidden">
           {/* Left: Back + Title + Language */}
@@ -734,8 +734,8 @@ export function EditorPage() {
 
 
         {/* Main Content */}
-        <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-w-0">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             <div className="flex-1 overflow-hidden">
               <div className={cn('h-full w-full', activeDoc === 'code' ? '' : 'hidden')}>
                 <div ref={editorRef} className="h-full w-full" />
@@ -781,8 +781,8 @@ export function EditorPage() {
         </div>
 
         {/* Footer */}
-        <footer className="flex items-center justify-between h-8 px-4 border-t bg-muted/50 text-xs text-muted-foreground shrink-0">
-          <div className="flex items-center gap-4">
+        <footer className="flex items-center justify-between h-8 px-4 border-t bg-muted/50 text-xs text-muted-foreground shrink-0 overflow-hidden">
+          <div className="flex items-center gap-4 min-w-0 overflow-hidden">
             <div className={cn('flex items-center gap-1', isConnected ? 'text-success' : 'text-destructive')}>
               {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
               <span className="hidden sm:inline">{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>

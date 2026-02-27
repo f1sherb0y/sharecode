@@ -40,6 +40,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&config.database_url)
         .await?;
 
+    tracing::info!("Running database migrations");
+    sqlx::migrate!("./migrations").run(&db).await?;
+    tracing::info!("Database migrations complete");
+
     let ws = Arc::new(ws::WsState::new());
 
     let state = AppState {

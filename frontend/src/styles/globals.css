@@ -70,6 +70,9 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   body {
@@ -77,12 +80,28 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     min-height: 100vh;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   #root {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+}
+
+@supports not (overflow: clip) {
+  @layer base {
+    html,
+    body,
+    #root {
+      overflow-x: hidden;
+    }
   }
 }
 
