@@ -396,7 +396,7 @@ export function EditorPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col min-h-screen h-dvh overflow-x-clip">
+      <div className="flex flex-col h-screen overflow-clip safe-x" style={{ height: '100dvh' }}>
         {/* Toolbar */}
         <header className="flex items-center justify-between h-14 px-2 sm:px-4 border-b bg-background shrink-0 gap-2 overflow-hidden">
           {/* Left: Back + Title + Language */}

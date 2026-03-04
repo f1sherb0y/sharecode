@@ -73,6 +73,7 @@
     width: 100%;
     max-width: 100%;
     overflow-x: clip;
+    overscroll-behavior-x: none;
   }
 
   body {
@@ -80,13 +81,16 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     min-height: 100vh;
+    min-height: 100dvh;
     width: 100%;
     max-width: 100%;
     overflow-x: clip;
+    overscroll-behavior-x: none;
   }
 
   #root {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -117,15 +121,25 @@
     max-width: 1280px;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
   }
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem;
-      padding-right: 1.5rem;
+      padding-left: max(1.5rem, env(safe-area-inset-left));
+      padding-right: max(1.5rem, env(safe-area-inset-right));
     }
+  }
+
+  /* Safe area utilities for viewport-fit: cover */
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
