@@ -85,7 +85,7 @@ pub async fn create_share_link(
         ));
     }
 
-    let token = random_token_hex(24);
+    let token = random_slug(8);
     let can_edit = payload.can_edit.unwrap_or(false) && room.allow_edit;
 
     let share_link = sqlx::query_as::<_, ShareLinkSummaryRow>(
@@ -248,7 +248,7 @@ pub async fn get_share_info(
             "canEdit": share_link.can_edit,
             "effectiveCanEdit": effective_can_edit,
             "createdAt": to_iso_string(share_link.created_at),
-            "shareUrl": build_share_url(&state, &share_link.token, &share_link.room_id),
+            "shareUrl": build_share_url(&state, &share_link.token),
         },
         "room": {
             "id": share_link.room_id,
@@ -481,11 +481,11 @@ fn format_share_link(state: &AppState, link: &ShareLinkSummaryRow) -> serde_json
         "canEdit": link.can_edit,
         "createdAt": to_iso_string(link.created_at),
         "guestCount": link.guest_count,
-        "shareUrl": build_share_url(state, &link.token, &link.room_id),
+        "shareUrl": build_share_url(state, &link.token),
     })
 }
 
-fn build_share_url(state: &AppState, token: &str, room_id: &str) -> Option<String> {
+fn build_share_url(state: &AppState, token: &str) -> Option<String> {
     let base = state
         .config
         .frontend_url
@@ -493,9 +493,9 @@ fn build_share_url(state: &AppState, token: &str, room_id: &str) -> Option<Strin
         .or_else(|| state.config.app_url.clone())?;
     let normalized = base.trim_end_matches('/');
     let path = if state.config.frontend_hash_router {
-        format!("#/room/{room_id}?share={token}")
+        format!("#/s/{token}")
     } else {
-        format!("room/{room_id}?share={token}")
+        format!("s/{token}")
     };
     Some(format!("{normalized}/{path}"))
 }
@@ -509,4 +509,15 @@ fn random_token_hex(bytes: usize) -> String {
     let mut rng = rand::rngs::OsRng;
     rng.try_fill_bytes(&mut data).unwrap();
     hex::encode(data)
+}
+
+fn random_slug(len: usize) -> String {
+    const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let mut rng = rand::rngs::OsRng;
+    let mut bytes = vec![0u8; len];
+    rng.try_fill_bytes(&mut bytes).unwrap();
+    bytes
+        .iter()
+        .map(|b| CHARSET[(*b as usize) % CHARSET.len()] as char)
+        .collect()
 }

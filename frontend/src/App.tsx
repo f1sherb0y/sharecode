@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, HashRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useSearchParams, useParams, useNavigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui'
 import {
@@ -17,6 +17,7 @@ import {
   getStealthSettings,
   applyStealthSettings,
 } from '@/lib/tauri'
+import { fetchShareInfo } from '@/api'
 import { Spinner } from '@/components/ui'
 import { Toaster } from 'sonner'
 
@@ -87,6 +88,28 @@ function RoomRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function ShareRedirect() {
+  const { shareToken } = useParams<{ shareToken: string }>()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!shareToken) return
+    fetchShareInfo(shareToken)
+      .then(({ room }) => {
+        navigate(`/room/${room.id}?share=${shareToken}`, { replace: true })
+      })
+      .catch(() => {
+        navigate('/login', { replace: true })
+      })
+  }, [shareToken, navigate])
+
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Spinner size="lg" />
+    </div>
+  )
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -108,6 +131,7 @@ function AppRoutes() {
         }
       />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/s/:shareToken" element={<ShareRedirect />} />
 
       {/* Protected routes */}
       <Route

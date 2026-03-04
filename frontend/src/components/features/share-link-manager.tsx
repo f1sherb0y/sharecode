@@ -168,14 +168,14 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
   )
 }
 
-function resolveShareUrl(token: string, roomId: string, preferred?: string | null) {
+function resolveShareUrl(token: string, _roomId: string, preferred?: string | null) {
   if (preferred) return preferred
 
   const useHashRoutes = isTauriApp() || (typeof window !== 'undefined' && window.location.hash.startsWith('#/'))
 
   if (typeof window !== 'undefined') {
     const origin = window.location.origin.replace(/\/$/, '')
-    return useHashRoutes ? `${origin}/#/room/${roomId}?share=${token}` : `${origin}/room/${roomId}?share=${token}`
+    return useHashRoutes ? `${origin}/#/s/${token}` : `${origin}/s/${token}`
   }
 
   return token
