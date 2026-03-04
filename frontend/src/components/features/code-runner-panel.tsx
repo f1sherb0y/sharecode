@@ -50,6 +50,8 @@ interface CodeRunnerPanelProps {
   onPositionChange?: (position: PanelPosition) => void
   roomId?: string
   isOwner?: boolean
+  expanded?: boolean
+  onExpandedChange?: (expanded: boolean) => void
 }
 
 export interface CodeRunnerPanelRef {
@@ -79,9 +81,13 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
   onPositionChange,
   roomId,
   isOwner = false,
+  expanded,
+  onExpandedChange,
 }, ref) {
   const { t } = useTranslation()
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [localExpanded, setLocalExpanded] = useState(false)
+  const isExpanded = expanded ?? localExpanded
+  const setIsExpanded = onExpandedChange ?? setLocalExpanded
   const [panelSize, setPanelSize] = useState(DEFAULT_PANEL_SIZE)
   const [activeTab, setActiveTab] = useState<PanelTab>('runner')
   const [stdin, setStdin] = useState('')

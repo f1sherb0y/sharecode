@@ -88,6 +88,7 @@ export function EditorPage() {
   const { theme } = useThemeStore()
   const [showShareManager, setShowShareManager] = useState(false)
   const [isCodeRunning, setIsCodeRunning] = useState(false)
+  const [isRunnerExpanded, setIsRunnerExpanded] = useState(false)
   const activeDoc = parseDocView(searchParams.get('view'))
   const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
   
@@ -765,6 +766,8 @@ export function EditorPage() {
                 onPositionChange={(position) => updateEditorParams({ runner: position })}
                 roomId={roomId}
                 isOwner={isOwner}
+                expanded={isRunnerExpanded}
+                onExpandedChange={setIsRunnerExpanded}
               />
             )}
           </div>
@@ -780,6 +783,8 @@ export function EditorPage() {
               onPositionChange={(position) => updateEditorParams({ runner: position })}
               roomId={roomId}
               isOwner={isOwner}
+              expanded={isRunnerExpanded}
+              onExpandedChange={setIsRunnerExpanded}
             />
           )}
         </div>
