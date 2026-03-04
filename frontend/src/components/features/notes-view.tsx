@@ -5,6 +5,17 @@ import { Button, Textarea, Spinner } from '@/components/ui'
 import { useNotesStore } from '@/stores'
 import { cn } from '@/lib/utils'
 
+function formatNoteTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const sameYear = d.getFullYear() === now.getFullYear()
+  const sameDay = sameYear && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  if (sameDay) return time
+  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })
+  return `${date} ${time}`
+}
+
 interface NotesViewProps {
   roomId: string
   readOnly?: boolean
@@ -174,6 +185,9 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
                   >
                     {note.text}
                   </pre>
+                  <span className="text-[10px] text-muted-foreground leading-none mt-0.5 block">
+                    {formatNoteTime(note.updatedAt !== note.createdAt ? note.updatedAt : note.createdAt)}
+                  </span>
                   <div className={cn(
                       'absolute top-0.5 right-0.5 flex items-center gap-0.5',
                       'opacity-0 group-hover:opacity-100 transition-opacity'
