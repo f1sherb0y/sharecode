@@ -8,6 +8,7 @@ mod admin;
 mod auth;
 mod code;
 mod health;
+mod notes;
 mod playback;
 mod rooms;
 mod share;
@@ -73,6 +74,23 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/rooms/{roomId}/playback/updates",
             get(playback::get_playback_updates),
+        )
+        // Notes
+        .route(
+            "/api/rooms/{roomId}/notes",
+            get(notes::list_notes),
+        )
+        .route(
+            "/api/rooms/{roomId}/notes",
+            post(notes::create_note),
+        )
+        .route(
+            "/api/rooms/{roomId}/notes/{noteId}",
+            put(notes::update_note),
+        )
+        .route(
+            "/api/rooms/{roomId}/notes/{noteId}",
+            delete(notes::delete_note),
         )
         // Share
         .route("/api/share/session", get(share::get_guest_session))

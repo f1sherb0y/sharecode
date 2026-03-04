@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Loader2, Clock, HardDrive, AlertCircle, CheckCircle2, Terminal, PanelBottom, PanelRight } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Loader2, Clock, HardDrive, AlertCircle, CheckCircle2, Terminal, PanelBottom, PanelRight, StickyNote } from 'lucide-react'
 import { Button, Textarea } from '@/components/ui'
+import { NotesView } from '@/components/features/notes-view'
+import { useAuthStore } from '@/stores'
 import { api } from '@/api'
 import { cn } from '@/lib/utils'
 import type * as Y from 'yjs'
@@ -36,6 +38,7 @@ const MAX_PANEL_SIZE = 500
 const DEFAULT_PANEL_SIZE = 200
 
 type PanelPosition = 'bottom' | 'right'
+type PanelTab = 'runner' | 'notes'
 
 interface CodeRunnerPanelProps {
   language: Language
@@ -45,6 +48,8 @@ interface CodeRunnerPanelProps {
   className?: string
   position?: PanelPosition
   onPositionChange?: (position: PanelPosition) => void
+  roomId?: string
+  isOwner?: boolean
 }
 
 export interface CodeRunnerPanelRef {
@@ -72,10 +77,13 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
   className,
   position = 'bottom',
   onPositionChange,
+  roomId,
+  isOwner = false,
 }, ref) {
   const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
   const [panelSize, setPanelSize] = useState(DEFAULT_PANEL_SIZE)
+  const [activeTab, setActiveTab] = useState<PanelTab>('runner')
   const [stdin, setStdin] = useState('')
   const [stdout, setStdout] = useState('')
   const [stderr, setStderr] = useState('')
@@ -294,6 +302,44 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
     onPositionChange?.(newPosition)
   }
 
+  const { user } = useAuthStore()
+  const isPrivileged = user?.role === 'admin' || user?.role === 'superuser'
+
+  const showTabs = (isOwner || isPrivileged) && !!roomId
+
+  // Header label for current tab
+  const headerLabel = activeTab === 'notes' ? t('codeRunner.tabNotes') : t('codeRunner.title')
+
+  // Tab bar component (rendered inside expanded content)
+  const TabBar = showTabs ? (
+    <div className="flex items-center gap-0.5 shrink-0 border-b pb-1 mb-1">
+      <button
+        type="button"
+        className={cn(
+          'px-2 py-0.5 rounded-sm text-xs font-medium transition-colors',
+          activeTab === 'runner'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+        )}
+        onClick={() => setActiveTab('runner')}
+      >
+        {t('codeRunner.tabIO')}
+      </button>
+      <button
+        type="button"
+        className={cn(
+          'px-2 py-0.5 rounded-sm text-xs font-medium transition-colors',
+          activeTab === 'notes'
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+        )}
+        onClick={() => setActiveTab('notes')}
+      >
+        {t('codeRunner.tabNotes')}
+      </button>
+    </div>
+  ) : null
+
   return (
     <div
       ref={panelRef}
@@ -329,17 +375,21 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
           'flex items-center gap-1.5',
           isRight && 'flex-col'
         )}>
-          <StatusIcon size="small" />
+          {activeTab === 'notes' ? (
+            <StickyNote className="h-3 w-3 text-muted-foreground" />
+          ) : (
+            <StatusIcon size="small" />
+          )}
           <span
             className="font-medium whitespace-nowrap text-xs"
             style={isRight ? { writingMode: 'vertical-rl' } : undefined}
           >
-            {t('codeRunner.title')}
+            {headerLabel}
           </span>
-          {status === 'running' && isBottom && (
+          {activeTab === 'runner' && status === 'running' && isBottom && (
             <span className="text-xs text-muted-foreground">{t('codeRunner.running')}</span>
           )}
-          {!isExpanded && status === 'success' && execTime && isBottom && (
+          {activeTab === 'runner' && !isExpanded && status === 'success' && execTime && isBottom && (
             <span className="text-xs text-muted-foreground flex items-center gap-0.5">
               <Clock className="h-2.5 w-2.5" />
               {execTime}s
@@ -390,60 +440,71 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
       {isExpanded && (
         <div
           className={cn(
-            'flex gap-2 overflow-hidden',
-            isBottom ? 'flex-row px-2 pb-2' : 'flex-col py-2 pr-2'
+            'flex flex-col overflow-hidden',
+            isBottom ? 'px-2 pb-2' : 'py-2 pr-2'
           )}
           style={isBottom ? { height: panelSize } : { width: panelSize }}
         >
-          {/* Input */}
-          <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <label className="text-xs text-muted-foreground mb-1 font-medium shrink-0">
-              {t('codeRunner.input')}
-            </label>
-            <Textarea
-              value={stdin}
-              onChange={(e) => handleStdinChange(e.target.value)}
-              placeholder={t('codeRunner.inputPlaceholder')}
-              className="flex-1 font-mono text-sm resize-none min-h-0"
-              readOnly={!canEdit}
-            />
-          </div>
+          {TabBar}
 
-          {/* Output */}
-          <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <div className="flex items-center justify-between mb-1 shrink-0">
-              <label className="text-xs text-muted-foreground font-medium">
-                {t('codeRunner.output')}
-              </label>
-              {status === 'success' && (execTime || execMemory) && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {execTime && (
-                    <span className="flex items-center gap-0.5">
-                      <Clock className="h-2.5 w-2.5" />
-                      {execTime}s
-                    </span>
-                  )}
-                  {execMemory && (
-                    <span className="flex items-center gap-0.5">
-                      <HardDrive className="h-2.5 w-2.5" />
-                      {(execMemory / 1024).toFixed(1)}MB
-                    </span>
+          {activeTab === 'runner' ? (
+            <div className={cn(
+              'flex gap-2 flex-1 min-h-0 overflow-hidden',
+              isBottom ? 'flex-row' : 'flex-col'
+            )}>
+              {/* Input */}
+              <div className="flex-1 flex flex-col min-w-0 min-h-0">
+                <label className="text-xs text-muted-foreground mb-1 font-medium shrink-0">
+                  {t('codeRunner.input')}
+                </label>
+                <Textarea
+                  value={stdin}
+                  onChange={(e) => handleStdinChange(e.target.value)}
+                  placeholder={t('codeRunner.inputPlaceholder')}
+                  className="flex-1 font-mono text-sm resize-none min-h-0"
+                  readOnly={!canEdit}
+                />
+              </div>
+
+              {/* Output */}
+              <div className="flex-1 flex flex-col min-w-0 min-h-0">
+                <div className="flex items-center justify-between mb-1 shrink-0">
+                  <label className="text-xs text-muted-foreground font-medium">
+                    {t('codeRunner.output')}
+                  </label>
+                  {status === 'success' && (execTime || execMemory) && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {execTime && (
+                        <span className="flex items-center gap-0.5">
+                          <Clock className="h-2.5 w-2.5" />
+                          {execTime}s
+                        </span>
+                      )}
+                      {execMemory && (
+                        <span className="flex items-center gap-0.5">
+                          <HardDrive className="h-2.5 w-2.5" />
+                          {(execMemory / 1024).toFixed(1)}MB
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+                <div className="flex-1 font-mono text-sm bg-muted/50 rounded-md p-2 overflow-auto min-h-0 whitespace-pre-wrap">
+                  {status === 'running' ? (
+                    <span className="text-muted-foreground">{t('codeRunner.executing')}</span>
+                  ) : stdout ? (
+                    <span className="text-foreground">{stdout}</span>
+                  ) : stderr ? (
+                    <span className="text-destructive">{stderr}</span>
+                  ) : (
+                    <span className="text-muted-foreground">{t('codeRunner.noOutput')}</span>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex-1 font-mono text-sm bg-muted/50 rounded-md p-2 overflow-auto min-h-0 whitespace-pre-wrap">
-              {status === 'running' ? (
-                <span className="text-muted-foreground">{t('codeRunner.executing')}</span>
-              ) : stdout ? (
-                <span className="text-foreground">{stdout}</span>
-              ) : stderr ? (
-                <span className="text-destructive">{stderr}</span>
-              ) : (
-                <span className="text-muted-foreground">{t('codeRunner.noOutput')}</span>
-              )}
-            </div>
-          </div>
+          ) : (
+            roomId && <NotesView roomId={roomId} />
+          )}
         </div>
       )}
     </div>

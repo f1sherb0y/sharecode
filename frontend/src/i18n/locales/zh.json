@@ -244,7 +244,8 @@
     "notEnded": "该房间还未结束。",
     "progress": "进度",
     "duration": "时长",
-    "noUpdates": "无可用回放数据"
+    "noUpdates": "无可用回放数据",
+    "notes": "笔记"
   },
   "settings": {
     "title": "服务器设置",
@@ -378,6 +379,16 @@
     "emptyCode": "请先编写代码再运行。",
     "executionFailed": "代码执行失败，请重试。",
     "attachBottom": "贴靠底部",
-    "attachRight": "贴靠右侧"
+    "attachRight": "贴靠右侧",
+    "tabIO": "输入/输出",
+    "tabNotes": "笔记"
+  },
+  "notes": {
+    "placeholder": "输入笔记...",
+    "empty": "暂无笔记，在下方添加。",
+    "add": "添加",
+    "editPlaceholder": "点击编辑",
+    "loading": "加载笔记中...",
+    "submitHint": "Ctrl+Enter 保存"
   }
 }

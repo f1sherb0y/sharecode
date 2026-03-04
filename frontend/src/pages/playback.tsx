@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush } from 'lucide-react'
+import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush, StickyNote, PanelRightClose, PanelRight } from 'lucide-react'
 import * as Y from 'yjs'
 import pako from 'pako'
 import { createTLStore, defaultShapeUtils, loadSnapshot, type TLRecord, type TLStore } from 'tldraw'
@@ -16,8 +16,9 @@ import {
   Spinner,
 } from '@/components/ui'
 import { ThemeToggle } from '@/components/layout'
+import { NotesView } from '@/components/features/notes-view'
 import { api } from '@/api'
-import { useAuthStore, useThemeStore } from '@/stores'
+import { useAuthStore, useThemeStore, useNotesStore } from '@/stores'
 import { loadMonaco } from '@/lib/monaco-loader'
 import { formatTime } from '@/lib/utils'
 import { CanvasView } from '@/components/features/canvas-view'
@@ -116,6 +117,8 @@ export function PlaybackPage() {
   const [error, setError] = useState('')
   const [canvasStore, setCanvasStore] = useState<TLStore | null>(null)
   const [canvasReady, setCanvasReady] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
+  const { notes } = useNotesStore()
 
   const editorRef = useRef<HTMLDivElement>(null)
   const monacoRef = useRef<MonacoModule | null>(null)
@@ -443,25 +446,62 @@ export function PlaybackPage() {
             </Button>
           </div>
           <ThemeToggle className="h-8 w-8" />
+          <Button
+            variant={showNotes ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setShowNotes(!showNotes)}
+            title={t('playback.notes')}
+          >
+            <StickyNote className="h-4 w-4" />
+          </Button>
         </div>
       </header>
 
-      {/* Editor */}
-      <div className="flex-1 overflow-hidden">
-        <div className={`h-full w-full ${activeDoc === 'code' ? '' : 'hidden'}`}>
-          <div ref={editorRef} className="h-full w-full" />
+      {/* Editor + Notes */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-hidden">
+          <div className={`h-full w-full ${activeDoc === 'code' ? '' : 'hidden'}`}>
+            <div ref={editorRef} className="h-full w-full" />
+          </div>
+          {activeDoc === 'canvas' && (
+            <CanvasView
+              store={canvasStore}
+              ready={canvasReady}
+              canEdit={false}
+              theme={theme}
+              provider={null}
+              followUserId={null}
+              followClientId={null}
+              followEnabled={false}
+            />
+          )}
         </div>
-        {activeDoc === 'canvas' && (
-          <CanvasView
-            store={canvasStore}
-            ready={canvasReady}
-            canEdit={false}
-            theme={theme}
-            provider={null}
-            followUserId={null}
-            followClientId={null}
-            followEnabled={false}
-          />
+
+        {/* Notes panel */}
+        {showNotes && roomId && (
+          <div className="w-64 border-l bg-background flex flex-col shrink-0">
+            <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
+              <div className="flex items-center gap-1.5">
+                <StickyNote className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium">{t('playback.notes')}</span>
+                {notes.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{notes.length}</Badge>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setShowNotes(false)}
+              >
+                <PanelRightClose className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-hidden p-2">
+              <NotesView roomId={roomId} readOnly />
+            </div>
+          </div>
         )}
       </div>
 

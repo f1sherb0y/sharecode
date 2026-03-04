@@ -183,3 +183,11 @@ export interface CodeExecutionResult {
   time?: string
   memory?: number
 }
+
+export interface Note {
+  id: string
+  roomId: string
+  text: string
+  createdAt: string
+  updatedAt: string
+}

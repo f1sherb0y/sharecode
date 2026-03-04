@@ -180,3 +180,12 @@ pub struct DocumentUpdateRow {
     pub timestamp: NaiveDateTime,
     pub user_id: Option<String>,
 }
+
+#[derive(Debug, FromRow)]
+pub struct RoomNoteRow {
+    pub id: String,
+    pub room_id: String,
+    pub text: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}

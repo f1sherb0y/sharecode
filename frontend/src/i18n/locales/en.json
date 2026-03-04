@@ -244,7 +244,8 @@
     "notEnded": "The room has not ended yet.",
     "progress": "Progress",
     "duration": "Duration",
-    "noUpdates": "No playback data available"
+    "noUpdates": "No playback data available",
+    "notes": "Notes"
   },
   "settings": {
     "title": "Server Settings",
@@ -378,6 +379,16 @@
     "emptyCode": "Please write some code before running.",
     "executionFailed": "Code execution failed. Please try again.",
     "attachBottom": "Attach to bottom",
-    "attachRight": "Attach to right"
+    "attachRight": "Attach to right",
+    "tabIO": "I/O",
+    "tabNotes": "Notes"
+  },
+  "notes": {
+    "placeholder": "Type a note...",
+    "empty": "No notes yet. Add one below.",
+    "add": "Add",
+    "editPlaceholder": "Click to edit",
+    "loading": "Loading notes...",
+    "submitHint": "Ctrl+Enter to save"
   }
 }

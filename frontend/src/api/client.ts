@@ -16,6 +16,7 @@ import type {
   RoomActiveness,
   PaginationMeta,
   CodeExecutionResult,
+  Note,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
 
@@ -276,6 +277,31 @@ class ApiClient {
   // Playback
   async getPlaybackUpdates(roomId: string): Promise<PlaybackData> {
     return this.request<PlaybackData>(`/api/rooms/${roomId}/playback/updates`)
+  }
+
+  // Notes
+  async getNotes(roomId: string): Promise<{ notes: Note[] }> {
+    return this.request<{ notes: Note[] }>(`/api/rooms/${roomId}/notes`)
+  }
+
+  async createNote(roomId: string, text: string): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/api/rooms/${roomId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    })
+  }
+
+  async updateNote(roomId: string, noteId: string, text: string): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/api/rooms/${roomId}/notes/${noteId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ text }),
+    })
+  }
+
+  async deleteNote(roomId: string, noteId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/rooms/${roomId}/notes/${noteId}`, {
+      method: 'DELETE',
+    })
   }
 
   // Code Execution

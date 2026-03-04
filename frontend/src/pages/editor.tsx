@@ -75,7 +75,7 @@ function parseDocView(value: string | null): 'code' | 'canvas' {
 function parseRunnerPosition(value: string | null): 'bottom' | 'right' {
   return RUNNER_POSITIONS.includes((value ?? '') as (typeof RUNNER_POSITIONS)[number])
     ? (value as 'bottom' | 'right')
-    : 'bottom'
+    : 'right'
 }
 
 export function EditorPage() {
@@ -763,6 +763,8 @@ export function EditorPage() {
                 ymeta={ymeta}
                 position="bottom"
                 onPositionChange={(position) => updateEditorParams({ runner: position })}
+                roomId={roomId}
+                isOwner={isOwner}
               />
             )}
           </div>
@@ -776,6 +778,8 @@ export function EditorPage() {
               ymeta={ymeta}
               position="right"
               onPositionChange={(position) => updateEditorParams({ runner: position })}
+              roomId={roomId}
+              isOwner={isOwner}
             />
           )}
         </div>
