@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush, StickyNote, PanelRightClose, PanelRight } from 'lucide-react'
+import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush, StickyNote, PanelRightClose } from 'lucide-react'
 import * as Y from 'yjs'
 import pako from 'pako'
 import { createTLStore, defaultShapeUtils, loadSnapshot, type TLRecord, type TLStore } from 'tldraw'
