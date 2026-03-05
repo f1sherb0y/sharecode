@@ -29,3 +29,4 @@ hex = "0.4"
 
 # TODO: confirm latest yrs version before first build.
 yrs = { version = "0.25", features = ["sync"] }
+url = "2.5.8"

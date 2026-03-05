@@ -696,7 +696,7 @@ pub async fn compress_room_playback(
 
     let room = sqlx::query_as::<_, RoomStatusRow>(
         r#"
-        SELECT id, "isEnded" as is_ended, "isDeleted" as is_deleted
+        SELECT "isEnded" as is_ended, "isDeleted" as is_deleted
         FROM "Room"
         WHERE id = $1
         "#,
@@ -852,7 +852,6 @@ pub async fn delete_room(
 
 #[derive(sqlx::FromRow)]
 struct RoomStatusRow {
-    id: String,
     is_ended: bool,
     is_deleted: bool,
 }

@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let db = PgPoolOptions::new()
         .max_connections(10)
-        .connect(&config.database_url)
+        .connect(&strip_unsupported_params(&config.database_url))
         .await?;
 
     tracing::info!("Running database migrations");
@@ -90,4 +90,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Strip query parameters not recognized by libpq (e.g. `schema` added by Prisma)
+/// to avoid sqlx warnings at connect time.
+fn strip_unsupported_params(url: &str) -> String {
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return url.to_string();
+    };
+    let cleaned: Vec<(String, String)> = parsed
+        .query_pairs()
+        .filter(|(key, _)| key != "schema")
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    if cleaned.is_empty() {
+        parsed.set_query(None);
+    } else {
+        parsed.set_query(None);
+        let mut pairs = parsed.query_pairs_mut();
+        for (k, v) in &cleaned {
+            pairs.append_pair(k, v);
+        }
+    }
+    parsed.to_string()
 }
