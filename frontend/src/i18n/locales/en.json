@@ -389,6 +389,8 @@
     "add": "Add",
     "editPlaceholder": "Click to edit",
     "loading": "Loading notes...",
-    "submitHint": "Ctrl+Enter to save"
+    "submitHint": "Ctrl+Enter to save",
+    "copyAll": "Copy all",
+    "copiedAll": "Copied!"
   }
 }

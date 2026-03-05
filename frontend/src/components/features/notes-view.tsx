@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, X, Loader2, Pencil, Copy, Check } from 'lucide-react'
+import { Plus, X, Loader2, Pencil, Copy, Check, ClipboardCopy } from 'lucide-react'
 import { Button, Textarea, Spinner } from '@/components/ui'
 import { useNotesStore } from '@/stores'
 import { cn } from '@/lib/utils'
@@ -29,6 +29,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
   const [editText, setEditText] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedAll, setCopiedAll] = useState(false)
   const editRef = useRef<HTMLTextAreaElement>(null)
   const newRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -118,6 +119,19 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
     }
   }, [])
 
+  const handleCopyAll = useCallback(async () => {
+    if (notes.length === 0) return
+    const sorted = [...notes].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    const text = sorted.map((n) => n.text).join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedAll(true)
+      setTimeout(() => setCopiedAll(false), 1500)
+    } catch {
+      // ignore
+    }
+  }, [notes])
+
   useEffect(() => {
     if (editingId && editRef.current) {
       editRef.current.focus()
@@ -135,6 +149,24 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      {/* Copy all button */}
+      {notes.length > 0 && (
+        <div className="shrink-0 flex justify-end px-0.5 pb-0.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+            onClick={handleCopyAll}
+          >
+            {copiedAll ? (
+              <Check className="h-2.5 w-2.5 mr-1 text-success" />
+            ) : (
+              <ClipboardCopy className="h-2.5 w-2.5 mr-1" />
+            )}
+            {copiedAll ? t('notes.copiedAll') : t('notes.copyAll')}
+          </Button>
+        </div>
+      )}
       {/* Notes list */}
       <div ref={listRef} className="flex-1 overflow-y-auto min-h-0 space-y-1">
         {notes.length === 0 ? (
