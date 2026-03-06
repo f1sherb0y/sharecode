@@ -2,7 +2,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use chrono::{DateTime, Duration, Local, LocalResult, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -1091,35 +1091,34 @@ fn room_to_json_with_flags(
 }
 
 fn parse_scheduled_time(value: &str) -> Result<DateTime<Utc>, ApiError> {
+    // Prefer timezone-aware input (e.g. "2026-03-07T14:30:00+08:00")
     if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) {
         return Ok(parsed.with_timezone(&Utc));
     }
 
+    // Also accept "YYYY-MM-DDTHH:MM:SS+HH:MM" variants that chrono::DateTime can parse
+    if let Ok(parsed) = chrono::DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%:z") {
+        return Ok(parsed.with_timezone(&Utc));
+    }
+
+    // Fallback: treat naive datetimes as UTC
     if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S") {
-        return Ok(local_to_utc(parsed));
+        return Ok(Utc.from_utc_datetime(&parsed));
     }
 
     if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M") {
-        return Ok(local_to_utc(parsed));
+        return Ok(Utc.from_utc_datetime(&parsed));
     }
 
     if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
-        return Ok(local_to_utc(parsed));
+        return Ok(Utc.from_utc_datetime(&parsed));
     }
 
     if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M") {
-        return Ok(local_to_utc(parsed));
+        return Ok(Utc.from_utc_datetime(&parsed));
     }
 
     Err(ApiError::internal("Internal server error"))
-}
-
-fn local_to_utc(value: NaiveDateTime) -> DateTime<Utc> {
-    match Local.from_local_datetime(&value) {
-        LocalResult::Single(dt) => dt.with_timezone(&Utc),
-        LocalResult::Ambiguous(dt, _) => dt.with_timezone(&Utc),
-        LocalResult::None => Utc.from_utc_datetime(&value),
-    }
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
