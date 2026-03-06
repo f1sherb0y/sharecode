@@ -1,6 +1,6 @@
 use axum::{extract::Path, extract::State, http::StatusCode, response::IntoResponse, Json};
 use bcrypt::hash;
-use chrono::{NaiveDateTime, Timelike};
+use chrono::{DateTime, Timelike, Utc};
 use serde_json::{json, Value};
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -29,7 +29,7 @@ struct PlaybackSizeRow {
     id: String,
     name: String,
     is_ended: bool,
-    ended_at: Option<NaiveDateTime>,
+    ended_at: Option<DateTime<Utc>>,
     update_count: i64,
     bytes: i64,
 }
@@ -37,12 +37,12 @@ struct PlaybackSizeRow {
 #[derive(sqlx::FromRow)]
 struct PlaybackUpdateRow {
     update: Vec<u8>,
-    timestamp: NaiveDateTime,
+    timestamp: DateTime<Utc>,
     user_id: Option<String>,
 }
 
 struct CompressedBucket {
-    timestamp: NaiveDateTime,
+    timestamp: DateTime<Utc>,
     update: Vec<u8>,
     user_id: Option<String>,
 }
@@ -748,7 +748,7 @@ pub async fn compress_room_playback(
 
     let mut buckets: Vec<CompressedBucket> = Vec::new();
     let mut pending: Vec<PlaybackUpdateRow> = Vec::new();
-    let mut current_bucket: Option<NaiveDateTime> = None;
+    let mut current_bucket: Option<DateTime<Utc>> = None;
 
     for row in updates {
         let bucket_time = row.timestamp.with_nanosecond(0).unwrap_or(row.timestamp);

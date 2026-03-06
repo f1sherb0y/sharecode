@@ -1,5 +1,5 @@
 use axum::extract::ws::{Message, WebSocket};
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use futures_util::{SinkExt, StreamExt};
 use hex::encode as hex_encode;
 use sqlx::PgPool;
@@ -77,7 +77,7 @@ pub(crate) async fn handle_socket(socket: WebSocket, state: AppState) {
     let _ = write_task.await;
 }
 
-pub async fn broadcast_room_ended(state: &AppState, room_id: &str, ended_at: NaiveDateTime) {
+pub async fn broadcast_room_ended(state: &AppState, room_id: &str, ended_at: DateTime<Utc>) {
     let Some(doc_state) = state.ws.get_document(room_id).await else {
         return;
     };

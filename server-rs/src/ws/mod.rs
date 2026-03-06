@@ -12,7 +12,7 @@ use axum::{
     },
     response::IntoResponse,
 };
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 
 use crate::state::AppState;
 
@@ -20,6 +20,6 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
     ws.on_upgrade(move |socket| handlers::handle_socket(socket, state))
 }
 
-pub async fn broadcast_room_ended(state: &AppState, room_id: &str, ended_at: NaiveDateTime) {
+pub async fn broadcast_room_ended(state: &AppState, room_id: &str, ended_at: DateTime<Utc>) {
     handlers::broadcast_room_ended(state, room_id, ended_at).await;
 }

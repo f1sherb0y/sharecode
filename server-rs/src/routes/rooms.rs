@@ -2,7 +2,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use chrono::{Duration, Local, LocalResult, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, Local, LocalResult, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -425,7 +425,7 @@ pub async fn get_rooms(
     };
 
     let mut response = Vec::with_capacity(rooms.len());
-    let now = Utc::now().naive_utc();
+    let now = Utc::now();
 
     for room in rooms {
         let participants = fetch_participants(&state, &room.id).await?;
@@ -729,7 +729,7 @@ pub async fn set_room_pin(
         || has_global_write(&auth_user)
         || user_participant.map(|p| p.can_edit).unwrap_or(false);
 
-    let now = Utc::now().naive_utc();
+    let now = Utc::now();
     let is_expired = room
         .scheduled_time
         .and_then(|scheduled| {
@@ -970,7 +970,7 @@ pub async fn end_room(
         "#,
     )
     .bind(&room_id)
-    .bind(Utc::now().naive_utc())
+    .bind(Utc::now())
     .fetch_one(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to end room"))?;
@@ -1090,9 +1090,9 @@ fn room_to_json_with_flags(
     value
 }
 
-fn parse_scheduled_time(value: &str) -> Result<NaiveDateTime, ApiError> {
+fn parse_scheduled_time(value: &str) -> Result<DateTime<Utc>, ApiError> {
     if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) {
-        return Ok(parsed.naive_utc());
+        return Ok(parsed.with_timezone(&Utc));
     }
 
     if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S") {
@@ -1114,11 +1114,11 @@ fn parse_scheduled_time(value: &str) -> Result<NaiveDateTime, ApiError> {
     Err(ApiError::internal("Internal server error"))
 }
 
-fn local_to_utc(value: NaiveDateTime) -> NaiveDateTime {
+fn local_to_utc(value: NaiveDateTime) -> DateTime<Utc> {
     match Local.from_local_datetime(&value) {
-        LocalResult::Single(dt) => dt.with_timezone(&Utc).naive_utc(),
-        LocalResult::Ambiguous(dt, _) => dt.with_timezone(&Utc).naive_utc(),
-        LocalResult::None => value,
+        LocalResult::Single(dt) => dt.with_timezone(&Utc),
+        LocalResult::Ambiguous(dt, _) => dt.with_timezone(&Utc),
+        LocalResult::None => Utc.from_utc_datetime(&value),
     }
 }
 

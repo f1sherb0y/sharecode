@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use sqlx::FromRow;
 
 #[derive(Debug, FromRow)]
@@ -13,8 +13,8 @@ pub struct UserRow {
     pub can_write_all_rooms: bool,
     pub can_delete_all_rooms: bool,
     pub is_deleted: bool,
-    pub created_at: NaiveDateTime,
-    pub last_seen: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
@@ -27,8 +27,8 @@ pub struct UserPublicRow {
     pub can_read_all_rooms: bool,
     pub can_write_all_rooms: bool,
     pub can_delete_all_rooms: bool,
-    pub created_at: NaiveDateTime,
-    pub last_seen: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
@@ -50,12 +50,12 @@ pub struct RoomWithOwnerRow {
     pub allow_edit: bool,
     pub is_pinned: bool,
     pub is_deleted: bool,
-    pub scheduled_time: Option<NaiveDateTime>,
+    pub scheduled_time: Option<DateTime<Utc>>,
     pub duration: Option<i32>,
     pub is_ended: bool,
-    pub ended_at: Option<NaiveDateTime>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub owner_username: String,
     pub owner_color: String,
 }
@@ -71,12 +71,12 @@ pub struct RoomAdminRow {
     pub allow_edit: bool,
     pub is_pinned: bool,
     pub is_deleted: bool,
-    pub scheduled_time: Option<NaiveDateTime>,
+    pub scheduled_time: Option<DateTime<Utc>>,
     pub duration: Option<i32>,
     pub is_ended: bool,
-    pub ended_at: Option<NaiveDateTime>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub owner_username: String,
     pub owner_email: Option<String>,
 }
@@ -87,7 +87,7 @@ pub struct RoomParticipantRow {
     pub room_id: String,
     pub user_id: String,
     pub can_edit: bool,
-    pub joined_at: NaiveDateTime,
+    pub joined_at: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
@@ -96,7 +96,7 @@ pub struct RoomParticipantWithUserRow {
     pub room_id: String,
     pub user_id: String,
     pub can_edit: bool,
-    pub joined_at: NaiveDateTime,
+    pub joined_at: DateTime<Utc>,
     pub user_username: String,
     pub user_color: String,
 }
@@ -108,7 +108,7 @@ pub struct RoomShareLinkRow {
     pub token: String,
     pub can_edit: bool,
     pub created_by: String,
-    pub created_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
@@ -116,14 +116,14 @@ pub struct ShareLinkWithRoomRow {
     pub id: String,
     pub token: String,
     pub can_edit: bool,
-    pub created_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
     pub room_id: String,
     pub room_name: String,
     pub room_language: String,
     pub room_allow_edit: bool,
     pub room_is_deleted: bool,
     pub room_is_ended: bool,
-    pub room_ended_at: Option<NaiveDateTime>,
+    pub room_ended_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, FromRow)]
@@ -131,7 +131,7 @@ pub struct ShareLinkSummaryRow {
     pub id: String,
     pub token: String,
     pub can_edit: bool,
-    pub created_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
     pub room_id: String,
     pub guest_count: i64,
 }
@@ -146,8 +146,8 @@ pub struct GuestSessionRow {
     pub email: Option<String>,
     pub color: String,
     pub can_edit: bool,
-    pub created_at: NaiveDateTime,
-    pub last_active: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub last_active: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
@@ -160,14 +160,14 @@ pub struct GuestSessionWithRoomRow {
     pub email: Option<String>,
     pub color: String,
     pub can_edit: bool,
-    pub created_at: NaiveDateTime,
-    pub last_active: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub last_active: DateTime<Utc>,
     pub room_name: String,
     pub room_language: String,
     pub room_allow_edit: bool,
     pub room_is_deleted: bool,
     pub room_is_ended: bool,
-    pub room_ended_at: Option<NaiveDateTime>,
+    pub room_ended_at: Option<DateTime<Utc>>,
     pub share_token: String,
     pub share_can_edit: bool,
 }
@@ -177,7 +177,7 @@ pub struct DocumentUpdateRow {
     pub id: String,
     pub document_id: String,
     pub update: Vec<u8>,
-    pub timestamp: NaiveDateTime,
+    pub timestamp: DateTime<Utc>,
     pub user_id: Option<String>,
 }
 
@@ -186,6 +186,6 @@ pub struct RoomNoteRow {
     pub id: String,
     pub room_id: String,
     pub text: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }

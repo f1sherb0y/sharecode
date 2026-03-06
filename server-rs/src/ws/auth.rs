@@ -143,7 +143,7 @@ async fn authenticate_user(
         "#,
     )
     .bind(&user.id)
-    .bind(Utc::now().naive_utc())
+    .bind(Utc::now())
     .execute(&state.db)
     .await
     .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to update user")))?;
@@ -208,7 +208,7 @@ async fn authenticate_guest(
         "#,
     )
     .bind(&guest.id)
-    .bind(Utc::now().naive_utc())
+    .bind(Utc::now())
     .bind(effective_can_edit)
     .execute(&state.db)
     .await

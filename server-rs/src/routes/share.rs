@@ -443,7 +443,7 @@ pub async fn get_guest_session(
         "#,
     )
     .bind(&guest.id)
-    .bind(chrono::Utc::now().naive_utc())
+    .bind(chrono::Utc::now())
     .bind(effective_can_edit)
     .execute(&state.db)
     .await
