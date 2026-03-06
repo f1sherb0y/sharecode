@@ -29,7 +29,7 @@ import {
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores'
-import { cn, formatDate } from '@/lib/utils'
+import { cn, formatDateMinutes } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import type { Room, Language, User, PaginationMeta, RoomActiveness } from '@/types'
 
@@ -798,14 +798,14 @@ function RoomCard({
             </div>
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              <span>{formatDate(room.createdAt)}</span>
+              <span>{formatDateMinutes(room.createdAt)}</span>
             </div>
           </div>
 
           {room.scheduledTime && (
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              <span>{formatDate(room.scheduledTime)}</span>
+              <span>{formatDateMinutes(room.scheduledTime)}</span>
               {room.duration && <span>• {room.duration} {t('rooms.list.durationUnit')}</span>}
             </div>
           )}
