@@ -234,39 +234,15 @@ export function RoomsPage() {
     setIsCreating(true)
 
     try {
-      // Convert the datetime-local value (user's configured timezone) to an ISO string with UTC offset
-      let scheduledTimeISO: string | undefined
-      if (scheduledTime) {
-        const fmt = new Intl.DateTimeFormat('en-US', {
-          timeZone: timezone,
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          hour12: false,
-          timeZoneName: 'longOffset',
-        })
-        // Parse the datetime-local value parts (format: "YYYY-MM-DDTHH:MM")
-        const sepIdx = scheduledTime.indexOf('T')
-        const datePart = scheduledTime.substring(0, sepIdx)
-        const timePart = scheduledTime.substring(sepIdx + 1)
-        const [y, mo, d] = datePart.split('-').map(Number) as [number, number, number]
-        const [h, mi] = timePart.split(':').map(Number) as [number, number]
-        // Create a probe Date to extract the UTC offset for the configured timezone
-        const probe = new Date(y, mo - 1, d, h, mi, 0)
-        const parts = fmt.formatToParts(probe)
-        const tzName = parts.find(p => p.type === 'timeZoneName')?.value ?? ''
-        // tzName is like "GMT+08:00" or "GMT-05:00" or "GMT"
-        const offsetMatch = tzName.match(/GMT([+-]\d{2}:\d{2})/)
-        const offset = offsetMatch ? offsetMatch[1] : '+00:00'
-        scheduledTimeISO = `${datePart}T${timePart}:00${offset}`
-      }
       const { room } = await api.createRoom(
         newRoomName,
         newRoomLanguage,
-        scheduledTimeISO,
+        scheduledTime || undefined,
         duration ? parseInt(duration, 10) : undefined,
         selectedUsers.length > 0 ? selectedUsers : undefined,
         newRoomCompany || undefined,
-        newRoomPosition || undefined
+        newRoomPosition || undefined,
+        timezone
       )
       setIsCreateOpen(false)
       resetForm()

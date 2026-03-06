@@ -121,11 +121,12 @@ class ApiClient {
     duration?: number,
     allowedUsers?: Array<{ userId: string; canEdit: boolean }>,
     company?: string,
-    position?: string
+    position?: string,
+    timezone?: string
   ): Promise<{ room: Room }> {
     return this.request<{ room: Room }>('/api/rooms', {
       method: 'POST',
-      body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers, company, position }),
+      body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers, company, position, timezone }),
     })
   }
 

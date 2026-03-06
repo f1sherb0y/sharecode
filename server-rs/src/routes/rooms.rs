@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
+use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -50,6 +51,7 @@ pub struct CreateRoomPayload {
     #[serde(rename = "scheduledTime")]
     pub scheduled_time: Option<String>,
     pub duration: Option<i32>,
+    pub timezone: Option<String>,
     #[serde(default, rename = "allowedUsers")]
     pub allowed_users: Vec<AllowedUserPayload>,
 }
@@ -154,7 +156,7 @@ pub async fn create_room(
     }
 
     let scheduled_time = match payload.scheduled_time {
-        Some(value) if !value.is_empty() => Some(parse_scheduled_time(&value)?),
+        Some(value) if !value.is_empty() => Some(parse_scheduled_time(&value, payload.timezone.as_deref())?),
         _ => None,
     };
 
@@ -1090,35 +1092,29 @@ fn room_to_json_with_flags(
     value
 }
 
-fn parse_scheduled_time(value: &str) -> Result<DateTime<Utc>, ApiError> {
-    // Prefer timezone-aware input (e.g. "2026-03-07T14:30:00+08:00")
+fn parse_scheduled_time(value: &str, timezone: Option<&str>) -> Result<DateTime<Utc>, ApiError> {
+    // If the string already contains timezone info, use it directly
     if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) {
         return Ok(parsed.with_timezone(&Utc));
     }
-
-    // Also accept "YYYY-MM-DDTHH:MM:SS+HH:MM" variants that chrono::DateTime can parse
     if let Ok(parsed) = chrono::DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%:z") {
         return Ok(parsed.with_timezone(&Utc));
     }
 
-    // Fallback: treat naive datetimes as UTC
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S") {
-        return Ok(Utc.from_utc_datetime(&parsed));
-    }
+    // Parse as naive datetime, then interpret in the given timezone
+    let naive = ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]
+        .iter()
+        .find_map(|fmt| NaiveDateTime::parse_from_str(value, fmt).ok())
+        .ok_or_else(|| ApiError::internal("Internal server error"))?;
 
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M") {
-        return Ok(Utc.from_utc_datetime(&parsed));
-    }
-
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
-        return Ok(Utc.from_utc_datetime(&parsed));
-    }
-
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M") {
-        return Ok(Utc.from_utc_datetime(&parsed));
-    }
-
-    Err(ApiError::internal("Internal server error"))
+    let tz: Tz = timezone
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(chrono_tz::UTC);
+    let dt = tz.from_local_datetime(&naive)
+        .single()
+        .map(|d| d.with_timezone(&Utc))
+        .unwrap_or_else(|| Utc.from_utc_datetime(&naive));
+    Ok(dt)
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
