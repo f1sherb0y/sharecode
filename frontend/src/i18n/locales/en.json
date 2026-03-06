@@ -248,8 +248,26 @@
     "notes": "Notes"
   },
   "settings": {
-    "title": "Server Settings",
+    "title": "Settings",
     "backToLogin": "Back to Login",
+    "appearance": {
+      "title": "Appearance",
+      "description": "Switch between light and dark mode",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language": {
+      "title": "Language",
+      "description": "Choose your display language"
+    },
+    "timezone": {
+      "title": "Timezone",
+      "description": "Set the timezone for displaying dates and times"
+    },
+    "server": {
+      "title": "Server Connection",
+      "description": "Configure your server connection settings"
+    },
     "serverUrl": {
       "label": "Server URL (HTTP)",
       "placeholder": "http://localhost:3000",

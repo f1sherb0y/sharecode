@@ -248,8 +248,26 @@
     "notes": "笔记"
   },
   "settings": {
-    "title": "服务器设置",
+    "title": "设置",
     "backToLogin": "返回登录",
+    "appearance": {
+      "title": "外观",
+      "description": "切换浅色和深色模式",
+      "light": "浅色",
+      "dark": "深色"
+    },
+    "language": {
+      "title": "语言",
+      "description": "选择界面显示语言"
+    },
+    "timezone": {
+      "title": "时区",
+      "description": "设置日期和时间的显示时区"
+    },
+    "server": {
+      "title": "服务器连接",
+      "description": "配置服务器连接设置"
+    },
     "serverUrl": {
       "label": "服务器 URL (HTTP)",
       "placeholder": "http://localhost:3000",

@@ -11,7 +11,6 @@ import {
   Button,
 } from '@/components/ui'
 import { useAuthStore } from '@/stores'
-import { isTauriApp } from '@/lib/tauri'
 
 export function UserMenu() {
   const { t } = useTranslation()
@@ -24,7 +23,6 @@ export function UserMenu() {
   }
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superuser'
-  const showSettings = isTauriApp() // Only show settings in desktop app
 
   return (
     <DropdownMenu>
@@ -53,14 +51,12 @@ export function UserMenu() {
             </Link>
           </DropdownMenuItem>
         )}
-        {showSettings && (
-          <DropdownMenuItem asChild>
-            <Link to="/settings" className="cursor-pointer">
-              <Settings className="mr-2 h-4 w-4" />
-              {t('common.settings')}
-            </Link>
-          </DropdownMenuItem>
-        )}
+        <DropdownMenuItem asChild>
+          <Link to="/settings" className="cursor-pointer">
+            <Settings className="mr-2 h-4 w-4" />
+            {t('common.settings')}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
           <LogOut className="mr-2 h-4 w-4" />

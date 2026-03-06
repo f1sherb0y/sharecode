@@ -61,7 +61,7 @@ import { CanvasView } from '@/components/features/canvas-view'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
 import { ThemeToggle } from '@/components/layout'
-import { generateUserColor, cn } from '@/lib/utils'
+import { generateUserColor, cn, getTimezone } from '@/lib/utils'
 import type { Language } from '@/types'
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
@@ -385,7 +385,7 @@ export function EditorPage() {
         <p className="text-sm text-muted-foreground max-w-md">{t('editor.ended.description')}</p>
         {roomEndedAt && (
           <p className="text-xs text-muted-foreground">
-            {t('editor.ended.endedAt', { time: new Date(roomEndedAt).toLocaleString() })}
+            {t('editor.ended.endedAt', { time: new Date(roomEndedAt).toLocaleString(undefined, { timeZone: getTimezone() }) })}
           </p>
         )}
         <Button onClick={handleBack}>{t('editor.ended.back')}</Button>

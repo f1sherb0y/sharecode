@@ -1,8 +1,13 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { useSettingsStore } from '@/stores/settings'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+export function getTimezone(): string {
+  return useSettingsStore.getState().timezone
 }
 
 export function generateUserColor(identifier: string | number | undefined): {
@@ -29,7 +34,7 @@ export function generateUserColor(identifier: string | number | undefined): {
 }
 
 export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleDateString()
+  return new Date(date).toLocaleDateString(undefined, { timeZone: getTimezone() })
 }
 
 export function formatDateMinutes(date: string | Date): string {
@@ -40,17 +45,21 @@ export function formatDateMinutes(date: string | Date): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: getTimezone(),
   })
 }
 
 export function formatDateTime(date: string | Date): string {
-  return new Date(date).toLocaleString()
+  return new Date(date).toLocaleString(undefined, { timeZone: getTimezone() })
 }
 
 export function formatTime(timestamp: number): string {
   const date = new Date(timestamp)
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  const seconds = date.getSeconds().toString().padStart(2, '0')
-  return `${hours}:${minutes}:${seconds}`
+  return date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: getTimezone(),
+  })
 }

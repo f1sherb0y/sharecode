@@ -3,16 +3,21 @@ import { useTranslation } from 'react-i18next'
 import { Plus, X, Loader2, Pencil, Copy, Check, ClipboardCopy } from 'lucide-react'
 import { Button, Textarea, Spinner } from '@/components/ui'
 import { useNotesStore } from '@/stores'
-import { cn } from '@/lib/utils'
+import { cn, getTimezone } from '@/lib/utils'
 
 function formatNoteTime(iso: string): string {
   const d = new Date(iso)
   const now = new Date()
-  const sameYear = d.getFullYear() === now.getFullYear()
-  const sameDay = sameYear && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
-  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  const tz = getTimezone()
+  const fmt = new Intl.DateTimeFormat(undefined, { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' })
+  const dParts = fmt.formatToParts(d)
+  const nowParts = fmt.formatToParts(now)
+  const get = (parts: Intl.DateTimeFormatPart[], type: string) => parts.find(p => p.type === type)?.value
+  const sameYear = get(dParts, 'year') === get(nowParts, 'year')
+  const sameDay = sameYear && get(dParts, 'month') === get(nowParts, 'month') && get(dParts, 'day') === get(nowParts, 'day')
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: tz })
   if (sameDay) return time
-  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })
+  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }), timeZone: tz })
   return `${date} ${time}`
 }
 
