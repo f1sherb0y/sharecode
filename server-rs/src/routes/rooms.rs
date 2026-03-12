@@ -13,7 +13,9 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::{RoomParticipantWithUserRow, RoomWithOwnerRow, UserSimpleRow},
-    permissions::{has_global_delete, has_global_read, has_global_write},
+    permissions::{
+        can_manage_room_lifecycle, has_global_read, has_global_write, RoomLifecycleAction,
+    },
     state::AppState,
     utils::time::{to_iso_string, to_iso_string_opt},
     ws,
@@ -156,7 +158,9 @@ pub async fn create_room(
     }
 
     let scheduled_time = match payload.scheduled_time {
-        Some(value) if !value.is_empty() => Some(parse_scheduled_time(&value, payload.timezone.as_deref())?),
+        Some(value) if !value.is_empty() => {
+            Some(parse_scheduled_time(&value, payload.timezone.as_deref())?)
+        }
         _ => None,
     };
 
@@ -775,7 +779,7 @@ pub async fn delete_room(
         None => return Err(ApiError::not_found("Room not found")),
     };
 
-    if room.owner_id != auth_user.id && !has_global_delete(&auth_user) {
+    if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::Delete) {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -940,7 +944,7 @@ pub async fn end_room(
         None => return Err(ApiError::not_found("Room not found")),
     };
 
-    if room.owner_id != auth_user.id && !has_global_delete(&auth_user) {
+    if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::End) {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -1102,15 +1106,21 @@ fn parse_scheduled_time(value: &str, timezone: Option<&str>) -> Result<DateTime<
     }
 
     // Parse as naive datetime, then interpret in the given timezone
-    let naive = ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]
-        .iter()
-        .find_map(|fmt| NaiveDateTime::parse_from_str(value, fmt).ok())
-        .ok_or_else(|| ApiError::internal("Internal server error"))?;
+    let naive = [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ]
+    .iter()
+    .find_map(|fmt| NaiveDateTime::parse_from_str(value, fmt).ok())
+    .ok_or_else(|| ApiError::internal("Internal server error"))?;
 
     let tz: Tz = timezone
         .and_then(|s| s.parse().ok())
         .unwrap_or(chrono_tz::UTC);
-    let dt = tz.from_local_datetime(&naive)
+    let dt = tz
+        .from_local_datetime(&naive)
         .single()
         .map(|d| d.with_timezone(&Utc))
         .unwrap_or_else(|| Utc.from_utc_datetime(&naive));

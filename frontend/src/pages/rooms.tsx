@@ -28,6 +28,7 @@ import {
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
+import { canDeleteRoom } from '@/lib/room-permissions'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import { cn, formatDateMinutes } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
@@ -743,7 +744,8 @@ function RoomCard({
   const isOwner = room.ownerId === currentUser?.id
   const isPrivileged = currentUser?.role === 'admin' || currentUser?.role === 'superuser' ||
     currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
-  const canManageRoom = isOwner || currentUser?.role === 'superuser' || currentUser?.canDeleteAllRooms
+  const canShareRoom = isOwner || currentUser?.role === 'superuser' || currentUser?.canDeleteAllRooms
+  const canDeleteCurrentRoom = canDeleteRoom(currentUser, room.ownerId)
   const canRenameRoom = isOwner || currentUser?.role === 'superuser'
   const canPinRoom = currentUser?.role === 'admin' || currentUser?.role === 'superuser'
   const participantCount = (room.participants?.length ?? 0) + 1
@@ -779,7 +781,7 @@ function RoomCard({
               {t('rooms.list.pinned')}
             </Badge>
           )}
-          {canManageRoom && (
+          {canShareRoom && (
             <Badge variant="outline" className="ml-1 text-xs px-1 py-0">
               {isOwner ? t('rooms.list.owned') : t('rooms.list.manage')}
             </Badge>
@@ -821,7 +823,7 @@ function RoomCard({
 
         {/* Actions */}
         <div className="flex items-center gap-1 mt-2 pt-2 border-t min-h-[36px]">
-          {canManageRoom && !room.isEnded && (
+          {canShareRoom && !room.isEnded && (
             <Button
               variant="ghost"
               size="sm"
@@ -880,7 +882,7 @@ function RoomCard({
             </Button>
           )}
 
-          {canManageRoom && (
+          {canDeleteCurrentRoom && (
             <Button
               variant="ghost"
               size="sm"

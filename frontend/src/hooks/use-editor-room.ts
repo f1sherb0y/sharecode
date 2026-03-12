@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, fetchShareInfo, joinShare } from '@/api'
+import { canEndRoom as canEndRoomByMatrix } from '@/lib/room-permissions'
 import { useAuthStore, useGuestStore } from '@/stores'
 import type { Room, Language, User, ShareLinkInfo, ShareRoomSummary } from '@/types'
 
@@ -17,6 +18,7 @@ export interface EditorRoomState {
   canEdit: boolean
   isOwner: boolean
   canManageRoom: boolean
+  canEndRoom: boolean
   isPrivileged: boolean
   canViewPlayback: boolean
   roomEnded: boolean
@@ -101,6 +103,7 @@ export function useEditorRoom(): EditorRoomState {
   const canManageRoom = !isGuestMode && !!user && (
     isOwner || user.role === 'superuser' || user.canDeleteAllRooms
   )
+  const canEndRoom = !isGuestMode && canEndRoomByMatrix(user, effectiveRoom?.ownerId)
 
   const hasGlobalReadPermission = !isGuestMode && !!user && (
     user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
@@ -211,7 +214,7 @@ export function useEditorRoom(): EditorRoomState {
   }
 
   const handleEndRoom = useCallback(async () => {
-    if (!roomId || !canManageRoom) return
+    if (!roomId || !canEndRoom) return
     
     // We will let the UI handle the confirmation dialog now, or keep it simple here.
     // The requirement was to use Radix UI Dialog. 
@@ -228,7 +231,7 @@ export function useEditorRoom(): EditorRoomState {
     } finally {
       setIsEnding(false)
     }
-  }, [roomId, canManageRoom, navigate])
+  }, [roomId, canEndRoom, navigate])
 
   const handleLanguageChange = useCallback(
     async (language: Language, ymeta: any) => {
@@ -260,6 +263,7 @@ export function useEditorRoom(): EditorRoomState {
     canEdit,
     isOwner,
     canManageRoom,
+    canEndRoom,
     isPrivileged,
     canViewPlayback,
     roomEnded,

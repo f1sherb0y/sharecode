@@ -133,6 +133,7 @@ export function EditorPage() {
     canEdit,
     isOwner,
     canManageRoom,
+    canEndRoom,
     roomEnded,
     roomEndedAt,
     shareInfo,
@@ -599,7 +600,7 @@ export function EditorPage() {
             )}
 
             {/* Desktop: Share & End Room Buttons */}
-            {(isOwner || canManageRoom) && (
+            {(canManageRoom || canEndRoom) && (
               <div className="hidden md:flex items-center gap-2">
                 {canManageRoom && (
                   <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowShareManager(true)}>
@@ -607,7 +608,7 @@ export function EditorPage() {
                     <span className="hidden xl:inline">{t('editor.toolbar.share')}</span>
                   </Button>
                 )}
-                {canManageRoom && (
+                {canEndRoom && (
                   <Button variant="destructive" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setIsEndRoomDialogOpen(true)}>
                     <StopCircle className="h-4 w-4 sm:mr-1" />
                     <span className="hidden xl:inline">{t('editor.toolbar.endRoom')}</span>
@@ -663,7 +664,7 @@ export function EditorPage() {
                     {t('editor.toolbar.blink')}
                   </DropdownMenuItem>
 
-                  {(isOwner || canManageRoom) && (
+                  {(canManageRoom || canEndRoom) && (
                     <>
                       {canManageRoom && (
                         <DropdownMenuItem onClick={() => setShowShareManager(true)}>
@@ -671,7 +672,7 @@ export function EditorPage() {
                           {t('editor.toolbar.share')}
                         </DropdownMenuItem>
                       )}
-                      {canManageRoom && (
+                      {canEndRoom && (
                         <DropdownMenuItem 
                           onClick={() => setIsEndRoomDialogOpen(true)}
                           className="text-destructive focus:text-destructive"
