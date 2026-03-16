@@ -56,7 +56,7 @@ import {
   DialogTitle,
 } from '@/components/ui'
 import { useAuthStore, useFontStore, useGuestStore, useThemeStore } from '@/stores'
-import { useEditorRoom, useMonacoEditor, useEditorAwareness, useYjsProvider, useTldrawStore, type StatelessMessage } from '@/hooks'
+import { useEditorRoom, useCodeMirrorEditor, useEditorAwareness, useYjsProvider, useTldrawStore, type StatelessMessage } from '@/hooks'
 import { CanvasView } from '@/components/features/canvas-view'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
@@ -181,14 +181,12 @@ export function EditorPage() {
     user: currentUser,
   })
 
-  // 3. Monaco Hook
+  // 3. CodeMirror Hook
   const {
     editorRef,
-    monacoEditorRef,
-    monacoModelRef,
-    monacoRef,
+    viewRef,
     updateLanguage
-  } = useMonacoEditor({
+  } = useCodeMirrorEditor({
     effectiveRoom,
     ytext,
     provider,
@@ -209,9 +207,7 @@ export function EditorPage() {
   } = useEditorAwareness({
     provider,
     ydoc,
-    monacoRef,
-    monacoEditorRef,
-    monacoModelRef
+    viewRef
   })
 
   // Code Runner Ref
@@ -254,8 +250,8 @@ export function EditorPage() {
 
   // Code Runner
   const getCode = useCallback(() => {
-    return monacoEditorRef.current?.getValue() ?? ''
-  }, [monacoEditorRef])
+    return viewRef.current?.state.doc.toString() ?? ''
+  }, [viewRef])
 
   const handleRunCode = useCallback(async () => {
     if (!codeRunnerRef.current || !canEdit) return
@@ -268,39 +264,27 @@ export function EditorPage() {
   }, [canEdit])
 
   const handleBlink = useCallback(() => {
-    if (!provider?.awareness || !monacoEditorRef.current || !monacoModelRef.current) return
+    if (!provider?.awareness || !viewRef.current) return
 
-    const selection = monacoEditorRef.current.getSelection()
-    if (!selection) return
-
-    const model = monacoModelRef.current
-    const anchorOffset = model.getOffsetAt({
-      lineNumber: selection.startLineNumber,
-      column: selection.startColumn,
-    })
-    const headOffset = model.getOffsetAt({
-      lineNumber: selection.endLineNumber,
-      column: selection.endColumn,
-    })
+    const selection = viewRef.current.state.selection.main
 
     provider.awareness.setLocalStateField('blink', {
-      anchor: Y.createRelativePositionFromTypeIndex(ytext, anchorOffset),
-      head: Y.createRelativePositionFromTypeIndex(ytext, headOffset),
+      anchor: Y.createRelativePositionFromTypeIndex(ytext, selection.anchor),
+      head: Y.createRelativePositionFromTypeIndex(ytext, selection.head),
       ts: Date.now(),
     })
-  }, [provider, monacoEditorRef, monacoModelRef, ytext])
+  }, [provider, viewRef, ytext])
 
   const canBlink =
     activeDoc === 'code' &&
     !!provider?.awareness &&
-    !!monacoEditorRef.current &&
-    !!monacoModelRef.current
+    !!viewRef.current
 
   useEffect(() => {
     if (activeDoc === 'code') {
-      monacoEditorRef.current?.layout()
+      viewRef.current?.requestMeasure()
     }
-  }, [activeDoc, monacoEditorRef])
+  }, [activeDoc, viewRef])
 
   // Loading View
   if (isLoading) {

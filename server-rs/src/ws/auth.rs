@@ -35,122 +35,102 @@ async fn authenticate_user(
     document_name: &str,
     payload: &crate::auth::UserTokenPayload,
 ) -> Result<AuthOutcome, String> {
-    let user = sqlx::query_as::<_, WsUserRow>(
+    let result = sqlx::query_as::<_, WsAuthCombinedRow>(
         r#"
         SELECT
-            id,
-            role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
-            "isDeleted" as is_deleted
-        FROM "User"
-        WHERE id = $1
+            u.id as user_id,
+            u.role,
+            u."canReadAllRooms" as can_read_all_rooms,
+            u."canWriteAllRooms" as can_write_all_rooms,
+            u."canDeleteAllRooms" as can_delete_all_rooms,
+            u."isDeleted" as user_is_deleted,
+            r.id as room_id,
+            r."ownerId" as owner_id,
+            r."isDeleted" as room_is_deleted,
+            r."isEnded" as is_ended,
+            p."canEdit" as participant_can_edit
+        FROM "User" u
+        CROSS JOIN "Room" r
+        LEFT JOIN "RoomParticipant" p ON p."roomId" = r.id AND p."userId" = u.id
+        WHERE u.id = $1 AND r.id = $2
         "#,
     )
     .bind(&payload.user_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to load user")))?;
-
-    let user = match user {
-        Some(user) if !user.is_deleted => user,
-        _ => return Err("Authentication failed: User not found".to_string()),
-    };
-
-    let room = sqlx::query_as::<_, WsRoomRow>(
-        r#"
-        SELECT
-            id,
-            "ownerId" as owner_id,
-            "isDeleted" as is_deleted,
-            "isEnded" as is_ended
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
     .bind(document_name)
     .fetch_optional(&state.db)
     .await
-    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to load room")))?;
+    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to load auth data")))?;
 
-    let room = match room {
-        Some(room) => room,
-        None => return Err("Authentication failed: Access denied".to_string()),
+    let row = match result {
+        Some(row) if !row.user_is_deleted => row,
+        _ => return Err("Authentication failed: User or Room not found".to_string()),
     };
 
-    if room.is_deleted {
+    if row.room_is_deleted {
         return Err("Authentication failed: Access denied".to_string());
     }
 
-    let participant = sqlx::query_as::<_, WsParticipantRow>(
-        r#"
-        SELECT "canEdit" as can_edit
-        FROM "RoomParticipant"
-        WHERE "roomId" = $1 AND "userId" = $2
-        "#,
-    )
-    .bind(&room.id)
-    .bind(&user.id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to load participant")))?;
-
-    let is_owner = room.owner_id == user.id;
+    let is_owner = row.owner_id == row.user_id;
     let can_read_globally =
-        user.can_read_all_rooms || user.can_write_all_rooms || user.can_delete_all_rooms;
-    let can_write_globally = user.can_write_all_rooms || user.can_delete_all_rooms;
+        row.can_read_all_rooms || row.can_write_all_rooms || row.can_delete_all_rooms;
+    let can_write_globally = row.can_write_all_rooms || row.can_delete_all_rooms;
     let is_privileged =
-        user.role == "admin" || user.role == "superuser" || can_read_globally;
+        row.role == "admin" || row.role == "superuser" || can_read_globally;
 
-    if room.is_ended && !is_owner && !is_privileged {
+    if row.is_ended && !is_owner && !is_privileged {
         return Err("Authentication failed: Access denied".to_string());
     }
 
-    let has_access = can_read_globally || is_owner || participant.is_some();
+    let has_access = can_read_globally || is_owner || row.participant_can_edit.is_some();
     if !has_access {
         return Err("Authentication failed: Access denied".to_string());
     }
 
-    let participant_can_edit = participant.as_ref().map(|p| p.can_edit).unwrap_or(false);
-    let can_edit = if room.is_ended {
+    let participant_can_edit = row.participant_can_edit.unwrap_or(false);
+    let can_edit = if row.is_ended {
         false
     } else {
         can_write_globally || is_owner || participant_can_edit
     };
 
-    if !room.is_ended && !is_owner && participant.is_none() {
-        sqlx::query(
+    let db = state.db.clone();
+    let user_id = row.user_id.clone();
+    let room_id = row.room_id.clone();
+    let is_ended = row.is_ended;
+    let needs_participant = !is_ended && !is_owner && row.participant_can_edit.is_none();
+
+    tokio::spawn(async move {
+        if needs_participant {
+            let _ = sqlx::query(
+                r#"
+                INSERT INTO "RoomParticipant" (id, "roomId", "userId", "canEdit")
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT ("roomId", "userId") DO NOTHING
+                "#,
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(&room_id)
+            .bind(&user_id)
+            .bind(can_write_globally)
+            .execute(&db)
+            .await;
+        }
+
+        let _ = sqlx::query(
             r#"
-            INSERT INTO "RoomParticipant" (id, "roomId", "userId", "canEdit")
-            VALUES ($1, $2, $3, $4)
+            UPDATE "User"
+            SET "lastSeen" = NOW()
+            WHERE id = $1
             "#,
         )
-        .bind(Uuid::new_v4().to_string())
-        .bind(&room.id)
-        .bind(&user.id)
-        .bind(can_write_globally)
-        .execute(&state.db)
-        .await
-        .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to add participant")))?;
-    }
-
-    sqlx::query(
-        r#"
-        UPDATE "User"
-        SET "lastSeen" = $2
-        WHERE id = $1
-        "#,
-    )
-    .bind(&user.id)
-    .bind(Utc::now())
-    .execute(&state.db)
-    .await
-    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to update user")))?;
+        .bind(&user_id)
+        .execute(&db)
+        .await;
+    });
 
     Ok(AuthOutcome {
         read_only: !can_edit,
-        actor_id: Some(user.id),
+        actor_id: Some(row.user_id),
     })
 }
 
@@ -221,26 +201,18 @@ async fn authenticate_guest(
 }
 
 #[derive(sqlx::FromRow)]
-struct WsUserRow {
-    id: String,
+struct WsAuthCombinedRow {
+    user_id: String,
     role: String,
     can_read_all_rooms: bool,
     can_write_all_rooms: bool,
     can_delete_all_rooms: bool,
-    is_deleted: bool,
-}
-
-#[derive(sqlx::FromRow)]
-struct WsRoomRow {
-    id: String,
+    user_is_deleted: bool,
+    room_id: String,
     owner_id: String,
-    is_deleted: bool,
+    room_is_deleted: bool,
     is_ended: bool,
-}
-
-#[derive(sqlx::FromRow)]
-struct WsParticipantRow {
-    can_edit: bool,
+    participant_can_edit: Option<bool>,
 }
 
 #[derive(sqlx::FromRow)]

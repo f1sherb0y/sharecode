@@ -433,8 +433,11 @@ pub async fn get_rooms(
     let mut response = Vec::with_capacity(rooms.len());
     let now = Utc::now();
 
+    let room_ids: Vec<String> = rooms.iter().map(|r| r.id.clone()).collect();
+    let mut participants_map = fetch_participants_batch(&state, &room_ids).await?;
+
     for room in rooms {
-        let participants = fetch_participants(&state, &room.id).await?;
+        let participants = participants_map.remove(&room.id).unwrap_or_default();
         let user_participant = participants.iter().find(|p| p.user_id == auth_user.id);
         let is_owner = room.owner_id == auth_user.id;
         let is_member = is_owner || user_participant.is_some();
@@ -986,6 +989,41 @@ pub async fn end_room(
     }
 
     Ok(Json(json!({ "room": room_to_json_basic(&updated) })))
+}
+
+async fn fetch_participants_batch(
+    state: &AppState,
+    room_ids: &[String],
+) -> Result<std::collections::HashMap<String, Vec<RoomParticipantWithUserRow>>, ApiError> {
+    if room_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let participants = sqlx::query_as::<_, RoomParticipantWithUserRow>(
+        r#"
+        SELECT
+            rp.id,
+            rp."roomId" as room_id,
+            u.id as user_id,
+            rp."canEdit" as can_edit,
+            rp."joinedAt" as joined_at,
+            u.username as user_username,
+            u.color as user_color
+        FROM "RoomParticipant" rp
+        JOIN "User" u ON u.id = rp."userId"
+        WHERE rp."roomId" = ANY($1)
+        "#,
+    )
+    .bind(room_ids)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load participants batch"))?;
+
+    let mut map = std::collections::HashMap::new();
+    for p in participants {
+        map.entry(p.room_id.clone()).or_insert_with(Vec::new).push(p);
+    }
+    Ok(map)
 }
 
 async fn fetch_participants(

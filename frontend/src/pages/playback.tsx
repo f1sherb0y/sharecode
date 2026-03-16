@@ -19,27 +19,28 @@ import { ThemeToggle } from '@/components/layout'
 import { NotesView } from '@/components/features/notes-view'
 import { api } from '@/api'
 import { useAuthStore, useThemeStore, useNotesStore } from '@/stores'
-import { loadMonaco } from '@/lib/monaco-loader'
 import { formatTime } from '@/lib/utils'
 import { CanvasView } from '@/components/features/canvas-view'
+import { EditorView, basicSetup } from 'codemirror'
+import { EditorState, Compartment } from '@codemirror/state'
+import { javascript } from '@codemirror/lang-javascript'
+import { python } from '@codemirror/lang-python'
+import { rust } from '@codemirror/lang-rust'
+import { cpp } from '@codemirror/lang-cpp'
+import { java } from '@codemirror/lang-java'
+import { php } from '@codemirror/lang-php'
+import { go } from '@codemirror/lang-go'
 import type { Room, Language } from '@/types'
-import type * as Monaco from 'monaco-editor'
 
-import 'monaco-editor/min/vs/editor/editor.main.css'
-
-type MonacoModule = typeof Monaco
-type MonacoEditorInstance = Monaco.editor.IStandaloneCodeEditor
-type MonacoModel = Monaco.editor.ITextModel
-
-const monacoLanguageIds: Record<Language, string> = {
-  javascript: 'javascript',
-  typescript: 'typescript',
-  python: 'python',
-  java: 'java',
-  cpp: 'cpp',
-  rust: 'rust',
-  go: 'go',
-  php: 'php',
+const languageExtensions: Record<Language, any> = {
+  javascript: javascript(),
+  typescript: javascript({ typescript: true }),
+  python: python(),
+  java: java(),
+  cpp: cpp(),
+  rust: rust(),
+  go: go(),
+  php: php(),
 }
 
 const PLAYBACK_DOC_VIEWS = ['code', 'canvas'] as const
@@ -121,9 +122,9 @@ export function PlaybackPage() {
   const { notes } = useNotesStore()
 
   const editorRef = useRef<HTMLDivElement>(null)
-  const monacoRef = useRef<MonacoModule | null>(null)
-  const monacoEditorRef = useRef<MonacoEditorInstance | null>(null)
-  const monacoModelRef = useRef<MonacoModel | null>(null)
+  const viewRef = useRef<EditorView | null>(null)
+  const languageCompartment = useRef(new Compartment())
+  const themeCompartment = useRef(new Compartment())
   const assetMapRef = useRef<Map<string, string>>(new Map())
 
   const assetStore = useMemo(
@@ -287,51 +288,57 @@ export function PlaybackPage() {
     }
   }, [roomId, user, t])
 
-  // Initialize Monaco
+  // Initialize CodeMirror
   useEffect(() => {
-    if (!room || !editorRef.current || monacoEditorRef.current) return
+    if (!room || !editorRef.current || viewRef.current) return
     if (updates.length === 0) return
 
-    let isCancelled = false
+    try {
+      const languageExt = languageExtensions[room.language] ?? javascript()
+      const initialDoc = getDocAtTimestamp(currentTimestamp)
+      const ytext = initialDoc.getText('codemirror')
 
-    loadMonaco()
-      .then((monaco) => {
-        if (isCancelled || !editorRef.current) return
-        monacoRef.current = monaco
+      const themeExt = EditorView.theme({
+        "&": {
+          height: "100%",
+          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+          color: theme === 'dark' ? '#d4d4d4' : '#000000',
+        },
+        ".cm-scroller": {
+           fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
+           fontSize: "14px",
+           paddingTop: "16px",
+           paddingBottom: "16px",
+        }
+      }, { dark: theme === 'dark' })
 
-        const languageId = monacoLanguageIds[room.language] ?? 'javascript'
-        const model = monaco.editor.createModel('', languageId)
-        model.setEOL(monaco.editor.EndOfLineSequence.LF)
-        monacoModelRef.current = model
-
-        const editor = monaco.editor.create(editorRef.current, {
-          model,
-          automaticLayout: true,
-          minimap: { enabled: false },
-          wordWrap: 'on',
-          readOnly: true,
-          scrollBeyondLastLine: false,
-          fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
-          fontSize: 14,
-          theme: theme === 'dark' ? 'vs-dark' : 'vs',
-          padding: { top: 16, bottom: 16 },
-        })
-        monacoEditorRef.current = editor
-
-        const initialDoc = getDocAtTimestamp(currentTimestamp)
-        const ytext = initialDoc.getText('codemirror')
-        model.setValue(ytext.toString())
-        editor.focus()
+      const state = EditorState.create({
+        doc: ytext.toString(),
+        extensions: [
+          basicSetup,
+          EditorView.lineWrapping,
+          languageCompartment.current.of(languageExt),
+          themeCompartment.current.of(themeExt),
+          EditorView.editable.of(false), // Playback is read-only
+        ]
       })
-      .catch((err) => {
-        console.error('Failed to initialize playback editor:', err)
-        setError('Failed to initialize playback editor')
+
+      const view = new EditorView({
+        state,
+        parent: editorRef.current
       })
+
+      viewRef.current = view
+    } catch (err) {
+      console.error('Failed to initialize playback editor:', err)
+      setError('Failed to initialize playback editor')
+    }
 
     return () => {
-      isCancelled = true
+      viewRef.current?.destroy()
+      viewRef.current = null
     }
-  }, [room, updates, theme, getDocAtTimestamp, currentTimestamp])
+  }, [room, updates.length, getDocAtTimestamp])
 
   // Initialize canvas store
   useEffect(() => {
@@ -346,15 +353,30 @@ export function PlaybackPage() {
   // Cleanup
   useEffect(() => {
     return () => {
-      monacoEditorRef.current?.dispose()
-      monacoModelRef.current?.dispose()
+      viewRef.current?.destroy()
     }
   }, [])
 
   // Update theme
   useEffect(() => {
-    if (!monacoRef.current) return
-    monacoRef.current.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs')
+    if (!viewRef.current) return
+    const themeExt = EditorView.theme({
+        "&": {
+          height: "100%",
+          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+          color: theme === 'dark' ? '#d4d4d4' : '#000000',
+        },
+        ".cm-scroller": {
+           fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
+           fontSize: "14px",
+           paddingTop: "16px",
+           paddingBottom: "16px",
+        }
+      }, { dark: theme === 'dark' })
+
+    viewRef.current.dispatch({
+      effects: themeCompartment.current.reconfigure(themeExt)
+    })
   }, [theme])
 
   // Update content at timestamp
@@ -362,9 +384,16 @@ export function PlaybackPage() {
     if (updates.length === 0) return
     const doc = getDocAtTimestamp(currentTimestamp)
 
-    if (monacoModelRef.current) {
+    if (viewRef.current) {
       const ytext = doc.getText('codemirror')
-      monacoModelRef.current.setValue(ytext.toString())
+      const newText = ytext.toString()
+      const currentText = viewRef.current.state.doc.toString()
+      
+      if (newText !== currentText) {
+         viewRef.current.dispatch({
+            changes: { from: 0, to: currentText.length, insert: newText }
+         })
+      }
     }
 
     updateCanvasFromDoc(doc)
