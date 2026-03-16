@@ -64,7 +64,7 @@ import { ThemeToggle } from '@/components/layout'
 import { generateUserColor, cn, getTimezone } from '@/lib/utils'
 import type { Language } from '@/types'
 
-const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
+const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php', 'markdown', 'verilog']
 const DOC_VIEWS = ['code', 'canvas'] as const
 const RUNNER_POSITIONS = ['bottom', 'right'] as const
 
@@ -225,6 +225,14 @@ export function EditorPage() {
         // Update Editor Language
         updateLanguage(newLanguage)
       }
+    }
+
+    // Call updateLanguage immediately if we are already out of sync
+    if (effectiveRoom?.language) {
+       const metaLang = ymeta.get('language') as Language | undefined
+       if (metaLang && metaLang !== effectiveRoom.language) {
+          updateLanguage(metaLang)
+       }
     }
 
     ymeta.observe(handleMetaChange)

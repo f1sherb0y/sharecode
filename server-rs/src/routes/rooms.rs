@@ -21,7 +21,7 @@ use crate::{
     ws,
 };
 
-const SUPPORTED_LANGUAGES: [&str; 8] = [
+const SUPPORTED_LANGUAGES: [&str; 10] = [
     "javascript",
     "typescript",
     "python",
@@ -30,6 +30,8 @@ const SUPPORTED_LANGUAGES: [&str; 8] = [
     "rust",
     "go",
     "php",
+    "markdown",
+    "verilog",
 ];
 
 #[derive(Debug, sqlx::FromRow)]

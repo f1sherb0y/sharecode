@@ -9,14 +9,18 @@ import { cpp } from '@codemirror/lang-cpp'
 import { java } from '@codemirror/lang-java'
 import { php } from '@codemirror/lang-php'
 import { go } from '@codemirror/lang-go'
+import { markdown } from '@codemirror/lang-markdown'
+import { StreamLanguage } from '@codemirror/language'
+import { verilog } from '@codemirror/legacy-modes/mode/verilog'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
+import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode'
 import { useThemeStore, useFontStore } from '@/stores'
 import { generateUserColor } from '@/lib/utils'
 import type { Room, Language, User } from '@/types'
 
 // Note: CodeMirror doesn't have a dedicated TypeScript language package,
 // it uses the javascript package with typescript set to true.
-const languageExtensions: Record<Language, any> = {
+const languageExtensions: Record<string, any> = {
   javascript: javascript(),
   typescript: javascript({ typescript: true }),
   python: python(),
@@ -25,6 +29,8 @@ const languageExtensions: Record<Language, any> = {
   rust: rust(),
   go: go(),
   php: php(),
+  markdown: markdown(),
+  verilog: StreamLanguage.define(verilog),
 }
 
 interface UseCodeMirrorEditorProps {
@@ -54,6 +60,7 @@ export function useCodeMirrorEditor({
   // Compartments allow dynamic reconfiguration of extensions
   const languageCompartment = useRef(new Compartment())
   const themeCompartment = useRef(new Compartment())
+  const fontCompartment = useRef(new Compartment())
   const editableCompartment = useRef(new Compartment())
 
   const { theme } = useThemeStore()
@@ -78,19 +85,20 @@ export function useCodeMirrorEditor({
 
       const languageExt = languageExtensions[effectiveRoom.language] ?? javascript()
       
-      const themeExt = EditorView.theme({
+      const fontExt = EditorView.theme({
         "&": {
           height: "100%",
-          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
-          color: theme === 'dark' ? '#d4d4d4' : '#000000',
         },
         ".cm-scroller": {
-           fontFamily: font,
+           fontFamily: `${font}, monospace`,
            fontSize: `${fontSize}px`,
            paddingTop: "16px",
            paddingBottom: "16px",
+        },
+        ".cm-content": {
+          fontFamily: `${font}, monospace`,
         }
-      }, { dark: theme === 'dark' })
+      })
 
       const state = EditorState.create({
         doc: ytext.toString(),
@@ -99,7 +107,8 @@ export function useCodeMirrorEditor({
           keymap.of([...yUndoManagerKeymap]),
           EditorView.lineWrapping,
           languageCompartment.current.of(languageExt),
-          themeCompartment.current.of(themeExt),
+          themeCompartment.current.of(theme === 'dark' ? vscodeDark : vscodeLight),
+          fontCompartment.current.of(fontExt),
           editableCompartment.current.of(EditorView.editable.of(canEdit)),
           yCollab(ytext, provider.awareness)
         ]
@@ -126,24 +135,34 @@ export function useCodeMirrorEditor({
   useEffect(() => {
     if (!viewRef.current) return
     
-    const themeExt = EditorView.theme({
+    viewRef.current.dispatch({
+      effects: themeCompartment.current.reconfigure(theme === 'dark' ? vscodeDark : vscodeLight)
+    })
+  }, [theme])
+
+  // Update font dynamically
+  useEffect(() => {
+    if (!viewRef.current) return
+    
+    const fontExt = EditorView.theme({
         "&": {
           height: "100%",
-          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
-          color: theme === 'dark' ? '#d4d4d4' : '#000000',
         },
         ".cm-scroller": {
-           fontFamily: font,
+           fontFamily: `${font}, monospace`,
            fontSize: `${fontSize}px`,
            paddingTop: "16px",
            paddingBottom: "16px",
+        },
+        ".cm-content": {
+          fontFamily: `${font}, monospace`,
         }
-      }, { dark: theme === 'dark' })
+      })
 
     viewRef.current.dispatch({
-      effects: themeCompartment.current.reconfigure(themeExt)
+      effects: fontCompartment.current.reconfigure(fontExt)
     })
-  }, [theme, font, fontSize])
+  }, [font, fontSize])
 
   // Update readOnly (editable) dynamically
   useEffect(() => {

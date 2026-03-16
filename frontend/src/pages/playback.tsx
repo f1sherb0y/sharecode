@@ -30,9 +30,13 @@ import { cpp } from '@codemirror/lang-cpp'
 import { java } from '@codemirror/lang-java'
 import { php } from '@codemirror/lang-php'
 import { go } from '@codemirror/lang-go'
+import { markdown } from '@codemirror/lang-markdown'
+import { StreamLanguage } from '@codemirror/language'
+import { verilog } from '@codemirror/legacy-modes/mode/verilog'
+import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode'
 import type { Room, Language } from '@/types'
 
-const languageExtensions: Record<Language, any> = {
+const languageExtensions: Record<Language | string, any> = {
   javascript: javascript(),
   typescript: javascript({ typescript: true }),
   python: python(),
@@ -41,6 +45,8 @@ const languageExtensions: Record<Language, any> = {
   rust: rust(),
   go: go(),
   php: php(),
+  markdown: markdown(),
+  verilog: StreamLanguage.define(verilog),
 }
 
 const PLAYBACK_DOC_VIEWS = ['code', 'canvas'] as const
@@ -125,6 +131,7 @@ export function PlaybackPage() {
   const viewRef = useRef<EditorView | null>(null)
   const languageCompartment = useRef(new Compartment())
   const themeCompartment = useRef(new Compartment())
+  const fontCompartment = useRef(new Compartment())
   const assetMapRef = useRef<Map<string, string>>(new Map())
 
   const assetStore = useMemo(
@@ -298,19 +305,20 @@ export function PlaybackPage() {
       const initialDoc = getDocAtTimestamp(currentTimestamp)
       const ytext = initialDoc.getText('codemirror')
 
-      const themeExt = EditorView.theme({
+      const fontExt = EditorView.theme({
         "&": {
           height: "100%",
-          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
-          color: theme === 'dark' ? '#d4d4d4' : '#000000',
         },
         ".cm-scroller": {
            fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
            fontSize: "14px",
            paddingTop: "16px",
            paddingBottom: "16px",
+        },
+        ".cm-content": {
+           fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
         }
-      }, { dark: theme === 'dark' })
+      })
 
       const state = EditorState.create({
         doc: ytext.toString(),
@@ -318,7 +326,8 @@ export function PlaybackPage() {
           basicSetup,
           EditorView.lineWrapping,
           languageCompartment.current.of(languageExt),
-          themeCompartment.current.of(themeExt),
+          themeCompartment.current.of(theme === 'dark' ? vscodeDark : vscodeLight),
+          fontCompartment.current.of(fontExt),
           EditorView.editable.of(false), // Playback is read-only
         ]
       })
@@ -360,22 +369,9 @@ export function PlaybackPage() {
   // Update theme
   useEffect(() => {
     if (!viewRef.current) return
-    const themeExt = EditorView.theme({
-        "&": {
-          height: "100%",
-          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
-          color: theme === 'dark' ? '#d4d4d4' : '#000000',
-        },
-        ".cm-scroller": {
-           fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
-           fontSize: "14px",
-           paddingTop: "16px",
-           paddingBottom: "16px",
-        }
-      }, { dark: theme === 'dark' })
-
+    
     viewRef.current.dispatch({
-      effects: themeCompartment.current.reconfigure(themeExt)
+      effects: themeCompartment.current.reconfigure(theme === 'dark' ? vscodeDark : vscodeLight)
     })
   }, [theme])
 
