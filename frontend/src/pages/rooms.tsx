@@ -34,7 +34,7 @@ import { cn, formatDateMinutes } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import type { Room, Language, User, PaginationMeta, RoomActiveness } from '@/types'
 
-const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php']
+const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php', 'markdown', 'verilog']
 const DEFAULT_PAGE_SIZE = 20
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const VALID_ACTIVENESS: RoomActiveness[] = ['all', 'active', 'ended']

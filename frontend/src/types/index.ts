@@ -9,6 +9,8 @@ export type Language =
   | 'rust'
   | 'go'
   | 'php'
+  | 'markdown'
+  | 'verilog'
 
 export type RoomActiveness = 'all' | 'active' | 'ended'
 
