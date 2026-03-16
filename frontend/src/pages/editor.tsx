@@ -197,6 +197,13 @@ export function EditorPage() {
     setError: setLocalError
   })
 
+  // Sync editor language with room language
+  useEffect(() => {
+    if (effectiveRoom?.language) {
+      updateLanguage(effectiveRoom.language)
+    }
+  }, [effectiveRoom?.language, updateLanguage])
+
   // 4. Awareness Hook
   const {
     remoteUsers,
@@ -221,7 +228,10 @@ export function EditorPage() {
       const newLanguage = ymeta.get('language') as Language | undefined
       if (newLanguage && newLanguage !== effectiveRoom?.language) {
         // Update local room state
-        setRoom((prev) => prev ? { ...prev, language: newLanguage } : prev)
+        setRoom((prev) => {
+           if (!prev) return prev;
+           return { ...prev, language: newLanguage };
+        })
         // Update Editor Language
         updateLanguage(newLanguage)
       }

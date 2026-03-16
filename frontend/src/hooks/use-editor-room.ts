@@ -251,6 +251,30 @@ export function useEditorRoom(): EditorRoomState {
     [roomId, isOwner]
   )
 
+  // Setters for local state updates (e.g. from Yjs)
+  const setRoomWithGuestUpdate: React.Dispatch<React.SetStateAction<Room | null>> = useCallback(
+    (value) => {
+      setRoom((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value
+        // If in guest mode, also update the guest session store so effectiveRoom is updated
+        if (isGuestMode && guestSession && next) {
+          setGuestSession({
+            ...guestSession,
+            room: {
+              ...guestSession.room,
+              name: next.name,
+              language: next.language,
+              isEnded: next.isEnded,
+              endedAt: next.endedAt,
+            },
+          })
+        }
+        return next
+      })
+    },
+    [isGuestMode, guestSession, setGuestSession]
+  )
+
   return {
     roomId,
     shareToken,
@@ -281,7 +305,7 @@ export function useEditorRoom(): EditorRoomState {
     handleEndRoom,
     handleLanguageChange,
     isEnding,
-    setRoom,
+    setRoom: setRoomWithGuestUpdate,
     setRoomEnded,
     setRoomEndedAt
   }
