@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, fetchShareInfo, joinShare } from '@/api'
@@ -77,22 +77,26 @@ export function useEditorRoom(): EditorRoomState {
   const isGuestMode = !!shareToken
 
   // Current user info
-  const currentUser = isGuestMode && guestSession
-    ? { id: guestSession.guest.id, username: guestSession.guest.displayName, color: guestSession.guest.color }
-    : user
+  const currentUser = useMemo(() => {
+    return isGuestMode && guestSession
+      ? { id: guestSession.guest.id, username: guestSession.guest.displayName, color: guestSession.guest.color }
+      : user
+  }, [isGuestMode, guestSession, user])
 
   // Effective room
-  const effectiveRoom = isGuestMode && guestSession?.room
-    ? {
-        id: guestSession.room.id,
-        name: guestSession.room.name,
-        language: guestSession.room.language,
-        isEnded: guestSession.room.isEnded || roomEnded,
-        canEdit: guestSession.guest.canEdit,
-        isOwner: false,
-        ownerId: '',
-      } as Room
-    : room
+  const effectiveRoom = useMemo(() => {
+    return isGuestMode && guestSession?.room
+      ? {
+          id: guestSession.room.id,
+          name: guestSession.room.name,
+          language: guestSession.room.language,
+          isEnded: guestSession.room.isEnded || roomEnded,
+          canEdit: guestSession.guest.canEdit,
+          isOwner: false,
+          ownerId: '',
+        } as Room
+      : room
+  }, [isGuestMode, guestSession?.room, guestSession?.guest.canEdit, roomEnded, room])
 
   // Permissions
   const isOwner = !isGuestMode && (effectiveRoom?.isOwner ?? effectiveRoom?.ownerId === user?.id)

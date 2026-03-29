@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState, Compartment } from '@codemirror/state'
+import { EditorState, Compartment, Transaction } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
@@ -62,6 +62,7 @@ export function useCodeMirrorEditor({
   const themeCompartment = useRef(new Compartment())
   const fontCompartment = useRef(new Compartment())
   const editableCompartment = useRef(new Compartment())
+  const readOnlyCompartment = useRef(new Compartment())
 
   const { theme } = useThemeStore()
   const { font, fontSize } = useFontStore()
@@ -105,11 +106,42 @@ export function useCodeMirrorEditor({
         extensions: [
           basicSetup,
           keymap.of([...yUndoManagerKeymap]),
+          EditorView.updateListener.of((update) => {
+            if (!update.selectionSet && !update.focusChanged && !update.docChanged) {
+              return
+            }
+
+            const selection = update.state.selection.main
+            console.debug('[cm-debug:update]', {
+              docChanged: update.docChanged,
+              selectionSet: update.selectionSet,
+              viewportChanged: update.viewportChanged,
+              focusChanged: update.focusChanged,
+              hasFocus: update.view.hasFocus,
+              selection: {
+                anchor: selection.anchor,
+                head: selection.head,
+                empty: selection.empty,
+              },
+              viewport: update.view.viewport,
+              visibleRanges: update.view.visibleRanges,
+              scrollTop: update.view.scrollDOM.scrollTop,
+              transactions: update.transactions.map((tr) => ({
+                docChanged: tr.docChanged,
+                selection: tr.selection ? {
+                  anchor: tr.selection.main.anchor,
+                  head: tr.selection.main.head,
+                } : null,
+                userEvent: tr.annotation(Transaction.userEvent) ?? null,
+              })),
+            })
+          }),
           EditorView.lineWrapping,
           languageCompartment.current.of(languageExt),
           themeCompartment.current.of(theme === 'dark' ? vscodeDark : vscodeLight),
           fontCompartment.current.of(fontExt),
-          editableCompartment.current.of(EditorView.editable.of(canEdit)),
+          editableCompartment.current.of(EditorView.editable.of(true)),
+          readOnlyCompartment.current.of(EditorState.readOnly.of(!canEdit)),
           yCollab(ytext, provider.awareness)
         ]
       })
@@ -118,6 +150,10 @@ export function useCodeMirrorEditor({
         state,
         parent: editorRef.current
       })
+
+      if (typeof window !== 'undefined') {
+        ;(window as Window & { __sharecodeEditorView?: EditorView }).__sharecodeEditorView = view
+      }
 
       viewRef.current = view
     } catch (err) {
@@ -129,7 +165,8 @@ export function useCodeMirrorEditor({
       viewRef.current?.destroy()
       viewRef.current = null
     }
-  }, [effectiveRoom, provider, ytext, currentUser, showGuestJoinForm, roomEnded, setError]) // Note: excluding theme/font/canEdit to prevent full re-init
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveRoom?.id, effectiveRoom?.isEnded, provider, ytext, currentUser?.id, showGuestJoinForm, roomEnded, setError]) // Note: excluding theme/font/canEdit to prevent full re-init
 
   // Update theme dynamically
   useEffect(() => {
@@ -164,11 +201,14 @@ export function useCodeMirrorEditor({
     })
   }, [font, fontSize])
 
-  // Update readOnly (editable) dynamically
+  // Keep the editor focusable/selectable, and toggle actual edit permissions separately.
   useEffect(() => {
     if (!viewRef.current) return
     viewRef.current.dispatch({
-      effects: editableCompartment.current.reconfigure(EditorView.editable.of(canEdit))
+      effects: [
+        editableCompartment.current.reconfigure(EditorView.editable.of(true)),
+        readOnlyCompartment.current.reconfigure(EditorState.readOnly.of(!canEdit))
+      ]
     })
   }, [canEdit])
 
