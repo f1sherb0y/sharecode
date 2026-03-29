@@ -241,6 +241,13 @@ export function EditorPage() {
     if (effectiveRoom?.language) {
        const metaLang = ymeta.get('language') as Language | undefined
        if (metaLang && metaLang !== effectiveRoom.language) {
+          setRoom((prev) => {
+            if (!prev && !isGuestMode) return prev
+            return {
+              ...(prev ?? effectiveRoom),
+              language: metaLang,
+            }
+          })
           updateLanguage(metaLang)
        }
     }
@@ -249,7 +256,7 @@ export function EditorPage() {
     return () => {
       ymeta.unobserve(handleMetaChange)
     }
-  }, [ymeta, effectiveRoom?.language, setRoom, updateLanguage])
+  }, [ymeta, effectiveRoom, isGuestMode, setRoom, updateLanguage])
 
   // Wrapper for language change to update both API and Yjs
   const onLanguageChange = async (lang: Language) => {

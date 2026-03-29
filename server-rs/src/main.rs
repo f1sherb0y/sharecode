@@ -40,6 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&strip_unsupported_params(&config.database_url))
         .await?;
 
+    // Keep the embedded sqlx migration set in sync with the migrations directory.
     tracing::info!("Running database migrations");
     sqlx::migrate!("./migrations").run(&db).await?;
     tracing::info!("Database migrations complete");

@@ -255,7 +255,29 @@ export function useEditorRoom(): EditorRoomState {
   const setRoomWithGuestUpdate: React.Dispatch<React.SetStateAction<Room | null>> = useCallback(
     (value) => {
       setRoom((prev) => {
-        const next = typeof value === 'function' ? value(prev) : value
+        const guestRoomFallback = isGuestMode && guestSession
+          ? ({
+              id: guestSession.room.id,
+              name: guestSession.room.name,
+              language: guestSession.room.language,
+              ownerId: '',
+              allowEdit: guestSession.room.allowEdit,
+              isEnded: guestSession.room.isEnded,
+              endedAt: guestSession.room.endedAt,
+              createdAt: '',
+              updatedAt: '',
+              owner: {
+                id: '',
+                username: '',
+                color: '',
+              },
+              canEdit: guestSession.guest.canEdit,
+              isOwner: false,
+            } as Room)
+          : null
+
+        const baseRoom = prev ?? guestRoomFallback
+        const next = typeof value === 'function' ? value(baseRoom) : value
         // If in guest mode, also update the guest session store so effectiveRoom is updated
         if (isGuestMode && guestSession && next) {
           setGuestSession({
