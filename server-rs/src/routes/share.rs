@@ -2,6 +2,7 @@ use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
+use chrono::Utc;
 use rand::TryRngCore;
 use serde::Deserialize;
 use serde_json::json;
@@ -37,6 +38,11 @@ struct RoomOwnerOnlyRow {
 struct ShareLinkOwnerRow {
     room_id: String,
     owner_id: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct ClaimedShareLinkRow {
+    id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,6 +103,8 @@ pub async fn create_share_link(
             token,
             "canEdit" as can_edit,
             "createdAt" as created_at,
+            "expiresAt" as expires_at,
+            "consumedAt" as consumed_at,
             "roomId" as room_id,
             0::bigint as guest_count
         "#,
@@ -151,6 +159,8 @@ pub async fn list_share_links(
             l.token,
             l."canEdit" as can_edit,
             l."createdAt" as created_at,
+            l."expiresAt" as expires_at,
+            l."consumedAt" as consumed_at,
             l."roomId" as room_id,
             COUNT(g.id) as guest_count
         FROM "RoomShareLink" l
@@ -217,6 +227,8 @@ pub async fn get_share_info(
             l.token,
             l."canEdit" as can_edit,
             l."createdAt" as created_at,
+            l."expiresAt" as expires_at,
+            l."consumedAt" as consumed_at,
             r.id as room_id,
             r.name as room_name,
             r.language as room_language,
@@ -239,6 +251,14 @@ pub async fn get_share_info(
         _ => return Err(ApiError::not_found("Share link not found")),
     };
 
+    if share_link_is_consumed(&share_link) {
+        return Err(ApiError::gone("This share link has already been used"));
+    }
+
+    if share_link_is_expired(&share_link) {
+        return Err(ApiError::gone("This share link has expired"));
+    }
+
     let effective_can_edit =
         share_link.can_edit && share_link.room_allow_edit && !share_link.room_is_ended;
 
@@ -248,6 +268,7 @@ pub async fn get_share_info(
             "canEdit": share_link.can_edit,
             "effectiveCanEdit": effective_can_edit,
             "createdAt": to_iso_string(share_link.created_at),
+            "expiresAt": to_iso_string(share_link.expires_at),
             "shareUrl": build_share_url(&state, &share_link.token),
         },
         "room": {
@@ -274,13 +295,70 @@ pub async fn join_share_link(
         return Err(ApiError::bad_request("Username is required"));
     }
 
-    let share_link = sqlx::query_as::<_, ShareLinkWithRoomRow>(
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|err| db_error(err, "Failed to start share join transaction"))?;
+
+    let share_link = sqlx::query_as::<_, ClaimedShareLinkRow>(
+        r#"
+        UPDATE "RoomShareLink"
+        SET "consumedAt" = NOW()
+        WHERE token = $1
+          AND "consumedAt" IS NULL
+          AND "expiresAt" > NOW()
+        RETURNING
+            id
+        "#,
+    )
+    .bind(&token)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to claim share link"))?;
+
+    let share_link = match share_link {
+        Some(link) => link,
+        None => {
+            let share_link = sqlx::query_as::<_, ShareLinkWithRoomRow>(
+                r#"
+                SELECT
+                    l.id,
+                    l.token,
+                    l."canEdit" as can_edit,
+                    l."createdAt" as created_at,
+                    l."expiresAt" as expires_at,
+                    l."consumedAt" as consumed_at,
+                    r.id as room_id,
+                    r.name as room_name,
+                    r.language as room_language,
+                    r."allowEdit" as room_allow_edit,
+                    r."isDeleted" as room_is_deleted,
+                    r."isEnded" as room_is_ended,
+                    r."endedAt" as room_ended_at
+                FROM "RoomShareLink" l
+                JOIN "Room" r ON r.id = l."roomId"
+                WHERE l.token = $1
+                "#,
+            )
+            .bind(&token)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|err| db_error(err, "Failed to load share link"))?;
+
+            return Err(share_link_access_error(share_link));
+        }
+    };
+
+    let room = sqlx::query_as::<_, ShareLinkWithRoomRow>(
         r#"
         SELECT
             l.id,
             l.token,
             l."canEdit" as can_edit,
             l."createdAt" as created_at,
+            l."expiresAt" as expires_at,
+            l."consumedAt" as consumed_at,
             r.id as room_id,
             r.name as room_name,
             r.language as room_language,
@@ -290,15 +368,15 @@ pub async fn join_share_link(
             r."endedAt" as room_ended_at
         FROM "RoomShareLink" l
         JOIN "Room" r ON r.id = l."roomId"
-        WHERE l.token = $1
+        WHERE l.id = $1
         "#,
     )
-    .bind(&token)
-    .fetch_optional(&state.db)
+    .bind(&share_link.id)
+    .fetch_optional(&mut *tx)
     .await
-    .map_err(|err| db_error(err, "Failed to load share link"))?;
+    .map_err(|err| db_error(err, "Failed to load room for share link"))?;
 
-    let share_link = match share_link {
+    let share_link = match room {
         Some(link) if !link.room_is_deleted => link,
         _ => return Err(ApiError::not_found("Share link not found")),
     };
@@ -326,7 +404,7 @@ pub async fn join_share_link(
     .bind(&normalized_email)
     .bind(&guest_color)
     .bind(can_edit)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create guest session"))?;
 
@@ -343,6 +421,10 @@ pub async fn join_share_link(
     );
 
     let jwt_token = crate::auth::generate_guest_token(&state.config, claims)?;
+
+    tx.commit()
+        .await
+        .map_err(|err| db_error(err, "Failed to finalize share link join"))?;
 
     Ok((
         StatusCode::CREATED,
@@ -381,7 +463,7 @@ pub async fn get_guest_session(
 
     let payload = match verify_token(&state.config, &token) {
         Ok(payload) => payload,
-        Err(_) => return Err(ApiError::internal("Internal server error")),
+        Err(_) => return Err(ApiError::unauthorized("Invalid token")),
     };
     let guest_payload = match payload {
         TokenPayload::Guest(payload) => payload,
@@ -475,12 +557,19 @@ pub async fn get_guest_session(
 }
 
 fn format_share_link(state: &AppState, link: &ShareLinkSummaryRow) -> serde_json::Value {
+    let is_consumed = link.consumed_at.is_some();
+    let is_expired = !is_consumed && link.expires_at <= Utc::now();
+
     json!({
         "id": link.id,
         "token": link.token,
         "canEdit": link.can_edit,
         "createdAt": to_iso_string(link.created_at),
+        "expiresAt": to_iso_string(link.expires_at),
+        "consumedAt": to_iso_string_opt(link.consumed_at),
         "guestCount": link.guest_count,
+        "isConsumed": is_consumed,
+        "isExpired": is_expired,
         "shareUrl": build_share_url(state, &link.token),
     })
 }
@@ -502,6 +591,38 @@ fn build_share_url(state: &AppState, token: &str) -> Option<String> {
 
 fn can_manage_room_shares(auth_user: &AuthUser, owner_id: &str) -> bool {
     auth_user.id == owner_id || auth_user.role == "superuser" || has_global_delete(auth_user)
+}
+
+fn share_link_is_consumed(link: &ShareLinkWithRoomRow) -> bool {
+    link.consumed_at.is_some()
+}
+
+fn share_link_is_expired(link: &ShareLinkWithRoomRow) -> bool {
+    link.consumed_at.is_none() && link.expires_at <= Utc::now()
+}
+
+fn share_link_access_error(share_link: Option<ShareLinkWithRoomRow>) -> ApiError {
+    let Some(link) = share_link else {
+        return ApiError::not_found("Share link not found");
+    };
+
+    if link.room_is_deleted {
+        return ApiError::not_found("Share link not found");
+    }
+
+    if share_link_is_consumed(&link) {
+        return ApiError::gone("This share link has already been used");
+    }
+
+    if share_link_is_expired(&link) {
+        return ApiError::gone("This share link has expired");
+    }
+
+    if link.room_is_ended {
+        return ApiError::bad_request("This room has already ended");
+    }
+
+    ApiError::not_found("Share link not found")
 }
 
 fn random_token_hex(bytes: usize) -> String {

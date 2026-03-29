@@ -116,7 +116,8 @@ struct RuntimeCache {
     fetched_at: Instant,
 }
 
-static RUNTIME_CACHE: std::sync::OnceLock<RwLock<Option<RuntimeCache>>> = std::sync::OnceLock::new();
+static RUNTIME_CACHE: std::sync::OnceLock<RwLock<Option<RuntimeCache>>> =
+    std::sync::OnceLock::new();
 
 pub async fn execute_code(
     State(state): State<AppState>,
@@ -231,7 +232,11 @@ pub async fn execute_code(
     let output = result.run.stdout;
     let error = result.run.stderr;
     let is_success = result.run.code == 0;
-    let status = if is_success { "Accepted" } else { "Runtime Error" };
+    let status = if is_success {
+        "Accepted"
+    } else {
+        "Runtime Error"
+    };
     let status_id = if is_success { 3 } else { 11 };
 
     let memory_kb = (result.run.memory as f64 / 1024.0).round() as i64;
@@ -261,12 +266,14 @@ pub async fn get_languages(
         .iter()
         .filter_map(|(editor_lang, piston_lang)| {
             let runtime = find_runtime(&runtimes, piston_lang);
-            runtime.map(|runtime| json!({
-                "name": *editor_lang,
-                "id": *editor_lang,
-                "version": runtime.version,
-                "available": true,
-            }))
+            runtime.map(|runtime| {
+                json!({
+                    "name": *editor_lang,
+                    "id": *editor_lang,
+                    "version": runtime.version,
+                    "available": true,
+                })
+            })
         })
         .collect::<Vec<_>>();
 
@@ -346,8 +353,7 @@ async fn get_runtimes(state: &AppState) -> Result<Vec<PistonRuntime>, ApiError> 
         let text = response.text().await.unwrap_or_default();
         return Err(ApiError::internal(format!(
             "Piston API error: {} - {}",
-            status,
-            text
+            status, text
         )));
     }
 
@@ -368,7 +374,9 @@ async fn get_runtimes(state: &AppState) -> Result<Vec<PistonRuntime>, ApiError> 
 fn find_runtime(runtimes: &[PistonRuntime], language: &str) -> Option<PistonRuntime> {
     runtimes
         .iter()
-        .find(|runtime| runtime.language == language || runtime.aliases.contains(&language.to_string()))
+        .find(|runtime| {
+            runtime.language == language || runtime.aliases.contains(&language.to_string())
+        })
         .cloned()
 }
 

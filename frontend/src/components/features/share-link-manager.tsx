@@ -125,11 +125,29 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
           {resolvedLinks.map((link) => (
             <div key={link.id} className="p-3 border rounded-md bg-muted/50">
               <div className="flex items-center justify-between mb-2">
-                <Badge variant={link.canEdit ? 'default' : 'secondary'} className="text-xs px-1.5 py-0">
-                  {link.canEdit ? t('share.manager.editLabel') : t('share.manager.viewLabel')}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={link.canEdit ? 'default' : 'secondary'} className="text-xs px-1.5 py-0">
+                    {link.canEdit ? t('share.manager.editLabel') : t('share.manager.viewLabel')}
+                  </Badge>
+                  <Badge
+                    variant={link.isConsumed ? 'secondary' : link.isExpired ? 'destructive' : 'success'}
+                    className="text-xs px-1.5 py-0"
+                  >
+                    {link.isConsumed
+                      ? t('share.manager.statusUsed')
+                      : link.isExpired
+                        ? t('share.manager.statusExpired')
+                        : t('share.manager.statusActive')}
+                  </Badge>
+                </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyLink(link)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => copyLink(link)}
+                    disabled={link.isConsumed || link.isExpired}
+                  >
                     <Copy className="h-3 w-3" />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDeleteClick(link)}>
@@ -138,6 +156,11 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground break-all font-mono">{link.shareUrl}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {link.isConsumed
+                  ? t('share.manager.usedAt', { time: formatLocalDateTime(link.consumedAt) })
+                  : t('share.manager.expiresAt', { time: formatLocalDateTime(link.expiresAt) })}
+              </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {t('share.manager.guests', { count: link.guestCount })}
               </p>
@@ -179,4 +202,13 @@ function resolveShareUrl(token: string, _roomId: string, preferred?: string | nu
   }
 
   return token
+}
+
+function formatLocalDateTime(value?: string | null) {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return date.toLocaleString()
 }

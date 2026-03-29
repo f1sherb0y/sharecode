@@ -7,13 +7,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    auth::AuthUser,
-    db::db_error,
-    error::ApiError,
-    models::RoomNoteRow,
-    permissions::has_global_read,
-    state::AppState,
-    utils::time::to_iso_string,
+    auth::AuthUser, db::db_error, error::ApiError, models::RoomNoteRow,
+    permissions::has_global_read, state::AppState, utils::time::to_iso_string,
 };
 
 #[derive(Debug, sqlx::FromRow)]
@@ -75,10 +70,7 @@ pub async fn list_notes(
     .await
     .map_err(|err| db_error(err, "Failed to load notes"))?;
 
-    let response: Vec<serde_json::Value> = notes
-        .into_iter()
-        .map(|n| note_to_json(&n))
-        .collect();
+    let response: Vec<serde_json::Value> = notes.into_iter().map(|n| note_to_json(&n)).collect();
 
     Ok(Json(json!({ "notes": response })))
 }
@@ -135,7 +127,10 @@ pub async fn create_note(
     .await
     .map_err(|err| db_error(err, "Failed to create note"))?;
 
-    Ok((StatusCode::CREATED, Json(json!({ "note": note_to_json(&note) }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "note": note_to_json(&note) })),
+    ))
 }
 
 pub async fn update_note(
@@ -224,14 +219,12 @@ pub async fn delete_note(
         return Err(ApiError::not_found("Room not found"));
     }
 
-    let result = sqlx::query(
-        r#"DELETE FROM "RoomNote" WHERE id = $1 AND "roomId" = $2"#,
-    )
-    .bind(&note_id)
-    .bind(&room_id)
-    .execute(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to delete note"))?;
+    let result = sqlx::query(r#"DELETE FROM "RoomNote" WHERE id = $1 AND "roomId" = $2"#)
+        .bind(&note_id)
+        .bind(&room_id)
+        .execute(&state.db)
+        .await
+        .map_err(|err| db_error(err, "Failed to delete note"))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("Note not found"));

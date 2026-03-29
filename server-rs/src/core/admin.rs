@@ -30,7 +30,7 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         FROM "User"
         WHERE role = 'superuser' AND "isDeleted" = false
         LIMIT 1
-        "#
+        "#,
     )
     .fetch_optional(&state.db)
     .await
@@ -39,7 +39,10 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
     if let Some(superuser) = existing_superuser {
         info!("Superuser already exists: {}", superuser.username);
 
-        if !superuser.can_read_all_rooms || !superuser.can_write_all_rooms || !superuser.can_delete_all_rooms {
+        if !superuser.can_read_all_rooms
+            || !superuser.can_write_all_rooms
+            || !superuser.can_delete_all_rooms
+        {
             sqlx::query(
                 r#"
                 UPDATE "User"
@@ -47,7 +50,7 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
                     "canWriteAllRooms" = true,
                     "canDeleteAllRooms" = true
                 WHERE id = $1
-                "#
+                "#,
             )
             .bind(&superuser.id)
             .execute(&state.db)
@@ -57,14 +60,15 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         }
 
         if config.admin_update_password {
-            let hashed = hash(&config.admin_password, 10)
-                .map_err(|err| crate::error::ApiError::internal(format!("Failed to hash admin password: {err}")))?;
+            let hashed = hash(&config.admin_password, 10).map_err(|err| {
+                crate::error::ApiError::internal(format!("Failed to hash admin password: {err}"))
+            })?;
             sqlx::query(
                 r#"
                 UPDATE "User"
                 SET password = $1
                 WHERE id = $2
-                "#
+                "#,
             )
             .bind(&hashed)
             .bind(&superuser.id)
@@ -83,7 +87,7 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         FROM "User"
         WHERE username = $1
         LIMIT 1
-        "#
+        "#,
     )
     .bind(&config.admin_username)
     .fetch_optional(&state.db)
@@ -99,7 +103,7 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
                 "canWriteAllRooms" = true,
                 "canDeleteAllRooms" = true
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(&user.id)
         .execute(&state.db)
@@ -109,17 +113,22 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         return Ok(());
     }
 
-    let hashed_password = hash(&config.admin_password, 10)
-        .map_err(|err| crate::error::ApiError::internal(format!("Failed to hash admin password: {err}")))?;
+    let hashed_password = hash(&config.admin_password, 10).map_err(|err| {
+        crate::error::ApiError::internal(format!("Failed to hash admin password: {err}"))
+    })?;
 
-    let mut tx = state.db.begin().await.map_err(|err| db_error(err, "Failed to begin admin transaction"))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|err| db_error(err, "Failed to begin admin transaction"))?;
     let color = random_user_color();
     sqlx::query(
         r#"
         INSERT INTO "User" (id, email, username, password, color, role,
                             "canReadAllRooms", "canWriteAllRooms", "canDeleteAllRooms")
         VALUES ($1, $2, $3, $4, $5, 'superuser', true, true, true)
-        "#
+        "#,
     )
     .bind(Uuid::new_v4().to_string())
     .bind(&config.admin_email)

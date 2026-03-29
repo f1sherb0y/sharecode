@@ -4,7 +4,7 @@ mod routes;
 mod utils;
 mod ws;
 
-pub use core::{admin, auth, config, error, permissions, state};
+pub use core::{admin, auth, config, error, permissions, share_links, state};
 pub use db::models;
 
 use std::net::SocketAddr;
@@ -56,6 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::error!(error = %err, "Failed to initialize admin user");
     }
 
+    share_links::spawn_expired_share_link_cleanup(state.db.clone());
+
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
         .allow_credentials(true)
@@ -79,9 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         });
 
-    let app = routes::router(state)
-        .layer(cors)
-        .layer(trace);
+    let app = routes::router(state).layer(cors).layer(trace);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(%addr, "sharecode server-rs listening");

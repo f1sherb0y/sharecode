@@ -308,7 +308,7 @@
   "share": {
     "manager": {
       "title": "访客分享链接",
-      "description": "生成无需账号即可加入房间的访客邀请链接。",
+      "description": "生成一次性访客邀请链接。每个链接仅能使用一次，未使用的链接会在 6 小时后过期。",
       "createView": "创建仅查看链接",
       "createEdit": "创建可编辑链接",
       "loading": "加载分享链接中...",
@@ -323,6 +323,11 @@
       "deleteFailed": "删除分享链接失败。",
       "editLabel": "可编辑",
       "viewLabel": "仅查看",
+      "statusActive": "可用",
+      "statusUsed": "已使用",
+      "statusExpired": "已过期",
+      "expiresAt": "过期时间：{{time}}",
+      "usedAt": "使用时间：{{time}}",
       "guests": "活跃访客：{{count}}",
       "close": "关闭",
       "openPanel": "分享房间",

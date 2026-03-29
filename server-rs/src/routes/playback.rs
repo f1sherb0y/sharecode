@@ -32,7 +32,7 @@ pub async fn get_playback_updates(
         SELECT id, "ownerId" as owner_id, "isEnded" as is_ended
         FROM "Room"
         WHERE id = $1
-        "#
+        "#,
     )
     .bind(&room_id)
     .fetch_optional(&state.db)
@@ -45,9 +45,8 @@ pub async fn get_playback_updates(
     };
 
     let is_owner = room.owner_id == auth_user.id;
-    let is_privileged = auth_user.role == "admin"
-        || auth_user.role == "superuser"
-        || has_global_read(&auth_user);
+    let is_privileged =
+        auth_user.role == "admin" || auth_user.role == "superuser" || has_global_read(&auth_user);
 
     if !is_owner && !is_privileged {
         return Err(ApiError::not_found("Room not found"));

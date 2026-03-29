@@ -25,8 +25,12 @@ pub(crate) async fn authenticate(
         .map_err(|err| format!("Authentication failed: {}", err))?;
 
     match payload {
-        TokenPayload::User(user_payload) => authenticate_user(state, document_name, &user_payload).await,
-        TokenPayload::Guest(guest_payload) => authenticate_guest(state, document_name, &guest_payload).await,
+        TokenPayload::User(user_payload) => {
+            authenticate_user(state, document_name, &user_payload).await
+        }
+        TokenPayload::Guest(guest_payload) => {
+            authenticate_guest(state, document_name, &guest_payload).await
+        }
     }
 }
 
@@ -59,7 +63,12 @@ async fn authenticate_user(
     .bind(document_name)
     .fetch_optional(&state.db)
     .await
-    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to load auth data")))?;
+    .map_err(|err| {
+        format!(
+            "Authentication failed: {}",
+            db_error(err, "Failed to load auth data")
+        )
+    })?;
 
     let row = match result {
         Some(row) if !row.user_is_deleted => row,
@@ -74,8 +83,7 @@ async fn authenticate_user(
     let can_read_globally =
         row.can_read_all_rooms || row.can_write_all_rooms || row.can_delete_all_rooms;
     let can_write_globally = row.can_write_all_rooms || row.can_delete_all_rooms;
-    let is_privileged =
-        row.role == "admin" || row.role == "superuser" || can_read_globally;
+    let is_privileged = row.role == "admin" || row.role == "superuser" || can_read_globally;
 
     if row.is_ended && !is_owner && !is_privileged {
         return Err("Authentication failed: Access denied".to_string());
@@ -159,7 +167,12 @@ async fn authenticate_guest(
     .bind(&payload.guest_id)
     .fetch_optional(&state.db)
     .await
-    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to load guest session")))?;
+    .map_err(|err| {
+        format!(
+            "Authentication failed: {}",
+            db_error(err, "Failed to load guest session")
+        )
+    })?;
 
     let guest = match guest {
         Some(guest) => guest,
@@ -171,7 +184,9 @@ async fn authenticate_guest(
     }
 
     if guest.room_id != document_name {
-        return Err("Authentication failed: Guest session does not match this document".to_string());
+        return Err(
+            "Authentication failed: Guest session does not match this document".to_string(),
+        );
     }
 
     if guest.room_is_deleted || guest.room_is_ended {
@@ -192,7 +207,12 @@ async fn authenticate_guest(
     .bind(effective_can_edit)
     .execute(&state.db)
     .await
-    .map_err(|err| format!("Authentication failed: {}", db_error(err, "Failed to update guest session")))?;
+    .map_err(|err| {
+        format!(
+            "Authentication failed: {}",
+            db_error(err, "Failed to update guest session")
+        )
+    })?;
 
     Ok(AuthOutcome {
         read_only: !effective_can_edit,

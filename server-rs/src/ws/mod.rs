@@ -6,10 +6,7 @@ mod state;
 pub use state::WsState;
 
 use axum::{
-    extract::{
-        ws::WebSocketUpgrade,
-        State,
-    },
+    extract::{ws::WebSocketUpgrade, State},
     response::IntoResponse,
 };
 use chrono::{DateTime, Utc};

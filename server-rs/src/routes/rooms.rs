@@ -1023,7 +1023,9 @@ async fn fetch_participants_batch(
 
     let mut map = std::collections::HashMap::new();
     for p in participants {
-        map.entry(p.room_id.clone()).or_insert_with(Vec::new).push(p);
+        map.entry(p.room_id.clone())
+            .or_insert_with(Vec::new)
+            .push(p);
     }
     Ok(map)
 }
