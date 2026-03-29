@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react'
 import type { RemoteUser } from '@/types'
 import * as Y from 'yjs'
+import { EditorView } from '@codemirror/view'
 
 interface UseEditorAwarenessProps {
   provider: any // HocuspocusProvider
   ydoc: Y.Doc | null
-  monacoRef: React.MutableRefObject<any>
-  monacoEditorRef: React.MutableRefObject<any>
-  monacoModelRef: React.MutableRefObject<any>
+  viewRef: React.MutableRefObject<EditorView | null>
 }
 
 export function useEditorAwareness({
   provider,
   ydoc,
-  monacoRef,
-  monacoEditorRef,
-  monacoModelRef
+  viewRef,
 }: UseEditorAwarenessProps) {
   const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
   
@@ -58,10 +55,10 @@ export function useEditorAwareness({
   // Follow user feature - scroll to their cursor position
   useEffect(() => {
     if ((followingUserId == null && followingClientId == null) || !provider?.awareness || !ydoc) return
-    if (!monacoRef.current || !monacoEditorRef.current || !monacoModelRef.current) return
+    if (!viewRef.current) return
 
     const scrollToUser = () => {
-      if (!provider.awareness) return
+      if (!provider.awareness || !viewRef.current) return
       let targetClientId: number | null = null
       const localClientId = provider.awareness.clientID
 
@@ -85,15 +82,13 @@ export function useEditorAwareness({
 
       try {
         // Convert RelativePosition to absolute position
-        const headRelative = state.cursor.head as Y.RelativePosition
+        const headRelative = Y.createRelativePositionFromJSON(state.cursor.head)
         const headAbs = Y.createAbsolutePositionFromRelativePosition(headRelative, ydoc)
         if (!headAbs) return
 
-        const position = monacoModelRef.current!.getPositionAt(headAbs.index)
-        monacoEditorRef.current!.revealPositionInCenter(
-          position,
-          monacoRef.current!.editor.ScrollType.Smooth
-        )
+        viewRef.current.dispatch({
+          effects: EditorView.scrollIntoView(headAbs.index, { y: 'center' })
+        })
       } catch (err) {
         console.error('Error following user:', err)
       }
@@ -105,7 +100,7 @@ export function useEditorAwareness({
     return () => {
       provider.awareness?.off('change', scrollToUser)
     }
-  }, [followingUserId, followingClientId, provider, ydoc, monacoRef, monacoEditorRef, monacoModelRef])
+  }, [followingUserId, followingClientId, provider, ydoc, viewRef])
 
   // Stop following if user disconnects
   useEffect(() => {

@@ -1,9 +1,4 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use bcrypt::hash;
 use chrono::Utc;
 use serde::Deserialize;
@@ -49,34 +44,32 @@ pub async fn register(
         return Err(ApiError::bad_request("Username and password are required"));
     }
 
-    let existing_user = sqlx::query_scalar::<_, i64>(
-        r#"SELECT 1 FROM "User" WHERE username = $1 LIMIT 1"#,
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to check existing username"))?;
+    let existing_user =
+        sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE username = $1 LIMIT 1"#)
+            .bind(&username)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|err| db_error(err, "Failed to check existing username"))?;
 
     if existing_user.is_some() {
         return Err(ApiError::bad_request("Username already taken"));
     }
 
     if let Some(ref email_value) = email {
-        let existing_email = sqlx::query_scalar::<_, i64>(
-            r#"SELECT 1 FROM "User" WHERE email = $1 LIMIT 1"#,
-        )
-        .bind(email_value)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to check existing email"))?;
+        let existing_email =
+            sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE email = $1 LIMIT 1"#)
+                .bind(email_value)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|err| db_error(err, "Failed to check existing email"))?;
 
         if existing_email.is_some() {
             return Err(ApiError::bad_request("Email already in use"));
         }
     }
 
-    let hashed_password =
-        hash(password, 10).map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
+    let hashed_password = hash(password, 10)
+        .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
     let color = random_user_color();
 
     let user = sqlx::query_as::<_, UserRow>(

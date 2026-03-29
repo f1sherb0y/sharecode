@@ -1,5 +1,6 @@
 use axum::extract::ws::Message;
 use sqlx::PgPool;
+use std::time::Instant;
 use std::{
     collections::HashMap,
     sync::{
@@ -7,10 +8,9 @@ use std::{
         Arc,
     },
 };
-use std::time::Instant;
 use tokio::sync::{mpsc, Mutex, RwLock};
-use yrs::{sync::Awareness, Doc, Transact, Update};
 use yrs::updates::decoder::Decode;
+use yrs::{sync::Awareness, Doc, Transact, Update};
 
 pub(crate) type ConnectionId = u64;
 

@@ -76,14 +76,8 @@ pub fn router(state: AppState) -> Router {
             get(playback::get_playback_updates),
         )
         // Notes
-        .route(
-            "/api/rooms/{roomId}/notes",
-            get(notes::list_notes),
-        )
-        .route(
-            "/api/rooms/{roomId}/notes",
-            post(notes::create_note),
-        )
+        .route("/api/rooms/{roomId}/notes", get(notes::list_notes))
+        .route("/api/rooms/{roomId}/notes", post(notes::create_note))
         .route(
             "/api/rooms/{roomId}/notes/{noteId}",
             put(notes::update_note),

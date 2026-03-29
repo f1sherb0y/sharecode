@@ -9,6 +9,8 @@ export type Language =
   | 'rust'
   | 'go'
   | 'php'
+  | 'markdown'
+  | 'verilog'
 
 export type RoomActiveness = 'all' | 'active' | 'ended'
 
@@ -80,7 +82,11 @@ export interface ShareLink {
   token: string
   canEdit: boolean
   createdAt: string
+  expiresAt: string
+  consumedAt?: string | null
   guestCount: number
+  isConsumed: boolean
+  isExpired: boolean
   shareUrl?: string | null
 }
 
@@ -89,6 +95,7 @@ export interface ShareLinkInfo {
   canEdit: boolean
   effectiveCanEdit: boolean
   createdAt: string
+  expiresAt: string
   shareUrl?: string | null
 }
 

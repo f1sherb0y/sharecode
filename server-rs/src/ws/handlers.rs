@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use uuid::Uuid;
-use yrs::encoding::write::Write as _;
+// use yrs::encoding::write::Write as _;
 use yrs::{
     merge_updates_v1,
     sync::{awareness::AwarenessUpdate, protocol::SyncMessage},
@@ -284,7 +284,7 @@ async fn handle_sync(
 async fn handle_update_message(
     state: &AppState,
     connection_id: ConnectionId,
-    outgoing: &mpsc::UnboundedSender<Message>,
+    _outgoing: &mpsc::UnboundedSender<Message>,
     session: &SessionState,
     document_name: &str,
     doc_state: Arc<DocumentState>,
@@ -294,21 +294,15 @@ async fn handle_update_message(
     let is_empty = parsed.is_empty();
 
     if session.read_only {
-        let state_vector = doc_state.awareness.doc().transact().state_vector();
-        let has_changes = parsed.extends(&state_vector) || !parsed.delete_set().is_empty();
-        send_sync_status(outgoing, document_name, !has_changes);
         return Ok(());
     }
 
     let mut txn = doc_state.awareness.doc().transact_mut();
     if txn.apply_update(parsed).is_err() {
-        send_sync_status(outgoing, document_name, false);
         return Ok(());
     }
     // Drop the write transaction before any awaits to avoid blocking other doc access.
     drop(txn);
-
-    send_sync_status(outgoing, document_name, true);
 
     if !is_empty {
         let update_message = encode_sync_update(document_name, &update);
@@ -693,12 +687,5 @@ fn send_sync_step2(
         .transact()
         .encode_state_as_update_v1(&state_vector);
     let message = encode_sync_message(document_name, SyncMessage::SyncStep2(update));
-    let _ = outgoing.send(Message::Binary(message.into()));
-}
-
-fn send_sync_status(outgoing: &mpsc::UnboundedSender<Message>, document_name: &str, ok: bool) {
-    let mut payload = Vec::new();
-    payload.write_var(if ok { 1u8 } else { 0u8 });
-    let message = encode_message(document_name, MSG_SYNC_STATUS, &payload);
     let _ = outgoing.send(Message::Binary(message.into()));
 }

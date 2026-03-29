@@ -109,6 +109,8 @@ pub struct RoomShareLinkRow {
     pub can_edit: bool,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, FromRow)]
@@ -117,6 +119,8 @@ pub struct ShareLinkWithRoomRow {
     pub token: String,
     pub can_edit: bool,
     pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
     pub room_id: String,
     pub room_name: String,
     pub room_language: String,
@@ -132,6 +136,8 @@ pub struct ShareLinkSummaryRow {
     pub token: String,
     pub can_edit: bool,
     pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
     pub room_id: String,
     pub guest_count: i64,
 }

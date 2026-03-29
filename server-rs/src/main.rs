@@ -4,7 +4,7 @@ mod routes;
 mod utils;
 mod ws;
 
-pub use core::{admin, auth, config, error, permissions, state};
+pub use core::{admin, auth, config, error, permissions, share_links, state};
 pub use db::models;
 
 use std::net::SocketAddr;
@@ -40,6 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&strip_unsupported_params(&config.database_url))
         .await?;
 
+    // Keep the embedded sqlx migration set in sync with the migrations directory.
     tracing::info!("Running database migrations");
     sqlx::migrate!("./migrations").run(&db).await?;
     tracing::info!("Database migrations complete");
@@ -55,6 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(err) = admin::initialize_admin(&state).await {
         tracing::error!(error = %err, "Failed to initialize admin user");
     }
+
+    share_links::spawn_expired_share_link_cleanup(state.db.clone());
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
@@ -79,9 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         });
 
-    let app = routes::router(state)
-        .layer(cors)
-        .layer(trace);
+    let app = routes::router(state).layer(cors).layer(trace);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(%addr, "sharecode server-rs listening");

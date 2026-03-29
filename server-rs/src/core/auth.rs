@@ -7,11 +7,8 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::Config,
-    db::db_error,
-    error::ApiError,
-    models::UserRow,
-    state::AppState,
+    config::Config, db::db_error, error::ApiError, models::UserRow,
+    share_links::GUEST_SHARE_TTL_HOURS, state::AppState,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -70,16 +67,16 @@ pub fn generate_user_token(config: &Config, payload: UserTokenPayload) -> Result
         .map_err(|err| ApiError::internal(format!("Failed to sign token: {err}")))
 }
 
-pub fn generate_guest_token(config: &Config, payload: GuestTokenPayload) -> Result<String, ApiError> {
+pub fn generate_guest_token(
+    config: &Config,
+    payload: GuestTokenPayload,
+) -> Result<String, ApiError> {
     let key = EncodingKey::from_secret(config.jwt_secret.as_bytes());
     encode(&Header::default(), &TokenPayload::Guest(payload), &key)
         .map_err(|err| ApiError::internal(format!("Failed to sign token: {err}")))
 }
 
-pub fn build_user_claims(
-    user: &UserRow,
-    now: chrono::DateTime<Utc>,
-) -> UserTokenPayload {
+pub fn build_user_claims(user: &UserRow, now: chrono::DateTime<Utc>) -> UserTokenPayload {
     let iat = now.timestamp();
     let exp = (now + Duration::days(7)).timestamp();
 
@@ -108,7 +105,7 @@ pub fn build_guest_claims(
     now: chrono::DateTime<Utc>,
 ) -> GuestTokenPayload {
     let iat = now.timestamp();
-    let exp = (now + Duration::hours(24)).timestamp();
+    let exp = (now + Duration::hours(GUEST_SHARE_TTL_HOURS)).timestamp();
 
     GuestTokenPayload {
         guest_id,

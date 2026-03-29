@@ -308,7 +308,7 @@
   "share": {
     "manager": {
       "title": "Guest Share Links",
-      "description": "Generate invite links that let guests join this room without an account.",
+      "description": "Generate single-use invite links that let one guest join this room without an account. Unused links expire after 6 hours.",
       "createView": "Create view-only link",
       "createEdit": "Create edit link",
       "loading": "Loading share links...",
@@ -323,6 +323,11 @@
       "deleteFailed": "Failed to delete share link.",
       "editLabel": "Can edit",
       "viewLabel": "View only",
+      "statusActive": "Active",
+      "statusUsed": "Used",
+      "statusExpired": "Expired",
+      "expiresAt": "Expires at: {{time}}",
+      "usedAt": "Used at: {{time}}",
       "guests": "Active guests: {{count}}",
       "close": "Close",
       "openPanel": "Share room",
