@@ -166,6 +166,7 @@ pub async fn list_share_links(
         FROM "RoomShareLink" l
         LEFT JOIN "GuestSession" g ON g."shareLinkId" = l.id
         WHERE l."roomId" = $1
+          AND l."consumedAt" IS NULL
         GROUP BY l.id
         ORDER BY l."createdAt" DESC
         "#,
