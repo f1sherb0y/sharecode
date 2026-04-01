@@ -2,6 +2,10 @@ import { useEffect, useState, useRef } from 'react'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import * as Y from 'yjs'
 import { getWebSocketUrl } from '@/api'
+import {
+  LINE_ENDING_NORMALIZATION_ORIGIN,
+  normalizeYTextLineEndings,
+} from '@/lib/line-endings'
 
 export interface StatelessMessage {
   type: string
@@ -47,6 +51,9 @@ export function useYjsProvider(
       },
       onSynced: ({ state }) => {
         setIsSynced(state)
+        if (state) {
+          normalizeYTextLineEndings(ytext)
+        }
       },
       onAuthenticationFailed: ({ reason }) => {
         console.error('Authentication failed:', reason)
@@ -68,6 +75,23 @@ export function useYjsProvider(
       hocuspocusProvider.destroy()
     }
   }, [documentName, token, ydoc])
+
+  useEffect(() => {
+    const handleTextChange = (_event: Y.YTextEvent, transaction: Y.Transaction) => {
+      if (transaction.origin === LINE_ENDING_NORMALIZATION_ORIGIN) {
+        return
+      }
+
+      normalizeYTextLineEndings(ytext)
+    }
+
+    normalizeYTextLineEndings(ytext)
+    ytext.observe(handleTextChange)
+
+    return () => {
+      ytext.unobserve(handleTextChange)
+    }
+  }, [ytext])
 
   return {
     provider,

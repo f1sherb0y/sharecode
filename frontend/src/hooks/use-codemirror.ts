@@ -16,6 +16,7 @@ import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
 import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode'
 import { useThemeStore, useFontStore } from '@/stores'
 import { generateUserColor } from '@/lib/utils'
+import { normalizeYTextLineEndings } from '@/lib/line-endings'
 import type { Room, Language, User } from '@/types'
 
 // Note: CodeMirror doesn't have a dedicated TypeScript language package,
@@ -74,6 +75,8 @@ export function useCodeMirrorEditor({
     if (showGuestJoinForm) return
 
     try {
+      normalizeYTextLineEndings(ytext)
+
       // Set local user in awareness
       const userColor = currentUser?.color || generateUserColor(currentUser?.id).color
       const userColorLight = generateUserColor(currentUser?.id).colorLight
