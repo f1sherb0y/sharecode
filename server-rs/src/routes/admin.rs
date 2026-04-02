@@ -510,19 +510,6 @@ pub async fn delete_user(
         return Err(ApiError::not_found("Not found"));
     }
 
-    if user.role == "admin" {
-        let admin_count = sqlx::query_scalar::<_, i64>(
-            r#"SELECT COUNT(*) FROM "User" WHERE role = 'admin' AND "isDeleted" = false"#,
-        )
-        .fetch_one(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to count admins"))?;
-
-        if admin_count <= 1 {
-            return Err(ApiError::not_found("Not found"));
-        }
-    }
-
     sqlx::query(
         r#"
         UPDATE "User"

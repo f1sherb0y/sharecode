@@ -243,7 +243,7 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `GET /api/admin/users` - List all active users (admin/superuser)
 - `POST /api/admin/users` - Create a new user with role + global permissions (admin limited to normal users, superuser for all)
 - `PATCH /api/admin/users/:id` - Update role or global permissions
-- `DELETE /api/admin/users/:id` - Soft delete a user (admins can only remove normal users)
+- `DELETE /api/admin/users/:id` - Soft delete a user (admins can only remove normal users; superusers can delete admins; superusers cannot be deleted)
 
 ### Superuser Only
 - `GET /api/admin/rooms` - List all rooms
@@ -251,6 +251,50 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `GET /api/admin/storage/db-size` - Database size summary
 - `GET /api/admin/storage/playback` - Playback storage per room
 - `POST /api/admin/rooms/:id/playback/compress` - Compress playback to 1s resolution
+
+## Permission Matrix
+
+The system combines a role hierarchy with three global room flags:
+
+- `canReadAllRooms`
+- `canWriteAllRooms`
+- `canDeleteAllRooms`
+
+`canDeleteAllRooms` implies room-management authority such as ending/deleting rooms across the system. In the admin UI, superusers can edit all role and global-permission assignments.
+
+| Capability | User | Admin | Superuser |
+| --- | --- | --- | --- |
+| View own accessible rooms | Yes | Yes | Yes |
+| Create rooms | Yes | Yes | Yes |
+| Join allowed rooms | Yes | Yes | Yes |
+| Edit rooms they own or can write | Yes | Yes | Yes |
+| View all users in admin panel | No | Yes | Yes |
+| Create normal users | No | Yes | Yes |
+| Create admins or superusers | No | No | Yes |
+| Edit normal users | No | Yes | Yes |
+| Edit admins | No | No | Yes |
+| Edit superusers | No | No | Yes |
+| Delete normal users | No | Yes | Yes |
+| Delete admins | No | No | Yes |
+| Delete superusers | No | No | No |
+| View all rooms in admin panel | No | No | Yes |
+| Force-delete any room | No | No | Yes |
+| View storage / playback admin pages | No | No | Yes |
+
+Global room flags apply on top of role:
+
+| Global Flag | Effect |
+| --- | --- |
+| `canReadAllRooms` | User can see and open every room, even if not explicitly allowed. |
+| `canWriteAllRooms` | User can edit every room. |
+| `canDeleteAllRooms` | User can end or delete every room. |
+
+Notes:
+
+- Room owners can manage their own rooms regardless of role.
+- Admins are still restricted to user-level account management; they cannot manage admins or superusers.
+- Superusers can delete admins, including the last remaining admin.
+- Superusers cannot delete themselves, and superuser accounts are protected from deletion.
 
 ## Supported Languages
 
