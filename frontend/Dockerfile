@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
 # Build stage
-FROM oven/bun:1 AS builder
+FROM oven/bun:1.3.11 AS builder
 
 WORKDIR /app
 ENV BUN_INSTALL_CACHE_DIR=/root/.bun/install/cache

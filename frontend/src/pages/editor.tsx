@@ -60,7 +60,7 @@ import {
 import { useAuthStore, useFontStore, useGuestStore, useThemeStore } from '@/stores'
 import {
   useEditorRoom,
-  useCodeMirrorEditor,
+  useMonacoEditor,
   useEditorAwareness,
   useYjsProvider,
   useTldrawStore,
@@ -105,7 +105,7 @@ export function EditorPage() {
   const activeDoc = parseDocView(searchParams.get('view'))
   const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
   const shellRef = useRef<HTMLDivElement>(null)
-  
+
   // State for End Room Dialog
   const [isEndRoomDialogOpen, setIsEndRoomDialogOpen] = useState(false)
 
@@ -195,12 +195,15 @@ export function EditorPage() {
     user: currentUser,
   })
 
-  // 3. CodeMirror Hook
+  // 3. Monaco Hook
   const {
     editorRef,
-    viewRef,
-    updateLanguage
-  } = useCodeMirrorEditor({
+    monacoRef,
+    editorInstanceRef,
+    modelRef,
+    isEditorReady,
+    updateLanguage,
+  } = useMonacoEditor({
     effectiveRoom,
     ytext,
     provider,
@@ -228,7 +231,10 @@ export function EditorPage() {
   } = useEditorAwareness({
     provider,
     ydoc,
-    viewRef
+    ytext,
+    monacoRef,
+    editorInstanceRef,
+    modelRef,
   })
 
   // Code Runner Ref
@@ -243,8 +249,8 @@ export function EditorPage() {
       if (newLanguage && newLanguage !== effectiveRoom?.language) {
         // Update local room state
         setRoom((prev) => {
-           if (!prev) return prev;
-           return { ...prev, language: newLanguage };
+          if (!prev) return prev;
+          return { ...prev, language: newLanguage };
         })
         // Update Editor Language
         updateLanguage(newLanguage)
@@ -253,17 +259,17 @@ export function EditorPage() {
 
     // Call updateLanguage immediately if we are already out of sync
     if (effectiveRoom?.language) {
-       const metaLang = ymeta.get('language') as Language | undefined
-       if (metaLang && metaLang !== effectiveRoom.language) {
-          setRoom((prev) => {
-            if (!prev && !isGuestMode) return prev
-            return {
-              ...(prev ?? effectiveRoom),
-              language: metaLang,
-            }
-          })
-          updateLanguage(metaLang)
-       }
+      const metaLang = ymeta.get('language') as Language | undefined
+      if (metaLang && metaLang !== effectiveRoom.language) {
+        setRoom((prev) => {
+          if (!prev && !isGuestMode) return prev
+          return {
+            ...(prev ?? effectiveRoom),
+            language: metaLang,
+          }
+        })
+        updateLanguage(metaLang)
+      }
     }
 
     ymeta.observe(handleMetaChange)
@@ -289,8 +295,8 @@ export function EditorPage() {
 
   // Code Runner
   const getCode = useCallback(() => {
-    return viewRef.current?.state.doc.toString() ?? ''
-  }, [viewRef])
+    return modelRef.current?.getValue() ?? ''
+  }, [modelRef])
 
   const handleRunCode = useCallback(async () => {
     if (!codeRunnerRef.current || !canEdit) return
@@ -303,27 +309,25 @@ export function EditorPage() {
   }, [canEdit])
 
   const handleBlink = useCallback(() => {
-    if (!provider?.awareness || !viewRef.current) return
+    if (!provider?.awareness || !editorInstanceRef.current || !modelRef.current) return
 
-    const selection = viewRef.current.state.selection.main
+    const selection = editorInstanceRef.current.getSelection()
+    if (!selection) return
+
+    const anchor = modelRef.current.getOffsetAt(selection.getStartPosition())
+    const head = modelRef.current.getOffsetAt(selection.getEndPosition())
 
     provider.awareness.setLocalStateField('blink', {
-      anchor: Y.createRelativePositionFromTypeIndex(ytext, selection.anchor),
-      head: Y.createRelativePositionFromTypeIndex(ytext, selection.head),
+      anchor: Y.createRelativePositionFromTypeIndex(ytext, anchor),
+      head: Y.createRelativePositionFromTypeIndex(ytext, head),
       ts: Date.now(),
     })
-  }, [provider, viewRef, ytext])
+  }, [provider, editorInstanceRef, modelRef, ytext])
 
   const canBlink =
     activeDoc === 'code' &&
     !!provider?.awareness &&
-    !!viewRef.current
-
-  useEffect(() => {
-    if (activeDoc === 'code') {
-      viewRef.current?.requestMeasure()
-    }
-  }, [activeDoc, viewRef])
+    isEditorReady
 
   // Loading View
   if (isLoading) {
@@ -424,7 +428,7 @@ export function EditorPage() {
       <div
         ref={shellRef}
         className={cn(
-          'editor-shell flex flex-col h-screen overflow-clip safe-x',
+          'editor-shell flex flex-col h-screen overflow-clip',
           isCompactViewport && 'compact-ui'
         )}
         style={{ height: '100dvh' }}
@@ -432,7 +436,7 @@ export function EditorPage() {
         {/* Toolbar */}
         <header
           className={cn(
-            'flex items-center justify-between border-b bg-background shrink-0 overflow-hidden',
+            'flex items-center justify-between border-b bg-background shrink-0 overflow-hidden safe-x',
             isCompactViewport ? 'h-10 px-1.5 gap-1' : 'h-12 px-2 sm:px-3 gap-2'
           )}
         >
@@ -508,7 +512,7 @@ export function EditorPage() {
               </div>
             )}
 
-             {isGuestMode && !isCompactViewport && (
+            {isGuestMode && !isCompactViewport && (
               <Badge variant="outline" className="hidden sm:inline-flex shrink-0 rounded-sm text-xs px-1.5 py-0">
                 {canEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}
               </Badge>
@@ -517,7 +521,7 @@ export function EditorPage() {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            
+
             {/* Desktop: Font Controls */}
             <div className="hidden md:flex items-center gap-1 border rounded-md mr-2">
               <Tooltip>
@@ -550,7 +554,7 @@ export function EditorPage() {
                 <DropdownMenuItem onClick={() => setFont('JetBrains Mono')}>
                   JetBrains Mono {font === 'JetBrains Mono' && <Check className="h-4 w-4 ml-2" />}
                 </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => setFont('JuliaMono')}>                  Julia Mono {font === 'Julia Mono' && <Check className="h-4 w-4 ml-2" />}
+                <DropdownMenuItem onClick={() => setFont('JuliaMono')}>                  Julia Mono {font === 'Julia Mono' && <Check className="h-4 w-4 ml-2" />}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -571,7 +575,7 @@ export function EditorPage() {
                 <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
                   {t('editor.toolbar.users')}
                 </DropdownMenuLabel>
-                
+
                 {/* Current User */}
                 <div className="px-2 py-1.5 flex items-center gap-2">
                   <div
@@ -580,16 +584,16 @@ export function EditorPage() {
                   />
                   <span className="text-sm truncate flex-1">{currentUser?.username} ({t('share.editor.you')})</span>
                 </div>
-                
+
                 <DropdownMenuSeparator />
-                
+
                 {/* Remote Users */}
                 {remoteUsers.length === 0 && (
-                   <div className="px-2 py-2 text-xs text-muted-foreground text-center">
-                     No other users connected
-                   </div>
+                  <div className="px-2 py-2 text-xs text-muted-foreground text-center">
+                    No other users connected
+                  </div>
                 )}
-                
+
                 {remoteUsers.map((u) => {
                   const isFollowing =
                     (followingUserId != null && u.id != null && followingUserId === u.id) ||
@@ -704,13 +708,13 @@ export function EditorPage() {
                 <DropdownMenuContent align="end">
                   {/* Font Controls Group */}
                   <div className="flex items-center justify-between px-2 py-1">
-                     <Button variant="outline" size="icon" className="h-6 w-6" onClick={decreaseFontSize}>
-                        <Minus className="h-3 w-3" />
-                     </Button>
-                     <span className="text-xs">{fontSize}</span>
-                     <Button variant="outline" size="icon" className="h-6 w-6" onClick={increaseFontSize}>
-                        <Plus className="h-3 w-3" />
-                     </Button>
+                    <Button variant="outline" size="icon" className="h-6 w-6" onClick={decreaseFontSize}>
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="text-xs">{fontSize}</span>
+                    <Button variant="outline" size="icon" className="h-6 w-6" onClick={increaseFontSize}>
+                      <Plus className="h-3 w-3" />
+                    </Button>
                   </div>
                   <DropdownMenuSeparator />
 
@@ -740,7 +744,7 @@ export function EditorPage() {
                         </DropdownMenuItem>
                       )}
                       {canEndRoom && (
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => setIsEndRoomDialogOpen(true)}
                           className="text-destructive focus:text-destructive"
                         >
@@ -776,8 +780,8 @@ export function EditorPage() {
               <Button variant="outline" onClick={() => setIsEndRoomDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={() => {
                   handleEndRoom()
                   setIsEndRoomDialogOpen(false)
@@ -789,6 +793,7 @@ export function EditorPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        
         {/* Share Manager Dialog */}
         <Dialog open={showShareManager} onOpenChange={setShowShareManager}>
           <DialogContent className="max-w-md">
@@ -859,7 +864,7 @@ export function EditorPage() {
           </div>
 
           {activeDoc === 'code' && codeRunnerPosition === 'right' && (
-             <CodeRunnerPanel
+            <CodeRunnerPanel
               ref={codeRunnerRef}
               language={effectiveRoom.language}
               getCode={getCode}
@@ -876,7 +881,7 @@ export function EditorPage() {
         </div>
 
         {!isCompactViewport && (
-          <footer className="safe-bottom flex items-center justify-between h-7 px-2 sm:px-3 border-t bg-background text-[11px] text-muted-foreground shrink-0 overflow-hidden">
+          <footer className="safe-bottom safe-x flex items-center justify-between h-7 px-2 sm:px-3 border-t bg-background text-[11px] text-muted-foreground shrink-0 overflow-hidden">
             <div className="flex items-center gap-3 min-w-0 overflow-hidden">
               <div className={cn('flex items-center gap-1', isConnected ? 'text-success' : 'text-destructive')}>
                 {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}

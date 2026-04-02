@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush, StickyNote, PanelRightClose } from 'lucide-react'
+import type * as Monaco from 'monaco-editor'
 import * as Y from 'yjs'
 import pako from 'pako'
 import { createTLStore, defaultShapeUtils, loadSnapshot, type TLRecord, type TLStore } from 'tldraw'
@@ -18,37 +19,13 @@ import {
 import { ThemeToggle } from '@/components/layout'
 import { NotesView } from '@/components/features/notes-view'
 import { api } from '@/api'
-import { useAuthStore, useThemeStore, useNotesStore } from '@/stores'
+import { useAuthStore, useThemeStore, useNotesStore, useFontStore } from '@/stores'
 import { useCompactViewport } from '@/hooks'
 import { cn, formatTime } from '@/lib/utils'
+import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
+import { loadMonaco } from '@/lib/monaco-loader'
 import { CanvasView } from '@/components/features/canvas-view'
-import { EditorView, basicSetup } from 'codemirror'
-import { EditorState, Compartment } from '@codemirror/state'
-import { javascript } from '@codemirror/lang-javascript'
-import { python } from '@codemirror/lang-python'
-import { rust } from '@codemirror/lang-rust'
-import { cpp } from '@codemirror/lang-cpp'
-import { java } from '@codemirror/lang-java'
-import { php } from '@codemirror/lang-php'
-import { go } from '@codemirror/lang-go'
-import { markdown } from '@codemirror/lang-markdown'
-import { StreamLanguage } from '@codemirror/language'
-import { verilog } from '@codemirror/legacy-modes/mode/verilog'
-import { vscodeDark, vscodeLight } from '@uiw/codemirror-theme-vscode'
-import type { Room, Language } from '@/types'
-
-const languageExtensions: Record<Language | string, any> = {
-  javascript: javascript(),
-  typescript: javascript({ typescript: true }),
-  python: python(),
-  java: java(),
-  cpp: cpp(),
-  rust: rust(),
-  go: go(),
-  php: php(),
-  markdown: markdown(),
-  verilog: StreamLanguage.define(verilog),
-}
+import type { Room } from '@/types'
 
 const PLAYBACK_DOC_VIEWS = ['code', 'canvas'] as const
 const PLAYBACK_SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const
@@ -112,6 +89,7 @@ export function PlaybackPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const { theme } = useThemeStore()
+  const { font, fontSize } = useFontStore()
   const isCompactViewport = useCompactViewport()
 
   const [room, setRoom] = useState<Room | null>(null)
@@ -130,10 +108,9 @@ export function PlaybackPage() {
   const { notes } = useNotesStore()
 
   const editorRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<EditorView | null>(null)
-  const languageCompartment = useRef(new Compartment())
-  const themeCompartment = useRef(new Compartment())
-  const fontCompartment = useRef(new Compartment())
+  const monacoRef = useRef<typeof Monaco | null>(null)
+  const playbackEditorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+  const playbackModelRef = useRef<Monaco.editor.ITextModel | null>(null)
   const assetMapRef = useRef<Map<string, string>>(new Map())
 
   const assetStore = useMemo(
@@ -297,59 +274,52 @@ export function PlaybackPage() {
     }
   }, [roomId, user, t])
 
-  // Initialize CodeMirror
+  // Initialize Monaco playback editor
   useEffect(() => {
-    if (!room || !editorRef.current || viewRef.current) return
+    if (!room || !editorRef.current || playbackEditorRef.current) return
     if (updates.length === 0) return
 
+    let cancelled = false
+
     try {
-      const languageExt = languageExtensions[room.language] ?? javascript()
       const initialDoc = getDocAtTimestamp(currentTimestamp)
       const ytext = initialDoc.getText('codemirror')
+      loadMonaco().then((monaco) => {
+        if (cancelled || !editorRef.current) return
+        monacoRef.current = monaco
 
-      const fontExt = EditorView.theme({
-        "&": {
-          height: "100%",
-        },
-        ".cm-scroller": {
-           fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
-           fontSize: "14px",
-           paddingTop: "16px",
-           paddingBottom: "16px",
-        },
-        ".cm-content": {
-           fontFamily: 'JetBrains Mono, SFMono-Regular, Consolas, "Liberation Mono", monospace',
-        }
+        const model = monaco.editor.createModel(
+          ytext.toString(),
+          resolveMonacoLanguage(room.language),
+        )
+        model.setEOL(monaco.editor.EndOfLineSequence.LF)
+        playbackModelRef.current = model
+
+        const editor = monaco.editor.create(editorRef.current, {
+          ...createMonacoEditorOptions({
+            model,
+            font,
+            fontSize,
+            theme,
+            readOnly: true,
+          }),
+        })
+
+        playbackEditorRef.current = editor
       })
-
-      const state = EditorState.create({
-        doc: ytext.toString(),
-        extensions: [
-          basicSetup,
-          EditorView.lineWrapping,
-          languageCompartment.current.of(languageExt),
-          themeCompartment.current.of(theme === 'dark' ? vscodeDark : vscodeLight),
-          fontCompartment.current.of(fontExt),
-          EditorView.editable.of(false), // Playback is read-only
-        ]
-      })
-
-      const view = new EditorView({
-        state,
-        parent: editorRef.current
-      })
-
-      viewRef.current = view
     } catch (err) {
       console.error('Failed to initialize playback editor:', err)
       setError('Failed to initialize playback editor')
     }
 
     return () => {
-      viewRef.current?.destroy()
-      viewRef.current = null
+      cancelled = true
+      playbackEditorRef.current?.dispose()
+      playbackEditorRef.current = null
+      playbackModelRef.current?.dispose()
+      playbackModelRef.current = null
     }
-  }, [room, updates.length, getDocAtTimestamp])
+  }, [room, updates.length, getDocAtTimestamp, currentTimestamp, theme, font, fontSize])
 
   // Initialize canvas store
   useEffect(() => {
@@ -364,38 +334,52 @@ export function PlaybackPage() {
   // Cleanup
   useEffect(() => {
     return () => {
-      viewRef.current?.destroy()
+      playbackEditorRef.current?.dispose()
+      playbackModelRef.current?.dispose()
     }
   }, [])
 
   // Update theme
   useEffect(() => {
-    if (!viewRef.current) return
-    
-    viewRef.current.dispatch({
-      effects: themeCompartment.current.reconfigure(theme === 'dark' ? vscodeDark : vscodeLight)
-    })
+    if (!monacoRef.current) return
+    monacoRef.current.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs')
   }, [theme])
+
+  useEffect(() => {
+    playbackEditorRef.current?.updateOptions({
+      fontFamily: `${font}, monospace`,
+      fontSize,
+    })
+  }, [font, fontSize])
 
   // Update content at timestamp
   useEffect(() => {
     if (updates.length === 0) return
     const doc = getDocAtTimestamp(currentTimestamp)
 
-    if (viewRef.current) {
+    if (playbackModelRef.current) {
       const ytext = doc.getText('codemirror')
       const newText = ytext.toString()
-      const currentText = viewRef.current.state.doc.toString()
+      const currentText = playbackModelRef.current.getValue()
       
       if (newText !== currentText) {
-         viewRef.current.dispatch({
-            changes: { from: 0, to: currentText.length, insert: newText }
-         })
+        playbackModelRef.current.pushEditOperations(
+          [],
+          [{ range: playbackModelRef.current.getFullModelRange(), text: newText }],
+          () => null,
+        )
       }
     }
 
+    if (room?.language && monacoRef.current && playbackModelRef.current) {
+      monacoRef.current.editor.setModelLanguage(
+        playbackModelRef.current,
+        resolveMonacoLanguage(room.language),
+      )
+    }
+
     updateCanvasFromDoc(doc)
-  }, [currentTimestamp, updates.length, getDocAtTimestamp, updateCanvasFromDoc])
+  }, [currentTimestamp, updates.length, getDocAtTimestamp, updateCanvasFromDoc, room?.language])
 
   // Auto-play
   useEffect(() => {

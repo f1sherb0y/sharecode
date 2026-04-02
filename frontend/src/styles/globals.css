@@ -147,6 +147,12 @@
     padding-top: 0.5rem;
     padding-bottom: 0.5rem;
   }
+
+  /* Remote user selection: fill full line width so lines connect visually */
+  .cm-yLineSelection {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
 }
 
 /* Font loading */

@@ -1,6 +1,6 @@
 export { useYjsProvider, type StatelessMessage } from './use-yjs-provider'
 export { useEditorRoom, type EditorRoomState } from './use-editor-room'
-export { useCodeMirrorEditor } from './use-codemirror'
+export { useMonacoEditor } from './use-monaco-editor'
 export { useEditorAwareness } from './use-editor-awareness'
 export { useTldrawStore } from './use-tldraw-store'
 export { useCompactViewport } from './use-compact-viewport'
