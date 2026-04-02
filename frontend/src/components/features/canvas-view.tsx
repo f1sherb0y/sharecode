@@ -26,21 +26,11 @@ export function CanvasView({
   followEnabled,
 }: CanvasViewProps) {
   const editorRef = useRef<Editor | null>(null)
-  const lastFollowRef = useRef<string | null>(null)
   const [mountVersion, setMountVersion] = useState(0)
 
   const applyFollow = useCallback(() => {
     const editor = editorRef.current
-    if (!editor) return
-
-    if (!followEnabled || (!followUserId && followClientId == null)) {
-      if (lastFollowRef.current) {
-        editor.stopFollowingUser()
-        lastFollowRef.current = null
-      }
-      return
-    }
-
+    if (!editor || !followEnabled || (!followUserId && followClientId == null)) return
     if (!provider?.awareness) return
 
     const awareness = provider.awareness
@@ -50,23 +40,22 @@ export function CanvasView({
     if (followUserId != null) {
       awareness.getStates().forEach((state: any, clientId: number) => {
         if (clientId === localClientId || targetClientId != null) return
-        if (state?.user?.id === followUserId) {
-          targetClientId = clientId
-        }
+        if (state?.user?.id === followUserId) targetClientId = clientId
       })
     } else if (followClientId != null) {
       targetClientId = followClientId
     }
 
-    const target = targetClientId != null ? targetClientId.toString() : null
-    if (target === lastFollowRef.current) return
+    if (targetClientId == null) return
 
-    if (target) {
-      editor.startFollowingUser(target)
-    } else if (lastFollowRef.current) {
-      editor.stopFollowingUser()
+    const targetState = (awareness.getStates() as Map<number, any>).get(targetClientId)
+    const cursor = targetState?.presence?.cursor
+    if (!cursor) return
+
+    const point = { x: cursor.x, y: cursor.y }
+    if (!editor.getViewportPageBounds().containsPoint(point)) {
+      editor.centerOnPoint(point, { animation: { duration: 150 } })
     }
-    lastFollowRef.current = target
   }, [provider, followUserId, followClientId, followEnabled])
 
   const handleMount = useCallback((editor: Editor) => {

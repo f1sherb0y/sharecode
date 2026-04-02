@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { HocuspocusProvider } from '@hocuspocus/provider'
 import type { TLInstancePresence, TLRecord, TLStore } from 'tldraw'
 import {
@@ -82,6 +82,10 @@ export function useTldrawStore({
   }, [ydoc, assetStore])
   const [ready, setReady] = useState(false)
   const clientId = provider?.awareness?.clientID?.toString()
+  const isSyncedRef = useRef(isSynced)
+  useEffect(() => {
+    isSyncedRef.current = isSynced
+  }, [isSynced])
   const userAtom = useMemo(() => {
     if (!clientId) return null
     return atom('tldraw-user', {
@@ -103,7 +107,7 @@ export function useTldrawStore({
 
   useEffect(() => {
     const awareness = provider?.awareness
-    if (!ydoc || !provider || !awareness || !isSynced || !store || !userAtom || !clientId) {
+    if (!ydoc || !provider || !awareness || !store || !userAtom || !clientId) {
       setReady(false)
       return
     }
@@ -111,6 +115,7 @@ export function useTldrawStore({
     const yRecords = ydoc.getMap<TLRecord>('tldraw-records')
     const assets = ydoc.getMap<string>('tldraw-assets')
     const unsubs: Array<() => void> = []
+    let seeded = false
 
     const normalizeAssetRecord = (record: TLRecord) => {
       if ((record as any).typeName !== 'asset') return record
@@ -248,38 +253,58 @@ export function useTldrawStore({
     awareness.on('update', handleAwarenessUpdate)
     unsubs.push(() => awareness.off('update', handleAwarenessUpdate))
 
-    // Initialize store from yjs or seed yjs from store
-    if (yRecords.size > 0) {
-      const originalRecords = Array.from(yRecords.values()) as TLRecord[]
-      const normalizedRecords = originalRecords.map(normalizeAssetRecord) as TLRecord[]
-      transact(() => {
-        store.clear()
-        store.put(normalizedRecords)
-      })
-      const replacements = normalizedRecords.filter((record, index) => record !== originalRecords[index])
-      if (replacements.length) {
+    // Initialize store from Yjs (or seed Yjs from store). Only runs once per binding
+    // lifecycle — seeded flag prevents re-running on reconnects.
+    const doSeed = () => {
+      if (seeded) return
+      seeded = true
+
+      if (yRecords.size > 0) {
+        const originalRecords = Array.from(yRecords.values()) as TLRecord[]
+        const normalizedRecords = originalRecords.map(normalizeAssetRecord) as TLRecord[]
+        transact(() => {
+          store.clear()
+          store.put(normalizedRecords)
+        })
+        const replacements = normalizedRecords.filter((record, index) => record !== originalRecords[index])
+        if (replacements.length) {
+          ydoc.transact(() => {
+            for (const record of replacements) {
+              yRecords.set(record.id, record)
+            }
+          })
+        }
+      } else {
         ydoc.transact(() => {
-          for (const record of replacements) {
+          store.allRecords().forEach((record) => {
             yRecords.set(record.id, record)
-          }
+          })
         })
       }
-    } else {
-      ydoc.transact(() => {
-        store.allRecords().forEach((record) => {
-          yRecords.set(record.id, record)
-        })
-      })
+
+      setReady(true)
     }
 
-    setReady(true)
+    // Seed immediately if already synced; otherwise wait for the provider's synced event.
+    // isSynced is intentionally NOT a dep of this effect — we don't want a transient
+    // false→true flicker (caused by a second peer connecting) to tear down and rebuild
+    // all bindings. The seeded flag ensures doSeed is a no-op on re-syncs.
+    if (isSyncedRef.current) {
+      doSeed()
+    }
+
+    const handleSynced = ({ state }: { state: boolean }) => {
+      if (state) doSeed()
+    }
+    provider.on('synced', handleSynced)
+    unsubs.push(() => provider.off('synced', handleSynced))
 
     return () => {
       unsubs.forEach((fn) => fn())
       unsubs.length = 0
       setReady(false)
     }
-  }, [ydoc, provider, isSynced, store, userAtom, clientId])
+  }, [ydoc, provider, store, userAtom, clientId])
 
   return { store, ready }
 }
