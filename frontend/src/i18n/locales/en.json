@@ -385,6 +385,8 @@
     "admin": "Admin",
     "superuser": "Superuser",
     "settings": "Settings",
+    "enterFullscreen": "Enter fullscreen",
+    "exitFullscreen": "Exit fullscreen",
     "loading": "Loading...",
     "error": "Error",
     "success": "Success"

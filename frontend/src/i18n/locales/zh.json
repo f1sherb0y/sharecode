@@ -385,6 +385,8 @@
     "admin": "管理员",
     "superuser": "超级管理员",
     "settings": "设置",
+    "enterFullscreen": "进入全屏",
+    "exitFullscreen": "退出全屏",
     "loading": "加载中...",
     "error": "错误",
     "success": "成功"

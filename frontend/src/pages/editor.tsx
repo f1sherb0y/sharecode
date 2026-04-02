@@ -20,6 +20,8 @@ import {
   Sparkles,
   FileCode,
   Brush,
+  Maximize,
+  Minimize2,
 } from 'lucide-react'
 import * as Y from 'yjs'
 import {
@@ -56,7 +58,16 @@ import {
   DialogTitle,
 } from '@/components/ui'
 import { useAuthStore, useFontStore, useGuestStore, useThemeStore } from '@/stores'
-import { useEditorRoom, useCodeMirrorEditor, useEditorAwareness, useYjsProvider, useTldrawStore, type StatelessMessage } from '@/hooks'
+import {
+  useEditorRoom,
+  useCodeMirrorEditor,
+  useEditorAwareness,
+  useYjsProvider,
+  useTldrawStore,
+  useCompactViewport,
+  useFullscreen,
+  type StatelessMessage
+} from '@/hooks'
 import { CanvasView } from '@/components/features/canvas-view'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
@@ -86,11 +97,14 @@ export function EditorPage() {
   const { session: guestSession } = useGuestStore()
   const { font, fontSize, increaseFontSize, decreaseFontSize, setFont } = useFontStore()
   const { theme } = useThemeStore()
+  const isCompactViewport = useCompactViewport()
+  const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen()
   const [showShareManager, setShowShareManager] = useState(false)
   const [isCodeRunning, setIsCodeRunning] = useState(false)
   const [isRunnerExpanded, setIsRunnerExpanded] = useState(false)
   const activeDoc = parseDocView(searchParams.get('view'))
   const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
+  const shellRef = useRef<HTMLDivElement>(null)
   
   // State for End Room Dialog
   const [isEndRoomDialogOpen, setIsEndRoomDialogOpen] = useState(false)
@@ -407,19 +421,48 @@ export function EditorPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen overflow-clip safe-x" style={{ height: '100dvh' }}>
+      <div
+        ref={shellRef}
+        className={cn(
+          'editor-shell flex flex-col h-screen overflow-clip safe-x',
+          isCompactViewport && 'compact-ui'
+        )}
+        style={{ height: '100dvh' }}
+      >
         {/* Toolbar */}
-        <header className="flex items-center justify-between h-14 px-2 sm:px-4 border-b bg-background shrink-0 gap-2 overflow-hidden">
+        <header
+          className={cn(
+            'flex items-center justify-between border-b bg-background shrink-0 overflow-hidden',
+            isCompactViewport ? 'h-10 px-1.5 gap-1' : 'h-12 px-2 sm:px-3 gap-2'
+          )}
+        >
           {/* Left: Back + Title + Language */}
-          <div className="flex items-center gap-2 min-w-0 shrink">
-            <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handleBack}>
+          <div className="flex items-center gap-1.5 min-w-0 shrink">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn('shrink-0', isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}
+              onClick={handleBack}
+            >
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <span className="font-medium truncate max-w-[100px] sm:max-w-[200px] mr-2">{effectiveRoom.name}</span>
+            <span
+              className={cn(
+                'font-medium truncate text-sm',
+                isCompactViewport ? 'max-w-[90px]' : 'max-w-[110px] sm:max-w-[220px]'
+              )}
+            >
+              {effectiveRoom.name}
+            </span>
 
             {isOwner ? (
               <Select value={effectiveRoom.language} onValueChange={(v) => onLanguageChange(v as Language)}>
-                <SelectTrigger className="w-24 sm:w-32 h-8 shrink-0">
+                <SelectTrigger
+                  className={cn(
+                    'shrink-0',
+                    isCompactViewport ? 'h-7 w-[92px] text-xs' : 'h-8 w-24 sm:w-32'
+                  )}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -431,31 +474,41 @@ export function EditorPage() {
                 </SelectContent>
               </Select>
             ) : (
-              <Badge variant="secondary" className="shrink-0 rounded-sm text-xs px-1.5 py-0">{effectiveRoom.language}</Badge>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  'shrink-0 rounded-sm text-xs',
+                  isCompactViewport ? 'px-1 py-0 leading-5' : 'px-1.5 py-0'
+                )}
+              >
+                {effectiveRoom.language}
+              </Badge>
             )}
 
-            <div className="hidden sm:flex items-center rounded-md border bg-muted/40 p-0.5 ml-1">
-              <Button
-                variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-7 px-2"
-                onClick={() => updateEditorParams({ view: 'code' })}
-              >
-                <FileCode className="h-3.5 w-3.5 sm:mr-1" />
-                <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
-              </Button>
-              <Button
-                variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-7 px-2"
-                onClick={() => updateEditorParams({ view: 'canvas' })}
-              >
-                <Brush className="h-3.5 w-3.5 sm:mr-1" />
-                <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
-              </Button>
-            </div>
+            {!isCompactViewport && (
+              <div className="hidden sm:flex items-center rounded-md border p-0.5 ml-1">
+                <Button
+                  variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() => updateEditorParams({ view: 'code' })}
+                >
+                  <FileCode className="h-3.5 w-3.5 sm:mr-1" />
+                  <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
+                </Button>
+                <Button
+                  variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() => updateEditorParams({ view: 'canvas' })}
+                >
+                  <Brush className="h-3.5 w-3.5 sm:mr-1" />
+                  <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
+                </Button>
+              </div>
+            )}
 
-             {isGuestMode && (
+             {isGuestMode && !isCompactViewport && (
               <Badge variant="outline" className="hidden sm:inline-flex shrink-0 rounded-sm text-xs px-1.5 py-0">
                 {canEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}
               </Badge>
@@ -505,7 +558,11 @@ export function EditorPage() {
             {/* Users Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1 h-8">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn('gap-1', isCompactViewport ? 'h-7 px-2 text-xs' : 'h-8')}
+                >
                   <Users className="h-4 w-4" />
                   <span>{remoteUsers.length + 1}</span>
                 </Button>
@@ -572,30 +629,32 @@ export function EditorPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <ThemeToggle className="h-8 w-8" />
+            <ThemeToggle className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')} />
 
             {/* Blink Selection */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={handleBlink}
-                  disabled={!canBlink}
-                >
-                  <Sparkles className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('editor.toolbar.blink')}</TooltipContent>
-            </Tooltip>
+            {!isCompactViewport && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleBlink}
+                    disabled={!canBlink}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('editor.toolbar.blink')}</TooltipContent>
+              </Tooltip>
+            )}
 
             {/* Run Code (Visible on all sizes if editable) */}
             {canEdit && (
               <Button
-                variant="default"
-                size="sm"
-                className="h-8 px-2 sm:px-3"
+                variant={isCompactViewport ? 'ghost' : 'default'}
+                size={isCompactViewport ? 'icon' : 'sm'}
+                className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 px-2 sm:px-3')}
                 onClick={handleRunCode}
                 disabled={isCodeRunning}
               >
@@ -604,12 +663,12 @@ export function EditorPage() {
                 ) : (
                   <Play className="h-4 w-4 sm:mr-1" />
                 )}
-                <span className="hidden sm:inline">{t('codeRunner.run')}</span>
+                {!isCompactViewport && <span className="hidden sm:inline">{t('codeRunner.run')}</span>}
               </Button>
             )}
 
             {/* Desktop: Share & End Room Buttons */}
-            {(canManageRoom || canEndRoom) && (
+            {!isCompactViewport && (canManageRoom || canEndRoom) && (
               <div className="hidden md:flex items-center gap-2">
                 {canManageRoom && (
                   <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowShareManager(true)}>
@@ -627,7 +686,7 @@ export function EditorPage() {
             )}
 
             {/* Desktop: Leave Room (Guest) */}
-            {isGuestMode && (
+            {isGuestMode && !isCompactViewport && (
               <Button variant="outline" size="sm" className="hidden md:flex h-8 px-2 sm:px-3" onClick={handleGuestLeave}>
                 <LogOut className="h-4 w-4 sm:mr-1" />
                 <span className="hidden xl:inline">{t('share.editor.leaveButton')}</span>
@@ -635,16 +694,15 @@ export function EditorPage() {
             )}
 
             {/* Mobile: More Menu (Dropdown) */}
-            <div className="md:hidden">
+            <div className={cn(isCompactViewport ? 'block' : 'md:hidden')}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}>
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {/* Font Controls Group */}
-                  <DropdownMenuLabel>Font Size</DropdownMenuLabel>
                   <div className="flex items-center justify-between px-2 py-1">
                      <Button variant="outline" size="icon" className="h-6 w-6" onClick={decreaseFontSize}>
                         <Minus className="h-3 w-3" />
@@ -747,7 +805,7 @@ export function EditorPage() {
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden min-w-0">
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            <div className="flex-1 overflow-hidden">
+            <div className="relative flex-1 overflow-hidden">
               <div className={cn('h-full w-full', activeDoc === 'code' ? '' : 'hidden')}>
                 <div ref={editorRef} className="h-full w-full" />
               </div>
@@ -762,6 +820,24 @@ export function EditorPage() {
                   followClientId={followingClientId}
                   followEnabled={activeDoc === 'canvas'}
                 />
+              )}
+              {isFullscreenSupported && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className={cn(
+                    'absolute right-3 bottom-3 z-20 rounded-full border bg-background/65 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/45',
+                    isCompactViewport ? 'h-9 w-9' : 'h-10 w-10'
+                  )}
+                  onClick={() => {
+                    void toggleFullscreen(shellRef.current)
+                  }}
+                  aria-label={isFullscreen ? t('common.exitFullscreen') : t('common.enterFullscreen')}
+                  title={isFullscreen ? t('common.exitFullscreen') : t('common.enterFullscreen')}
+                >
+                  {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+                </Button>
               )}
             </div>
 
@@ -799,25 +875,26 @@ export function EditorPage() {
           )}
         </div>
 
-        {/* Footer */}
-        <footer className="flex items-center justify-between h-8 px-4 border-t bg-muted/50 text-xs text-muted-foreground shrink-0 overflow-hidden">
-          <div className="flex items-center gap-4 min-w-0 overflow-hidden">
-            <div className={cn('flex items-center gap-1', isConnected ? 'text-success' : 'text-destructive')}>
-              {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-              <span className="hidden sm:inline">{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
+        {!isCompactViewport && (
+          <footer className="safe-bottom flex items-center justify-between h-7 px-2 sm:px-3 border-t bg-background text-[11px] text-muted-foreground shrink-0 overflow-hidden">
+            <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+              <div className={cn('flex items-center gap-1', isConnected ? 'text-success' : 'text-destructive')}>
+                {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                <span className="hidden sm:inline">{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                {isSynced ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
+                <span className="hidden sm:inline">{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
+              </div>
+              {isGuestMode && guestSession && (
+                <span className="text-muted-foreground truncate max-w-[150px]">
+                  {t('share.editor.connectedAs', { name: guestSession.guest.displayName })}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-1">
-              {isSynced ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
-              <span className="hidden sm:inline">{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
-            </div>
-            {isGuestMode && guestSession && (
-              <span className="text-muted-foreground truncate max-w-[150px]">
-                {t('share.editor.connectedAs', { name: guestSession.guest.displayName })}
-              </span>
-            )}
-          </div>
-          <div>{effectiveRoom.language}</div>
-        </footer>
+            <div>{effectiveRoom.language}</div>
+          </footer>
+        )}
       </div>
     </TooltipProvider>
   )

@@ -19,7 +19,8 @@ import { ThemeToggle } from '@/components/layout'
 import { NotesView } from '@/components/features/notes-view'
 import { api } from '@/api'
 import { useAuthStore, useThemeStore, useNotesStore } from '@/stores'
-import { formatTime } from '@/lib/utils'
+import { useCompactViewport } from '@/hooks'
+import { cn, formatTime } from '@/lib/utils'
 import { CanvasView } from '@/components/features/canvas-view'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, Compartment } from '@codemirror/state'
@@ -111,6 +112,7 @@ export function PlaybackPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const { theme } = useThemeStore()
+  const isCompactViewport = useCompactViewport()
 
   const [room, setRoom] = useState<Room | null>(null)
   const [updates, setUpdates] = useState<Update[]>([])
@@ -431,22 +433,53 @@ export function PlaybackPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div
+      className={cn(
+        'playback-shell flex flex-col h-screen safe-x',
+        isCompactViewport && 'compact-ui'
+      )}
+      style={{ height: '100dvh' }}
+    >
       {/* Header */}
-      <header className="flex items-center justify-between h-12 px-4 border-b bg-background shrink-0">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate('/rooms')}>
+      <header
+        className={cn(
+          'flex items-center justify-between border-b bg-background shrink-0 gap-2',
+          isCompactViewport ? 'h-10 px-2' : 'h-11 px-3 sm:px-4'
+        )}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}
+            onClick={() => navigate('/rooms')}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <span className="font-medium mr-3">Playback: {room?.name}</span>
-          <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">{room?.language}</Badge>
+          <span
+            className={cn(
+              'font-medium truncate text-sm',
+              isCompactViewport ? 'max-w-[140px]' : 'max-w-[240px]'
+            )}
+          >
+            {room?.name}
+          </span>
+          <Badge
+            variant="secondary"
+            className={cn(
+              'rounded-sm text-xs',
+              isCompactViewport ? 'px-1 py-0 leading-5' : 'px-1.5 py-0'
+            )}
+          >
+            {room?.language}
+          </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-md border bg-muted/40 p-0.5">
+        <div className="flex items-center gap-1">
+          <div className={cn('flex items-center rounded-md border p-0.5', isCompactViewport && 'gap-0.5')}>
             <Button
               variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-7 px-2"
+              className={cn(isCompactViewport ? 'h-7 px-1.5' : 'h-7 px-2')}
               onClick={() => {
                 const next = new URLSearchParams(searchParams)
                 next.set('view', 'code')
@@ -454,12 +487,12 @@ export function PlaybackPage() {
               }}
             >
               <FileCode className="h-3.5 w-3.5 sm:mr-1" />
-              <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
+              {!isCompactViewport && <span className="hidden md:inline">{t('editor.toolbar.code')}</span>}
             </Button>
             <Button
               variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-7 px-2"
+              className={cn(isCompactViewport ? 'h-7 px-1.5' : 'h-7 px-2')}
               onClick={() => {
                 const next = new URLSearchParams(searchParams)
                 next.set('view', 'canvas')
@@ -467,14 +500,14 @@ export function PlaybackPage() {
               }}
             >
               <Brush className="h-3.5 w-3.5 sm:mr-1" />
-              <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
+              {!isCompactViewport && <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>}
             </Button>
           </div>
-          <ThemeToggle className="h-8 w-8" />
+          <ThemeToggle className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')} />
           <Button
             variant={showNotes ? 'secondary' : 'ghost'}
             size="icon"
-            className="h-8 w-8"
+            className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}
             onClick={() => setShowNotes(!showNotes)}
             title={t('playback.notes')}
           >
@@ -484,8 +517,8 @@ export function PlaybackPage() {
       </header>
 
       {/* Editor + Notes */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-hidden">
+      <div className="relative flex-1 flex overflow-hidden min-w-0">
+        <div className="flex-1 overflow-hidden min-w-0">
           <div className={`h-full w-full ${activeDoc === 'code' ? '' : 'hidden'}`}>
             <div ref={editorRef} className="h-full w-full" />
           </div>
@@ -505,7 +538,14 @@ export function PlaybackPage() {
 
         {/* Notes panel */}
         {showNotes && roomId && (
-          <div className="w-64 border-l bg-background flex flex-col shrink-0">
+          <div
+            className={cn(
+              'border-l bg-background flex flex-col',
+              isCompactViewport
+                ? 'absolute inset-y-0 right-0 z-10 w-[min(18rem,78vw)] shadow-lg'
+                : 'w-64 shrink-0'
+            )}
+          >
             <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
               <div className="flex items-center gap-1.5">
                 <StickyNote className="h-3.5 w-3.5 text-muted-foreground" />
@@ -531,9 +571,14 @@ export function PlaybackPage() {
       </div>
 
       {/* Playback controls */}
-      <footer className="border-t bg-muted/50 p-4 shrink-0">
+      <footer
+        className={cn(
+          'safe-bottom border-t bg-background shrink-0',
+          isCompactViewport ? 'px-2 py-1.5' : 'px-3 py-2.5 sm:px-4 sm:py-3'
+        )}
+      >
         {/* Timeline with marks */}
-        <div className="relative mb-4">
+        <div className={cn('relative', isCompactViewport ? 'mb-2' : 'mb-3')}>
           <input
             type="range"
             min={startMs}
@@ -544,10 +589,13 @@ export function PlaybackPage() {
               setCurrentTimestamp(Number(e.target.value))
               setIsPlaying(false)
             }}
-            className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer relative z-10"
+            className={cn(
+              'w-full bg-secondary rounded-lg appearance-none cursor-pointer relative z-10',
+              isCompactViewport ? 'h-1.5' : 'h-2'
+            )}
           />
           {/* Update marks - group close updates into regions */}
-          <div className="absolute top-0 left-0 right-0 h-2 pointer-events-none">
+          <div className={cn('absolute top-0 left-0 right-0 pointer-events-none', isCompactViewport ? 'h-1.5' : 'h-2')}>
             {(() => {
               const duration = endMs - startMs
               if (duration === 0) return null
@@ -573,7 +621,7 @@ export function PlaybackPage() {
                 return (
                   <div
                     key={i}
-                    className="absolute top-0 h-2 bg-primary/50 rounded-sm"
+                    className={cn('absolute top-0 bg-primary/50 rounded-sm', isCompactViewport ? 'h-1.5' : 'h-2')}
                     style={{
                       left: `${region.start}%`,
                       width: `${width}%`,
@@ -586,11 +634,12 @@ export function PlaybackPage() {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
             <Button
               variant="outline"
               size="icon"
+              className={cn(isCompactViewport ? 'h-7 w-7' : 'h-9 w-9')}
               onClick={() => {
                 setCurrentTimestamp(startMs)
                 setIsPlaying(false)
@@ -598,12 +647,18 @@ export function PlaybackPage() {
             >
               <SkipBack className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={() => setIsPlaying(!isPlaying)}>
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(isCompactViewport ? 'h-7 w-7' : 'h-9 w-9')}
+              onClick={() => setIsPlaying(!isPlaying)}
+            >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </Button>
             <Button
               variant="outline"
               size="icon"
+              className={cn(isCompactViewport ? 'h-7 w-7' : 'h-9 w-9')}
               onClick={() => {
                 setCurrentTimestamp(endMs)
                 setIsPlaying(false)
@@ -611,13 +666,18 @@ export function PlaybackPage() {
             >
               <SkipForward className="h-4 w-4" />
             </Button>
-            <span className="ml-2 text-sm text-muted-foreground font-mono">
+            <span
+              className={cn(
+                'ml-1 text-muted-foreground font-mono whitespace-nowrap',
+                isCompactViewport ? 'text-xs' : 'ml-2 text-sm'
+              )}
+            >
               {formatTime(currentTimestamp)} / {formatTime(endMs)}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{t('playback.speed')}:</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {!isCompactViewport && <span className="text-sm text-muted-foreground">{t('playback.speed')}:</span>}
             <Select
               value={String(playbackSpeed)}
               onValueChange={(v) => {
@@ -626,7 +686,7 @@ export function PlaybackPage() {
                 setSearchParams(next)
               }}
             >
-              <SelectTrigger className="w-20 h-8">
+              <SelectTrigger className={cn(isCompactViewport ? 'h-7 w-[4.5rem]' : 'w-20 h-8')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

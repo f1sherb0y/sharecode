@@ -141,6 +141,12 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+
+  .editor-shell.compact-ui .cm-scroller,
+  .playback-shell.compact-ui .cm-scroller {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
 }
 
 /* Font loading */
