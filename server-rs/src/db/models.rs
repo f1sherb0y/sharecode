@@ -157,28 +157,6 @@ pub struct GuestSessionRow {
 }
 
 #[derive(Debug, FromRow)]
-pub struct GuestSessionWithRoomRow {
-    pub id: String,
-    pub share_link_id: String,
-    pub room_id: String,
-    pub token: String,
-    pub display_name: String,
-    pub email: Option<String>,
-    pub color: String,
-    pub can_edit: bool,
-    pub created_at: DateTime<Utc>,
-    pub last_active: DateTime<Utc>,
-    pub room_name: String,
-    pub room_language: String,
-    pub room_allow_edit: bool,
-    pub room_is_deleted: bool,
-    pub room_is_ended: bool,
-    pub room_ended_at: Option<DateTime<Utc>>,
-    pub share_token: String,
-    pub share_can_edit: bool,
-}
-
-#[derive(Debug, FromRow)]
 pub struct DocumentUpdateRow {
     pub id: String,
     pub document_id: String,

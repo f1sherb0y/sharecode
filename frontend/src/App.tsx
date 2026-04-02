@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, HashRouter, Routes, Route, Navigate, useSearchParams, useParams, useNavigate } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui'
 import {
@@ -10,6 +10,7 @@ import {
   AdminPage,
   PlaybackPage,
   SettingsPage,
+  SharePage,
 } from '@/pages'
 import { useAuthStore, useThemeStore } from '@/stores'
 import {
@@ -17,7 +18,6 @@ import {
   getStealthSettings,
   applyStealthSettings,
 } from '@/lib/tauri'
-import { fetchShareInfo } from '@/api'
 import { Spinner } from '@/components/ui'
 import { Toaster } from 'sonner'
 
@@ -66,11 +66,9 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// RoomRoute allows both authenticated users and guests with share tokens
+// RoomRoute allows authenticated users and guests (actorType !== null)
 function RoomRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isInitialized } = useAuthStore()
-  const [searchParams] = useSearchParams()
-  const shareToken = searchParams.get('share')
+  const { actorType, isLoading, isInitialized } = useAuthStore()
 
   if (!isInitialized || isLoading) {
     return (
@@ -80,34 +78,11 @@ function RoomRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Allow access if user is authenticated OR has a share token
-  if (!user && !shareToken) {
+  if (actorType === null) {
     return <Navigate to="/login" replace />
   }
 
   return <>{children}</>
-}
-
-function ShareRedirect() {
-  const { shareToken } = useParams<{ shareToken: string }>()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    if (!shareToken) return
-    fetchShareInfo(shareToken)
-      .then(({ room }) => {
-        navigate(`/room/${room.id}?share=${shareToken}`, { replace: true })
-      })
-      .catch(() => {
-        navigate('/login', { replace: true })
-      })
-  }, [shareToken, navigate])
-
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Spinner size="lg" />
-    </div>
-  )
 }
 
 function AppRoutes() {
@@ -131,7 +106,7 @@ function AppRoutes() {
         }
       />
       <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/s/:shareToken" element={<ShareRedirect />} />
+      <Route path="/s/:shareToken" element={<SharePage />} />
 
       {/* Protected routes */}
       <Route

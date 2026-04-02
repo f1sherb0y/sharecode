@@ -4,9 +4,7 @@ import type {
   AuthResponse,
   Role,
   ShareLink,
-  ShareLinkInfo,
   ShareGuest,
-  ShareRoomSummary,
   ShareRoomDetails,
   PlaybackData,
   DbStorageSize,
@@ -329,26 +327,10 @@ class ApiClient {
 export const api = new ApiClient()
 
 // Share API (unauthenticated endpoints)
-export async function fetchShareInfo(
-  shareToken: string
-): Promise<{ share: ShareLinkInfo; room: ShareRoomSummary }> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/share/${shareToken}`, {
-    headers: { 'Content-Type': 'application/json' },
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || 'Request failed')
-  }
-
-  return response.json()
-}
-
 export async function joinShare(
   shareToken: string,
   payload: { username: string; email?: string }
-): Promise<{ token: string; guest: ShareGuest; room: ShareRoomDetails }> {
+): Promise<{ token: string; redirectUrl: string | null; guest: ShareGuest; room: ShareRoomDetails }> {
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/share/${shareToken}/join`, {
     method: 'POST',
@@ -364,13 +346,17 @@ export async function joinShare(
   return response.json()
 }
 
-export async function getGuestSession(authToken: string): Promise<{
-  guest: ShareGuest
-  room: ShareRoomDetails
-  share: { id: string; token: string; canEdit: boolean }
-}> {
+export async function getSessionProfile(authToken: string): Promise<
+  | { actorType: 'user'; user: User }
+  | {
+      actorType: 'guest'
+      guest: ShareGuest
+      room: ShareRoomDetails
+      share: { id: string; token: string; canEdit: boolean }
+    }
+> {
   const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/share/session`, {
+  const response = await fetch(`${baseUrl}/api/auth/profile`, {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${authToken}`,

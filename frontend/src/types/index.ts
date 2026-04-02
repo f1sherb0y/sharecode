@@ -90,15 +90,6 @@ export interface ShareLink {
   shareUrl?: string | null
 }
 
-export interface ShareLinkInfo {
-  token: string
-  canEdit: boolean
-  effectiveCanEdit: boolean
-  createdAt: string
-  expiresAt: string
-  shareUrl?: string | null
-}
-
 export interface ShareGuest {
   id: string
   displayName: string
@@ -107,24 +98,14 @@ export interface ShareGuest {
   canEdit: boolean
 }
 
-export interface ShareRoomSummary {
+export interface ShareRoomDetails {
   id: string
   name: string
   language: Language
-  isEnded?: boolean
-  endedAt?: string | null
-}
-
-export interface ShareRoomDetails extends ShareRoomSummary {
   documentId: string
   allowEdit: boolean
-}
-
-export interface ShareSession {
-  shareToken: string
-  authToken: string
-  guest: ShareGuest
-  room: ShareRoomDetails
+  isEnded?: boolean
+  endedAt?: string | null
 }
 
 export interface AuthResponse {

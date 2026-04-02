@@ -87,8 +87,6 @@ pub fn router(state: AppState) -> Router {
             delete(notes::delete_note),
         )
         // Share
-        .route("/api/share/session", get(share::get_guest_session))
-        .route("/api/share/{token}", get(share::get_share_info))
         .route("/api/share/{token}/join", post(share::join_share_link))
         // Code execution
         .route("/api/code/execute", post(code::execute_code))

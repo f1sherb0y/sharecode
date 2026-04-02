@@ -43,13 +43,6 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  Input,
-  Label,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -57,7 +50,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
-import { useAuthStore, useFontStore, useGuestStore, useThemeStore } from '@/stores'
+import { useAuthStore, useFontStore, useThemeStore } from '@/stores'
 import {
   useEditorRoom,
   useMonacoEditor,
@@ -94,7 +87,6 @@ export function EditorPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
   const { token: authToken } = useAuthStore()
-  const { session: guestSession } = useGuestStore()
   const { font, fontSize, increaseFontSize, decreaseFontSize, setFont } = useFontStore()
   const { theme } = useThemeStore()
   const isCompactViewport = useCompactViewport()
@@ -150,15 +142,6 @@ export function EditorPage() {
     canEndRoom,
     roomEnded,
     roomEndedAt,
-    shareInfo,
-    showGuestJoinForm,
-    guestDisplayName,
-    setGuestDisplayName,
-    guestEmail,
-    setGuestEmail,
-    isJoiningAsGuest,
-    guestJoinError,
-    handleGuestJoin,
     handleGuestLeave,
     handleEndRoom,
     handleLanguageChange: updateRoomLanguage,
@@ -178,7 +161,7 @@ export function EditorPage() {
     }
   }, [setRoomEnded, setRoomEndedAt])
 
-  const wsToken = isGuestMode ? (guestSession?.authToken ?? '') : (authToken ?? '')
+  const wsToken = authToken ?? ''
   const wsDocumentId = roomId ?? ''
   const shouldConnectWs = !!wsToken && !!wsDocumentId && !roomEnded && !(effectiveRoom?.isEnded)
 
@@ -210,7 +193,6 @@ export function EditorPage() {
     canEdit,
     currentUser,
     roomEnded,
-    showGuestJoinForm,
     setError: setLocalError
   })
 
@@ -344,62 +326,6 @@ export function EditorPage() {
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <p className="text-destructive">{displayError}</p>
         <Button onClick={handleBack}>{t('common.back')}</Button>
-      </div>
-    )
-  }
-
-  // Guest Join Form
-  if (showGuestJoinForm && shareInfo) {
-    return (
-      <div className="flex items-center justify-center min-h-screen p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>{shareInfo.room.name}</CardTitle>
-              <Badge variant={shareInfo.share.effectiveCanEdit ? 'default' : 'secondary'}>
-                {shareInfo.share.effectiveCanEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}
-              </Badge>
-            </div>
-            <CardDescription>
-              {shareInfo.share.effectiveCanEdit
-                ? t('share.join.descriptionEdit')
-                : t('share.join.descriptionView')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleGuestJoin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="displayName">{t('share.join.nameLabel')}</Label>
-                <Input
-                  id="displayName"
-                  value={guestDisplayName}
-                  onChange={(e) => setGuestDisplayName(e.target.value)}
-                  placeholder={t('share.join.namePlaceholder')}
-                  required
-                  autoFocus
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">{t('share.join.emailLabel')}</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={guestEmail}
-                  onChange={(e) => setGuestEmail(e.target.value)}
-                  placeholder={t('share.join.emailPlaceholder')}
-                />
-                <p className="text-xs text-muted-foreground">{t('share.join.emailHint')}</p>
-              </div>
-
-              {guestJoinError && <p className="text-sm text-destructive">{guestJoinError}</p>}
-
-              <Button type="submit" className="w-full" disabled={isJoiningAsGuest || !guestDisplayName.trim()}>
-                {isJoiningAsGuest ? t('share.join.joining') : t('share.join.joinButton')}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
       </div>
     )
   }
@@ -891,9 +817,9 @@ export function EditorPage() {
                 {isSynced ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
                 <span className="hidden sm:inline">{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
               </div>
-              {isGuestMode && guestSession && (
+              {isGuestMode && currentUser && (
                 <span className="text-muted-foreground truncate max-w-[150px]">
-                  {t('share.editor.connectedAs', { name: guestSession.guest.displayName })}
+                  {t('share.editor.connectedAs', { name: currentUser.username })}
                 </span>
               )}
             </div>

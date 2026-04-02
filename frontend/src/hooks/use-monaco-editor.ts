@@ -18,7 +18,6 @@ interface UseMonacoEditorProps {
   canEdit: boolean
   currentUser: (User | { id: string; username: string; color: string }) | null
   roomEnded: boolean
-  showGuestJoinForm: boolean
   setError: (error: string) => void
 }
 
@@ -29,7 +28,6 @@ export function useMonacoEditor({
   canEdit,
   currentUser,
   roomEnded,
-  showGuestJoinForm,
   setError,
 }: UseMonacoEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -67,7 +65,7 @@ export function useMonacoEditor({
 
   useEffect(() => {
     if (!effectiveRoom || !editorRef.current || !provider || editorInstanceRef.current) return
-    if (effectiveRoom.isEnded || roomEnded || showGuestJoinForm) return
+    if (effectiveRoom.isEnded || roomEnded) return
 
     let cancelled = false
 
@@ -125,7 +123,6 @@ export function useMonacoEditor({
     effectiveRoom?.isEnded,
     provider,
     ytext,
-    showGuestJoinForm,
     roomEnded,
     setError,
     destroyEditor,

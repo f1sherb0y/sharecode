@@ -40,27 +40,19 @@ export function LoginPage() {
     }
   }
 
-  const parseShareLink = (link: string): { documentId: string; token: string } | null => {
+  const parseShareLink = (link: string): { shareToken: string } | null => {
     try {
       const url = new URL(link)
 
-      // Hash-based route format (Tauri): #/room/{documentId}?share={token}
+      // Hash-based route format (Tauri): #/s/{shareToken}
       if (url.hash) {
-        const hashMatch = url.hash.match(/#\/room\/([^?]+)\?share=([^&]+)/)
-        if (hashMatch) {
-          return { documentId: hashMatch[1]!, token: hashMatch[2]! }
-        }
+        const hashMatch = url.hash.match(/#\/s\/([^/?]+)/)
+        if (hashMatch) return { shareToken: hashMatch[1]! }
       }
 
-      // Path-based route format (Web): /room/{documentId}?share={token}
-      const pathMatch = url.pathname.match(/\/room\/([^/?]+)/)
-      if (pathMatch) {
-        const searchParams = new URLSearchParams(url.search)
-        const shareToken = searchParams.get('share')
-        if (shareToken) {
-          return { documentId: pathMatch[1]!, token: shareToken }
-        }
-      }
+      // Path-based route format (Web): /s/{shareToken}
+      const pathMatch = url.pathname.match(/\/s\/([^/?]+)/)
+      if (pathMatch) return { shareToken: pathMatch[1]! }
 
       return null
     } catch {
@@ -82,7 +74,7 @@ export function LoginPage() {
         setJoinLinkError(t('auth.login.joinLink.invalid'))
         return
       }
-      navigate(`/room/${parsed.documentId}?share=${parsed.token}`)
+      navigate(`/s/${parsed.shareToken}`)
     } catch (err) {
       setJoinLinkError(err instanceof Error ? err.message : 'Failed to parse link')
     } finally {

@@ -1,5 +1,5 @@
 use axum::extract::{Path, State};
-use axum::http::{header, StatusCode};
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use chrono::Utc;
@@ -9,10 +9,10 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    auth::{build_guest_claims, verify_token, AuthUser, TokenPayload},
+    auth::{build_guest_claims, AuthUser},
     db::db_error,
     error::ApiError,
-    models::{GuestSessionWithRoomRow, ShareLinkSummaryRow, ShareLinkWithRoomRow},
+    models::{ShareLinkSummaryRow, ShareLinkWithRoomRow},
     permissions::has_global_delete,
     state::AppState,
     utils::colors::random_user_color,
@@ -217,71 +217,6 @@ pub async fn delete_share_link(
     Ok(Json(json!({ "message": "Share link deleted" })))
 }
 
-pub async fn get_share_info(
-    State(state): State<AppState>,
-    Path(token): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let share_link = sqlx::query_as::<_, ShareLinkWithRoomRow>(
-        r#"
-        SELECT
-            l.id,
-            l.token,
-            l."canEdit" as can_edit,
-            l."createdAt" as created_at,
-            l."expiresAt" as expires_at,
-            l."consumedAt" as consumed_at,
-            r.id as room_id,
-            r.name as room_name,
-            r.language as room_language,
-            r."allowEdit" as room_allow_edit,
-            r."isDeleted" as room_is_deleted,
-            r."isEnded" as room_is_ended,
-            r."endedAt" as room_ended_at
-        FROM "RoomShareLink" l
-        JOIN "Room" r ON r.id = l."roomId"
-        WHERE l.token = $1
-        "#,
-    )
-    .bind(&token)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load share info"))?;
-
-    let share_link = match share_link {
-        Some(link) if !link.room_is_deleted => link,
-        _ => return Err(ApiError::not_found("Share link not found")),
-    };
-
-    if share_link_is_consumed(&share_link) {
-        return Err(ApiError::gone("This share link has already been used"));
-    }
-
-    if share_link_is_expired(&share_link) {
-        return Err(ApiError::gone("This share link has expired"));
-    }
-
-    let effective_can_edit =
-        share_link.can_edit && share_link.room_allow_edit && !share_link.room_is_ended;
-
-    Ok(Json(json!({
-        "share": {
-            "token": share_link.token,
-            "canEdit": share_link.can_edit,
-            "effectiveCanEdit": effective_can_edit,
-            "createdAt": to_iso_string(share_link.created_at),
-            "expiresAt": to_iso_string(share_link.expires_at),
-            "shareUrl": build_share_url(&state, &share_link.token),
-        },
-        "room": {
-            "id": share_link.room_id,
-            "name": share_link.room_name,
-            "language": share_link.room_language,
-            "isEnded": share_link.room_is_ended,
-            "endedAt": to_iso_string_opt(share_link.room_ended_at),
-        }
-    })))
-}
-
 pub async fn join_share_link(
     State(state): State<AppState>,
     Path(token): Path<String>,
@@ -431,6 +366,7 @@ pub async fn join_share_link(
         StatusCode::CREATED,
         Json(json!({
             "token": jwt_token,
+            "redirectUrl": build_room_url(&state, &share_link.room_id),
             "guest": {
                 "id": guest_id,
                 "displayName": username,
@@ -449,112 +385,6 @@ pub async fn join_share_link(
             }
         })),
     ))
-}
-
-pub async fn get_guest_session(
-    State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let token = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or_else(|| ApiError::unauthorized("No token provided"))?
-        .to_string();
-
-    let payload = match verify_token(&state.config, &token) {
-        Ok(payload) => payload,
-        Err(_) => return Err(ApiError::unauthorized("Invalid token")),
-    };
-    let guest_payload = match payload {
-        TokenPayload::Guest(payload) => payload,
-        _ => return Err(ApiError::unauthorized("Invalid token")),
-    };
-
-    let guest = sqlx::query_as::<_, GuestSessionWithRoomRow>(
-        r#"
-        SELECT
-            g.id,
-            g."shareLinkId" as share_link_id,
-            g."roomId" as room_id,
-            g.token,
-            g."displayName" as display_name,
-            g.email,
-            g.color,
-            g."canEdit" as can_edit,
-            g."createdAt" as created_at,
-            g."lastActive" as last_active,
-            r.name as room_name,
-            r.language as room_language,
-            r."allowEdit" as room_allow_edit,
-            r."isDeleted" as room_is_deleted,
-            r."isEnded" as room_is_ended,
-            r."endedAt" as room_ended_at,
-            l.token as share_token,
-            l."canEdit" as share_can_edit
-        FROM "GuestSession" g
-        JOIN "Room" r ON r.id = g."roomId"
-        JOIN "RoomShareLink" l ON l.id = g."shareLinkId"
-        WHERE g.id = $1
-        "#,
-    )
-    .bind(&guest_payload.guest_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load guest session"))?;
-
-    let guest = match guest {
-        Some(guest) => guest,
-        None => return Err(ApiError::not_found("Session not found")),
-    };
-
-    if guest.token != guest_payload.session_token {
-        return Err(ApiError::unauthorized("Session token mismatch"));
-    }
-
-    if guest.room_is_deleted {
-        return Err(ApiError::gone("Room no longer available"));
-    }
-
-    let effective_can_edit = guest.can_edit && guest.room_allow_edit && !guest.room_is_ended;
-
-    sqlx::query(
-        r#"
-        UPDATE "GuestSession"
-        SET "lastActive" = $2, "canEdit" = $3
-        WHERE id = $1
-        "#,
-    )
-    .bind(&guest.id)
-    .bind(chrono::Utc::now())
-    .bind(effective_can_edit)
-    .execute(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to update guest session"))?;
-
-    Ok(Json(json!({
-        "guest": {
-            "id": guest.id,
-            "displayName": guest.display_name,
-            "email": guest.email,
-            "color": guest.color,
-            "canEdit": effective_can_edit,
-        },
-        "room": {
-            "id": guest.room_id,
-            "name": guest.room_name,
-            "language": guest.room_language,
-            "documentId": guest.room_id,
-            "allowEdit": guest.room_allow_edit,
-            "isEnded": guest.room_is_ended,
-            "endedAt": to_iso_string_opt(guest.room_ended_at),
-        },
-        "share": {
-            "id": guest.share_link_id,
-            "token": guest.share_token,
-            "canEdit": guest.share_can_edit,
-        }
-    })))
 }
 
 fn format_share_link(state: &AppState, link: &ShareLinkSummaryRow) -> serde_json::Value {
@@ -586,6 +416,21 @@ fn build_share_url(state: &AppState, token: &str) -> Option<String> {
         format!("#/s/{token}")
     } else {
         format!("s/{token}")
+    };
+    Some(format!("{normalized}/{path}"))
+}
+
+fn build_room_url(state: &AppState, room_id: &str) -> Option<String> {
+    let base = state
+        .config
+        .frontend_url
+        .clone()
+        .or_else(|| state.config.app_url.clone())?;
+    let normalized = base.trim_end_matches('/');
+    let path = if state.config.frontend_hash_router {
+        format!("#/room/{room_id}")
+    } else {
+        format!("room/{room_id}")
     };
     Some(format!("{normalized}/{path}"))
 }

@@ -1,1 +1,1 @@
-export { api, getApiBaseUrl, getWebSocketUrl, fetchShareInfo, joinShare, getGuestSession } from './client'
+export { api, getApiBaseUrl, getWebSocketUrl, joinShare, getSessionProfile } from './client'

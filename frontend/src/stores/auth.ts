@@ -1,16 +1,22 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { User } from '@/types'
-import { api } from '@/api'
+import type { User, ShareGuest, ShareRoomDetails } from '@/types'
+import { api, getSessionProfile } from '@/api'
+
+type ActorType = 'user' | 'guest' | null
 
 interface AuthState {
   user: User | null
+  guestProfile: { guest: ShareGuest; room: ShareRoomDetails } | null
+  actorType: ActorType
   token: string | null
   isLoading: boolean
   isInitialized: boolean
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string) => Promise<void>
   logout: () => void
+  setGuestSession: (token: string, guest: ShareGuest, room: ShareRoomDetails) => void
+  clearGuestSession: () => void
   initialize: () => Promise<void>
 }
 
@@ -18,46 +24,64 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
+      guestProfile: null,
+      actorType: null,
       token: null,
       isLoading: false,
       isInitialized: false,
 
-      login: async (username: string, password: string) => {
+      login: async (username, password) => {
         const { user, token } = await api.login(username, password)
         localStorage.setItem('token', token)
-        set({ user, token })
+        set({ user, token, actorType: 'user', guestProfile: null })
       },
 
-      register: async (username: string, password: string, email?: string) => {
+      register: async (username, password, email) => {
         const { user, token } = await api.register(username, password, email)
         localStorage.setItem('token', token)
-        set({ user, token })
+        set({ user, token, actorType: 'user', guestProfile: null })
       },
 
       logout: () => {
         localStorage.removeItem('token')
-        set({ user: null, token: null })
+        set({ user: null, token: null, actorType: null, guestProfile: null })
+      },
+
+      setGuestSession: (token, guest, room) => {
+        localStorage.setItem('token', token)
+        set({ token, guestProfile: { guest, room }, actorType: 'guest', user: null })
+      },
+
+      clearGuestSession: () => {
+        localStorage.removeItem('token')
+        set({ token: null, guestProfile: null, actorType: null })
       },
 
       initialize: async () => {
-        const { token, isInitialized } = get()
+        const { isInitialized } = get()
         if (isInitialized) return
 
         set({ isLoading: true })
 
-        const storedToken = localStorage.getItem('token')
-        if (storedToken && !token) {
-          set({ token: storedToken })
-        }
-
-        const currentToken = storedToken || token
-        if (currentToken) {
+        const storedToken = localStorage.getItem('token') || get().token
+        if (storedToken) {
           try {
-            const { user } = await api.getProfile()
-            set({ user, isLoading: false, isInitialized: true })
+            const data = await getSessionProfile(storedToken)
+            if (data.actorType === 'user') {
+              set({ user: data.user, token: storedToken, actorType: 'user', isLoading: false, isInitialized: true })
+            } else {
+              set({
+                guestProfile: { guest: data.guest, room: data.room },
+                token: storedToken,
+                actorType: 'guest',
+                user: null,
+                isLoading: false,
+                isInitialized: true,
+              })
+            }
           } catch {
             localStorage.removeItem('token')
-            set({ user: null, token: null, isLoading: false, isInitialized: true })
+            set({ user: null, guestProfile: null, token: null, actorType: null, isLoading: false, isInitialized: true })
           }
         } else {
           set({ isLoading: false, isInitialized: true })
