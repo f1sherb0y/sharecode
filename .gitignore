@@ -55,3 +55,4 @@ server-rs/target/
 data/
 
 .claude/
+.codex
