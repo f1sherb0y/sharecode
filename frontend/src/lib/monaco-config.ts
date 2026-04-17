@@ -21,7 +21,7 @@ export const resolveMonacoLanguage = (language?: Language) => {
 
 interface CreateMonacoEditorOptionsProps {
   model: Monaco.editor.ITextModel
-  font: string
+  fontFamily: string
   fontSize: number
   theme: 'light' | 'dark'
   readOnly: boolean
@@ -29,7 +29,7 @@ interface CreateMonacoEditorOptionsProps {
 
 export const createMonacoEditorOptions = ({
   model,
-  font,
+  fontFamily,
   fontSize,
   theme,
   readOnly,
@@ -42,7 +42,7 @@ export const createMonacoEditorOptions = ({
   scrollBeyondLastLine: false,
   quickSuggestions: { other: true, comments: false, strings: false },
   wordBasedSuggestions: 'currentDocument',
-  fontFamily: `${font}, monospace`,
+  fontFamily,
   fontSize,
   tabSize: 4,
   insertSpaces: true,

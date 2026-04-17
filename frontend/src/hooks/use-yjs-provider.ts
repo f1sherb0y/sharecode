@@ -16,21 +16,31 @@ export function useYjsProvider(
   onStatelessMessage?: (message: StatelessMessage) => void
 ) {
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null)
-  const [ydoc] = useState(() => new Y.Doc())
-  const [ytext] = useState(() => ydoc.getText('codemirror'))
-  const [ymeta] = useState(() => ydoc.getMap('meta'))
+  // ydoc/ytext/ymeta are created INSIDE the effect — one fresh Y.Doc per
+  // (documentName, token) pair. Previously we held a single Y.Doc across the
+  // hook's lifetime, which meant navigating /room/A → /room/B reused the doc
+  // that already held room A's CRDT state; room B's server state merged into
+  // it and Monaco/tldraw kept showing room A's content.
+  const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
+  const [ytext, setYtext] = useState<Y.Text | null>(null)
+  const [ymeta, setYmeta] = useState<Y.Map<unknown> | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isSynced, setIsSynced] = useState(false)
-  const providerRef = useRef<HocuspocusProvider | null>(null)
   const onStatelessRef = useRef(onStatelessMessage)
 
-  // Keep the callback ref updated
   useEffect(() => {
     onStatelessRef.current = onStatelessMessage
   }, [onStatelessMessage])
 
   useEffect(() => {
     if (!documentName || !token) return
+
+    const doc = new Y.Doc()
+    const text = doc.getText('codemirror')
+    const meta = doc.getMap('meta')
+    setYdoc(doc)
+    setYtext(text)
+    setYmeta(meta)
 
     const wsBaseUrl = getWebSocketUrl()
     const wsUrl = wsBaseUrl.endsWith('/api/ws')
@@ -40,7 +50,7 @@ export function useYjsProvider(
     const hocuspocusProvider = new HocuspocusProvider({
       url: wsUrl,
       name: documentName,
-      document: ydoc,
+      document: doc,
       token,
       onStatus: ({ status }) => {
         setIsConnected(status === 'connected')
@@ -61,13 +71,19 @@ export function useYjsProvider(
       },
     })
 
-    providerRef.current = hocuspocusProvider
     setProvider(hocuspocusProvider)
 
     return () => {
+      setProvider(null)
+      setYdoc(null)
+      setYtext(null)
+      setYmeta(null)
+      setIsConnected(false)
+      setIsSynced(false)
       hocuspocusProvider.destroy()
+      doc.destroy()
     }
-  }, [documentName, token, ydoc])
+  }, [documentName, token])
 
   return {
     provider,

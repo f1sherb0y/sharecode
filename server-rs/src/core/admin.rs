@@ -60,7 +60,7 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         }
 
         if config.admin_update_password {
-            let hashed = hash(&config.admin_password, 10).map_err(|err| {
+            let hashed = hash(&config.admin_password, 12).map_err(|err| {
                 crate::error::ApiError::internal(format!("Failed to hash admin password: {err}"))
             })?;
             sqlx::query(
@@ -113,7 +113,7 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         return Ok(());
     }
 
-    let hashed_password = hash(&config.admin_password, 10).map_err(|err| {
+    let hashed_password = hash(&config.admin_password, 12).map_err(|err| {
         crate::error::ApiError::internal(format!("Failed to hash admin password: {err}"))
     })?;
 

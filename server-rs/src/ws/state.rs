@@ -4,7 +4,7 @@ use std::time::Instant;
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
 };
@@ -64,6 +64,7 @@ pub(crate) struct DocumentState {
     connections: RwLock<HashMap<ConnectionId, mpsc::UnboundedSender<Message>>>,
     pub(crate) snapshot: Arc<Mutex<SnapshotDebounce>>,
     pub(crate) update_batch: Arc<Mutex<UpdateBatch>>,
+    is_ended: AtomicBool,
 }
 
 impl DocumentState {
@@ -89,12 +90,30 @@ impl DocumentState {
             }
         }
 
+        let room_is_ended = sqlx::query_scalar::<_, bool>(
+            r#"SELECT "isEnded" FROM "Room" WHERE id = $1"#,
+        )
+        .bind(name)
+        .fetch_optional(db)
+        .await
+        .map_err(WsError::Db)?
+        .unwrap_or(false);
+
         Ok(Self {
             awareness: Awareness::new(doc),
             connections: RwLock::new(HashMap::new()),
             snapshot: Arc::new(Mutex::new(SnapshotDebounce::new())),
             update_batch: Arc::new(Mutex::new(UpdateBatch::new())),
+            is_ended: AtomicBool::new(room_is_ended),
         })
+    }
+
+    pub(crate) fn is_ended(&self) -> bool {
+        self.is_ended.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn mark_ended(&self) {
+        self.is_ended.store(true, Ordering::Release);
     }
 
     pub(crate) async fn add_connection(
@@ -193,6 +212,8 @@ pub(crate) enum WsError {
     Apply(#[from] yrs::error::UpdateError),
     #[error("awareness error: {0}")]
     Awareness(#[from] yrs::sync::awareness::Error),
+    #[error("document name too long")]
+    DocumentNameTooLong,
 }
 
 #[derive(sqlx::FromRow)]

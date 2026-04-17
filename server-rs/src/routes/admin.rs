@@ -242,7 +242,7 @@ pub async fn create_user(
         }
     }
 
-    let hashed_password = hash(password, 10)
+    let hashed_password = hash(password, 12)
         .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
 
     let requested_permissions = extract_permission_input(&payload);

@@ -44,6 +44,15 @@ export function useEditorRoom(): EditorRoomState {
   const [room, setRoom] = useState<Room | null>(null)
   const [guestRoom, setGuestRoom] = useState(isGuestMode ? (guestProfile?.room ?? null) : null)
   const [isLoading, setIsLoading] = useState(!isGuestMode)
+
+  // Re-sync guestRoom whenever the guest session changes (joining a new room
+  // swaps guestProfile). Without this, useState's initializer only runs once
+  // and guestRoom stays frozen on the first room the guest ever joined —
+  // EditorPage doesn't remount across /room/A → /room/B since the route
+  // pattern is the same.
+  useEffect(() => {
+    setGuestRoom(isGuestMode ? (guestProfile?.room ?? null) : null)
+  }, [isGuestMode, guestProfile])
   const [error, setError] = useState('')
   const [roomEnded, setRoomEnded] = useState(false)
   const [roomEndedAt, setRoomEndedAt] = useState<string | null>(null)

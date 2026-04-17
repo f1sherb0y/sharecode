@@ -1,0 +1,99 @@
+diff --git a/node_modules/tldraw/.bun-tag-be7d86f511971cc9 b/.bun-tag-be7d86f511971cc9
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist-cjs/lib/shapes/draw/toolStates/Drawing.js b/dist-cjs/lib/shapes/draw/toolStates/Drawing.js
+index 289b7c9322245db4ecb22f3392d89140224e5f60..00c4c0596bbd42184be8e50ffcc935597739efe8 100644
+--- a/dist-cjs/lib/shapes/draw/toolStates/Drawing.js
++++ b/dist-cjs/lib/shapes/draw/toolStates/Drawing.js
+@@ -41,10 +41,13 @@ class Drawing extends import_editor.StateNode {
+   // Cache for current segment's points to avoid repeated b64 decode/encode
+   currentSegmentPoints = [];
+   markId = null;
++  // sharecode patch: mouse-input sample-rate cap (see onPointerMove)
++  lastMoveTime = 0;
+   onEnter(info) {
+     this.markId = null;
+     this.info = info;
+     this.lastRecordedPoint = this.editor.inputs.getCurrentPagePoint().clone();
++    this.lastMoveTime = 0;
+     this.startShape();
+   }
+   onPointerMove() {
+@@ -57,6 +60,18 @@ class Drawing extends import_editor.StateNode {
+         return;
+       }
+     }
++    // sharecode patch: rate-cap mouse-driven samples. Interval (ms) is read
++    // from globalThis.__TLDRAW_DRAW_SAMPLE_INTERVAL_MS so the app can tune it
++    // at runtime; default 200 = 5 Hz. Pen/stylus bypass — they're already
++    // distance-limited below. onPointerUp flushes one final sample so strokes
++    // end exactly at the release point.
++    if (!this.isPenOrStylus) {
++      const g = globalThis.__TLDRAW_DRAW_SAMPLE_INTERVAL_MS;
++      const interval = typeof g === "number" && g >= 0 ? g : 200;
++      const now = performance.now();
++      if (now - this.lastMoveTime < interval) return;
++      this.lastMoveTime = now;
++    }
+     if (this.isPenOrStylus) {
+       const currentPagePoint = inputs.getCurrentPagePoint();
+       if (import_editor.Vec.Dist(currentPagePoint, this.lastRecordedPoint) >= 1 / this.editor.getZoomLevel()) {
+@@ -510,6 +525,10 @@ class Drawing extends import_editor.StateNode {
+     return Math.sqrt(length);
+   }
+   onPointerUp() {
++    // sharecode patch: force one final sample so the stroke ends exactly at
++    // the release position even if the last pointermove was rate-limited.
++    this.lastMoveTime = 0;
++    this.updateDrawingShape();
+     this.complete();
+   }
+   onCancel() {
+diff --git a/dist-esm/lib/shapes/draw/toolStates/Drawing.mjs b/dist-esm/lib/shapes/draw/toolStates/Drawing.mjs
+index 4fdcd8bb0ebc13af31ce1cf6550ec7bc3539b0fc..5990848586abb751bb5b97777fd17bb886c13723 100644
+--- a/dist-esm/lib/shapes/draw/toolStates/Drawing.mjs
++++ b/dist-esm/lib/shapes/draw/toolStates/Drawing.mjs
+@@ -29,10 +29,13 @@ class Drawing extends StateNode {
+   // Cache for current segment's points to avoid repeated b64 decode/encode
+   currentSegmentPoints = [];
+   markId = null;
++  // sharecode patch: mouse-input sample-rate cap (see onPointerMove)
++  lastMoveTime = 0;
+   onEnter(info) {
+     this.markId = null;
+     this.info = info;
+     this.lastRecordedPoint = this.editor.inputs.getCurrentPagePoint().clone();
++    this.lastMoveTime = 0;
+     this.startShape();
+   }
+   onPointerMove() {
+@@ -45,6 +48,18 @@ class Drawing extends StateNode {
+         return;
+       }
+     }
++    // sharecode patch: rate-cap mouse-driven samples. Interval (ms) is read
++    // from globalThis.__TLDRAW_DRAW_SAMPLE_INTERVAL_MS so the app can tune it
++    // at runtime; default 200 = 5 Hz. Pen/stylus bypass — they're already
++    // distance-limited below. onPointerUp flushes one final sample so strokes
++    // end exactly at the release point.
++    if (!this.isPenOrStylus) {
++      const g = globalThis.__TLDRAW_DRAW_SAMPLE_INTERVAL_MS;
++      const interval = typeof g === "number" && g >= 0 ? g : 200;
++      const now = performance.now();
++      if (now - this.lastMoveTime < interval) return;
++      this.lastMoveTime = now;
++    }
+     if (this.isPenOrStylus) {
+       const currentPagePoint = inputs.getCurrentPagePoint();
+       if (Vec.Dist(currentPagePoint, this.lastRecordedPoint) >= 1 / this.editor.getZoomLevel()) {
+@@ -498,6 +513,10 @@ class Drawing extends StateNode {
+     return Math.sqrt(length);
+   }
+   onPointerUp() {
++    // sharecode patch: force one final sample so the stroke ends exactly at
++    // the release position even if the last pointermove was rate-limited.
++    this.lastMoveTime = 0;
++    this.updateDrawingShape();
+     this.complete();
+   }
+   onCancel() {

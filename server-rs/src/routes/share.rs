@@ -91,7 +91,7 @@ pub async fn create_share_link(
         ));
     }
 
-    let token = random_slug(8);
+    let token = random_slug(16);
     let can_edit = payload.can_edit.unwrap_or(false) && room.allow_edit;
 
     let share_link = sqlx::query_as::<_, ShareLinkSummaryRow>(

@@ -71,21 +71,55 @@ pub fn can_manage_room_lifecycle(
     }
 }
 
+// Admin and superuser roles implicitly have all three global-room capabilities,
+// regardless of whether the `canReadAllRooms` / `canWriteAllRooms` /
+// `canDeleteAllRooms` flags are explicitly set on their account. The flags
+// exist to grant the same room-wide access to normal users. This is enforced
+// identically on the REST and WebSocket paths — do not duplicate this logic
+// elsewhere; call these helpers.
+
+pub fn role_has_global_read(
+    role: &str,
+    can_read_all_rooms: bool,
+    can_write_all_rooms: bool,
+    can_delete_all_rooms: bool,
+) -> bool {
+    role == "admin"
+        || role == "superuser"
+        || can_read_all_rooms
+        || can_write_all_rooms
+        || can_delete_all_rooms
+}
+
+pub fn role_has_global_write(
+    role: &str,
+    can_write_all_rooms: bool,
+    can_delete_all_rooms: bool,
+) -> bool {
+    role == "admin" || role == "superuser" || can_write_all_rooms || can_delete_all_rooms
+}
+
+pub fn role_has_global_delete(role: &str, can_delete_all_rooms: bool) -> bool {
+    role == "admin" || role == "superuser" || can_delete_all_rooms
+}
+
 pub fn has_global_read(user: &AuthUser) -> bool {
-    user.role == "admin"
-        || user.role == "superuser"
-        || user.can_read_all_rooms
-        || user.can_write_all_rooms
-        || user.can_delete_all_rooms
+    role_has_global_read(
+        &user.role,
+        user.can_read_all_rooms,
+        user.can_write_all_rooms,
+        user.can_delete_all_rooms,
+    )
 }
 
 pub fn has_global_write(user: &AuthUser) -> bool {
-    user.role == "admin"
-        || user.role == "superuser"
-        || user.can_write_all_rooms
-        || user.can_delete_all_rooms
+    role_has_global_write(
+        &user.role,
+        user.can_write_all_rooms,
+        user.can_delete_all_rooms,
+    )
 }
 
 pub fn has_global_delete(user: &AuthUser) -> bool {
-    user.role == "admin" || user.role == "superuser" || user.can_delete_all_rooms
+    role_has_global_delete(&user.role, user.can_delete_all_rooms)
 }

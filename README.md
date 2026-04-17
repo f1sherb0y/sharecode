@@ -267,7 +267,8 @@ The system combines a role hierarchy with three global room flags:
 | View own accessible rooms | Yes | Yes | Yes |
 | Create rooms | Yes | Yes | Yes |
 | Join allowed rooms | Yes | Yes | Yes |
-| Edit rooms they own or can write | Yes | Yes | Yes |
+| Read any room | No\* | Yes | Yes |
+| Edit any room | No\* | Yes | Yes |
 | View all users in admin panel | No | Yes | Yes |
 | Create normal users | No | Yes | Yes |
 | Create admins or superusers | No | No | Yes |
@@ -281,13 +282,17 @@ The system combines a role hierarchy with three global room flags:
 | Force-delete any room | No | No | Yes |
 | View storage / playback admin pages | No | No | Yes |
 
-Global room flags apply on top of role:
+\* Normal users can get these capabilities via the global flags below.
+
+Global room flags apply on top of role and let you grant room-wide access without promoting a user to admin:
 
 | Global Flag | Effect |
 | --- | --- |
 | `canReadAllRooms` | User can see and open every room, even if not explicitly allowed. |
-| `canWriteAllRooms` | User can edit every room. |
-| `canDeleteAllRooms` | User can end or delete every room. |
+| `canWriteAllRooms` | User can edit every room (implies `canReadAllRooms`). |
+| `canDeleteAllRooms` | User can end or delete every room (implies `canWriteAllRooms` and `canReadAllRooms`). |
+
+**Role ↔ global-flag interaction.** Admin and superuser roles implicitly have all three global-room capabilities (`canReadAllRooms` / `canWriteAllRooms` / `canDeleteAllRooms`), regardless of whether those flags are set on their account. The flags exist to grant the same room-wide access to normal users. This is enforced identically on the REST and WebSocket paths — see `core::permissions::role_has_global_{read,write,delete}`.
 
 Notes:
 

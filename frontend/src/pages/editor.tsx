@@ -214,6 +214,7 @@ export function EditorPage() {
     provider,
     ydoc,
     ytext,
+    isConnected,
     monacoRef,
     editorInstanceRef,
     modelRef,
@@ -291,7 +292,7 @@ export function EditorPage() {
   }, [canEdit])
 
   const handleBlink = useCallback(() => {
-    if (!provider?.awareness || !editorInstanceRef.current || !modelRef.current) return
+    if (!provider?.awareness || !editorInstanceRef.current || !modelRef.current || !ytext) return
 
     const selection = editorInstanceRef.current.getSelection()
     if (!selection) return
@@ -480,7 +481,8 @@ export function EditorPage() {
                 <DropdownMenuItem onClick={() => setFont('JetBrains Mono')}>
                   JetBrains Mono {font === 'JetBrains Mono' && <Check className="h-4 w-4 ml-2" />}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setFont('JuliaMono')}>                  Julia Mono {font === 'Julia Mono' && <Check className="h-4 w-4 ml-2" />}
+                <DropdownMenuItem onClick={() => setFont('JuliaMono')}>
+                  Julia Mono {font === 'JuliaMono' && <Check className="h-4 w-4 ml-2" />}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -778,7 +780,7 @@ export function EditorPage() {
                 language={effectiveRoom.language}
                 getCode={getCode}
                 canEdit={canEdit}
-                ymeta={ymeta}
+                ymeta={ymeta ?? undefined}
                 position="bottom"
                 onPositionChange={(position) => updateEditorParams({ runner: position })}
                 roomId={roomId}
@@ -795,7 +797,7 @@ export function EditorPage() {
               language={effectiveRoom.language}
               getCode={getCode}
               canEdit={canEdit}
-              ymeta={ymeta}
+              ymeta={ymeta ?? undefined}
               position="right"
               onPositionChange={(position) => updateEditorParams({ runner: position })}
               roomId={roomId}

@@ -155,7 +155,14 @@
   }
 }
 
-/* Font loading */
+/* Font loading. Prefer the locally-installed font when available, then fall
+   back to the bundled web font. Without the url() fallbacks, users without
+   the font installed silently fell back to the generic monospace stack. */
+
+/* JetBrains Mono is pulled in via @fontsource/jetbrains-mono in main.tsx,
+   which emits its own @font-face rules. We override here with a local()
+   preference that drops in ahead of the fontsource url() on users who
+   already have the OS font. */
 @font-face {
   font-family: "JetBrains Mono";
   src: local("JetBrains Mono"), local("JetBrainsMono-Regular");
@@ -166,7 +173,8 @@
 
 @font-face {
   font-family: "JuliaMono";
-  src: local("JuliaMono"), local("JuliaMono-Regular");
+  src: local("JuliaMono"), local("JuliaMono-Regular"),
+       url("/fonts/JuliaMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;

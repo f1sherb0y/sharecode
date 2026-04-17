@@ -1,6 +1,9 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import type * as Monaco from 'monaco-editor'
+import type * as Y from 'yjs'
+import type { HocuspocusProvider } from '@hocuspocus/provider'
 import { useThemeStore, useFontStore } from '@/stores'
+import { fontFamilyStack } from '@/stores/font'
 import { generateUserColor } from '@/lib/utils'
 import { MonacoBinding } from '@/lib/monaco-binding'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
@@ -13,8 +16,8 @@ type MonacoModelInstance = Monaco.editor.ITextModel
 
 interface UseMonacoEditorProps {
   effectiveRoom: Room | null
-  ytext: any
-  provider: any
+  ytext: Y.Text | null
+  provider: HocuspocusProvider | null
   canEdit: boolean
   currentUser: (User | { id: string; username: string; color: string }) | null
   roomEnded: boolean
@@ -64,7 +67,7 @@ export function useMonacoEditor({
   }, [provider, currentUser?.id, currentUser?.username, currentUser?.color])
 
   useEffect(() => {
-    if (!effectiveRoom || !editorRef.current || !provider || editorInstanceRef.current) return
+    if (!effectiveRoom || !editorRef.current || !provider || !ytext || editorInstanceRef.current) return
     if (effectiveRoom.isEnded || roomEnded) return
 
     let cancelled = false
@@ -86,7 +89,7 @@ export function useMonacoEditor({
           mountNode,
           createMonacoEditorOptions({
             model,
-            font,
+            fontFamily: fontFamilyStack(font),
             fontSize,
             theme,
             readOnly: !canEdit,
@@ -135,7 +138,7 @@ export function useMonacoEditor({
 
   useEffect(() => {
     editorInstanceRef.current?.updateOptions({
-      fontFamily: `${font}, monospace`,
+      fontFamily: fontFamilyStack(font),
       fontSize,
     })
   }, [font, fontSize])

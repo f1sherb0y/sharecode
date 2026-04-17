@@ -20,6 +20,7 @@ import { ThemeToggle } from '@/components/layout'
 import { NotesView } from '@/components/features/notes-view'
 import { api } from '@/api'
 import { useAuthStore, useThemeStore, useNotesStore, useFontStore } from '@/stores'
+import { fontFamilyStack } from '@/stores/font'
 import { useCompactViewport } from '@/hooks'
 import { cn, formatTime } from '@/lib/utils'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
@@ -298,7 +299,7 @@ export function PlaybackPage() {
         const editor = monaco.editor.create(editorRef.current, {
           ...createMonacoEditorOptions({
             model,
-            font,
+            fontFamily: fontFamilyStack(font),
             fontSize,
             theme,
             readOnly: true,
@@ -347,7 +348,7 @@ export function PlaybackPage() {
 
   useEffect(() => {
     playbackEditorRef.current?.updateOptions({
-      fontFamily: `${font}, monospace`,
+      fontFamily: fontFamilyStack(font),
       fontSize,
     })
   }, [font, fontSize])

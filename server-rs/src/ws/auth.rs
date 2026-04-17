@@ -4,6 +4,7 @@ use uuid::Uuid;
 use crate::{
     auth::{verify_token, TokenPayload},
     db::db_error,
+    permissions::{role_has_global_read, role_has_global_write},
     state::AppState,
 };
 
@@ -80,10 +81,15 @@ async fn authenticate_user(
     }
 
     let is_owner = row.owner_id == row.user_id;
-    let can_read_globally =
-        row.can_read_all_rooms || row.can_write_all_rooms || row.can_delete_all_rooms;
-    let can_write_globally = row.can_write_all_rooms || row.can_delete_all_rooms;
-    let is_privileged = row.role == "admin" || row.role == "superuser" || can_read_globally;
+    let can_read_globally = role_has_global_read(
+        &row.role,
+        row.can_read_all_rooms,
+        row.can_write_all_rooms,
+        row.can_delete_all_rooms,
+    );
+    let can_write_globally =
+        role_has_global_write(&row.role, row.can_write_all_rooms, row.can_delete_all_rooms);
+    let is_privileged = can_read_globally;
 
     if row.is_ended && !is_owner && !is_privileged {
         return Err("Authentication failed: Access denied".to_string());

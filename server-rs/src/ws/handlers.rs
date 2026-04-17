@@ -82,6 +82,8 @@ pub async fn broadcast_room_ended(state: &AppState, room_id: &str, ended_at: Dat
         return;
     };
 
+    doc_state.mark_ended();
+
     let payload = serde_json::json!({
         "type": "room-status",
         "status": "ended",
@@ -143,13 +145,13 @@ async fn handle_binary_message(
             .await?;
         }
         MSG_AWARENESS => {
-            handle_awareness(connection_id, outgoing, session, &document_name, payload).await?;
+            handle_awareness(connection_id, session, &document_name, payload).await?;
         }
         MSG_QUERY_AWARENESS => {
             handle_query_awareness(outgoing, session, &document_name).await?;
         }
         MSG_STATELESS => {
-            handle_stateless(outgoing, session, &document_name, payload, connection_id).await?;
+            handle_stateless(session, &document_name, payload, connection_id).await?;
         }
         MSG_CLOSE => {
             let _ = outgoing.send(Message::Close(None));
@@ -293,7 +295,7 @@ async fn handle_update_message(
     let parsed = Update::decode_v1(&update).map_err(WsError::Decode)?;
     let is_empty = parsed.is_empty();
 
-    if session.read_only {
+    if session.read_only || doc_state.is_ended() {
         return Ok(());
     }
 
@@ -331,7 +333,6 @@ async fn handle_update_message(
 
 async fn handle_awareness(
     connection_id: ConnectionId,
-    outgoing: &mpsc::UnboundedSender<Message>,
     session: &mut SessionState,
     document_name: &str,
     payload: &[u8],
@@ -359,9 +360,6 @@ async fn handle_awareness(
     doc_state
         .broadcast(awareness_message, Some(connection_id))
         .await;
-    let _ = outgoing.send(Message::Binary(
-        encode_message(document_name, MSG_AWARENESS, &payload).into(),
-    ));
     Ok(())
 }
 
@@ -395,7 +393,6 @@ fn send_awareness_snapshot(
 }
 
 async fn handle_stateless(
-    outgoing: &mpsc::UnboundedSender<Message>,
     session: &SessionState,
     document_name: &str,
     payload: &[u8],
@@ -411,9 +408,6 @@ async fn handle_stateless(
 
     let message = encode_message(document_name, MSG_STATELESS, payload);
     doc_state.broadcast(message, Some(connection_id)).await;
-    let _ = outgoing.send(Message::Binary(
-        encode_message(document_name, MSG_STATELESS, payload).into(),
-    ));
     Ok(())
 }
 
@@ -564,30 +558,11 @@ impl DocumentState {
         drop(guard);
 
         tokio::spawn(async move {
+            let debounce = Duration::from_secs(1);
             loop {
-                let should_wait = {
-                    let guard = snapshot.lock().await;
-                    let elapsed = guard.last_update.elapsed();
-                    if elapsed >= Duration::from_secs(1) {
-                        false
-                    } else {
-                        true
-                    }
-                };
-
-                if should_wait {
-                    let sleep_for = {
-                        let guard = snapshot.lock().await;
-                        let elapsed = guard.last_update.elapsed();
-                        if elapsed >= Duration::from_secs(1) {
-                            Duration::from_secs(0)
-                        } else {
-                            Duration::from_secs(1) - elapsed
-                        }
-                    };
-                    if !sleep_for.is_zero() {
-                        tokio::time::sleep(sleep_for).await;
-                    }
+                let elapsed = snapshot.lock().await.last_update.elapsed();
+                if elapsed < debounce {
+                    tokio::time::sleep(debounce - elapsed).await;
                     continue;
                 }
 
@@ -600,9 +575,9 @@ impl DocumentState {
                 }
 
                 let mut guard = snapshot.lock().await;
-                if guard.last_update.elapsed() >= Duration::from_secs(1) {
+                if guard.last_update.elapsed() >= debounce {
                     guard.running = false;
-                    break;
+                    return;
                 }
             }
         });

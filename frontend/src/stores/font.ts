@@ -2,13 +2,20 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export const SELECTABLE_FONTS = ['JetBrains Mono', 'JuliaMono'] as const
-type SelectableFont = (typeof SELECTABLE_FONTS)[number]
+export type SelectableFont = (typeof SELECTABLE_FONTS)[number]
 
 const FONT_FALLBACK_STACK =
   "'Fira Code', 'DejaVu Sans Mono', 'Liberation Mono', 'ui-monospace', 'monospace'"
 
+/** CSS `font-family` value combining the selected font and fallbacks. */
+export function fontFamilyStack(font: SelectableFont): string {
+  return `'${font}', ${FONT_FALLBACK_STACK}`
+}
+
 interface FontState {
-  font: string
+  /** Name of the selected font (not a CSS stack). Use `fontFamilyStack(font)`
+   *  to get the value to hand to Monaco or CSS. */
+  font: SelectableFont
   fontSize: number
   setFont: (font: SelectableFont) => void
   setFontSize: (size: number) => void
@@ -20,14 +27,25 @@ const MIN_FONT_SIZE = 10
 const MAX_FONT_SIZE = 24
 const FONT_SIZE_STEP = 2
 
+function normalizeFont(value: unknown): SelectableFont {
+  if (typeof value === 'string') {
+    // Legacy persisted value was a full CSS stack, e.g.
+    // `'JetBrains Mono', 'Fira Code', ...`. Recover the first known font.
+    for (const candidate of SELECTABLE_FONTS) {
+      if (value.includes(candidate)) return candidate
+    }
+  }
+  return 'JuliaMono'
+}
+
 export const useFontStore = create<FontState>()(
   persist(
     (set, get) => ({
-      font: `'JetBrains Mono', ${FONT_FALLBACK_STACK}`,
+      font: 'JuliaMono',
       fontSize: 14,
 
       setFont: (font: SelectableFont) => {
-        set({ font: `'${font}', ${FONT_FALLBACK_STACK}` })
+        set({ font })
       },
 
       setFontSize: (size: number) => {
@@ -49,6 +67,17 @@ export const useFontStore = create<FontState>()(
     }),
     {
       name: 'font-storage',
+      migrate: (state: unknown) => {
+        const s = (state ?? {}) as Partial<FontState> & { font?: unknown }
+        return {
+          ...s,
+          font: normalizeFont(s.font),
+          fontSize:
+            typeof s.fontSize === 'number'
+              ? Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, s.fontSize))
+              : 14,
+        } as FontState
+      },
     }
   )
 )

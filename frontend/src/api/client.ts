@@ -17,6 +17,7 @@ import type {
   Note,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
+import { useAuthStore } from '@/stores'
 
 function getSettings(): { serverUrl?: string; wsUrl?: string } {
   if (typeof window === 'undefined') return {}
@@ -60,7 +61,7 @@ export function getWebSocketUrl(): string {
 
 class ApiClient {
   private getAuthHeader(): HeadersInit {
-    const token = localStorage.getItem('token')
+    const token = useAuthStore.getState().token
     return token ? { Authorization: `Bearer ${token}` } : {}
   }
 

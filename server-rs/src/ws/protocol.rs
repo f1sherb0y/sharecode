@@ -5,6 +5,8 @@ use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 
 use super::state::WsError;
 
+const MAX_DOCUMENT_NAME_LEN: usize = 256;
+
 pub(crate) const MSG_SYNC: u8 = 0;
 pub(crate) const MSG_AWARENESS: u8 = 1;
 pub(crate) const MSG_AUTH: u8 = 2;
@@ -19,7 +21,11 @@ pub(crate) const AUTH_AUTHENTICATED: u8 = 2;
 
 pub(crate) fn decode_frame(data: &[u8]) -> Result<(String, u8, &[u8]), WsError> {
     let mut cursor = Cursor::new(data);
-    let document_name = cursor.read_string().map_err(WsError::Decode)?.to_string();
+    let document_name = cursor.read_string().map_err(WsError::Decode)?;
+    if document_name.len() > MAX_DOCUMENT_NAME_LEN {
+        return Err(WsError::DocumentNameTooLong);
+    }
+    let document_name = document_name.to_string();
     let message_type: u8 = cursor.read_var().map_err(WsError::Decode)?;
     let payload = &data[cursor.next..];
     Ok((document_name, message_type, payload))
