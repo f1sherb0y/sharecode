@@ -4,10 +4,15 @@ import type { User, ShareGuest, ShareRoomDetails } from '@/types'
 import { api, getSessionProfile } from '@/api'
 
 type ActorType = 'user' | 'guest' | null
+type GuestProfile = {
+  guest: ShareGuest
+  room: ShareRoomDetails
+  shareToken: string
+}
 
 interface AuthState {
   user: User | null
-  guestProfile: { guest: ShareGuest; room: ShareRoomDetails } | null
+  guestProfile: GuestProfile | null
   actorType: ActorType
   token: string | null
   isLoading: boolean
@@ -15,7 +20,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string) => Promise<void>
   logout: () => void
-  setGuestSession: (token: string, guest: ShareGuest, room: ShareRoomDetails) => void
+  setGuestSession: (token: string, guest: ShareGuest, room: ShareRoomDetails, shareToken: string) => void
   clearGuestSession: () => void
   initialize: () => Promise<void>
 }
@@ -32,28 +37,23 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (username, password) => {
         const { user, token } = await api.login(username, password)
-        localStorage.setItem('token', token)
         set({ user, token, actorType: 'user', guestProfile: null })
       },
 
       register: async (username, password, email) => {
         const { user, token } = await api.register(username, password, email)
-        localStorage.setItem('token', token)
         set({ user, token, actorType: 'user', guestProfile: null })
       },
 
       logout: () => {
-        localStorage.removeItem('token')
         set({ user: null, token: null, actorType: null, guestProfile: null })
       },
 
-      setGuestSession: (token, guest, room) => {
-        localStorage.setItem('token', token)
-        set({ token, guestProfile: { guest, room }, actorType: 'guest', user: null })
+      setGuestSession: (token, guest, room, shareToken) => {
+        set({ token, guestProfile: { guest, room, shareToken }, actorType: 'guest', user: null })
       },
 
       clearGuestSession: () => {
-        localStorage.removeItem('token')
         set({ token: null, guestProfile: null, actorType: null })
       },
 
@@ -63,7 +63,14 @@ export const useAuthStore = create<AuthState>()(
 
         set({ isLoading: true })
 
-        const storedToken = localStorage.getItem('token') || get().token
+        // Prefer the persisted zustand token; fall back to the legacy `token`
+        // localStorage key for users upgrading from a pre-persist build.
+        const legacyToken =
+          typeof window !== 'undefined' ? window.localStorage.getItem('token') : null
+        const storedToken = get().token || legacyToken
+        if (legacyToken) {
+          window.localStorage.removeItem('token')
+        }
         if (storedToken) {
           try {
             const data = await getSessionProfile(storedToken)
@@ -71,7 +78,7 @@ export const useAuthStore = create<AuthState>()(
               set({ user: data.user, token: storedToken, actorType: 'user', isLoading: false, isInitialized: true })
             } else {
               set({
-                guestProfile: { guest: data.guest, room: data.room },
+                guestProfile: { guest: data.guest, room: data.room, shareToken: data.share.token },
                 token: storedToken,
                 actorType: 'guest',
                 user: null,
@@ -80,7 +87,6 @@ export const useAuthStore = create<AuthState>()(
               })
             }
           } catch {
-            localStorage.removeItem('token')
             set({ user: null, guestProfile: null, token: null, actorType: null, isLoading: false, isInitialized: true })
           }
         } else {

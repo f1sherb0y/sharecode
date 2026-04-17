@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Tldraw, type Editor } from 'tldraw'
 import type { TLStore } from 'tldraw'
+import type { HocuspocusProvider } from '@hocuspocus/provider'
+import type { TLInstancePresence } from '@tldraw/tlschema'
 import { Spinner } from '@/components/ui'
 import 'tldraw/tldraw.css'
 
@@ -9,7 +11,7 @@ interface CanvasViewProps {
   ready: boolean
   canEdit: boolean
   theme: 'light' | 'dark'
-  provider: any | null
+  provider: HocuspocusProvider | null
   followUserId: string | null
   followClientId: number | null
   followEnabled: boolean
@@ -27,10 +29,14 @@ export function CanvasView({
 }: CanvasViewProps) {
   const editorRef = useRef<Editor | null>(null)
   const [mountVersion, setMountVersion] = useState(0)
+  const lastFollowBoundsRef = useRef<string | null>(null)
 
   const applyFollow = useCallback(() => {
     const editor = editorRef.current
-    if (!editor || !followEnabled || (!followUserId && followClientId == null)) return
+    if (!editor || !followEnabled || (!followUserId && followClientId == null)) {
+      lastFollowBoundsRef.current = null
+      return
+    }
     if (!provider?.awareness) return
 
     const awareness = provider.awareness
@@ -38,9 +44,10 @@ export function CanvasView({
     const localClientId = awareness.clientID
 
     if (followUserId != null) {
-      awareness.getStates().forEach((state: any, clientId: number) => {
+      awareness.getStates().forEach((state, clientId) => {
         if (clientId === localClientId || targetClientId != null) return
-        if (state?.user?.id === followUserId) targetClientId = clientId
+        const user = (state as { user?: { id?: string } }).user
+        if (user?.id === followUserId) targetClientId = clientId
       })
     } else if (followClientId != null) {
       targetClientId = followClientId
@@ -48,14 +55,26 @@ export function CanvasView({
 
     if (targetClientId == null) return
 
-    const targetState = (awareness.getStates() as Map<number, any>).get(targetClientId)
-    const cursor = targetState?.presence?.cursor
-    if (!cursor) return
+    const targetState = awareness.getStates().get(targetClientId) as { presence?: TLInstancePresence } | undefined
+    const presence = targetState?.presence
+    const targetBounds = getPresenceViewportBounds(presence)
+    if (!presence || !targetBounds) return
+    if (presence.currentPageId !== editor.getCurrentPageId()) return
 
-    const point = { x: cursor.x, y: cursor.y }
-    if (!editor.getViewportPageBounds().containsPoint(point)) {
-      editor.centerOnPoint(point, { animation: { duration: 150 } })
+    const signature = serializeBounds(targetBounds)
+    if (signature === lastFollowBoundsRef.current) return
+
+    const currentBounds = editor.getViewportPageBounds()
+    if (boundsAreNearlyEqual(currentBounds, targetBounds)) {
+      lastFollowBoundsRef.current = signature
+      return
     }
+
+    lastFollowBoundsRef.current = signature
+    editor.zoomToBounds(targetBounds, {
+      inset: 0,
+      animation: { duration: 150 },
+    })
   }, [provider, followUserId, followClientId, followEnabled])
 
   const handleMount = useCallback((editor: Editor) => {
@@ -81,12 +100,13 @@ export function CanvasView({
   useEffect(() => {
     if (!editorRef.current) return
     applyFollow()
-    if (!provider?.awareness) return
+    const awareness = provider?.awareness
+    if (!awareness) return
 
-    provider.awareness.on('change', applyFollow)
+    awareness.on('change', applyFollow)
 
     return () => {
-      provider.awareness.off('change', applyFollow)
+      awareness.off('change', applyFollow)
     }
   }, [provider, applyFollow, mountVersion])
 
@@ -102,5 +122,36 @@ export function CanvasView({
     <div className="h-full w-full">
       <Tldraw store={store} onMount={handleMount} />
     </div>
+  )
+}
+
+function getPresenceViewportBounds(presence: TLInstancePresence | undefined) {
+  const camera = presence?.camera
+  const screenBounds = presence?.screenBounds
+  if (!camera || !screenBounds || camera.z <= 0) return null
+
+  return {
+    x: -camera.x,
+    y: -camera.y,
+    w: screenBounds.w / camera.z,
+    h: screenBounds.h / camera.z,
+  }
+}
+
+function serializeBounds(bounds: { x: number; y: number; w: number; h: number }) {
+  return [bounds.x, bounds.y, bounds.w, bounds.h]
+    .map((value) => value.toFixed(2))
+    .join(':')
+}
+
+function boundsAreNearlyEqual(
+  currentBounds: { x: number; y: number; w: number; h: number },
+  nextBounds: { x: number; y: number; w: number; h: number }
+) {
+  return (
+    Math.abs(currentBounds.x - nextBounds.x) < 0.5 &&
+    Math.abs(currentBounds.y - nextBounds.y) < 0.5 &&
+    Math.abs(currentBounds.w - nextBounds.w) < 0.5 &&
+    Math.abs(currentBounds.h - nextBounds.h) < 0.5
   )
 }

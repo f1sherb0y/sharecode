@@ -20,6 +20,8 @@ export function SharePage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { actorType, guestProfile, isInitialized, setGuestSession } = useAuthStore()
+  const isSameGuestShareLink =
+    actorType === 'guest' && !!guestProfile && guestProfile.shareToken === shareToken
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -36,10 +38,10 @@ export function SharePage() {
     }
 
     // Existing valid guest session — go straight to the room
-    if (actorType === 'guest' && guestProfile) {
+    if (isSameGuestShareLink && guestProfile) {
       navigate(`/room/${guestProfile.room.id}`, { replace: true })
     }
-  }, [isInitialized, actorType, guestProfile, navigate])
+  }, [isInitialized, actorType, guestProfile, isSameGuestShareLink, navigate])
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,7 +54,7 @@ export function SharePage() {
         username: name.trim(),
         email: email.trim() || undefined,
       })
-      setGuestSession(result.token, result.guest, result.room)
+      setGuestSession(result.token, result.guest, result.room, shareToken)
       navigate(`/room/${result.room.id}`, { replace: true })
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : t('share.join.joinFailed'))
@@ -70,7 +72,7 @@ export function SharePage() {
   }
 
   // Still rendering while redirect is in-flight
-  if (actorType !== null) {
+  if (actorType === 'user' || isSameGuestShareLink) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Spinner size="lg" />

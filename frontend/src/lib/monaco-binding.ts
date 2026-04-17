@@ -149,6 +149,8 @@ export class MonacoBinding {
   private readonly awareness: Awareness | null
   private readonly styleElements = new Map<number, HTMLStyleElement>()
   private readonly selectionDisposables: Monaco.IDisposable[] = []
+  private rerenderHandle = 0
+  private lastDecorationsSignature = ''
 
   private savedSelections = new Map<EditorInstance, RelativeSelection>()
   private decorations = new Map<EditorInstance, string[]>()
@@ -167,6 +169,11 @@ export class MonacoBinding {
   }
 
   private readonly ytextObserver = (event: Y.YTextEvent) => {
+    if (event.transaction.origin === this) {
+      this.scheduleRerenderDecorations()
+      return
+    }
+
     this.mux(() => {
       let index = 0
       event.delta.forEach((op) => {
@@ -210,11 +217,46 @@ export class MonacoBinding {
       })
     })
 
-    this.rerenderDecorations()
+    this.scheduleRerenderDecorations()
   }
 
   private readonly rerenderDecorations = () => {
-    const activeClients = new Set<number>()
+    // Track every peer currently known to awareness (regardless of whether
+    // their cursor state is resolvable this tick). Pruning against the full
+    // peer set avoids churning style elements when a peer's relative
+    // position temporarily fails to resolve, and still drops styles when a
+    // peer leaves awareness entirely (y-protocols has its own ~30s stale
+    // state timeout, so silent disconnects clear up too).
+    const knownPeers = new Set<number>()
+    if (this.awareness) {
+      this.awareness.getStates().forEach((_state, clientId) => {
+        if (clientId !== this.doc.clientID) knownPeers.add(clientId)
+      })
+    }
+
+    const nextSignature =
+      this.awareness == null
+        ? ''
+        : Array.from(this.awareness.getStates().entries())
+            .filter(([clientId]) => clientId !== this.doc.clientID)
+            .map(([clientId, state]) => {
+              const cursorState = (state as { cursor?: CursorState }).cursor
+              const userState = (state as { user?: { color?: string; colorLight?: string } }).user
+              return [
+                clientId,
+                cursorState?.anchor ? JSON.stringify(cursorState.anchor) : '',
+                cursorState?.head ? JSON.stringify(cursorState.head) : '',
+                userState?.color ?? '',
+                userState?.colorLight ?? '',
+              ].join(':')
+            })
+            .join('|')
+
+    if (nextSignature === this.lastDecorationsSignature) {
+      pruneStyleElements(knownPeers, this.styleElements)
+      return
+    }
+    this.lastDecorationsSignature = nextSignature
 
     this.editors.forEach((editor) => {
       if (!this.awareness || editor.getModel() !== this.monacoModel) {
@@ -240,7 +282,6 @@ export class MonacoBinding {
         const userColor = state.user?.color ?? '#3b82f6'
         const userHighlight = state.user?.colorLight ?? 'rgba(59, 130, 246, 0.2)'
         ensureStyleElement(clientId, userColor, userHighlight, this.styleElements)
-        activeClients.add(clientId)
 
         let startIndex = anchorAbs.index
         let endIndex = headAbs.index
@@ -276,7 +317,15 @@ export class MonacoBinding {
       this.decorations.set(editor, editor.deltaDecorations(currentDecorations, nextDecorations))
     })
 
-    pruneStyleElements(activeClients, this.styleElements)
+    pruneStyleElements(knownPeers, this.styleElements)
+  }
+
+  private readonly scheduleRerenderDecorations = () => {
+    if (this.rerenderHandle) return
+    this.rerenderHandle = requestAnimationFrame(() => {
+      this.rerenderHandle = 0
+      this.rerenderDecorations()
+    })
   }
 
   private readonly monacoChangeHandler: Monaco.IDisposable
@@ -314,7 +363,7 @@ export class MonacoBinding {
               this.ytext.delete(change.rangeOffset, change.rangeLength)
               this.ytext.insert(change.rangeOffset, change.text)
             })
-        })
+        }, this)
       })
     })
 
@@ -351,7 +400,7 @@ export class MonacoBinding {
         )
       })
 
-      this.awareness.on('change', this.rerenderDecorations)
+      this.awareness.on('change', this.scheduleRerenderDecorations)
     }
   }
 
@@ -364,8 +413,13 @@ export class MonacoBinding {
     this.doc.off('beforeAllTransactions', this.beforeTransaction)
 
     if (this.awareness) {
-      this.awareness.off('change', this.rerenderDecorations)
+      this.awareness.off('change', this.scheduleRerenderDecorations)
       this.awareness.setLocalStateField('cursor', null)
+    }
+
+    if (this.rerenderHandle) {
+      cancelAnimationFrame(this.rerenderHandle)
+      this.rerenderHandle = 0
     }
 
     this.styleElements.forEach((style) => style.remove())
