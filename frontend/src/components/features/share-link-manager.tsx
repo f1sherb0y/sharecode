@@ -15,6 +15,7 @@ import {
 } from '@/components/ui'
 import { api } from '@/api'
 import { isTauriApp } from '@/lib/tauri'
+import { copyTextToClipboard } from '@/lib/utils'
 import type { ShareLink } from '@/types'
 
 interface ShareLinkManagerProps {
@@ -81,9 +82,9 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
   }
 
   const copyLink = async (shareLink: ShareLink) => {
-    const shareUrl = resolveShareUrl(shareLink.token, roomId, shareLink.shareUrl)
+    const shareUrl = resolveShareUrl(shareLink.token)
     try {
-      await navigator.clipboard.writeText(shareUrl)
+      await copyTextToClipboard(shareUrl)
       toast.success(t('share.manager.copied'))
     } catch {
       toast.error(t('share.manager.copyFailed'))
@@ -94,9 +95,9 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
     () =>
       links.map((link) => ({
         ...link,
-        shareUrl: resolveShareUrl(link.token, roomId, link.shareUrl),
+        shareUrl: resolveShareUrl(link.token),
       })),
-    [links, roomId]
+    [links]
   )
 
   return (
@@ -191,9 +192,7 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
   )
 }
 
-function resolveShareUrl(token: string, _roomId: string, preferred?: string | null) {
-  if (preferred) return preferred
-
+function resolveShareUrl(token: string) {
   const useHashRoutes = isTauriApp() || (typeof window !== 'undefined' && window.location.hash.startsWith('#/'))
 
   if (typeof window !== 'undefined') {

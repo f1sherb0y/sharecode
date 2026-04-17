@@ -387,7 +387,7 @@ pub async fn join_share_link(
     ))
 }
 
-fn format_share_link(state: &AppState, link: &ShareLinkSummaryRow) -> serde_json::Value {
+fn format_share_link(_state: &AppState, link: &ShareLinkSummaryRow) -> serde_json::Value {
     let is_consumed = link.consumed_at.is_some();
     let is_expired = !is_consumed && link.expires_at <= Utc::now();
 
@@ -401,23 +401,7 @@ fn format_share_link(state: &AppState, link: &ShareLinkSummaryRow) -> serde_json
         "guestCount": link.guest_count,
         "isConsumed": is_consumed,
         "isExpired": is_expired,
-        "shareUrl": build_share_url(state, &link.token),
     })
-}
-
-fn build_share_url(state: &AppState, token: &str) -> Option<String> {
-    let base = state
-        .config
-        .frontend_url
-        .clone()
-        .or_else(|| state.config.app_url.clone())?;
-    let normalized = base.trim_end_matches('/');
-    let path = if state.config.frontend_hash_router {
-        format!("#/s/{token}")
-    } else {
-        format!("s/{token}")
-    };
-    Some(format!("{normalized}/{path}"))
 }
 
 fn build_room_url(state: &AppState, room_id: &str) -> Option<String> {

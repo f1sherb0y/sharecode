@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Plus, X, Loader2, Pencil, Copy, Check, ClipboardCopy } from 'lucide-react'
 import { Button, Textarea, Spinner } from '@/components/ui'
 import { useNotesStore } from '@/stores'
-import { cn, getTimezone } from '@/lib/utils'
+import { cn, copyTextToClipboard, getTimezone } from '@/lib/utils'
 
 function formatNoteTime(iso: string): string {
   const d = new Date(iso)
@@ -116,7 +116,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
 
   const handleCopy = useCallback(async (noteId: string, text: string) => {
     try {
-      await navigator.clipboard.writeText(text)
+      await copyTextToClipboard(text)
       setCopiedId(noteId)
       setTimeout(() => setCopiedId((prev) => (prev === noteId ? null : prev)), 1500)
     } catch {
@@ -129,7 +129,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
     const sorted = [...notes].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     const text = sorted.map((n) => n.text).join('\n')
     try {
-      await navigator.clipboard.writeText(text)
+      await copyTextToClipboard(text)
       setCopiedAll(true)
       setTimeout(() => setCopiedAll(false), 1500)
     } catch {

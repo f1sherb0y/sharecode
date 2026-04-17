@@ -87,7 +87,6 @@ export interface ShareLink {
   guestCount: number
   isConsumed: boolean
   isExpired: boolean
-  shareUrl?: string | null
 }
 
 export interface ShareGuest {

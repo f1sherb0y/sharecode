@@ -355,7 +355,7 @@ export function EditorPage() {
       <div
         ref={shellRef}
         className={cn(
-          'editor-shell flex flex-col h-screen overflow-clip',
+          'editor-shell isolate flex flex-col h-screen overflow-clip',
           isCompactViewport && 'compact-ui'
         )}
         style={{ height: '100dvh' }}
@@ -363,7 +363,7 @@ export function EditorPage() {
         {/* Toolbar */}
         <header
           className={cn(
-            'flex items-center justify-between border-b bg-background shrink-0 overflow-hidden safe-x',
+            'relative z-30 flex items-center justify-between border-b bg-background shrink-0 overflow-hidden safe-x',
             isCompactViewport ? 'h-10 px-1.5 gap-1' : 'h-12 px-2 sm:px-3 gap-2'
           )}
         >
@@ -736,9 +736,9 @@ export function EditorPage() {
 
 
         {/* Main Content */}
-        <div className="flex-1 flex overflow-hidden min-w-0">
+        <div className="relative z-0 flex flex-1 overflow-hidden min-w-0">
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            <div className="relative flex-1 overflow-hidden">
+            <div className="relative z-0 flex-1 overflow-hidden">
               <div className={cn('h-full w-full', activeDoc === 'code' ? '' : 'hidden')}>
                 <div ref={editorRef} className="h-full w-full" />
               </div>
@@ -809,7 +809,7 @@ export function EditorPage() {
         </div>
 
         {!isCompactViewport && (
-          <footer className="safe-bottom safe-x flex items-center justify-between h-7 px-2 sm:px-3 border-t bg-background text-[11px] text-muted-foreground shrink-0 overflow-hidden">
+          <footer className="relative z-30 safe-bottom safe-x flex items-center justify-between h-7 px-2 sm:px-3 border-t bg-background text-[11px] text-muted-foreground shrink-0 overflow-hidden">
             <div className="flex items-center gap-3 min-w-0 overflow-hidden">
               <div className={cn('flex items-center gap-1', isConnected ? 'text-success' : 'text-destructive')}>
                 {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
