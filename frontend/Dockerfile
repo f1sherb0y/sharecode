@@ -6,8 +6,11 @@ FROM oven/bun:1.3.11 AS builder
 WORKDIR /app
 ENV BUN_INSTALL_CACHE_DIR=/root/.bun/install/cache
 
-# Copy package files
+# Copy package files. `patches/` must be present before `bun install` runs,
+# since package.json references it via `patchedDependencies` — bun resolves
+# the patch file at install time, not at the later `COPY . .`.
 COPY package.json bun.lock ./
+COPY patches ./patches
 
 # Install dependencies
 RUN --mount=type=cache,target=/root/.bun/install/cache \
