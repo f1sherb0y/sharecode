@@ -264,6 +264,22 @@
       "title": "时区",
       "description": "设置日期和时间的显示时区"
     },
+    "password": {
+      "title": "修改密码",
+      "description": "输入当前密码并设置一个新的安全密码。",
+      "current": "当前密码",
+      "currentPlaceholder": "输入当前密码",
+      "new": "新密码",
+      "newPlaceholder": "输入新密码",
+      "confirm": "确认新密码",
+      "confirmPlaceholder": "再次输入新密码",
+      "required": "请完整填写密码表单。",
+      "mismatch": "两次输入的新密码不一致。",
+      "update": "更新密码",
+      "updating": "更新中...",
+      "success": "密码已更新。",
+      "failed": "修改密码失败，请重试。"
+    },
     "server": {
       "title": "服务器连接",
       "description": "配置服务器连接设置"
@@ -392,7 +408,9 @@
     "exitFullscreen": "退出全屏",
     "loading": "加载中...",
     "error": "错误",
-    "success": "成功"
+    "success": "成功",
+    "passwordPolicyHint": "密码至少 10 位，且必须包含大写字母、小写字母、数字和特殊字符，不能包含空格，也不能是常见弱密码。",
+    "passwordPolicyError": "密码不符合安全要求。密码至少 10 位，且必须包含大写字母、小写字母、数字和特殊字符，不能包含空格，也不能是常见弱密码。"
   },
   "codeRunner": {
     "title": "代码运行器",

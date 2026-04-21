@@ -14,6 +14,7 @@ use crate::{
     permissions::{can_manage_room_lifecycle, RoomLifecycleAction},
     state::AppState,
     utils::colors::random_user_color,
+    utils::passwords::validate_password,
     utils::time::{to_iso_string, to_iso_string_opt},
 };
 
@@ -207,6 +208,8 @@ pub async fn create_user(
     if username.is_empty() || password.is_empty() {
         return Err(ApiError::bad_request("Username and password are required"));
     }
+
+    validate_password(password).map_err(ApiError::bad_request)?;
 
     if !VALID_ROLES.contains(&requested_role) {
         return Err(ApiError::bad_request("Invalid role"));

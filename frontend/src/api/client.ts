@@ -107,6 +107,16 @@ class ApiClient {
     return this.request<{ allowRegistration: boolean }>('/api/config/registration')
   }
 
+  async changePassword(
+    oldPassword: string,
+    newPassword: string
+  ): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ oldPassword, newPassword }),
+    })
+  }
+
   // Users
   async getAllUsersForRoomCreation(): Promise<{ users: User[] }> {
     return this.request<{ users: User[] }>('/api/users')

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useMutation } from '@tanstack/react-query'
 import { ArrowLeft, Check, X, Keyboard, Sun, Moon } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Button,
   Input,
@@ -13,7 +15,9 @@ import {
   CardTitle,
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
-import { useThemeStore, useSettingsStore } from '@/stores'
+import { api } from '@/api'
+import { useAuthStore, useThemeStore, useSettingsStore } from '@/stores'
+import { validatePasswordPolicy } from '@/lib/password-policy'
 import {
   isTauriApp,
   getStealthSettings,
@@ -51,6 +55,7 @@ const TIMEZONE_OPTIONS = [
 export function SettingsPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const { user, actorType } = useAuthStore()
   const { theme, setTheme } = useThemeStore()
   const { timezone, setTimezone } = useSettingsStore()
 
@@ -59,8 +64,26 @@ export function SettingsPage() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [stealthSettings, setStealthSettings] = useState<StealthSettings>(getStealthSettings())
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
 
   const isTauri = isTauriApp()
+  const canChangePassword = actorType === 'user' && !!user
+  const isNewPasswordValid = validatePasswordPolicy(newPassword)
+
+  const changePasswordMutation = useMutation({
+    mutationFn: ({ oldPassword, nextPassword }: { oldPassword: string; nextPassword: string }) =>
+      api.changePassword(oldPassword, nextPassword),
+    onSuccess: () => {
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordError('')
+      toast.success(t('settings.password.success'))
+    },
+  })
 
   useEffect(() => {
     const saved = localStorage.getItem('sharecode_settings')
@@ -140,6 +163,35 @@ export function SettingsPage() {
       } catch {
         // Ignore
       }
+    }
+  }
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordError('')
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError(t('settings.password.required'))
+      return
+    }
+
+    if (!isNewPasswordValid) {
+      setPasswordError(t('common.passwordPolicyError'))
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('settings.password.mismatch'))
+      return
+    }
+
+    try {
+      await changePasswordMutation.mutateAsync({
+        oldPassword: currentPassword,
+        nextPassword: newPassword,
+      })
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : t('settings.password.failed'))
     }
   }
 
@@ -235,6 +287,68 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {canChangePassword && (
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>{t('settings.password.title')}</CardTitle>
+              <CardDescription>{t('settings.password.description')}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleChangePassword} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="currentPassword">{t('settings.password.current')}</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder={t('settings.password.currentPlaceholder')}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">{t('settings.password.new')}</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={t('settings.password.newPlaceholder')}
+                    autoComplete="new-password"
+                    minLength={10}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">{t('settings.password.confirm')}</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder={t('settings.password.confirmPlaceholder')}
+                    autoComplete="new-password"
+                    minLength={10}
+                    required
+                  />
+                </div>
+                <div className="md:col-span-3 flex flex-col gap-3">
+                  <p className="text-xs text-muted-foreground">{t('common.passwordPolicyHint')}</p>
+                  {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+                  <div>
+                    <Button type="submit" disabled={changePasswordMutation.isPending}>
+                      {changePasswordMutation.isPending
+                        ? t('settings.password.updating')
+                        : t('settings.password.update')}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Server & stealth — Tauri only */}
         {isTauri && (

@@ -264,6 +264,22 @@
       "title": "Timezone",
       "description": "Set the timezone for displaying dates and times"
     },
+    "password": {
+      "title": "Change Password",
+      "description": "Enter your current password and choose a new secure password.",
+      "current": "Current password",
+      "currentPlaceholder": "Enter current password",
+      "new": "New password",
+      "newPlaceholder": "Enter new password",
+      "confirm": "Confirm new password",
+      "confirmPlaceholder": "Re-enter new password",
+      "required": "Please complete the password form.",
+      "mismatch": "The new password confirmation does not match.",
+      "update": "Update password",
+      "updating": "Updating...",
+      "success": "Password updated.",
+      "failed": "Failed to change password. Please try again."
+    },
     "server": {
       "title": "Server Connection",
       "description": "Configure your server connection settings"
@@ -392,7 +408,9 @@
     "exitFullscreen": "Exit fullscreen",
     "loading": "Loading...",
     "error": "Error",
-    "success": "Success"
+    "success": "Success",
+    "passwordPolicyHint": "Password must be at least 10 characters and include uppercase, lowercase, a number, and a special character, with no spaces, and it must not be a common password.",
+    "passwordPolicyError": "Password does not meet the security requirements. It must be at least 10 characters and include uppercase, lowercase, a number, and a special character, with no spaces, and it must not be a common password."
   },
   "codeRunner": {
     "title": "Code Runner",

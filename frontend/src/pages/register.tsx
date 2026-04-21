@@ -6,6 +6,7 @@ import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '
 import { ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { useAuthStore } from '@/stores'
 import { api } from '@/api'
+import { validatePasswordPolicy } from '@/lib/password-policy'
 
 export function RegisterPage() {
   const { t } = useTranslation()
@@ -19,6 +20,7 @@ export function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [registrationAllowed, setRegistrationAllowed] = useState(true)
   const [isCheckingStatus, setIsCheckingStatus] = useState(true)
+  const isPasswordValid = validatePasswordPolicy(password)
 
   useEffect(() => {
     const checkRegistrationStatus = async () => {
@@ -37,6 +39,12 @@ export function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!isPasswordValid) {
+      setError(t('common.passwordPolicyError'))
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -153,8 +161,12 @@ export function RegisterPage() {
                       placeholder={t('auth.register.passwordPlaceholder')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      minLength={10}
                       required
                     />
+                    <p className="text-xs text-muted-foreground">
+                      {t('common.passwordPolicyHint')}
+                    </p>
                   </div>
                   {error && <p className="text-sm text-destructive">{error}</p>}
                   <Button type="submit" className="w-full" disabled={isLoading}>

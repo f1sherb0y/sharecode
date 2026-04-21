@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use bcrypt::hash;
+use bcrypt::{hash, verify};
 use chrono::Utc;
 use serde::Deserialize;
 use serde_json::json;
@@ -17,6 +17,7 @@ use crate::{
     models::{UserPublicRow, UserRow},
     state::AppState,
     utils::colors::random_user_color,
+    utils::passwords::validate_password,
     utils::time::{to_iso_string, to_iso_string_opt},
 };
 
@@ -31,6 +32,13 @@ pub struct RegisterPayload {
 pub struct LoginPayload {
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangePasswordPayload {
+    pub old_password: Option<String>,
+    pub new_password: Option<String>,
 }
 
 pub async fn register(
@@ -48,6 +56,8 @@ pub async fn register(
     if username.is_empty() || password.is_empty() {
         return Err(ApiError::bad_request("Username and password are required"));
     }
+
+    validate_password(&password).map_err(ApiError::bad_request)?;
 
     let existing_user =
         sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE username = $1 LIMIT 1"#)
@@ -192,6 +202,91 @@ pub async fn login(
             "canDeleteAllRooms": user.can_delete_all_rooms,
         },
         "token": token,
+    })))
+}
+
+pub async fn change_password(
+    State(state): State<AppState>,
+    auth_user: crate::auth::AuthUser,
+    Json(payload): Json<ChangePasswordPayload>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let old_password = payload.old_password.unwrap_or_default();
+    let new_password = payload.new_password.unwrap_or_default();
+
+    if old_password.is_empty() || new_password.is_empty() {
+        return Err(ApiError::bad_request(
+            "Current password and new password are required",
+        ));
+    }
+
+    if old_password == new_password {
+        return Err(ApiError::bad_request(
+            "New password must be different from current password",
+        ));
+    }
+
+    validate_password(&new_password).map_err(ApiError::bad_request)?;
+
+    let user = sqlx::query_as::<_, UserRow>(
+        r#"
+        SELECT
+            id,
+            email,
+            username,
+            password,
+            color,
+            role,
+            "canReadAllRooms" as can_read_all_rooms,
+            "canWriteAllRooms" as can_write_all_rooms,
+            "canDeleteAllRooms" as can_delete_all_rooms,
+            "isDeleted" as is_deleted,
+            "createdAt" as created_at,
+            "lastSeen" as last_seen
+        FROM "User"
+        WHERE id = $1
+        "#,
+    )
+    .bind(&auth_user.id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load user"))?;
+
+    let user = match user {
+        Some(user) if !user.is_deleted => user,
+        _ => return Err(ApiError::unauthorized("Invalid token")),
+    };
+
+    let valid_password = verify(&old_password, &user.password)
+        .map_err(|err| ApiError::internal(format!("Failed to verify password: {err}")))?;
+
+    if !valid_password {
+        return Err(ApiError::bad_request("Current password is incorrect"));
+    }
+
+    let hashed_password = hash(&new_password, 12)
+        .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
+
+    sqlx::query(
+        r#"
+        UPDATE "User"
+        SET password = $1
+        WHERE id = $2
+        "#,
+    )
+    .bind(&hashed_password)
+    .bind(&auth_user.id)
+    .execute(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to update password"))?;
+
+    tracing::info!(
+        actor_id = %auth_user.id,
+        username = %auth_user.username,
+        "password changed"
+    );
+
+    Ok(Json(json!({
+        "message": "Password updated"
     })))
 }
 

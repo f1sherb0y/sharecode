@@ -20,6 +20,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/profile", get(auth::get_profile))
+        .route("/api/auth/change-password", post(auth::change_password))
         .route(
             "/api/config/registration",
             get(auth::get_registration_status),

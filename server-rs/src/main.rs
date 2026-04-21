@@ -69,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(err) = admin::initialize_admin(&state).await {
         tracing::error!(error = %err, "Failed to initialize admin user");
+        return Err(err.into());
     }
 
     room_activity::spawn_inactive_room_cleanup(state.clone());

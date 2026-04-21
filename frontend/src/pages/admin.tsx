@@ -30,6 +30,7 @@ import {
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { canDeleteRoom } from '@/lib/room-permissions'
+import { validatePasswordPolicy } from '@/lib/password-policy'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores'
 import { formatDate, formatDateTime } from '@/lib/utils'
@@ -102,6 +103,7 @@ export function AdminPage() {
   const [newEmail, setNewEmail] = useState('')
   const [newRole, setNewRole] = useState<Role>('user')
   const [newPermissions, setNewPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
+  const isNewPasswordValid = validatePasswordPolicy(newPassword)
 
   // Delete states
   const [userToDelete, setUserToDelete] = useState<{ id: string; username: string } | null>(null)
@@ -296,6 +298,11 @@ export function AdminPage() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!isNewPasswordValid) {
+      setError(t('common.passwordPolicyError'))
+      return
+    }
 
     try {
       await createUserMutation.mutateAsync({
@@ -616,8 +623,12 @@ export function AdminPage() {
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           placeholder={t('admin.users.createForm.passwordPlaceholder')}
+                          minLength={10}
                           required
                         />
+                        <p className="text-xs text-muted-foreground">
+                          {t('common.passwordPolicyHint')}
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label>{t('admin.users.createForm.email')}</Label>

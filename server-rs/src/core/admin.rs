@@ -2,7 +2,11 @@ use bcrypt::hash;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::{db::db_error, state::AppState, utils::colors::random_user_color};
+use crate::{
+    db::db_error,
+    state::AppState,
+    utils::{colors::random_user_color, passwords::validate_password},
+};
 
 #[derive(Debug, sqlx::FromRow)]
 struct SuperuserRow {
@@ -21,6 +25,12 @@ struct AdminRow {
 
 pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiError> {
     let config = &state.config;
+
+    validate_password(&config.admin_password).map_err(|err| {
+        crate::error::ApiError::internal(format!(
+            "ADMIN_PASSWORD does not satisfy password policy: {err}"
+        ))
+    })?;
 
     let existing_superuser = sqlx::query_as::<_, SuperuserRow>(
         r#"

@@ -42,7 +42,8 @@ impl Config {
             env::var("PISTON_URL").unwrap_or_else(|_| "http://localhost:2000".to_string());
 
         let admin_username = env::var("ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
-        let admin_password = env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin123".to_string());
+        let admin_password =
+            env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "ChangeMe123!".to_string());
         let admin_email =
             env::var("ADMIN_EMAIL").unwrap_or_else(|_| "admin@sharecode.local".to_string());
         let admin_update_password = env_bool("ADMIN_UPDATE_PASSWORD", false);
