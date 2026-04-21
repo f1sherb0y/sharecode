@@ -40,12 +40,14 @@ pub fn session_color_for_slot(slot: usize) -> SessionColor {
     let saturation = saturations[(slot / 360) % saturations.len()];
     let lightness = lightnesses[(slot / (360 * saturations.len())) % lightnesses.len()];
 
+    let light_lightness = (lightness + 18).min(72);
+    let alpha = 0.50;
+
     SessionColor {
         slot,
         color: format!("hsl({hue}, {saturation}%, {lightness}%)"),
         color_light: format!(
-            "hsla({hue}, {saturation}%, {}, 0.35)",
-            (lightness + 24).min(88)
+            "hsla({hue}, {saturation}%, {light_lightness}%, {alpha})"
         ),
     }
 }

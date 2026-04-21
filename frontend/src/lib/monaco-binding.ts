@@ -92,7 +92,12 @@ const ensureStyleElement = (
   const existing = styleMap.get(clientId)
   const css = `
     .yRemoteSelection-${clientId} {
-      background-color: ${highlight};
+      background-color: ${highlight} !important;
+      outline: 1px solid ${color} !important;
+      outline-offset: -1px !important;
+      position: absolute !important;
+      height: 100% !important;
+      z-index: 5 !important;
     }
     .yRemoteSelectionHead-${clientId} {
       border-left: 2px solid ${color};
@@ -234,30 +239,6 @@ export class MonacoBinding {
       })
     }
 
-    const nextSignature =
-      this.awareness == null
-        ? ''
-        : Array.from(this.awareness.getStates().entries())
-            .filter(([clientId]) => clientId !== this.doc.clientID)
-            .map(([clientId, state]) => {
-              const cursorState = (state as { cursor?: CursorState }).cursor
-              const userState = (state as { user?: { color?: string; colorLight?: string } }).user
-              return [
-                clientId,
-                cursorState?.anchor ? JSON.stringify(cursorState.anchor) : '',
-                cursorState?.head ? JSON.stringify(cursorState.head) : '',
-                userState?.color ?? '',
-                userState?.colorLight ?? '',
-              ].join(':')
-            })
-            .join('|')
-
-    if (nextSignature === this.lastDecorationsSignature) {
-      pruneStyleElements(knownPeers, this.styleElements)
-      return
-    }
-    this.lastDecorationsSignature = nextSignature
-
     this.editors.forEach((editor) => {
       if (!this.awareness || editor.getModel() !== this.monacoModel) {
         this.decorations.delete(editor)
@@ -266,21 +247,37 @@ export class MonacoBinding {
 
       const currentDecorations = this.decorations.get(editor) ?? []
       const nextDecorations: Monaco.editor.IModelDeltaDecoration[] = []
+      // Build a stable signature from resolved absolute indices instead of
+      // JSON.stringify(RelativePosition), which is brittle (item=null at
+      // end-of-doc yields identical JSON for different positions) and fails
+      // to distinguish between a temporarily-unresolved cursor and one that
+      // has actually moved.
+      let nextSignature = ''
 
       this.awareness.getStates().forEach((state: any, clientId: number) => {
         if (clientId === this.doc.clientID) return
 
         const cursorState = state.cursor as CursorState | undefined
-        if (!cursorState?.anchor || !cursorState?.head) return
+        if (!cursorState?.anchor || !cursorState?.head) {
+          // Peer exists but has no cursor yet — include in signature so
+          // we re-render once they do.
+          nextSignature += `${clientId}:nocursor|`
+          return
+        }
 
         const anchorAbs = Y.createAbsolutePositionFromRelativePosition(cursorState.anchor, this.doc)
         const headAbs = Y.createAbsolutePositionFromRelativePosition(cursorState.head, this.doc)
         if (!anchorAbs || !headAbs || anchorAbs.type !== this.ytext || headAbs.type !== this.ytext) {
+          // Document may still be syncing; keep an unresolved marker in
+          // the signature so we try again on the next update.
+          nextSignature += `${clientId}:unresolved|`
           return
         }
 
+        nextSignature += `${clientId}:${anchorAbs.index}:${headAbs.index}|`
+
         const userColor = state.user?.color ?? '#3b82f6'
-        const userHighlight = state.user?.colorLight ?? 'rgba(59, 130, 246, 0.2)'
+        const userHighlight = state.user?.colorLight ?? 'rgba(59, 130, 246, 0.3)'
         ensureStyleElement(clientId, userColor, userHighlight, this.styleElements)
 
         let startIndex = anchorAbs.index
@@ -310,11 +307,16 @@ export class MonacoBinding {
             afterContentClassName,
             beforeContentClassName,
             stickiness: this.monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+            showIfCollapsed: true,
           },
         })
       })
 
-      this.decorations.set(editor, editor.deltaDecorations(currentDecorations, nextDecorations))
+      if (nextSignature !== this.lastDecorationsSignature) {
+        this.lastDecorationsSignature = nextSignature
+        const newIds = editor.deltaDecorations(currentDecorations, nextDecorations)
+        this.decorations.set(editor, newIds)
+      }
     })
 
     pruneStyleElements(knownPeers, this.styleElements)

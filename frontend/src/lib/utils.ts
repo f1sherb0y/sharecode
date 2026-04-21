@@ -25,11 +25,11 @@ export function generateUserColor(identifier: string | number | undefined): {
   const hue = Math.abs(hash) % 360
   const saturation = 78
   const baseLightness = 52
-  const highlightLightness = Math.min(baseLightness + 20, 88)
+  const highlightLightness = Math.min(baseLightness + 18, 72)
 
   return {
     color: `hsl(${hue}, ${saturation}%, ${baseLightness}%)`,
-    colorLight: `hsla(${hue}, ${saturation}%, ${highlightLightness}%, 0.35)`,
+    colorLight: `hsla(${hue}, ${saturation}%, ${highlightLightness}%, 0.50)`,
   }
 }
 
