@@ -17,6 +17,13 @@ struct AutoEndedRoomRow {
 
 pub fn spawn_inactive_room_cleanup(state: AppState) {
     tokio::spawn(async move {
+        tracing::info!(
+            interval_seconds = INACTIVE_ROOM_CLEANUP_INTERVAL.as_secs(),
+            inactivity_timeout_hours = ROOM_INACTIVITY_TIMEOUT_HOURS,
+            "inactive room cleanup task started"
+        );
+
+        tracing::info!(trigger = "startup", "running inactive room cleanup");
         if let Err(err) = auto_end_inactive_rooms(&state).await {
             tracing::error!(error = %err, "failed to auto-end inactive rooms on startup");
         }
@@ -28,10 +35,10 @@ pub fn spawn_inactive_room_cleanup(state: AppState) {
         loop {
             ticker.tick().await;
 
+            tracing::info!(trigger = "interval", "running inactive room cleanup");
             match auto_end_inactive_rooms(&state).await {
-                Ok(0) => {}
                 Ok(count) => {
-                    tracing::info!(ended = count, "auto-ended inactive unpinned rooms")
+                    tracing::info!(trigger = "interval", ended = count, "inactive room cleanup completed")
                 }
                 Err(err) => tracing::error!(error = %err, "failed to auto-end inactive rooms"),
             }
@@ -56,6 +63,13 @@ pub async fn auto_end_inactive_rooms(state: &AppState) -> Result<u64, sqlx::Erro
     .bind(ROOM_INACTIVITY_TIMEOUT_HOURS)
     .fetch_all(&state.db)
     .await?;
+
+    if ended_rooms.is_empty() {
+        tracing::debug!("inactive room cleanup found no rooms to end");
+    } else {
+        let ended_room_ids = ended_rooms.iter().map(|room| room.id.clone()).collect::<Vec<_>>();
+        tracing::info!(ended_room_ids = ?ended_room_ids, ended = ended_rooms.len(), "inactive room cleanup ended rooms");
+    }
 
     for room in &ended_rooms {
         ws::broadcast_room_ended(state, &room.id, room.ended_at).await;

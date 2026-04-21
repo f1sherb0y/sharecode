@@ -160,6 +160,7 @@ pub async fn create_room(
     };
 
     let duration = payload.duration.filter(|value| *value != 0);
+    let participant_count = payload.allowed_users.len() + 1;
 
     let mut tx = state
         .db
@@ -243,6 +244,16 @@ pub async fn create_room(
     tx.commit()
         .await
         .map_err(|err| db_error(err, "Failed to commit room transaction"))?;
+
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        room_id = %room.id,
+        room_name = %room.name,
+        language = %room.language,
+        participant_count = participant_count,
+        "room created"
+    );
 
     Ok((
         StatusCode::CREATED,
@@ -794,6 +805,16 @@ pub async fn delete_room(
         .await
         .map_err(|err| db_error(err, "Failed to delete room"))?;
 
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        room_id = %room_id,
+        owner_id = %room.owner_id,
+        deletion_mode = "soft",
+        route = "rooms.delete_room",
+        "room deleted"
+    );
+
     Ok(Json(json!({ "message": "Room deleted" })))
 }
 
@@ -859,6 +880,17 @@ pub async fn end_room(
     .fetch_one(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to end room"))?;
+
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        room_id = %updated.id,
+        room_name = %updated.name,
+        owner_id = %updated.owner_id,
+        ended_at = ?updated.ended_at,
+        route = "rooms.end_room",
+        "room ended"
+    );
 
     if let Some(ended_at) = updated.ended_at {
         ws::broadcast_room_ended(&state, &room_id, ended_at).await;

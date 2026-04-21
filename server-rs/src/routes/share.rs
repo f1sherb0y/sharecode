@@ -118,6 +118,17 @@ pub async fn create_share_link(
     .await
     .map_err(|err| db_error(err, "Failed to create share link"))?;
 
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        room_id = %room.id,
+        owner_id = %room.owner_id,
+        share_link_id = %share_link.id,
+        can_edit = share_link.can_edit,
+        expires_at = ?share_link.expires_at,
+        "share link created"
+    );
+
     Ok((
         StatusCode::CREATED,
         Json(json!({
@@ -213,6 +224,15 @@ pub async fn delete_share_link(
         .execute(&state.db)
         .await
         .map_err(|err| db_error(err, "Failed to delete share link"))?;
+
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        room_id = %room_id,
+        owner_id = %share_link.owner_id,
+        share_link_id = %share_link_id,
+        "share link deleted"
+    );
 
     Ok(Json(json!({ "message": "Share link deleted" })))
 }
@@ -361,6 +381,16 @@ pub async fn join_share_link(
     tx.commit()
         .await
         .map_err(|err| db_error(err, "Failed to finalize share link join"))?;
+
+    tracing::info!(
+        share_link_id = %share_link.id,
+        room_id = %share_link.room_id,
+        guest_id = %guest_id,
+        guest_name = %username,
+        guest_email = ?normalized_email,
+        can_edit = can_edit,
+        "share link joined"
+    );
 
     Ok((
         StatusCode::CREATED,

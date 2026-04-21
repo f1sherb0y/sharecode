@@ -8,6 +8,13 @@ const EXPIRED_SHARE_LINK_CLEANUP_INTERVAL: Duration = Duration::from_secs(300);
 
 pub fn spawn_expired_share_link_cleanup(db: PgPool) {
     tokio::spawn(async move {
+        tracing::info!(
+            interval_seconds = EXPIRED_SHARE_LINK_CLEANUP_INTERVAL.as_secs(),
+            share_ttl_hours = GUEST_SHARE_TTL_HOURS,
+            "expired share link cleanup task started"
+        );
+
+        tracing::info!(trigger = "startup", "running expired share link cleanup");
         if let Err(err) = cleanup_expired_share_links(&db).await {
             tracing::error!(error = %err, "failed to clean up expired share links on startup");
         }
@@ -19,10 +26,10 @@ pub fn spawn_expired_share_link_cleanup(db: PgPool) {
         loop {
             ticker.tick().await;
 
+            tracing::info!(trigger = "interval", "running expired share link cleanup");
             match cleanup_expired_share_links(&db).await {
-                Ok(0) => {}
                 Ok(count) => {
-                    tracing::info!(deleted = count, "cleaned up expired unused share links")
+                    tracing::info!(trigger = "interval", deleted = count, "expired share link cleanup completed")
                 }
                 Err(err) => tracing::error!(error = %err, "failed to clean up expired share links"),
             }
@@ -41,5 +48,8 @@ pub async fn cleanup_expired_share_links(db: &PgPool) -> Result<u64, sqlx::Error
     .execute(db)
     .await?;
 
-    Ok(result.rows_affected())
+    let deleted = result.rows_affected();
+    tracing::debug!(deleted = deleted, "expired share link cleanup database delete executed");
+
+    Ok(deleted)
 }

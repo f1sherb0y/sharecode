@@ -285,6 +285,18 @@ pub async fn create_user(
     .await
     .map_err(|err| db_error(err, "Failed to create user"))?;
 
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        user_id = %user.id,
+        username = %user.username,
+        role = %user.role,
+        can_read_all_rooms = user.can_read_all_rooms,
+        can_write_all_rooms = user.can_write_all_rooms,
+        can_delete_all_rooms = user.can_delete_all_rooms,
+        "user created"
+    );
+
     Ok((
         StatusCode::CREATED,
         Json(json!({ "user": user_to_json(&user) })),
@@ -527,6 +539,16 @@ pub async fn delete_user(
     .execute(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to delete user"))?;
+
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        user_id = %user.id,
+        username = %user.username,
+        target_role = %user.role,
+        deletion_mode = "soft",
+        "user deleted"
+    );
 
     Ok(Json(json!({ "message": "User deleted successfully" })))
 }
@@ -862,6 +884,16 @@ pub async fn delete_room(
     .execute(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to delete room"))?;
+
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        room_id = %room_id,
+        owner_id = %room.owner_id,
+        deletion_mode = "soft",
+        route = "admin.delete_room",
+        "room deleted"
+    );
 
     Ok(Json(json!({ "message": "Room deleted successfully" })))
 }

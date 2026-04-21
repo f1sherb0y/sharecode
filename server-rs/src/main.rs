@@ -10,6 +10,7 @@ pub use db::models;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
 use axum::http::{Request, Response};
 use sqlx::postgres::PgPoolOptions;
@@ -41,9 +42,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Keep the embedded sqlx migration set in sync with the migrations directory.
-    tracing::info!("Running database migrations");
-    sqlx::migrate!("./migrations").run(&db).await?;
-    tracing::info!("Database migrations complete");
+    let migration_started_at = Instant::now();
+    tracing::info!(source = "./migrations", "starting database migrations");
+    if let Err(err) = sqlx::migrate!("./migrations").run(&db).await {
+        tracing::error!(
+            source = "./migrations",
+            elapsed_ms = migration_started_at.elapsed().as_millis(),
+            error = %err,
+            "database migrations failed"
+        );
+        return Err(err.into());
+    }
+    tracing::info!(
+        source = "./migrations",
+        elapsed_ms = migration_started_at.elapsed().as_millis(),
+        "database migrations complete"
+    );
 
     let ws = Arc::new(ws::WsState::new());
 
