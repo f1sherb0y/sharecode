@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useNavigate, Link } from 'react-router-dom'
-import { LogOut, Settings, Shield, User } from 'lucide-react'
+import { Bell, LogOut, Settings, Shield, User } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +51,12 @@ export function UserMenu() {
             </Link>
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem asChild>
+          <Link to="/notifications" className="cursor-pointer">
+            <Bell className="mr-2 h-4 w-4" />
+            {t('notifications.title')}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/settings" className="cursor-pointer">
             <Settings className="mr-2 h-4 w-4" />

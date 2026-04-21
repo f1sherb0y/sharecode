@@ -173,3 +173,21 @@ pub struct RoomNoteRow {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, FromRow)]
+pub struct NotificationRow {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub severity: String,
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct NotificationReadRow {
+    pub id: String,
+    pub notification_id: String,
+    pub user_id: String,
+    pub read_at: DateTime<Utc>,
+}

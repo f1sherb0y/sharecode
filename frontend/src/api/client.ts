@@ -15,6 +15,7 @@ import type {
   PaginationMeta,
   CodeExecutionResult,
   Note,
+  NotificationItem,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
 import { useAuthStore } from '@/stores'
@@ -114,6 +115,31 @@ class ApiClient {
     return this.request<{ message: string }>('/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ oldPassword, newPassword }),
+    })
+  }
+
+  async getNotifications(): Promise<{ notifications: NotificationItem[] }> {
+    return this.request<{ notifications: NotificationItem[] }>('/api/notifications')
+  }
+
+  async getUnreadNotifications(): Promise<{ notifications: NotificationItem[] }> {
+    return this.request<{ notifications: NotificationItem[] }>('/api/notifications/unread')
+  }
+
+  async markAllNotificationsRead(): Promise<{ markedCount: number }> {
+    return this.request<{ markedCount: number }>('/api/notifications/read-all', {
+      method: 'POST',
+    })
+  }
+
+  async createNotification(payload: {
+    title: string
+    content: string
+    severity: 'normal' | 'emergency'
+  }): Promise<{ notification: NotificationItem }> {
+    return this.request<{ notification: NotificationItem }>('/api/admin/notifications', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     })
   }
 

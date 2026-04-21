@@ -9,6 +9,7 @@ mod auth;
 mod code;
 mod health;
 mod notes;
+mod notifications;
 mod playback;
 mod rooms;
 mod share;
@@ -21,6 +22,15 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/profile", get(auth::get_profile))
         .route("/api/auth/change-password", post(auth::change_password))
+        .route("/api/notifications", get(notifications::list_notifications))
+        .route(
+            "/api/notifications/unread",
+            get(notifications::list_unread_notifications),
+        )
+        .route(
+            "/api/notifications/read-all",
+            post(notifications::mark_all_notifications_read),
+        )
         .route(
             "/api/config/registration",
             get(auth::get_registration_status),
@@ -53,6 +63,10 @@ pub fn router(state: AppState) -> Router {
         // Admin
         .route("/api/admin/users", post(admin::create_user))
         .route("/api/admin/users", get(admin::get_all_users))
+        .route(
+            "/api/admin/notifications",
+            post(notifications::create_notification),
+        )
         .route("/api/admin/users/{id}", patch(admin::update_user))
         .route("/api/admin/users/{id}", delete(admin::delete_user))
         .route("/api/admin/rooms", get(admin::get_all_rooms))

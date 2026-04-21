@@ -1,4 +1,5 @@
 export type Role = 'user' | 'admin' | 'superuser'
+export type NotificationSeverity = 'normal' | 'emergency'
 
 export type Language =
   | 'javascript'
@@ -178,4 +179,18 @@ export interface Note {
   text: string
   createdAt: string
   updatedAt: string
+}
+
+export interface NotificationItem {
+  id: string
+  title: string
+  content: string
+  severity: NotificationSeverity
+  createdAt: string
+  isRead: boolean
+  readAt?: string | null
+  createdBy: {
+    id: string
+    username: string
+  }
 }

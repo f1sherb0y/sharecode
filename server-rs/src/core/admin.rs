@@ -26,12 +26,6 @@ struct AdminRow {
 pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiError> {
     let config = &state.config;
 
-    validate_password(&config.admin_password).map_err(|err| {
-        crate::error::ApiError::internal(format!(
-            "ADMIN_PASSWORD does not satisfy password policy: {err}"
-        ))
-    })?;
-
     let existing_superuser = sqlx::query_as::<_, SuperuserRow>(
         r#"
         SELECT id, username, "canReadAllRooms" as can_read_all_rooms,
@@ -70,6 +64,11 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         }
 
         if config.admin_update_password {
+            validate_password(&config.admin_password).map_err(|err| {
+                crate::error::ApiError::internal(format!(
+                    "ADMIN_PASSWORD does not satisfy password policy: {err}"
+                ))
+            })?;
             let hashed = hash(&config.admin_password, 12).map_err(|err| {
                 crate::error::ApiError::internal(format!("Failed to hash admin password: {err}"))
             })?;
@@ -122,6 +121,12 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
         info!("Promoted existing user to superuser: {}", user.username);
         return Ok(());
     }
+
+    validate_password(&config.admin_password).map_err(|err| {
+        crate::error::ApiError::internal(format!(
+            "ADMIN_PASSWORD does not satisfy password policy: {err}"
+        ))
+    })?;
 
     let hashed_password = hash(&config.admin_password, 12).map_err(|err| {
         crate::error::ApiError::internal(format!("Failed to hash admin password: {err}"))

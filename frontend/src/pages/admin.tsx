@@ -24,7 +24,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   Checkbox,
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
@@ -83,6 +82,164 @@ function getInitialPermissionsForRole(role: Role): PermissionState {
   return { canReadAllRooms: false, canWriteAllRooms: false, canDeleteAllRooms: false }
 }
 
+function CreateUserDialog({
+  open,
+  onOpenChange,
+  isSuperuser,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  isSuperuser: boolean
+}) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<Role>('user')
+  const [permissions, setPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
+  const [error, setError] = useState('')
+  const isPasswordValid = validatePasswordPolicy(password)
+
+  const createUserMutation = useMutation({
+    mutationFn: (payload: {
+      username: string
+      password: string
+      email?: string
+      role?: Role
+      canReadAllRooms?: boolean
+      canWriteAllRooms?: boolean
+      canDeleteAllRooms?: boolean
+    }) => api.createUser(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
+      onOpenChange(false)
+    },
+  })
+
+  useEffect(() => {
+    if (open) return
+    setUsername('')
+    setPassword('')
+    setEmail('')
+    setRole('user')
+    setPermissions(getInitialPermissionsForRole('user'))
+    setError('')
+  }, [open])
+
+  const roleLabel = (r: Role) => {
+    switch (r) {
+      case 'superuser':
+        return t('common.superuser')
+      case 'admin':
+        return t('common.admin')
+      default:
+        return t('admin.users.createForm.roleUser')
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!isPasswordValid) {
+      setError(t('common.passwordPolicyError'))
+      return
+    }
+
+    try {
+      await createUserMutation.mutateAsync({
+        username,
+        password,
+        email: email || undefined,
+        role,
+        ...permissions,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create user')
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{t('admin.users.createForm.title')}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label>{t('admin.users.createForm.username')}</Label>
+              <Input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder={t('admin.users.createForm.usernamePlaceholder')}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('admin.users.createForm.password')}</Label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t('admin.users.createForm.passwordPlaceholder')}
+                minLength={10}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('common.passwordPolicyHint')}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('admin.users.createForm.email')}</Label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t('admin.users.createForm.emailPlaceholder')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('admin.users.createForm.role')}</Label>
+              <Select
+                value={role}
+                onValueChange={(v) => {
+                  const nextRole = v as Role
+                  setRole(nextRole)
+                  setPermissions(getInitialPermissionsForRole(nextRole))
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(isSuperuser ? ROLES : (['user'] as Role[])).map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {roleLabel(r)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t('admin.users.cancelButton')}
+            </Button>
+            <Button type="submit" disabled={createUserMutation.isPending}>
+              {createUserMutation.isPending
+                ? t('admin.users.createForm.creating')
+                : t('admin.users.createForm.createButton')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function AdminPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -96,22 +253,16 @@ export function AdminPage() {
   const [error, setError] = useState('')
   const [storageNotice, setStorageNotice] = useState('')
 
-  // Create user form
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [newUsername, setNewUsername] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newRole, setNewRole] = useState<Role>('user')
-  const [newPermissions, setNewPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
-  const isNewPasswordValid = validatePasswordPolicy(newPassword)
 
   // Delete states
   const [userToDelete, setUserToDelete] = useState<{ id: string; username: string } | null>(null)
   const [roomToDelete, setRoomToDelete] = useState<{ id: string; name: string } | null>(null)
   const [roomToCompress, setRoomToCompress] = useState<RoomPlaybackSize | null>(null)
 
-  // Edit tracking
-  const [editedUsers, setEditedUsers] = useState<Map<string, { role: Role } & PermissionState>>(new Map())
+  // Pending edits: per-user diff of fields the admin has touched but not yet saved.
+  // Source of truth for current values is the query cache; this map holds only user intent.
+  const [pendingEdits, setPendingEdits] = useState<Map<string, Partial<{ role: Role } & PermissionState>>>(new Map())
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [compressingRoomId, setCompressingRoomId] = useState<string | null>(null)
 
@@ -154,39 +305,29 @@ export function AdminPage() {
     enabled: !!user && user.role === 'superuser',
   })
 
-  const createUserMutation = useMutation({
-    mutationFn: (payload: {
-      username: string
-      password: string
-      email?: string
-      role?: Role
-      canReadAllRooms?: boolean
-      canWriteAllRooms?: boolean
-      canDeleteAllRooms?: boolean
-    }) => api.createUser(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
-      setIsCreateOpen(false)
-      setNewUsername('')
-      setNewPassword('')
-      setNewEmail('')
-      setNewRole('user')
-      setNewPermissions(getInitialPermissionsForRole('user'))
-    },
-  })
+  const clearPendingEditFor = useCallback((userId: string) => {
+    setPendingEdits((prev) => {
+      if (!prev.has(userId)) return prev
+      const next = new Map(prev)
+      next.delete(userId)
+      return next
+    })
+  }, [])
 
   const updateUserMutation = useMutation({
     mutationFn: ({ userId, payload }: { userId: string; payload: Partial<{ role: Role } & PermissionState> }) =>
       api.updateUser(userId, payload),
-    onSuccess: async () => {
+    onSuccess: async (_data, { userId }) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
+      clearPendingEditFor(userId)
     },
   })
 
   const deleteUserMutation = useMutation({
     mutationFn: (userId: string) => api.deleteUser(userId),
-    onSuccess: async () => {
+    onSuccess: async (_data, userId) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
+      clearPendingEditFor(userId)
       setUserToDelete(null)
     },
   })
@@ -206,10 +347,10 @@ export function AdminPage() {
     mutationFn: (roomId: string) => api.compressRoomPlayback(roomId),
   })
 
-  const users = usersQuery.data ?? []
-  const rooms = roomsQuery.data ?? []
+  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
+  const rooms = useMemo(() => roomsQuery.data ?? [], [roomsQuery.data])
   const dbSize = dbSizeQuery.data ?? null
-  const playbackSizes = playbackSizesQuery.data ?? []
+  const playbackSizes = useMemo(() => playbackSizesQuery.data ?? [], [playbackSizesQuery.data])
   const isLoadingUsers = usersQuery.isLoading
   const isLoadingRooms = roomsQuery.isLoading
   const isLoadingStorage = isSuperuser ? dbSizeQuery.isLoading : false
@@ -258,24 +399,6 @@ export function AdminPage() {
   }, [canAccessAdmin, navigate])
 
   useEffect(() => {
-    if (users.length === 0) {
-      setEditedUsers(new Map())
-      return
-    }
-
-    const editMap = new Map<string, { role: Role } & PermissionState>()
-    users.forEach((u) => {
-      editMap.set(u.id, {
-        role: u.role,
-        canReadAllRooms: u.canReadAllRooms,
-        canWriteAllRooms: u.canWriteAllRooms,
-        canDeleteAllRooms: u.canDeleteAllRooms,
-      })
-    })
-    setEditedUsers(editMap)
-  }, [users])
-
-  useEffect(() => {
     const queryError =
       usersQuery.error ?? roomsQuery.error ?? dbSizeQuery.error ?? playbackSizesQuery.error
     if (queryError instanceof Error) {
@@ -295,38 +418,19 @@ export function AdminPage() {
     await Promise.all(tasks)
   }
 
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (!isNewPasswordValid) {
-      setError(t('common.passwordPolicyError'))
-      return
-    }
-
-    try {
-      await createUserMutation.mutateAsync({
-        username: newUsername,
-        password: newPassword,
-        email: newEmail || undefined,
-        role: newRole,
-        ...newPermissions,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create user')
-    }
-  }
-
   const handleUpdateUser = async (userId: string) => {
-    const edits = editedUsers.get(userId)
+    const edits = pendingEdits.get(userId)
     const original = users.find((u) => u.id === userId)
     if (!edits || !original) return
 
     const payload: Partial<{ role: Role } & PermissionState> = {}
-    if (edits.role !== original.role) payload.role = edits.role
-    if (edits.canReadAllRooms !== original.canReadAllRooms) payload.canReadAllRooms = edits.canReadAllRooms
-    if (edits.canWriteAllRooms !== original.canWriteAllRooms) payload.canWriteAllRooms = edits.canWriteAllRooms
-    if (edits.canDeleteAllRooms !== original.canDeleteAllRooms) payload.canDeleteAllRooms = edits.canDeleteAllRooms
+    if (edits.role !== undefined && edits.role !== original.role) payload.role = edits.role
+    if (edits.canReadAllRooms !== undefined && edits.canReadAllRooms !== original.canReadAllRooms)
+      payload.canReadAllRooms = edits.canReadAllRooms
+    if (edits.canWriteAllRooms !== undefined && edits.canWriteAllRooms !== original.canWriteAllRooms)
+      payload.canWriteAllRooms = edits.canWriteAllRooms
+    if (edits.canDeleteAllRooms !== undefined && edits.canDeleteAllRooms !== original.canDeleteAllRooms)
+      payload.canDeleteAllRooms = edits.canDeleteAllRooms
 
     if (Object.keys(payload).length === 0) return
 
@@ -397,26 +501,23 @@ export function AdminPage() {
   }
 
   const updateEditedUser = (userId: string, updates: Partial<{ role: Role } & PermissionState>) => {
-    setEditedUsers((prev) => {
-      const newMap = new Map(prev)
-      const current = newMap.get(userId)
-      if (current) {
-        newMap.set(userId, { ...current, ...updates })
-      }
-      return newMap
+    setPendingEdits((prev) => {
+      const next = new Map(prev)
+      next.set(userId, { ...next.get(userId), ...updates })
+      return next
     })
   }
 
   const hasChanges = (userId: string): boolean => {
-    const edits = editedUsers.get(userId)
+    const edits = pendingEdits.get(userId)
     const original = users.find((u) => u.id === userId)
     if (!edits || !original) return false
 
     return (
-      edits.role !== original.role ||
-      edits.canReadAllRooms !== original.canReadAllRooms ||
-      edits.canWriteAllRooms !== original.canWriteAllRooms ||
-      edits.canDeleteAllRooms !== original.canDeleteAllRooms
+      (edits.role !== undefined && edits.role !== original.role) ||
+      (edits.canReadAllRooms !== undefined && edits.canReadAllRooms !== original.canReadAllRooms) ||
+      (edits.canWriteAllRooms !== undefined && edits.canWriteAllRooms !== original.canWriteAllRooms) ||
+      (edits.canDeleteAllRooms !== undefined && edits.canDeleteAllRooms !== original.canDeleteAllRooms)
     )
   }
 
@@ -594,84 +695,15 @@ export function AdminPage() {
           <CardHeader className="py-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">{t('admin.users.title')}</CardTitle>
-              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-1" />
-                    {t('admin.users.createButton')}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <form onSubmit={handleCreateUser}>
-                    <DialogHeader>
-                      <DialogTitle>{t('admin.users.createForm.title')}</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <div className="space-y-2">
-                        <Label>{t('admin.users.createForm.username')}</Label>
-                        <Input
-                          value={newUsername}
-                          onChange={(e) => setNewUsername(e.target.value)}
-                          placeholder={t('admin.users.createForm.usernamePlaceholder')}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t('admin.users.createForm.password')}</Label>
-                        <Input
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder={t('admin.users.createForm.passwordPlaceholder')}
-                          minLength={10}
-                          required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {t('common.passwordPolicyHint')}
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t('admin.users.createForm.email')}</Label>
-                        <Input
-                          type="email"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          placeholder={t('admin.users.createForm.emailPlaceholder')}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t('admin.users.createForm.role')}</Label>
-                        <Select
-                          value={newRole}
-                          onValueChange={(v) => {
-                            setNewRole(v as Role)
-                            setNewPermissions(getInitialPermissionsForRole(v as Role))
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(isSuperuser ? ROLES : (['user'] as Role[])).map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {roleDisplay(role)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
-                        {t('admin.users.cancelButton')}
-                      </Button>
-                      <Button type="submit" disabled={createUserMutation.isPending}>
-                        {createUserMutation.isPending ? t('admin.users.createForm.creating') : t('admin.users.createForm.createButton')}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
+              <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                {t('admin.users.createButton')}
+              </Button>
+              <CreateUserDialog
+                open={isCreateOpen}
+                onOpenChange={setIsCreateOpen}
+                isSuperuser={isSuperuser}
+              />
             </div>
           </CardHeader>
           <CardContent className="pt-0 px-2 sm:px-6">
@@ -696,7 +728,7 @@ export function AdminPage() {
                   </thead>
                   <tbody>
                     {filteredUsers.map((u) => {
-                      const edits = editedUsers.get(u.id)
+                      const edits = pendingEdits.get(u.id)
                       const canDelete = isSuperuser
                         ? u.id !== user?.id && u.role !== 'superuser'
                         : u.role === 'user'

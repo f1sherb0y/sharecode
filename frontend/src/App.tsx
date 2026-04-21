@@ -11,6 +11,7 @@ import {
   PlaybackPage,
   SettingsPage,
   SharePage,
+  NotificationsPage,
 } from '@/pages'
 import { useAuthStore, useThemeStore } from '@/stores'
 import {
@@ -21,9 +22,12 @@ import {
 import { queryClient } from '@/lib/query-client'
 import { Spinner } from '@/components/ui'
 import { Toaster } from 'sonner'
+import { NotificationPopup } from '@/components/features/notification-popup'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isInitialized } = useAuthStore()
+  const user = useAuthStore((state) => state.user)
+  const isLoading = useAuthStore((state) => state.isLoading)
+  const isInitialized = useAuthStore((state) => state.isInitialized)
 
   if (!isInitialized || isLoading) {
     return (
@@ -41,7 +45,9 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isInitialized } = useAuthStore()
+  const user = useAuthStore((state) => state.user)
+  const isLoading = useAuthStore((state) => state.isLoading)
+  const isInitialized = useAuthStore((state) => state.isInitialized)
 
   if (!isInitialized || isLoading) {
     return (
@@ -60,7 +66,9 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 // RoomRoute allows authenticated users and guests (actorType !== null)
 function RoomRoute({ children }: { children: React.ReactNode }) {
-  const { actorType, isLoading, isInitialized } = useAuthStore()
+  const actorType = useAuthStore((state) => state.actorType)
+  const isLoading = useAuthStore((state) => state.isLoading)
+  const isInitialized = useAuthStore((state) => state.isInitialized)
 
   if (!isInitialized || isLoading) {
     return (
@@ -126,6 +134,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/notifications"
+        element={
+          <PrivateRoute>
+            <NotificationsPage />
+          </PrivateRoute>
+        }
+      />
+      <Route
         path="/playback/:roomId"
         element={
           <PrivateRoute>
@@ -144,8 +160,8 @@ function AppRoutes() {
 }
 
 function AppContent() {
-  const { initialize } = useAuthStore()
-  const { theme } = useThemeStore()
+  const initialize = useAuthStore((state) => state.initialize)
+  const theme = useThemeStore((state) => state.theme)
 
   useEffect(() => {
     initialize()
@@ -177,6 +193,7 @@ function AppContent() {
     <Router>
       <TooltipProvider>
         <AppRoutes />
+        <NotificationPopup />
         <Toaster />
       </TooltipProvider>
     </Router>

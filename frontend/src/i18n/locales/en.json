@@ -393,6 +393,47 @@
       "following": "Following"
     }
   },
+  "notifications": {
+    "title": "Notifications",
+    "severity": {
+      "normal": "Normal",
+      "emergency": "Emergency"
+    },
+    "status": {
+      "read": "Read",
+      "unread": "Unread"
+    },
+    "popup": {
+      "title": "You have {{count}} unread notification(s)",
+      "description": "Unread notifications will continue to pop up when you enter the site until they are read.",
+      "more": "{{count}} more unread notification(s) in the notification center.",
+      "later": "Later",
+      "openCenter": "Open center",
+      "markAllRead": "Mark all read",
+      "marking": "Marking..."
+    },
+    "history": {
+      "title": "Notification History",
+      "description": "All past notifications are listed here. Opening this page marks current unread notifications as read.",
+      "empty": "No notifications yet."
+    },
+    "publish": {
+      "title": "Publish Notification",
+      "description": "Superusers can publish site-wide notifications here.",
+      "required": "Title and content are required.",
+      "submit": "Publish",
+      "submitting": "Publishing...",
+      "success": "Notification published.",
+      "failed": "Failed to publish notification.",
+      "fields": {
+        "title": "Title",
+        "titlePlaceholder": "Enter notification title",
+        "content": "Content",
+        "contentPlaceholder": "Enter notification content",
+        "severity": "Severity"
+      }
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
