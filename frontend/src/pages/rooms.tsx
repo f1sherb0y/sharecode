@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Users, Clock, Trash2, Play, Calendar, Share2, Pencil, Pin, PinOff } from 'lucide-react'
 import {
   Button,
@@ -28,7 +29,8 @@ import {
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
-import { canDeleteRoom } from '@/lib/room-permissions'
+import { canDeleteRoom, canManageRoomShares } from '@/lib/room-permissions'
+import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import { cn, formatDateMinutes } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
@@ -93,13 +95,11 @@ function getNextHalfHourBoundaryLocal(): string {
 export function RoomsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuthStore()
   const { timezone } = useSettingsStore()
 
-  const [rooms, setRooms] = useState<Room[]>([])
-  const [pagination, setPagination] = useState<PaginationMeta>(EMPTY_PAGINATION)
-  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [pinUpdatingRoomId, setPinUpdatingRoomId] = useState<string | null>(null)
   const page = useMemo(() => {
@@ -127,7 +127,6 @@ export function RoomsPage() {
   const [newRoomPosition, setNewRoomPosition] = useState('')
   const [scheduledTime, setScheduledTime] = useState(getNextHalfHourBoundaryLocal())
   const [duration, setDuration] = useState('60')
-  const [isCreating, setIsCreating] = useState(false)
 
   // Delete dialog state
   const [roomToDelete, setRoomToDelete] = useState<{ id: string; name: string } | null>(null)
@@ -138,15 +137,9 @@ export function RoomsPage() {
   // Rename dialog state
   const [roomToRename, setRoomToRename] = useState<{ id: string; name: string } | null>(null)
   const [renameRoomName, setRenameRoomName] = useState('')
-  const [isRenaming, setIsRenaming] = useState(false)
 
   // User selection for room access
-  const [allUsers, setAllUsers] = useState<User[]>([])
   const [selectedUsers, setSelectedUsers] = useState<Array<{ userId: string; canEdit: boolean }>>([])
-
-  useEffect(() => {
-    loadUsers()
-  }, [])
 
   useEffect(() => {
     const normalized = new URLSearchParams(searchParams)
@@ -174,9 +167,99 @@ export function RoomsPage() {
     }
   }, [searchParams, page, pageSize, ownerFilter, activenessFilter, setSearchParams])
 
+  const roomListParams = useMemo(
+    () => ({
+      page,
+      pageSize,
+      ownerId: ownerFilter === 'all' ? undefined : ownerFilter,
+      activeness: activenessFilter,
+    }),
+    [page, pageSize, ownerFilter, activenessFilter]
+  )
+
+  const roomsQuery = useQuery({
+    queryKey: queryKeys.rooms(roomListParams),
+    queryFn: () => api.getRooms(roomListParams),
+    enabled: !!user,
+  })
+
+  const roomCreationUsersQuery = useQuery({
+    queryKey: queryKeys.roomCreationUsers,
+    queryFn: async () => {
+      const { users } = await api.getAllUsersForRoomCreation()
+      return users
+    },
+    enabled: !!user,
+  })
+
+  const createRoomMutation = useMutation({
+    mutationFn: async () =>
+      api.createRoom(
+        newRoomName,
+        newRoomLanguage,
+        scheduledTime || undefined,
+        duration ? parseInt(duration, 10) : undefined,
+        selectedUsers.length > 0 ? selectedUsers : undefined,
+        newRoomCompany || undefined,
+        newRoomPosition || undefined,
+        timezone
+      ),
+    onSuccess: async ({ room }) => {
+      await queryClient.invalidateQueries({ queryKey: ['rooms'] })
+      setIsCreateOpen(false)
+      resetForm()
+      navigate(`/room/${room.id}`)
+    },
+  })
+
+  const deleteRoomMutation = useMutation({
+    mutationFn: async (roomId: string) => api.deleteRoom(roomId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['rooms'] })
+      setRoomToDelete(null)
+    },
+  })
+
+  const renameRoomMutation = useMutation({
+    mutationFn: async ({ roomId, name }: { roomId: string; name: string }) =>
+      api.updateRoom(roomId, { name }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['rooms'] })
+      setRoomToRename(null)
+      setRenameRoomName('')
+    },
+  })
+
+  const pinRoomMutation = useMutation({
+    mutationFn: async ({ roomId, isPinned }: { roomId: string; isPinned: boolean }) =>
+      api.setRoomPin(roomId, isPinned),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['rooms'] })
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables) {
+        setPinUpdatingRoomId((current) => (current === variables.roomId ? null : current))
+      }
+    },
+  })
+
+  const rooms = roomsQuery.data?.rooms ?? []
+  const pagination = roomsQuery.data?.pagination ?? EMPTY_PAGINATION
+  const isLoading = roomsQuery.isLoading
+  const allUsers = roomCreationUsersQuery.data ?? []
+
   useEffect(() => {
-    loadRooms()
-  }, [page, pageSize, ownerFilter, activenessFilter])
+    const queryError = roomsQuery.error ?? roomCreationUsersQuery.error
+    if (queryError instanceof Error) {
+      setError(queryError.message)
+    }
+  }, [roomsQuery.error, roomCreationUsersQuery.error])
+
+  useEffect(() => {
+    if (pagination.totalPages > 0 && rooms.length === 0 && page > pagination.totalPages) {
+      updateListParams({ page: pagination.totalPages })
+    }
+  }, [pagination.totalPages, rooms.length, page])
 
   const updateListParams = (updates: {
     page?: number
@@ -199,59 +282,14 @@ export function RoomsPage() {
     })
   }
 
-  const loadRooms = async () => {
-    try {
-      setIsLoading(true)
-      const { rooms, pagination } = await api.getRooms({
-        page,
-        pageSize,
-        ownerId: ownerFilter === 'all' ? undefined : ownerFilter,
-        activeness: activenessFilter,
-      })
-      setRooms(rooms)
-      setPagination(pagination ?? EMPTY_PAGINATION)
-
-      if (pagination && rooms.length === 0 && pagination.totalPages > 0 && page > pagination.totalPages) {
-        updateListParams({ page: pagination.totalPages })
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load rooms')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadUsers = async () => {
-    try {
-      const { users } = await api.getAllUsersForRoomCreation()
-      setAllUsers(users)
-    } catch {
-      // Non-critical error
-    }
-  }
-
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsCreating(true)
 
     try {
-      const { room } = await api.createRoom(
-        newRoomName,
-        newRoomLanguage,
-        scheduledTime || undefined,
-        duration ? parseInt(duration, 10) : undefined,
-        selectedUsers.length > 0 ? selectedUsers : undefined,
-        newRoomCompany || undefined,
-        newRoomPosition || undefined,
-        timezone
-      )
-      setIsCreateOpen(false)
-      resetForm()
-      navigate(`/room/${room.id}`)
+      setError('')
+      await createRoomMutation.mutateAsync()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create room')
-    } finally {
-      setIsCreating(false)
     }
   }
 
@@ -282,9 +320,8 @@ export function RoomsPage() {
     if (!roomToDelete) return
 
     try {
-      await api.deleteRoom(roomToDelete.id)
-      setRoomToDelete(null)
-      loadRooms()
+      setError('')
+      await deleteRoomMutation.mutateAsync(roomToDelete.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete room')
     }
@@ -296,15 +333,10 @@ export function RoomsPage() {
     if (!trimmedName) return
 
     try {
-      setIsRenaming(true)
-      await api.updateRoom(roomToRename.id, { name: trimmedName })
-      setRoomToRename(null)
-      setRenameRoomName('')
-      loadRooms()
+      setError('')
+      await renameRoomMutation.mutateAsync({ roomId: roomToRename.id, name: trimmedName })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to rename room')
-    } finally {
-      setIsRenaming(false)
     }
   }
 
@@ -343,12 +375,10 @@ export function RoomsPage() {
 
     try {
       setPinUpdatingRoomId(room.id)
-      await api.setRoomPin(room.id, !room.isPinned)
-      await loadRooms()
+      setError('')
+      await pinRoomMutation.mutateAsync({ roomId: room.id, isPinned: !room.isPinned })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update room pin status')
-    } finally {
-      setPinUpdatingRoomId(null)
     }
   }
 
@@ -489,8 +519,8 @@ export function RoomsPage() {
                   <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
                     {t('rooms.cancel')}
                   </Button>
-                  <Button type="submit" disabled={isCreating}>
-                    {isCreating ? t('rooms.create.creating') : t('rooms.create.button')}
+                  <Button type="submit" disabled={createRoomMutation.isPending}>
+                    {createRoomMutation.isPending ? t('rooms.create.creating') : t('rooms.create.button')}
                   </Button>
                 </DialogFooter>
               </form>
@@ -511,7 +541,7 @@ export function RoomsPage() {
             <Button variant="outline" onClick={() => setRoomToDelete(null)}>
               {t('rooms.cancel')}
             </Button>
-            <Button variant="destructive" onClick={confirmDeleteRoom}>
+            <Button variant="destructive" onClick={confirmDeleteRoom} disabled={deleteRoomMutation.isPending}>
               {t('rooms.delete')}
             </Button>
           </DialogFooter>
@@ -548,8 +578,8 @@ export function RoomsPage() {
             <Button variant="outline" onClick={() => setRoomToRename(null)}>
               {t('rooms.cancel')}
             </Button>
-            <Button onClick={confirmRenameRoom} disabled={isRenaming || !renameRoomName.trim()}>
-              {isRenaming ? t('rooms.list.renaming') : t('rooms.list.rename')}
+            <Button onClick={confirmRenameRoom} disabled={renameRoomMutation.isPending || !renameRoomName.trim()}>
+              {renameRoomMutation.isPending ? t('rooms.list.renaming') : t('rooms.list.rename')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -744,7 +774,7 @@ function RoomCard({
   const isOwner = room.ownerId === currentUser?.id
   const isPrivileged = currentUser?.role === 'admin' || currentUser?.role === 'superuser' ||
     currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
-  const canShareRoom = isOwner || currentUser?.role === 'superuser' || currentUser?.canDeleteAllRooms
+  const canShareRoom = canManageRoomShares(currentUser, room.ownerId)
   const canDeleteCurrentRoom = canDeleteRoom(currentUser, room.ownerId)
   const canRenameRoom = isOwner || currentUser?.role === 'superuser'
   const canPinRoom = currentUser?.role === 'admin' || currentUser?.role === 'superuser'

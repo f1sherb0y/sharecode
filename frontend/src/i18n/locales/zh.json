@@ -309,6 +309,7 @@
     "manager": {
       "title": "访客分享链接",
       "description": "生成一次性访客邀请链接。每个链接仅能使用一次，未使用的链接会在 6 小时后过期。",
+      "activeOnlyHint": "这里只显示当前仍可使用的链接。链接一旦被访客使用，就会从列表中消失。",
       "createView": "创建仅查看链接",
       "createEdit": "创建可编辑链接",
       "loading": "加载分享链接中...",
@@ -326,6 +327,8 @@
       "statusActive": "可用",
       "statusUsed": "已使用",
       "statusExpired": "已过期",
+      "singleUse": "一次性",
+      "singleUseHint": "第一个打开此链接的访客会占用它，之后再次访问会被拒绝。",
       "expiresAt": "过期时间：{{time}}",
       "usedAt": "使用时间：{{time}}",
       "guests": "活跃访客：{{count}}",

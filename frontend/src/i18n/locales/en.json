@@ -309,6 +309,7 @@
     "manager": {
       "title": "Guest Share Links",
       "description": "Generate single-use invite links that let one guest join this room without an account. Unused links expire after 6 hours.",
+      "activeOnlyHint": "Only active, unused links are shown here. Once a guest joins, the link disappears from this list.",
       "createView": "Create view-only link",
       "createEdit": "Create edit link",
       "loading": "Loading share links...",
@@ -326,6 +327,8 @@
       "statusActive": "Active",
       "statusUsed": "Used",
       "statusExpired": "Expired",
+      "singleUse": "Single use",
+      "singleUseHint": "The first guest who opens this link claims it. Later attempts will be rejected.",
       "expiresAt": "Expires at: {{time}}",
       "usedAt": "Used at: {{time}}",
       "guests": "Active guests: {{count}}",

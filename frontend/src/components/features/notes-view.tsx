@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Loader2, Pencil, Copy, Check, ClipboardCopy } from 'lucide-react'
 import { Button, Textarea, Spinner } from '@/components/ui'
-import { useNotesStore } from '@/stores'
+import { api } from '@/api'
+import { queryKeys } from '@/lib/query-keys'
 import { cn, copyTextToClipboard, getTimezone } from '@/lib/utils'
 
 function formatNoteTime(iso: string): string {
@@ -28,36 +30,70 @@ interface NotesViewProps {
 
 export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
   const { t } = useTranslation()
-  const { notes, isLoading, fetchNotes, addNote, updateNote, removeNote } = useNotesStore()
+  const queryClient = useQueryClient()
   const [newText, setNewText] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
   const editRef = useRef<HTMLTextAreaElement>(null)
   const newRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    fetchNotes(roomId)
-  }, [roomId, fetchNotes])
+  const { data: notes = [], isLoading } = useQuery({
+    queryKey: queryKeys.notes(roomId),
+    queryFn: async () => {
+      const { notes } = await api.getNotes(roomId)
+      return notes
+    },
+    enabled: !!roomId,
+  })
+
+  const addNoteMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const { note } = await api.createNote(roomId, text)
+      return note
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.notes(roomId) })
+    },
+  })
+
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ noteId, text }: { noteId: string; text: string }) => {
+      const { note } = await api.updateNote(roomId, noteId, text)
+      return note
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.notes(roomId) })
+    },
+  })
+
+  const removeNoteMutation = useMutation({
+    mutationFn: async (noteId: string) => {
+      await api.deleteNote(roomId, noteId)
+      return noteId
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.notes(roomId) })
+    },
+  })
+
+  const isSaving =
+    addNoteMutation.isPending || updateNoteMutation.isPending || removeNoteMutation.isPending
 
   const handleAdd = useCallback(async () => {
     if (!newText.trim() || isSaving) return
-    setIsSaving(true)
     try {
-      await addNote(roomId, newText)
+      await addNoteMutation.mutateAsync(newText.trim())
       setNewText('')
       requestAnimationFrame(() => {
         listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
       })
     } catch {
       // keep text so user can retry
-    } finally {
-      setIsSaving(false)
     }
-  }, [roomId, newText, addNote, isSaving])
+  }, [newText, addNoteMutation, isSaving])
 
   const handleNewKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Cmd/Ctrl+Enter to submit, plain Enter for newlines
@@ -75,18 +111,15 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
 
   const commitEdit = useCallback(async () => {
     if (editingId && editText.trim()) {
-      setIsSaving(true)
       try {
-        await updateNote(roomId, editingId, editText)
+        await updateNoteMutation.mutateAsync({ noteId: editingId, text: editText.trim() })
       } catch {
         // ignore
-      } finally {
-        setIsSaving(false)
       }
     }
     setEditingId(null)
     setEditText('')
-  }, [roomId, editingId, editText, updateNote])
+  }, [editingId, editText, updateNoteMutation])
 
   const cancelEdit = useCallback(() => {
     setEditingId(null)
@@ -104,15 +137,12 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
 
   const handleRemove = useCallback(async (noteId: string) => {
     if (isSaving) return
-    setIsSaving(true)
     try {
-      await removeNote(roomId, noteId)
+      await removeNoteMutation.mutateAsync(noteId)
     } catch {
       // ignore
-    } finally {
-      setIsSaving(false)
     }
-  }, [roomId, removeNote, isSaving])
+  }, [removeNoteMutation, isSaving])
 
   const handleCopy = useCallback(async (noteId: string, text: string) => {
     try {

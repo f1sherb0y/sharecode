@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, StickyNote, PanelRightClose } from 'lucide-react'
 import type * as Monaco from 'monaco-editor'
 import pako from 'pako'
@@ -18,7 +19,8 @@ import {
 import { ThemeToggle } from '@/components/layout'
 import { NotesView } from '@/components/features/notes-view'
 import { api } from '@/api'
-import { useAuthStore, useThemeStore, useNotesStore, useFontStore } from '@/stores'
+import { useAuthStore, useThemeStore, useFontStore } from '@/stores'
+import { queryKeys } from '@/lib/query-keys'
 import { fontFamilyStack } from '@/stores/font'
 import { useCompactViewport } from '@/hooks'
 import { cn, formatTime } from '@/lib/utils'
@@ -93,7 +95,15 @@ export function PlaybackPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [showNotes, setShowNotes] = useState(false)
-  const { notes } = useNotesStore()
+  const { data: notes = [] } = useQuery({
+    queryKey: queryKeys.notes(roomId ?? ''),
+    queryFn: async () => {
+      if (!roomId) return []
+      const { notes } = await api.getNotes(roomId)
+      return notes
+    },
+    enabled: !!roomId,
+  })
 
   const editorRef = useRef<HTMLDivElement>(null)
   const monacoRef = useRef<typeof Monaco | null>(null)

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { 
@@ -14,6 +15,7 @@ import {
   DialogTitle, 
 } from '@/components/ui'
 import { api } from '@/api'
+import { queryKeys } from '@/lib/query-keys'
 import { isTauriApp } from '@/lib/tauri'
 import { copyTextToClipboard } from '@/lib/utils'
 import type { ShareLink } from '@/types'
@@ -24,41 +26,62 @@ interface ShareLinkManagerProps {
 
 export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
   const { t } = useTranslation()
-  const [links, setLinks] = useState<ShareLink[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isCreating, setIsCreating] = useState(false)
+  const queryClient = useQueryClient()
   const [error, setError] = useState('')
   const [linkToDelete, setLinkToDelete] = useState<ShareLink | null>(null)
 
-  const loadLinks = useCallback(async () => {
-    try {
-      setIsLoading(true)
+  const { data: links = [], isLoading } = useQuery({
+    queryKey: queryKeys.shareLinks(roomId),
+    queryFn: async () => {
       const { shareLinks } = await api.listShareLinks(roomId)
-      setLinks(shareLinks)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('share.manager.loadFailed'))
-    } finally {
-      setIsLoading(false)
-    }
-  }, [roomId, t])
+      return shareLinks
+    },
+    enabled: !!roomId,
+  })
 
   useEffect(() => {
-    loadLinks()
-  }, [loadLinks])
+    setError('')
+  }, [roomId])
 
-  const createLink = async (canEdit: boolean) => {
-    try {
-      setIsCreating(true)
-      setError('')
+  const createLinkMutation = useMutation({
+    mutationFn: async (canEdit: boolean) => {
       const { shareLink } = await api.createShareLink(roomId, canEdit)
-      setLinks((prev) => [shareLink, ...prev])
+      return shareLink
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.shareLinks(roomId) })
       toast.success(t('share.manager.created'))
-    } catch (err) {
+    },
+    onError: (err) => {
       const msg = err instanceof Error ? err.message : t('share.manager.createFailed')
       setError(msg)
       toast.error(msg)
-    } finally {
-      setIsCreating(false)
+    },
+  })
+
+  const deleteLinkMutation = useMutation({
+    mutationFn: async (shareLinkId: string) => {
+      await api.deleteShareLink(roomId, shareLinkId)
+      return shareLinkId
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.shareLinks(roomId) })
+      setLinkToDelete(null)
+      toast.success(t('share.manager.deleted'))
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : t('share.manager.deleteFailed')
+      setError(msg)
+      toast.error(msg)
+    },
+  })
+
+  const createLink = async (canEdit: boolean) => {
+    try {
+      setError('')
+      await createLinkMutation.mutateAsync(canEdit)
+    } catch (err) {
+      // handled by mutation callbacks
     }
   }
 
@@ -70,14 +93,9 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
     if (!linkToDelete) return
 
     try {
-      await api.deleteShareLink(roomId, linkToDelete.id)
-      setLinks((prev) => prev.filter((link) => link.id !== linkToDelete.id))
-      setLinkToDelete(null)
-      toast.success(t('share.manager.deleted'))
+      await deleteLinkMutation.mutateAsync(linkToDelete.id)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('share.manager.deleteFailed')
-      setError(msg)
-      toast.error(msg)
+      // handled by mutation callbacks
     }
   }
 
@@ -105,13 +123,14 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
       <p className="text-sm text-muted-foreground mb-4">{t('share.manager.description')}</p>
 
       <div className="flex gap-2 mb-4">
-        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => createLink(false)} disabled={isCreating}>
+        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => createLink(false)} disabled={createLinkMutation.isPending}>
           {t('share.manager.createView')}
         </Button>
-        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => createLink(true)} disabled={isCreating}>
+        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => createLink(true)} disabled={createLinkMutation.isPending}>
           {t('share.manager.createEdit')}
         </Button>
       </div>
+      <p className="text-xs text-muted-foreground mb-4">{t('share.manager.activeOnlyHint')}</p>
 
       {error && <p className="text-xs text-destructive mb-2">{error}</p>}
 
@@ -131,14 +150,15 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
                     {link.canEdit ? t('share.manager.editLabel') : t('share.manager.viewLabel')}
                   </Badge>
                   <Badge
-                    variant={link.isConsumed ? 'secondary' : link.isExpired ? 'destructive' : 'success'}
+                    variant={link.isExpired ? 'destructive' : 'success'}
                     className="text-xs px-1.5 py-0"
                   >
-                    {link.isConsumed
-                      ? t('share.manager.statusUsed')
-                      : link.isExpired
-                        ? t('share.manager.statusExpired')
-                        : t('share.manager.statusActive')}
+                    {link.isExpired
+                      ? t('share.manager.statusExpired')
+                      : t('share.manager.statusActive')}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs px-1.5 py-0">
+                    {t('share.manager.singleUse')}
                   </Badge>
                 </div>
                 <div className="flex gap-1">
@@ -147,7 +167,7 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() => copyLink(link)}
-                    disabled={link.isConsumed || link.isExpired}
+                    disabled={link.isExpired}
                   >
                     <Copy className="h-3 w-3" />
                   </Button>
@@ -157,13 +177,9 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground break-all font-mono">{link.shareUrl}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t('share.manager.singleUseHint')}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {link.isConsumed
-                  ? t('share.manager.usedAt', { time: formatLocalDateTime(link.consumedAt) })
-                  : t('share.manager.expiresAt', { time: formatLocalDateTime(link.expiresAt) })}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t('share.manager.guests', { count: link.guestCount })}
+                {t('share.manager.expiresAt', { time: formatLocalDateTime(link.expiresAt) })}
               </p>
             </div>
           ))}
@@ -182,7 +198,7 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
             <Button variant="outline" onClick={() => setLinkToDelete(null)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="destructive" onClick={confirmDeleteLink}>
+            <Button variant="destructive" onClick={confirmDeleteLink} disabled={deleteLinkMutation.isPending}>
               {t('common.delete')}
             </Button>
           </DialogFooter>

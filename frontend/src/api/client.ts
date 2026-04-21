@@ -173,18 +173,6 @@ class ApiClient {
     })
   }
 
-  async joinRoom(roomId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/api/rooms/${roomId}/join`, {
-      method: 'POST',
-    })
-  }
-
-  async leaveRoom(roomId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/api/rooms/${roomId}/leave`, {
-      method: 'POST',
-    })
-  }
-
   async endRoom(roomId: string): Promise<{ room: Room }> {
     return this.request<{ room: Room }>(`/api/rooms/${roomId}/end`, {
       method: 'POST',

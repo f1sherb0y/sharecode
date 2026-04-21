@@ -72,3 +72,21 @@ export function canEndRoom(
 ): boolean {
   return canPerformRoomLifecycleAction(user, roomOwnerId, 'end')
 }
+
+export function hasGlobalDeletePermission(
+  user: Pick<User, 'role' | 'canDeleteAllRooms'> | null | undefined
+): boolean {
+  if (!user) return false
+  return user.role === 'admin' || user.role === 'superuser' || user.canDeleteAllRooms
+}
+
+export function canManageRoomShares(
+  user: Pick<User, 'id' | 'role' | 'canDeleteAllRooms'> | null | undefined,
+  roomOwnerId: string | null | undefined
+): boolean {
+  if (!user || !roomOwnerId) {
+    return false
+  }
+
+  return user.id === roomOwnerId || user.role === 'superuser' || hasGlobalDeletePermission(user)
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import {
   Button,
@@ -28,9 +29,11 @@ import {
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
+import { canDeleteRoom } from '@/lib/room-permissions'
+import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import type { User, Room, Role, DbStorageSize, RoomPlaybackSize } from '@/types'
+import type { Role, RoomPlaybackSize } from '@/types'
 
 type PermissionState = {
   canReadAllRooms: boolean
@@ -82,21 +85,14 @@ function getInitialPermissionsForRole(role: Role): PermissionState {
 export function AdminPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuthStore()
   const section = parseAdminSection(searchParams.get('section'))
   const userRoleFilter = parseUserRoleFilter(searchParams.get('userRole'))
   const roomStatusFilter = parseRoomStatusFilter(searchParams.get('roomStatus'))
 
-  const [users, setUsers] = useState<User[]>([])
-  const [rooms, setRooms] = useState<Room[]>([])
-  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
-  const [isLoadingRooms, setIsLoadingRooms] = useState(true)
   const [error, setError] = useState('')
-  const [dbSize, setDbSize] = useState<DbStorageSize | null>(null)
-  const [playbackSizes, setPlaybackSizes] = useState<RoomPlaybackSize[]>([])
-  const [isLoadingStorage, setIsLoadingStorage] = useState(true)
-  const [isLoadingPlaybackSizes, setIsLoadingPlaybackSizes] = useState(true)
   const [storageNotice, setStorageNotice] = useState('')
 
   // Create user form
@@ -106,7 +102,6 @@ export function AdminPage() {
   const [newEmail, setNewEmail] = useState('')
   const [newRole, setNewRole] = useState<Role>('user')
   const [newPermissions, setNewPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
-  const [isCreating, setIsCreating] = useState(false)
 
   // Delete states
   const [userToDelete, setUserToDelete] = useState<{ id: string; username: string } | null>(null)
@@ -122,6 +117,101 @@ export function AdminPage() {
   const isAdmin = user?.role === 'admin'
   const showUsersSection = section === 'all' || section === 'users'
   const showRoomsSection = section === 'all' || section === 'rooms'
+  const canAccessAdmin = !!user && (user.role === 'admin' || user.role === 'superuser')
+
+  const usersQuery = useQuery({
+    queryKey: queryKeys.adminUsers,
+    queryFn: async () => {
+      const { users } = await api.getAllUsers()
+      return users
+    },
+    enabled: canAccessAdmin,
+  })
+
+  const roomsQuery = useQuery({
+    queryKey: queryKeys.adminRooms,
+    queryFn: async () => {
+      const { rooms } = await api.getAllRoomsAdmin()
+      return rooms
+    },
+    enabled: canAccessAdmin,
+  })
+
+  const dbSizeQuery = useQuery({
+    queryKey: queryKeys.adminDbSize,
+    queryFn: () => api.getDbStorageSize(),
+    enabled: !!user && user.role === 'superuser',
+  })
+
+  const playbackSizesQuery = useQuery({
+    queryKey: queryKeys.adminPlaybackSizes,
+    queryFn: async () => {
+      const { rooms } = await api.getRoomPlaybackSizes()
+      return rooms
+    },
+    enabled: !!user && user.role === 'superuser',
+  })
+
+  const createUserMutation = useMutation({
+    mutationFn: (payload: {
+      username: string
+      password: string
+      email?: string
+      role?: Role
+      canReadAllRooms?: boolean
+      canWriteAllRooms?: boolean
+      canDeleteAllRooms?: boolean
+    }) => api.createUser(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
+      setIsCreateOpen(false)
+      setNewUsername('')
+      setNewPassword('')
+      setNewEmail('')
+      setNewRole('user')
+      setNewPermissions(getInitialPermissionsForRole('user'))
+    },
+  })
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ userId, payload }: { userId: string; payload: Partial<{ role: Role } & PermissionState> }) =>
+      api.updateUser(userId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
+    },
+  })
+
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: string) => api.deleteUser(userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
+      setUserToDelete(null)
+    },
+  })
+
+  const deleteRoomMutation = useMutation({
+    mutationFn: (roomId: string) => api.deleteRoomAdmin(roomId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminRooms }),
+        queryClient.invalidateQueries({ queryKey: ['rooms'] }),
+      ])
+      setRoomToDelete(null)
+    },
+  })
+
+  const compressPlaybackMutation = useMutation({
+    mutationFn: (roomId: string) => api.compressRoomPlayback(roomId),
+  })
+
+  const users = usersQuery.data ?? []
+  const rooms = roomsQuery.data ?? []
+  const dbSize = dbSizeQuery.data ?? null
+  const playbackSizes = playbackSizesQuery.data ?? []
+  const isLoadingUsers = usersQuery.isLoading
+  const isLoadingRooms = roomsQuery.isLoading
+  const isLoadingStorage = isSuperuser ? dbSizeQuery.isLoading : false
+  const isLoadingPlaybackSizes = isSuperuser ? playbackSizesQuery.isLoading : false
 
   const updateAdminParams = useCallback((updates: {
     section?: AdminSection
@@ -160,111 +250,63 @@ export function AdminPage() {
   }, [searchParams, section, userRoleFilter, roomStatusFilter, setSearchParams])
 
   useEffect(() => {
-    if (!user || (user.role !== 'admin' && user.role !== 'superuser')) {
+    if (!canAccessAdmin) {
       navigate('/rooms')
+    }
+  }, [canAccessAdmin, navigate])
+
+  useEffect(() => {
+    if (users.length === 0) {
+      setEditedUsers(new Map())
       return
     }
-    loadUsers()
-    if (user.role === 'superuser' || user.role === 'admin') {
-      loadRooms()
-    }
-    if (user.role === 'superuser') {
-      loadStorage()
-      loadPlaybackSizes()
-    } else {
-      setIsLoadingStorage(false)
-      setIsLoadingPlaybackSizes(false)
-    }
-  }, [user, navigate])
 
-  const loadUsers = async () => {
-    try {
-      setIsLoadingUsers(true)
-      const { users } = await api.getAllUsers()
-      setUsers(users)
-      // Initialize edit state
-      const editMap = new Map<string, { role: Role } & PermissionState>()
-      users.forEach((u) => {
-        editMap.set(u.id, {
-          role: u.role,
-          canReadAllRooms: u.canReadAllRooms,
-          canWriteAllRooms: u.canWriteAllRooms,
-          canDeleteAllRooms: u.canDeleteAllRooms,
-        })
+    const editMap = new Map<string, { role: Role } & PermissionState>()
+    users.forEach((u) => {
+      editMap.set(u.id, {
+        role: u.role,
+        canReadAllRooms: u.canReadAllRooms,
+        canWriteAllRooms: u.canWriteAllRooms,
+        canDeleteAllRooms: u.canDeleteAllRooms,
       })
-      setEditedUsers(editMap)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load users')
-    } finally {
-      setIsLoadingUsers(false)
-    }
-  }
+    })
+    setEditedUsers(editMap)
+  }, [users])
 
-  const loadRooms = async () => {
-    try {
-      setIsLoadingRooms(true)
-      const { rooms } = await api.getAllRoomsAdmin()
-      setRooms(rooms)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load rooms')
-    } finally {
-      setIsLoadingRooms(false)
+  useEffect(() => {
+    const queryError =
+      usersQuery.error ?? roomsQuery.error ?? dbSizeQuery.error ?? playbackSizesQuery.error
+    if (queryError instanceof Error) {
+      setError(queryError.message)
     }
-  }
-
-  const loadStorage = async () => {
-    try {
-      setIsLoadingStorage(true)
-      const size = await api.getDbStorageSize()
-      setDbSize(size)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load storage size')
-    } finally {
-      setIsLoadingStorage(false)
-    }
-  }
-
-  const loadPlaybackSizes = async () => {
-    try {
-      setIsLoadingPlaybackSizes(true)
-      const { rooms } = await api.getRoomPlaybackSizes()
-      setPlaybackSizes(rooms)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load playback storage')
-    } finally {
-      setIsLoadingPlaybackSizes(false)
-    }
-  }
+  }, [usersQuery.error, roomsQuery.error, dbSizeQuery.error, playbackSizesQuery.error])
 
   const refreshStorage = async () => {
     setStorageNotice('')
-    await Promise.all([loadRooms(), loadStorage(), loadPlaybackSizes()])
+    const tasks = [
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminRooms }),
+    ]
+    if (isSuperuser) {
+      tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.adminDbSize }))
+      tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.adminPlaybackSizes }))
+    }
+    await Promise.all(tasks)
   }
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsCreating(true)
     setError('')
 
     try {
-      await api.createUser({
+      await createUserMutation.mutateAsync({
         username: newUsername,
         password: newPassword,
         email: newEmail || undefined,
         role: newRole,
         ...newPermissions,
       })
-      setIsCreateOpen(false)
-      setNewUsername('')
-      setNewPassword('')
-      setNewEmail('')
-      setNewRole('user')
-      setNewPermissions(getInitialPermissionsForRole('user'))
-      loadUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user')
-    } finally {
-      setIsCreating(false)
     }
   }
 
@@ -283,8 +325,8 @@ export function AdminPage() {
 
     setSavingUserId(userId)
     try {
-      await api.updateUser(userId, payload)
-      loadUsers()
+      setError('')
+      await updateUserMutation.mutateAsync({ userId, payload })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update user')
     } finally {
@@ -299,9 +341,8 @@ export function AdminPage() {
   const confirmDeleteUser = async () => {
     if (!userToDelete) return
     try {
-      await api.deleteUser(userToDelete.id)
-      setUserToDelete(null)
-      loadUsers()
+      setError('')
+      await deleteUserMutation.mutateAsync(userToDelete.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user')
     }
@@ -314,9 +355,8 @@ export function AdminPage() {
   const confirmDeleteRoom = async () => {
     if (!roomToDelete) return
     try {
-      await api.deleteRoomAdmin(roomToDelete.id)
-      setRoomToDelete(null)
-      loadRooms()
+      setError('')
+      await deleteRoomMutation.mutateAsync(roomToDelete.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete room')
     }
@@ -327,7 +367,7 @@ export function AdminPage() {
     setCompressingRoomId(roomToCompress.id)
     setStorageNotice('')
     try {
-      const result = await api.compressRoomPlayback(roomToCompress.id)
+      const result = await compressPlaybackMutation.mutateAsync(roomToCompress.id)
       const saved = formatBytes(result.savedBytes)
       setStorageNotice(
         t('admin.storage.compressResult', {
@@ -338,7 +378,10 @@ export function AdminPage() {
         })
       )
       setRoomToCompress(null)
-      await Promise.all([loadStorage(), loadPlaybackSizes()])
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminDbSize }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminPlaybackSizes }),
+      ])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to compress playback data')
     } finally {
@@ -447,7 +490,7 @@ export function AdminPage() {
               <Button variant="outline" onClick={() => setRoomToDelete(null)}>
                 {t('common.cancel')}
               </Button>
-              <Button variant="destructive" onClick={confirmDeleteRoom}>
+              <Button variant="destructive" onClick={confirmDeleteRoom} disabled={deleteRoomMutation.isPending}>
                 {t('common.delete')}
               </Button>
             </DialogFooter>
@@ -611,8 +654,8 @@ export function AdminPage() {
                       <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
                         {t('admin.users.cancelButton')}
                       </Button>
-                      <Button type="submit" disabled={isCreating}>
-                        {isCreating ? t('admin.users.createForm.creating') : t('admin.users.createForm.createButton')}
+                      <Button type="submit" disabled={createUserMutation.isPending}>
+                        {createUserMutation.isPending ? t('admin.users.createForm.creating') : t('admin.users.createForm.createButton')}
                       </Button>
                     </DialogFooter>
                   </form>
@@ -834,6 +877,7 @@ export function AdminPage() {
                           const endedAt = playback?.endedAt ?? room.endedAt ?? null
                           const isEnded = playback?.isEnded ?? room.isEnded ?? false
                           const canCompress = isEnded && updates > 0
+                          const canDeleteCurrentRoom = canDeleteRoom(user, room.owner.id)
 
                           return (
                             <tr key={room.id} className="border-b">
@@ -887,14 +931,16 @@ export function AdminPage() {
                                       ? t('admin.storage.compressing')
                                       : t('admin.storage.compressButton')}
                                   </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    className="h-7 px-2"
-                                    onClick={() => handleDeleteRoom(room.id, room.name)}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
+                                  {canDeleteCurrentRoom && (
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="h-7 px-2"
+                                      onClick={() => handleDeleteRoom(room.id, room.name)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               </td>
                             </tr>

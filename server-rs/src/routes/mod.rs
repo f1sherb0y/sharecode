@@ -36,8 +36,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/rooms/{roomId}", put(rooms::update_room))
         .route("/api/rooms/{roomId}/pin", put(rooms::set_room_pin))
         .route("/api/rooms/{roomId}", delete(rooms::delete_room))
-        .route("/api/rooms/{roomId}/join", post(rooms::join_room))
-        .route("/api/rooms/{roomId}/leave", post(rooms::leave_room))
         .route("/api/rooms/{roomId}/end", post(rooms::end_room))
         .route(
             "/api/rooms/{roomId}/share-links",

@@ -11,6 +11,7 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::{RoomAdminRow, RoomParticipantWithUserRow, UserPublicRow, UserRow},
+    permissions::{can_manage_room_lifecycle, RoomLifecycleAction},
     state::AppState,
     utils::colors::random_user_color,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -39,6 +40,11 @@ struct PlaybackUpdateRow {
     update: Vec<u8>,
     timestamp: DateTime<Utc>,
     user_id: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct RoomOwnerRow {
+    owner_id: String,
 }
 
 struct CompressedBucket {
@@ -818,15 +824,38 @@ pub async fn compress_room_playback(
 
 pub async fn delete_room(
     State(state): State<AppState>,
-    AdminUser(_auth_user): AdminUser,
+    AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let room = sqlx::query_as::<_, RoomOwnerRow>(
+        r#"
+        SELECT "ownerId" as owner_id
+        FROM "Room"
+        WHERE id = $1
+          AND "isDeleted" = false
+        "#,
+    )
+    .bind(&room_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load room"))?;
+
+    let room = match room {
+        Some(room) => room,
+        None => return Err(ApiError::not_found("Room not found")),
+    };
+
+    if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::Delete) {
+        return Err(ApiError::not_found("Room not found"));
+    }
+
     sqlx::query(
         r#"
         UPDATE "Room"
         SET "isDeleted" = true,
             "updatedAt" = NOW()
         WHERE id = $1
+          AND "isDeleted" = false
         "#,
     )
     .bind(&room_id)

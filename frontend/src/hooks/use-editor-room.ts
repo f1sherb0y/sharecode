@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '@/api'
-import { canEndRoom as canEndRoomByMatrix } from '@/lib/room-permissions'
+import { canEndRoom as canEndRoomByMatrix, canManageRoomShares } from '@/lib/room-permissions'
 import { useAuthStore } from '@/stores'
 import type { Room, Language, User, ShareGuest } from '@/types'
 
@@ -118,7 +118,7 @@ export function useEditorRoom(): EditorRoomState {
     ? (guestProfile?.guest.canEdit ?? false)
     : hasWriteAllPermission || isOwner || effectiveRoom?.canEdit === true
   const canManageRoom =
-    !isGuestMode && !!user && (isOwner || user.role === 'superuser' || user.canDeleteAllRooms)
+    !isGuestMode && canManageRoomShares(user, effectiveRoom?.ownerId)
   const canEndRoom = !isGuestMode && canEndRoomByMatrix(user, effectiveRoom?.ownerId)
   const hasGlobalReadPermission =
     !isGuestMode &&

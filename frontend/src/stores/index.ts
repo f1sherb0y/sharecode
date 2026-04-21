@@ -1,5 +1,4 @@
 export { useAuthStore } from './auth'
 export { useThemeStore } from './theme'
 export { useFontStore } from './font'
-export { useNotesStore } from './notes'
 export { useSettingsStore } from './settings'

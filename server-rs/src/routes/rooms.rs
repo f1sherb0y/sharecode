@@ -39,13 +39,6 @@ struct RoomOwnerRow {
     owner_id: String,
 }
 
-#[derive(Debug, sqlx::FromRow)]
-struct RoomJoinRow {
-    owner_id: String,
-    is_ended: bool,
-    is_deleted: bool,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct CreateRoomPayload {
     pub name: Option<String>,
@@ -788,139 +781,20 @@ pub async fn delete_room(
         return Err(ApiError::not_found("Room not found"));
     }
 
-    sqlx::query(r#"DELETE FROM "Room" WHERE id = $1"#)
+    sqlx::query(
+        r#"
+        UPDATE "Room"
+        SET "isDeleted" = true,
+            "updatedAt" = NOW()
+        WHERE id = $1
+        "#,
+    )
         .bind(&room_id)
         .execute(&state.db)
         .await
         .map_err(|err| db_error(err, "Failed to delete room"))?;
 
     Ok(Json(json!({ "message": "Room deleted" })))
-}
-
-pub async fn join_room(
-    State(state): State<AppState>,
-    auth_user: AuthUser,
-    Path(room_id): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    if room_id.is_empty() {
-        return Err(ApiError::bad_request("Room ID is required"));
-    }
-
-    let room = sqlx::query_as::<_, RoomJoinRow>(
-        r#"
-        SELECT "ownerId" as owner_id, "isEnded" as is_ended, "isDeleted" as is_deleted
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
-
-    let room = match room {
-        Some(room) if !room.is_deleted => room,
-        _ => return Err(ApiError::not_found("Room not found")),
-    };
-
-    if room.is_ended {
-        return Err(ApiError::not_found("Room not found"));
-    }
-
-    let existing = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT 1
-        FROM "RoomParticipant"
-        WHERE "roomId" = $1 AND "userId" = $2
-        LIMIT 1
-        "#,
-    )
-    .bind(&room_id)
-    .bind(&auth_user.id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to check participant"))?;
-
-    let is_owner = room.owner_id == auth_user.id;
-
-    if !is_owner && existing.is_none() {
-        return Err(ApiError::not_found("Room not found"));
-    }
-
-    if existing.is_some() {
-        return Err(ApiError::bad_request("Already a participant"));
-    }
-
-    sqlx::query(
-        r#"
-        INSERT INTO "RoomParticipant" (id, "roomId", "userId")
-        VALUES ($1, $2, $3)
-        "#,
-    )
-    .bind(Uuid::new_v4().to_string())
-    .bind(&room_id)
-    .bind(&auth_user.id)
-    .execute(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to join room"))?;
-
-    Ok(Json(json!({ "message": "Joined room successfully" })))
-}
-
-pub async fn leave_room(
-    State(state): State<AppState>,
-    auth_user: AuthUser,
-    Path(room_id): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let owner_room = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT 1
-        FROM "Room"
-        WHERE id = $1 AND "ownerId" = $2
-        LIMIT 1
-        "#,
-    )
-    .bind(&room_id)
-    .bind(&auth_user.id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room owner"))?;
-
-    if owner_room.is_some() {
-        return Err(ApiError::bad_request("Owner cannot leave room"));
-    }
-
-    let membership = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT 1
-        FROM "RoomParticipant"
-        WHERE "roomId" = $1 AND "userId" = $2
-        LIMIT 1
-        "#,
-    )
-    .bind(&room_id)
-    .bind(&auth_user.id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to check room membership"))?;
-
-    if membership.is_none() {
-        return Err(ApiError::not_found("Room not found"));
-    }
-
-    sqlx::query(
-        r#"
-        DELETE FROM "RoomParticipant"
-        WHERE "roomId" = $1 AND "userId" = $2
-        "#,
-    )
-    .bind(&room_id)
-    .bind(&auth_user.id)
-    .execute(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to leave room"))?;
-
-    Ok(Json(json!({ "message": "Left room successfully" })))
 }
 
 pub async fn end_room(
