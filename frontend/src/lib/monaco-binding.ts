@@ -292,6 +292,9 @@ export class MonacoBinding {
           afterContentClassName = `yRemoteSelectionHead yRemoteSelectionHead-${clientId}`
         }
 
+        const selectionLen = endIndex - startIndex
+        const hasSelection = selectionLen > 0
+
         const startPos = this.monacoModel.getPositionAt(startIndex)
         const endPos = this.monacoModel.getPositionAt(endIndex)
 
@@ -303,7 +306,9 @@ export class MonacoBinding {
             endPos.column,
           ),
           options: {
-            className: `yRemoteSelection yRemoteSelection-${clientId}`,
+            className: hasSelection
+              ? `yRemoteSelection yRemoteSelection-${clientId}`
+              : undefined,
             afterContentClassName,
             beforeContentClassName,
             stickiness: this.monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
