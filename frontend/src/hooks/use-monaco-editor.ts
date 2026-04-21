@@ -21,6 +21,7 @@ interface UseMonacoEditorProps {
   canEdit: boolean
   currentUser: (User | { id: string; username: string; color: string }) | null
   sessionAwarenessColor: {
+    slot: number
     color: string
     colorLight: string
   } | null
@@ -68,6 +69,7 @@ export function useMonacoEditor({
       id: currentUser?.id,
       name: username,
       username,
+      colorSlot: sessionAwarenessColor?.slot,
       color: sessionAwarenessColor?.color ?? fallbackColor.color,
       colorLight: sessionAwarenessColor?.colorLight ?? fallbackColor.colorLight,
     })
@@ -75,6 +77,7 @@ export function useMonacoEditor({
     provider,
     currentUser?.id,
     currentUser?.username,
+    sessionAwarenessColor?.slot,
     sessionAwarenessColor?.color,
     sessionAwarenessColor?.colorLight,
   ])

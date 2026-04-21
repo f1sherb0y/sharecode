@@ -118,6 +118,7 @@ export interface RemoteUser {
   username: string
   color: string
   colorLight: string
+  colorSlot?: number
   cursor?: {
     anchor: unknown
     head: unknown

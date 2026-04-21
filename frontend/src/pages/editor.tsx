@@ -85,6 +85,7 @@ export function EditorPage() {
   const [isCodeRunning, setIsCodeRunning] = useState(false)
   const [isRunnerExpanded, setIsRunnerExpanded] = useState(false)
   const [sessionAwarenessColor, setSessionAwarenessColor] = useState<{
+    slot: number
     color: string
     colorLight: string
   } | null>(null)
@@ -156,10 +157,12 @@ export function EditorPage() {
 
     if (
       message.type === 'session-color' &&
+      typeof message.slot === 'number' &&
       typeof message.color === 'string' &&
       typeof message.colorLight === 'string'
     ) {
       setSessionAwarenessColor({
+        slot: message.slot,
         color: message.color,
         colorLight: message.colorLight,
       })
@@ -221,6 +224,29 @@ export function EditorPage() {
     monacoRef,
     editorInstanceRef,
     modelRef,
+  })
+
+  const localClientId = provider?.awareness?.clientID ?? -1
+  const localFallbackColor = generateUserColor(`${currentUser?.id ?? 'anonymous'}:${localClientId}`)
+  const connectedUsers = [
+    {
+      clientId: localClientId,
+      id: currentUser?.id,
+      username: currentUser?.username ?? 'Anonymous',
+      color: sessionAwarenessColor?.color ?? localFallbackColor.color,
+      colorLight: sessionAwarenessColor?.colorLight ?? localFallbackColor.colorLight,
+      colorSlot: sessionAwarenessColor?.slot,
+      isLocal: true,
+    },
+    ...remoteUsers.map((user) => ({
+      ...user,
+      isLocal: false,
+    })),
+  ].sort((left, right) => {
+    const leftSlot = left.colorSlot ?? Number.MAX_SAFE_INTEGER
+    const rightSlot = right.colorSlot ?? Number.MAX_SAFE_INTEGER
+    if (leftSlot !== rightSlot) return leftSlot - rightSlot
+    return left.clientId - right.clientId
   })
 
   // Code Runner Ref
@@ -474,24 +500,13 @@ export function EditorPage() {
                   className={cn('gap-1', isCompactViewport ? 'h-7 px-2 text-xs' : 'h-8')}
                 >
                   <Users className="h-4 w-4" />
-                  <span>{remoteUsers.length + 1}</span>
+                  <span>{connectedUsers.length}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
                   {t('editor.toolbar.users')}
                 </DropdownMenuLabel>
-
-                {/* Current User */}
-                <div className="px-2 py-1.5 flex items-center gap-2">
-                  <div
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: currentUser?.color || generateUserColor(currentUser?.id).color }}
-                  />
-                  <span className="text-sm truncate flex-1">{currentUser?.username} ({t('share.editor.you')})</span>
-                </div>
-
-                <DropdownMenuSeparator />
 
                 {/* Remote Users */}
                 {remoteUsers.length === 0 && (
@@ -500,11 +515,17 @@ export function EditorPage() {
                   </div>
                 )}
 
-                {remoteUsers.map((u) => {
+                {connectedUsers.map((u) => {
                   const isFollowing =
-                    (followingUserId != null && u.id != null && followingUserId === u.id) ||
-                    (followingUserId == null && followingClientId != null && followingClientId === u.clientId)
+                    !u.isLocal &&
+                    (
+                      (followingUserId != null && u.id != null && followingUserId === u.id) ||
+                      (followingUserId == null &&
+                        followingClientId != null &&
+                        followingClientId === u.clientId)
+                    )
                   const toggleFollow = () => {
+                    if (u.isLocal) return
                     if (isFollowing) {
                       setFollowingUserId(null)
                       setFollowingClientId(null)
@@ -520,19 +541,24 @@ export function EditorPage() {
                       onClick={toggleFollow}
                     >
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
-                      <span className="truncate flex-1">{u.username || 'Anonymous'}</span>
-                      <Button
-                        variant={isFollowing ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          toggleFollow()
-                        }}
-                      >
-                        {isFollowing ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
-                      </Button>
+                      <span className="truncate flex-1">
+                        {u.username || 'Anonymous'}
+                        {u.isLocal ? ` (${t('share.editor.you')})` : ''}
+                      </span>
+                      {!u.isLocal && (
+                        <Button
+                          variant={isFollowing ? 'secondary' : 'ghost'}
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            toggleFollow()
+                          }}
+                        >
+                          {isFollowing ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
+                        </Button>
+                      )}
                     </DropdownMenuItem>
                   )
                 })}

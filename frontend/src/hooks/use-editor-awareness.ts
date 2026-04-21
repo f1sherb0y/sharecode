@@ -49,13 +49,19 @@ export function useEditorAwareness({
         })
       })
 
-      users.sort((left, right) => left.clientId - right.clientId)
+      users.sort((left, right) => {
+        const leftSlot = left.colorSlot ?? Number.MAX_SAFE_INTEGER
+        const rightSlot = right.colorSlot ?? Number.MAX_SAFE_INTEGER
+        if (leftSlot !== rightSlot) return leftSlot - rightSlot
+        return left.clientId - right.clientId
+      })
       const signature = users
         .map((user) =>
           [
             user.clientId,
             user.id ?? '',
             user.username ?? '',
+            user.colorSlot ?? '',
             user.color ?? '',
             user.colorLight ?? '',
           ].join(':')
