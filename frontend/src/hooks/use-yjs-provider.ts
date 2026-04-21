@@ -7,6 +7,9 @@ export interface StatelessMessage {
   type: string
   status?: string
   endedAt?: string
+  slot?: number
+  color?: string
+  colorLight?: string
   [key: string]: unknown
 }
 

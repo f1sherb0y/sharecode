@@ -38,7 +38,11 @@ pub fn spawn_inactive_room_cleanup(state: AppState) {
             tracing::info!(trigger = "interval", "running inactive room cleanup");
             match auto_end_inactive_rooms(&state).await {
                 Ok(count) => {
-                    tracing::info!(trigger = "interval", ended = count, "inactive room cleanup completed")
+                    tracing::info!(
+                        trigger = "interval",
+                        ended = count,
+                        "inactive room cleanup completed"
+                    )
                 }
                 Err(err) => tracing::error!(error = %err, "failed to auto-end inactive rooms"),
             }
@@ -67,7 +71,10 @@ pub async fn auto_end_inactive_rooms(state: &AppState) -> Result<u64, sqlx::Erro
     if ended_rooms.is_empty() {
         tracing::debug!("inactive room cleanup found no rooms to end");
     } else {
-        let ended_room_ids = ended_rooms.iter().map(|room| room.id.clone()).collect::<Vec<_>>();
+        let ended_room_ids = ended_rooms
+            .iter()
+            .map(|room| room.id.clone())
+            .collect::<Vec<_>>();
         tracing::info!(ended_room_ids = ?ended_room_ids, ended = ended_rooms.len(), "inactive room cleanup ended rooms");
     }
 

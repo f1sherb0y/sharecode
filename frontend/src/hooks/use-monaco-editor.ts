@@ -20,6 +20,10 @@ interface UseMonacoEditorProps {
   provider: HocuspocusProvider | null
   canEdit: boolean
   currentUser: (User | { id: string; username: string; color: string }) | null
+  sessionAwarenessColor: {
+    color: string
+    colorLight: string
+  } | null
   roomEnded: boolean
   setError: (error: string) => void
 }
@@ -30,6 +34,7 @@ export function useMonacoEditor({
   provider,
   canEdit,
   currentUser,
+  sessionAwarenessColor,
   roomEnded,
   setError,
 }: UseMonacoEditorProps) {
@@ -56,17 +61,23 @@ export function useMonacoEditor({
   useEffect(() => {
     if (!provider?.awareness) return
 
-    const userColor = currentUser?.color || generateUserColor(currentUser?.id).color
-    const userColorLight = generateUserColor(currentUser?.id).colorLight
+    const fallbackSeed = `${currentUser?.id ?? 'anonymous'}:${provider.awareness.clientID}`
+    const fallbackColor = generateUserColor(fallbackSeed)
     const username = currentUser?.username ?? 'Anonymous'
     provider.awareness.setLocalStateField('user', {
       id: currentUser?.id,
       name: username,
       username,
-      color: userColor,
-      colorLight: userColorLight,
+      color: sessionAwarenessColor?.color ?? fallbackColor.color,
+      colorLight: sessionAwarenessColor?.colorLight ?? fallbackColor.colorLight,
     })
-  }, [provider, currentUser?.id, currentUser?.username, currentUser?.color])
+  }, [
+    provider,
+    currentUser?.id,
+    currentUser?.username,
+    sessionAwarenessColor?.color,
+    sessionAwarenessColor?.colorLight,
+  ])
 
   useEffect(() => {
     if (!effectiveRoom || !editorRef.current || !provider || !ytext || editorInstanceRef.current) return

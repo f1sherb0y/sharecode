@@ -800,10 +800,10 @@ pub async fn delete_room(
         WHERE id = $1
         "#,
     )
-        .bind(&room_id)
-        .execute(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to delete room"))?;
+    .bind(&room_id)
+    .execute(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to delete room"))?;
 
     tracing::info!(
         actor_id = %auth_user.id,

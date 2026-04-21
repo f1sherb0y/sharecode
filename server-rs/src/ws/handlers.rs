@@ -198,10 +198,11 @@ async fn handle_auth(
                 .ws
                 .get_or_create_document(&state.db, document_name)
                 .await?;
-            doc_state
+            let session_color = doc_state
                 .add_connection(connection_id, outgoing.clone())
                 .await;
             session.document = Some(std::sync::Arc::clone(&doc_state));
+            session.session_color = Some(session_color.clone());
 
             let scope = if outcome.read_only {
                 "readonly"
@@ -210,6 +211,7 @@ async fn handle_auth(
             };
             let auth_reply = encode_auth_message(document_name, AUTH_AUTHENTICATED, Some(scope));
             let _ = outgoing.send(Message::Binary(auth_reply.into()));
+            send_session_color(outgoing, document_name, &session_color);
 
             if let Some(pending_sv) = session.pending_sync_step1.take() {
                 send_sync_step2(outgoing, &doc_state, document_name, pending_sv);
@@ -390,6 +392,22 @@ fn send_awareness_snapshot(
     let message = encode_message(document_name, MSG_AWARENESS, &payload);
     let _ = outgoing.send(Message::Binary(message.into()));
     Ok(())
+}
+
+fn send_session_color(
+    outgoing: &mpsc::UnboundedSender<Message>,
+    document_name: &str,
+    session_color: &crate::utils::colors::SessionColor,
+) {
+    let payload = serde_json::json!({
+        "type": "session-color",
+        "slot": session_color.slot,
+        "color": session_color.color,
+        "colorLight": session_color.color_light,
+    })
+    .to_string();
+    let message = encode_stateless_message(document_name, &payload);
+    let _ = outgoing.send(Message::Binary(message.into()));
 }
 
 async fn handle_stateless(

@@ -84,6 +84,10 @@ export function EditorPage() {
   const [showShareManager, setShowShareManager] = useState(false)
   const [isCodeRunning, setIsCodeRunning] = useState(false)
   const [isRunnerExpanded, setIsRunnerExpanded] = useState(false)
+  const [sessionAwarenessColor, setSessionAwarenessColor] = useState<{
+    color: string
+    colorLight: string
+  } | null>(null)
   const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
   const shellRef = useRef<HTMLDivElement>(null)
 
@@ -147,12 +151,28 @@ export function EditorPage() {
     if (message.type === 'room-status' && message.status === 'ended') {
       setRoomEnded(true)
       setRoomEndedAt(message.endedAt ?? null)
+      return
+    }
+
+    if (
+      message.type === 'session-color' &&
+      typeof message.color === 'string' &&
+      typeof message.colorLight === 'string'
+    ) {
+      setSessionAwarenessColor({
+        color: message.color,
+        colorLight: message.colorLight,
+      })
     }
   }, [setRoomEnded, setRoomEndedAt])
 
   const wsToken = authToken ?? ''
   const wsDocumentId = roomId ?? ''
   const shouldConnectWs = !!wsToken && !!wsDocumentId && !roomEnded && !(effectiveRoom?.isEnded)
+
+  useEffect(() => {
+    setSessionAwarenessColor(null)
+  }, [wsDocumentId, wsToken])
 
   const { provider, ydoc, ytext, ymeta, isConnected, isSynced } = useYjsProvider(
     shouldConnectWs ? wsDocumentId : '',
@@ -174,6 +194,7 @@ export function EditorPage() {
     provider,
     canEdit,
     currentUser,
+    sessionAwarenessColor,
     roomEnded,
     setError: setLocalError
   })

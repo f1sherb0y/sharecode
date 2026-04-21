@@ -12,6 +12,8 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 use yrs::updates::decoder::Decode;
 use yrs::{sync::Awareness, Doc, Transact, Update};
 
+use crate::utils::colors::{next_available_color_slot, session_color_for_slot, SessionColor};
+
 pub(crate) type ConnectionId = u64;
 
 pub struct WsState {
@@ -61,7 +63,7 @@ impl WsState {
 
 pub(crate) struct DocumentState {
     pub(crate) awareness: Awareness,
-    connections: RwLock<HashMap<ConnectionId, mpsc::UnboundedSender<Message>>>,
+    connections: RwLock<HashMap<ConnectionId, DocumentConnection>>,
     pub(crate) snapshot: Arc<Mutex<SnapshotDebounce>>,
     pub(crate) update_batch: Arc<Mutex<UpdateBatch>>,
     is_ended: AtomicBool,
@@ -119,9 +121,22 @@ impl DocumentState {
         &self,
         id: ConnectionId,
         sender: mpsc::UnboundedSender<Message>,
-    ) {
+    ) -> SessionColor {
         let mut connections = self.connections.write().await;
-        connections.insert(id, sender);
+        if let Some(existing) = connections.get(&id) {
+            return existing.color.clone();
+        }
+        let slot =
+            next_available_color_slot(connections.values().map(|connection| connection.color.slot));
+        let color = session_color_for_slot(slot);
+        connections.insert(
+            id,
+            DocumentConnection {
+                sender,
+                color: color.clone(),
+            },
+        );
+        color
     }
 
     pub(crate) async fn remove_connection(&self, id: ConnectionId) -> bool {
@@ -132,15 +147,22 @@ impl DocumentState {
 
     pub(crate) async fn broadcast(&self, message: Vec<u8>, exclude: Option<ConnectionId>) {
         let connections = self.connections.read().await;
-        for (id, tx) in connections.iter() {
+        for (id, connection) in connections.iter() {
             if let Some(exclude_id) = exclude {
                 if exclude_id == *id {
                     continue;
                 }
             }
-            let _ = tx.send(Message::Binary(message.clone().into()));
+            let _ = connection
+                .sender
+                .send(Message::Binary(message.clone().into()));
         }
     }
+}
+
+struct DocumentConnection {
+    sender: mpsc::UnboundedSender<Message>,
+    color: SessionColor,
 }
 
 pub(crate) struct SnapshotDebounce {
@@ -183,6 +205,7 @@ pub(crate) struct SessionState {
     pub(crate) authenticated: bool,
     pub(crate) read_only: bool,
     pub(crate) actor_id: Option<String>,
+    pub(crate) session_color: Option<SessionColor>,
     pub(crate) document: Option<Arc<DocumentState>>,
     pub(crate) pending_sync_step1: Option<yrs::StateVector>,
     pub(crate) awareness_clients: std::collections::HashSet<yrs::block::ClientID>,
@@ -194,6 +217,7 @@ impl SessionState {
             authenticated: false,
             read_only: true,
             actor_id: None,
+            session_color: None,
             document: None,
             pending_sync_step1: None,
             awareness_clients: std::collections::HashSet::new(),

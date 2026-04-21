@@ -29,7 +29,11 @@ pub fn spawn_expired_share_link_cleanup(db: PgPool) {
             tracing::info!(trigger = "interval", "running expired share link cleanup");
             match cleanup_expired_share_links(&db).await {
                 Ok(count) => {
-                    tracing::info!(trigger = "interval", deleted = count, "expired share link cleanup completed")
+                    tracing::info!(
+                        trigger = "interval",
+                        deleted = count,
+                        "expired share link cleanup completed"
+                    )
                 }
                 Err(err) => tracing::error!(error = %err, "failed to clean up expired share links"),
             }
@@ -49,7 +53,10 @@ pub async fn cleanup_expired_share_links(db: &PgPool) -> Result<u64, sqlx::Error
     .await?;
 
     let deleted = result.rows_affected();
-    tracing::debug!(deleted = deleted, "expired share link cleanup database delete executed");
+    tracing::debug!(
+        deleted = deleted,
+        "expired share link cleanup database delete executed"
+    );
 
     Ok(deleted)
 }
