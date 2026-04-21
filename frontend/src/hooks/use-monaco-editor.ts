@@ -89,8 +89,20 @@ export function useMonacoEditor({
     let cancelled = false
 
     loadMonaco()
-      .then((monaco) => {
+      .then(async (monaco) => {
         if (cancelled || !editorRef.current) return
+
+        // Monaco caches glyph widths the first time it paints. If the web
+        // font isn't loaded yet, it measures against a fallback and the
+        // cached metrics never update — text ends up mispositioned even
+        // after the real font arrives. Wait for font loading, with a hard
+        // cap so a stalled fetch never blocks the editor from appearing.
+        await Promise.race([
+          document.fonts.ready,
+          new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+        ])
+        if (cancelled || !editorRef.current) return
+
         const mountNode = editorRef.current
 
         monacoRef.current = monaco
@@ -112,6 +124,15 @@ export function useMonacoEditor({
           }),
         )
         editorInstanceRef.current = editor
+
+        // If fonts.ready timed out above, the real font may still arrive
+        // afterwards; remeasure then so metrics match the displayed glyphs.
+        document.fonts.ready
+          .then(() => {
+            if (cancelled) return
+            monaco.editor.remeasureFonts()
+          })
+          .catch(() => {})
 
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
           void editor.getAction('actions.find')?.run()
@@ -153,10 +174,14 @@ export function useMonacoEditor({
   }, [theme])
 
   useEffect(() => {
-    editorInstanceRef.current?.updateOptions({
+    const editor = editorInstanceRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    editor.updateOptions({
       fontFamily: fontFamilyStack(font),
       fontSize,
     })
+    monaco.editor.remeasureFonts()
   }, [font, fontSize])
 
   useEffect(() => {

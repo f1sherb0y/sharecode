@@ -7,9 +7,15 @@ export type SelectableFont = (typeof SELECTABLE_FONTS)[number]
 const FONT_FALLBACK_STACK =
   "'Fira Code', 'DejaVu Sans Mono', 'Liberation Mono', 'ui-monospace', 'monospace'"
 
-/** CSS `font-family` value combining the selected font and fallbacks. */
+/** CSS `font-family` value combining the selected font and fallbacks.
+ *  Defensively whitelists `font` — a legacy persisted value that slipped past
+ *  migration would otherwise produce invalid CSS and cause the whole
+ *  declaration to be dropped, inheriting the page's sans-serif font. */
 export function fontFamilyStack(font: SelectableFont): string {
-  return `'${font}', ${FONT_FALLBACK_STACK}`
+  const safe = (SELECTABLE_FONTS as readonly string[]).includes(font)
+    ? font
+    : 'JuliaMono'
+  return `'${safe}', ${FONT_FALLBACK_STACK}`
 }
 
 interface FontState {
@@ -67,6 +73,10 @@ export const useFontStore = create<FontState>()(
     }),
     {
       name: 'font-storage',
+      // Bump whenever the shape of persisted state changes. Without a version
+      // bump, zustand's persist treats stored and current version both as 0
+      // and skips migrate — so pre-refactor entries stay in localStorage.
+      version: 1,
       migrate: (state: unknown) => {
         const s = (state ?? {}) as Partial<FontState> & { font?: unknown }
         return {
