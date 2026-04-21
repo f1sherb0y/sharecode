@@ -90,14 +90,13 @@ impl DocumentState {
             }
         }
 
-        let room_is_ended = sqlx::query_scalar::<_, bool>(
-            r#"SELECT "isEnded" FROM "Room" WHERE id = $1"#,
-        )
-        .bind(name)
-        .fetch_optional(db)
-        .await
-        .map_err(WsError::Db)?
-        .unwrap_or(false);
+        let room_is_ended =
+            sqlx::query_scalar::<_, bool>(r#"SELECT "isEnded" FROM "Room" WHERE id = $1"#)
+                .bind(name)
+                .fetch_optional(db)
+                .await
+                .map_err(WsError::Db)?
+                .unwrap_or(false);
 
         Ok(Self {
             awareness: Awareness::new(doc),

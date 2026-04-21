@@ -41,10 +41,11 @@ export function useEditorAwareness({
         if (clientId === localClientId) return
         if (!state.user) return
 
-        const userData = state.user as Omit<RemoteUser, 'clientId'>
+        const userData = state.user as Omit<RemoteUser, 'clientId'> & { name?: string }
         users.push({
           clientId,
           ...userData,
+          username: userData.username ?? userData.name ?? '',
         })
       })
 

@@ -58,9 +58,11 @@ export function useMonacoEditor({
 
     const userColor = currentUser?.color || generateUserColor(currentUser?.id).color
     const userColorLight = generateUserColor(currentUser?.id).colorLight
+    const username = currentUser?.username ?? 'Anonymous'
     provider.awareness.setLocalStateField('user', {
       id: currentUser?.id,
-      name: currentUser?.username ?? 'Anonymous',
+      name: username,
+      username,
       color: userColor,
       colorLight: userColorLight,
     })

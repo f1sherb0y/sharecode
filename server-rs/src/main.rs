@@ -4,7 +4,7 @@ mod routes;
 mod utils;
 mod ws;
 
-pub use core::{admin, auth, config, error, permissions, share_links, state};
+pub use core::{admin, auth, config, error, permissions, room_activity, share_links, state};
 pub use db::models;
 
 use std::net::SocketAddr;
@@ -57,6 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::error!(error = %err, "Failed to initialize admin user");
     }
 
+    room_activity::spawn_inactive_room_cleanup(state.clone());
     share_links::spawn_expired_share_link_cleanup(state.db.clone());
 
     let cors = CorsLayer::new()

@@ -18,8 +18,6 @@ import {
   Loader2,
   MoreVertical,
   Sparkles,
-  FileCode,
-  Brush,
   Maximize,
   Minimize2,
 } from 'lucide-react'
@@ -50,18 +48,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
-import { useAuthStore, useFontStore, useThemeStore } from '@/stores'
+import { useAuthStore, useFontStore } from '@/stores'
 import {
   useEditorRoom,
   useMonacoEditor,
   useEditorAwareness,
   useYjsProvider,
-  useTldrawStore,
   useCompactViewport,
   useFullscreen,
   type StatelessMessage
 } from '@/hooks'
-import { CanvasView } from '@/components/features/canvas-view'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
 import { ThemeToggle } from '@/components/layout'
@@ -69,12 +65,7 @@ import { generateUserColor, cn, getTimezone } from '@/lib/utils'
 import type { Language } from '@/types'
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php', 'markdown', 'verilog']
-const DOC_VIEWS = ['code', 'canvas'] as const
 const RUNNER_POSITIONS = ['bottom', 'right'] as const
-
-function parseDocView(value: string | null): 'code' | 'canvas' {
-  return DOC_VIEWS.includes((value ?? '') as (typeof DOC_VIEWS)[number]) ? (value as 'code' | 'canvas') : 'code'
-}
 
 function parseRunnerPosition(value: string | null): 'bottom' | 'right' {
   return RUNNER_POSITIONS.includes((value ?? '') as (typeof RUNNER_POSITIONS)[number])
@@ -88,34 +79,32 @@ export function EditorPage() {
   const { t } = useTranslation()
   const { token: authToken } = useAuthStore()
   const { font, fontSize, increaseFontSize, decreaseFontSize, setFont } = useFontStore()
-  const { theme } = useThemeStore()
   const isCompactViewport = useCompactViewport()
   const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen()
   const [showShareManager, setShowShareManager] = useState(false)
   const [isCodeRunning, setIsCodeRunning] = useState(false)
   const [isRunnerExpanded, setIsRunnerExpanded] = useState(false)
-  const activeDoc = parseDocView(searchParams.get('view'))
   const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
   const shellRef = useRef<HTMLDivElement>(null)
 
   // State for End Room Dialog
   const [isEndRoomDialogOpen, setIsEndRoomDialogOpen] = useState(false)
 
-  const updateEditorParams = useCallback((updates: { view?: 'code' | 'canvas'; runner?: 'bottom' | 'right' }) => {
+  const updateEditorParams = useCallback((updates: { runner?: 'bottom' | 'right' }) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      next.set('view', updates.view ?? activeDoc)
       next.set('runner', updates.runner ?? codeRunnerPosition)
+      next.delete('view')
       return next
     })
-  }, [setSearchParams, activeDoc, codeRunnerPosition])
+  }, [setSearchParams, codeRunnerPosition])
 
   useEffect(() => {
     const normalized = new URLSearchParams(searchParams)
     let changed = false
 
-    if (normalized.get('view') !== activeDoc) {
-      normalized.set('view', activeDoc)
+    if (normalized.has('view')) {
+      normalized.delete('view')
       changed = true
     }
     if (normalized.get('runner') !== codeRunnerPosition) {
@@ -126,7 +115,7 @@ export function EditorPage() {
     if (changed) {
       setSearchParams(normalized, { replace: true })
     }
-  }, [searchParams, activeDoc, codeRunnerPosition, setSearchParams])
+  }, [searchParams, codeRunnerPosition, setSearchParams])
 
   // 1. Room & Auth Hook
   const {
@@ -170,13 +159,6 @@ export function EditorPage() {
     shouldConnectWs ? wsToken : '',
     handleStatelessMessage
   )
-
-  const { store: tldrawStore, ready: tldrawReady } = useTldrawStore({
-    ydoc,
-    provider,
-    isSynced,
-    user: currentUser,
-  })
 
   // 3. Monaco Hook
   const {
@@ -308,9 +290,7 @@ export function EditorPage() {
   }, [provider, editorInstanceRef, modelRef, ytext])
 
   const canBlink =
-    activeDoc === 'code' &&
-    !!provider?.awareness &&
-    isEditorReady
+    !!provider?.awareness && isEditorReady
 
   // Loading View
   if (isLoading) {
@@ -414,29 +394,6 @@ export function EditorPage() {
               >
                 {effectiveRoom.language}
               </Badge>
-            )}
-
-            {!isCompactViewport && (
-              <div className="hidden sm:flex items-center rounded-md border p-0.5 ml-1">
-                <Button
-                  variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={() => updateEditorParams({ view: 'code' })}
-                >
-                  <FileCode className="h-3.5 w-3.5 sm:mr-1" />
-                  <span className="hidden md:inline">{t('editor.toolbar.code')}</span>
-                </Button>
-                <Button
-                  variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={() => updateEditorParams({ view: 'canvas' })}
-                >
-                  <Brush className="h-3.5 w-3.5 sm:mr-1" />
-                  <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>
-                </Button>
-              </div>
             )}
 
             {isGuestMode && !isCompactViewport && (
@@ -646,18 +603,6 @@ export function EditorPage() {
                   </div>
                   <DropdownMenuSeparator />
 
-                  <DropdownMenuItem onClick={() => updateEditorParams({ view: 'code' })}>
-                    <FileCode className="h-4 w-4 mr-2" />
-                    {t('editor.toolbar.code')}
-                    {activeDoc === 'code' && <Check className="h-3 w-3 ml-auto" />}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => updateEditorParams({ view: 'canvas' })}>
-                    <Brush className="h-4 w-4 mr-2" />
-                    {t('editor.toolbar.canvas')}
-                    {activeDoc === 'canvas' && <Check className="h-3 w-3 ml-auto" />}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-
                   <DropdownMenuItem onClick={handleBlink} disabled={!canBlink}>
                     <Sparkles className="h-4 w-4 mr-2" />
                     {t('editor.toolbar.blink')}
@@ -739,21 +684,7 @@ export function EditorPage() {
         <div className="relative z-0 flex flex-1 overflow-hidden min-w-0">
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             <div className="relative z-0 flex-1 overflow-hidden">
-              <div className={cn('h-full w-full', activeDoc === 'code' ? '' : 'hidden')}>
-                <div ref={editorRef} className="h-full w-full" />
-              </div>
-              {activeDoc === 'canvas' && (
-                <CanvasView
-                  store={tldrawStore}
-                  ready={tldrawReady}
-                  canEdit={canEdit}
-                  theme={theme}
-                  provider={provider}
-                  followUserId={followingUserId}
-                  followClientId={followingClientId}
-                  followEnabled={activeDoc === 'canvas'}
-                />
-              )}
+              <div ref={editorRef} className="h-full w-full" />
               {isFullscreenSupported && (
                 <Button
                   type="button"
@@ -774,7 +705,7 @@ export function EditorPage() {
               )}
             </div>
 
-            {activeDoc === 'code' && codeRunnerPosition === 'bottom' && (
+            {codeRunnerPosition === 'bottom' && (
               <CodeRunnerPanel
                 ref={codeRunnerRef}
                 language={effectiveRoom.language}
@@ -791,7 +722,7 @@ export function EditorPage() {
             )}
           </div>
 
-          {activeDoc === 'code' && codeRunnerPosition === 'right' && (
+          {codeRunnerPosition === 'right' && (
             <CodeRunnerPanel
               ref={codeRunnerRef}
               language={effectiveRoom.language}

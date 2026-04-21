@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Play, Pause, SkipBack, SkipForward, FileCode, Brush, StickyNote, PanelRightClose } from 'lucide-react'
+import { ArrowLeft, Play, Pause, SkipBack, SkipForward, StickyNote, PanelRightClose } from 'lucide-react'
 import type * as Monaco from 'monaco-editor'
-import * as Y from 'yjs'
 import pako from 'pako'
-import { createTLStore, defaultShapeUtils, loadSnapshot, type TLRecord, type TLStore } from 'tldraw'
+import * as Y from 'yjs'
 import {
   Button,
   Badge,
@@ -25,17 +24,9 @@ import { useCompactViewport } from '@/hooks'
 import { cn, formatTime } from '@/lib/utils'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
 import { loadMonaco } from '@/lib/monaco-loader'
-import { CanvasView } from '@/components/features/canvas-view'
 import type { Room } from '@/types'
 
-const PLAYBACK_DOC_VIEWS = ['code', 'canvas'] as const
 const PLAYBACK_SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const
-
-function parsePlaybackView(value: string | null): 'code' | 'canvas' {
-  return PLAYBACK_DOC_VIEWS.includes((value ?? '') as (typeof PLAYBACK_DOC_VIEWS)[number])
-    ? (value as 'code' | 'canvas')
-    : 'code'
-}
 
 function parsePlaybackSpeed(value: string | null): number {
   const numeric = Number(value)
@@ -52,23 +43,6 @@ interface Update {
   userId: string | null
 }
 
-function normalizeAssetRecord(record: TLRecord, assets: Map<string, string>): TLRecord {
-  if ((record as any).typeName !== 'asset') return record
-  const props = (record as any).props
-  if (!props || typeof props.src !== 'string') return record
-  const src = props.src as string
-  if (!src.startsWith('yjs:')) return record
-  const resolved = assets.get(src.slice(4)) ?? ''
-  if (resolved === src) return record
-  return {
-    ...(record as any),
-    props: {
-      ...props,
-      src: resolved,
-    },
-  } as TLRecord
-}
-
 function base64ToUint8Array(base64: string): Uint8Array {
   const binaryString = atob(base64)
   const bytes = new Uint8Array(binaryString.length)
@@ -83,6 +57,22 @@ function decompressUpdate(compressedBase64: string): Uint8Array {
   return pako.ungzip(compressed)
 }
 
+function getCodeAtTimestamp(updates: Update[], timestamp: number): string {
+  const doc = new Y.Doc()
+
+  updates
+    .filter((u) => u.timestampMs <= timestamp)
+    .forEach((u) => {
+      try {
+        Y.applyUpdate(doc, u.update)
+      } catch (err) {
+        console.error('Error applying playback update:', err)
+      }
+    })
+
+  return doc.getText('codemirror').toString()
+}
+
 export function PlaybackPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
@@ -95,7 +85,6 @@ export function PlaybackPage() {
 
   const [room, setRoom] = useState<Room | null>(null)
   const [updates, setUpdates] = useState<Update[]>([])
-  const activeDoc = parsePlaybackView(searchParams.get('view'))
   const playbackSpeed = parsePlaybackSpeed(searchParams.get('speed'))
   const [startMs, setStartMs] = useState(0)
   const [endMs, setEndMs] = useState(0)
@@ -103,8 +92,6 @@ export function PlaybackPage() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [canvasStore, setCanvasStore] = useState<TLStore | null>(null)
-  const [canvasReady, setCanvasReady] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const { notes } = useNotesStore()
 
@@ -112,33 +99,13 @@ export function PlaybackPage() {
   const monacoRef = useRef<typeof Monaco | null>(null)
   const playbackEditorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const playbackModelRef = useRef<Monaco.editor.ITextModel | null>(null)
-  const assetMapRef = useRef<Map<string, string>>(new Map())
-
-  const assetStore = useMemo(
-    () => ({
-      async upload() {
-        throw new Error('Playback is read-only')
-      },
-      resolve(asset: any) {
-        const src = asset?.props?.src ?? asset?.src ?? ''
-        if (typeof src === 'string' && src.startsWith('yjs:')) {
-          return assetMapRef.current.get(src.slice(4)) ?? ''
-        }
-        return typeof src === 'string' ? src : ''
-      },
-      async remove() {
-        // no-op for playback
-      },
-    }),
-    []
-  )
 
   useEffect(() => {
     const normalized = new URLSearchParams(searchParams)
     let changed = false
 
-    if (normalized.get('view') !== activeDoc) {
-      normalized.set('view', activeDoc)
+    if (normalized.has('view')) {
+      normalized.delete('view')
       changed = true
     }
     if (normalized.get('speed') !== String(playbackSpeed)) {
@@ -149,7 +116,7 @@ export function PlaybackPage() {
     if (changed) {
       setSearchParams(normalized, { replace: true })
     }
-  }, [searchParams, activeDoc, playbackSpeed, setSearchParams])
+  }, [searchParams, playbackSpeed, setSearchParams])
 
   useEffect(() => {
     if (startMs === 0 || endMs === 0) return
@@ -158,49 +125,6 @@ export function PlaybackPage() {
       setCurrentTimestamp(clamped)
     }
   }, [startMs, endMs, currentTimestamp])
-
-  const getDocAtTimestamp = useCallback(
-    (timestamp: number) => {
-      const tempDoc = new Y.Doc()
-
-      updates
-        .filter((u) => u.timestampMs <= timestamp)
-        .forEach((u) => {
-          try {
-            Y.applyUpdate(tempDoc, u.update)
-          } catch (err) {
-            console.error('Error applying update:', err)
-          }
-        })
-
-      return tempDoc
-    },
-    [updates]
-  )
-
-  const updateCanvasFromDoc = useCallback(
-    (doc: Y.Doc) => {
-      if (!canvasStore) return
-      const yRecords = doc.getMap<TLRecord>('tldraw-records')
-      const yAssets = doc.getMap<string>('tldraw-assets')
-
-      const assets = new Map<string, string>()
-      yAssets.forEach((value, key) => {
-        assets.set(key, value)
-      })
-      assetMapRef.current = assets
-
-      const originalRecords = Array.from(yRecords.values()) as TLRecord[]
-      const normalizedRecords = originalRecords.map((record) => normalizeAssetRecord(record, assets))
-      const snapshot = {
-        schema: canvasStore.schema.serialize(),
-        store: Object.fromEntries(normalizedRecords.map((record) => [record.id, record])),
-      }
-      loadSnapshot(canvasStore, { document: snapshot })
-      setCanvasReady(true)
-    },
-    [canvasStore]
-  )
 
   // Load room and updates
   useEffect(() => {
@@ -283,14 +207,13 @@ export function PlaybackPage() {
     let cancelled = false
 
     try {
-      const initialDoc = getDocAtTimestamp(currentTimestamp)
-      const ytext = initialDoc.getText('codemirror')
+      const initialText = getCodeAtTimestamp(updates, currentTimestamp)
       loadMonaco().then((monaco) => {
         if (cancelled || !editorRef.current) return
         monacoRef.current = monaco
 
         const model = monaco.editor.createModel(
-          ytext.toString(),
+          initialText,
           resolveMonacoLanguage(room.language),
         )
         model.setEOL(monaco.editor.EndOfLineSequence.LF)
@@ -320,17 +243,7 @@ export function PlaybackPage() {
       playbackModelRef.current?.dispose()
       playbackModelRef.current = null
     }
-  }, [room, updates.length, getDocAtTimestamp, currentTimestamp, theme, font, fontSize])
-
-  // Initialize canvas store
-  useEffect(() => {
-    if (canvasStore || updates.length === 0) return
-    const store = createTLStore({
-      shapeUtils: defaultShapeUtils,
-      assets: assetStore,
-    })
-    setCanvasStore(store)
-  }, [canvasStore, updates.length, assetStore])
+  }, [room, updates, currentTimestamp, theme, font, fontSize])
 
   // Cleanup
   useEffect(() => {
@@ -356,13 +269,10 @@ export function PlaybackPage() {
   // Update content at timestamp
   useEffect(() => {
     if (updates.length === 0) return
-    const doc = getDocAtTimestamp(currentTimestamp)
-
     if (playbackModelRef.current) {
-      const ytext = doc.getText('codemirror')
-      const newText = ytext.toString()
+      const newText = getCodeAtTimestamp(updates, currentTimestamp)
       const currentText = playbackModelRef.current.getValue()
-      
+
       if (newText !== currentText) {
         playbackModelRef.current.pushEditOperations(
           [],
@@ -378,9 +288,7 @@ export function PlaybackPage() {
         resolveMonacoLanguage(room.language),
       )
     }
-
-    updateCanvasFromDoc(doc)
-  }, [currentTimestamp, updates.length, getDocAtTimestamp, updateCanvasFromDoc, room?.language])
+  }, [currentTimestamp, updates, room?.language])
 
   // Auto-play
   useEffect(() => {
@@ -460,34 +368,6 @@ export function PlaybackPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-1">
-          <div className={cn('flex items-center rounded-md border p-0.5', isCompactViewport && 'gap-0.5')}>
-            <Button
-              variant={activeDoc === 'code' ? 'secondary' : 'ghost'}
-              size="sm"
-              className={cn(isCompactViewport ? 'h-7 px-1.5' : 'h-7 px-2')}
-              onClick={() => {
-                const next = new URLSearchParams(searchParams)
-                next.set('view', 'code')
-                setSearchParams(next)
-              }}
-            >
-              <FileCode className="h-3.5 w-3.5 sm:mr-1" />
-              {!isCompactViewport && <span className="hidden md:inline">{t('editor.toolbar.code')}</span>}
-            </Button>
-            <Button
-              variant={activeDoc === 'canvas' ? 'secondary' : 'ghost'}
-              size="sm"
-              className={cn(isCompactViewport ? 'h-7 px-1.5' : 'h-7 px-2')}
-              onClick={() => {
-                const next = new URLSearchParams(searchParams)
-                next.set('view', 'canvas')
-                setSearchParams(next)
-              }}
-            >
-              <Brush className="h-3.5 w-3.5 sm:mr-1" />
-              {!isCompactViewport && <span className="hidden md:inline">{t('editor.toolbar.canvas')}</span>}
-            </Button>
-          </div>
           <ThemeToggle className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')} />
           <Button
             variant={showNotes ? 'secondary' : 'ghost'}
@@ -504,21 +384,7 @@ export function PlaybackPage() {
       {/* Editor + Notes */}
       <div className="relative flex-1 flex overflow-hidden min-w-0">
         <div className="flex-1 overflow-hidden min-w-0">
-          <div className={`h-full w-full ${activeDoc === 'code' ? '' : 'hidden'}`}>
-            <div ref={editorRef} className="h-full w-full" />
-          </div>
-          {activeDoc === 'canvas' && (
-            <CanvasView
-              store={canvasStore}
-              ready={canvasReady}
-              canEdit={false}
-              theme={theme}
-              provider={null}
-              followUserId={null}
-              followClientId={null}
-              followEnabled={false}
-            />
-          )}
+          <div ref={editorRef} className="h-full w-full" />
         </div>
 
         {/* Notes panel */}

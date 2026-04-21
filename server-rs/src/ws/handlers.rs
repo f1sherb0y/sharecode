@@ -16,7 +16,7 @@ use yrs::{
     ReadTxn, StateVector, Transact, Update,
 };
 
-use crate::{state::AppState, utils::time::to_iso_string};
+use crate::{room_activity, state::AppState, utils::time::to_iso_string};
 
 use super::{
     auth::authenticate,
@@ -463,6 +463,10 @@ async fn store_update(
     .execute(db)
     .await
     .map_err(WsError::Db)?;
+
+    room_activity::touch_room_activity(db, document_name)
+        .await
+        .map_err(WsError::Db)?;
 
     Ok(())
 }

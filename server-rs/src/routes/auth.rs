@@ -296,8 +296,10 @@ pub async fn get_profile(
                 return Err(ApiError::gone("Room no longer available"));
             }
 
-            let effective_can_edit =
-                guest.can_edit && guest.room_allow_edit && guest.share_can_edit && !guest.room_is_ended;
+            let effective_can_edit = guest.can_edit
+                && guest.room_allow_edit
+                && guest.share_can_edit
+                && !guest.room_is_ended;
 
             sqlx::query(
                 r#"
