@@ -173,7 +173,7 @@ export function LoginPage() {
               </p>
             )}
 
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-muted-foreground mt-4">
               {t('auth.login.joinPrompt')}{' '}
               <Link to="/join" className="text-primary hover:underline">
                 {t('auth.login.joinLinkLabel')}
