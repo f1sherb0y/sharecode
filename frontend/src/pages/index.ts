@@ -1,4 +1,5 @@
 export { LoginPage } from './login'
+export { JoinPage } from './join'
 export { SharePage } from './share'
 export { RegisterPage } from './register'
 export { RoomsPage } from './rooms'

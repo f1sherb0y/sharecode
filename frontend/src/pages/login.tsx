@@ -6,6 +6,7 @@ import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '
 import { ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { useAuthStore } from '@/stores'
 import { isTauriApp } from '@/lib/tauri'
+import { parseShareToken } from '@/lib/share'
 
 const ALLOW_REGISTRATION = import.meta.env.VITE_ALLOW_REGISTRATION !== 'false'
 
@@ -41,23 +42,8 @@ export function LoginPage() {
   }
 
   const parseShareLink = (link: string): { shareToken: string } | null => {
-    try {
-      const url = new URL(link)
-
-      // Hash-based route format (Tauri): #/s/{shareToken}
-      if (url.hash) {
-        const hashMatch = url.hash.match(/#\/s\/([^/?]+)/)
-        if (hashMatch) return { shareToken: hashMatch[1]! }
-      }
-
-      // Path-based route format (Web): /s/{shareToken}
-      const pathMatch = url.pathname.match(/\/s\/([^/?]+)/)
-      if (pathMatch) return { shareToken: pathMatch[1]! }
-
-      return null
-    } catch {
-      return null
-    }
+    const token = parseShareToken(link)
+    return token ? { shareToken: token } : null
   }
 
   const handleJoinLink = async (e: React.FormEvent) => {
@@ -186,6 +172,13 @@ export function LoginPage() {
                 </Link>
               </p>
             )}
+
+            <p className="text-center text-sm text-muted-foreground">
+              {t('auth.login.joinPrompt')}{' '}
+              <Link to="/join" className="text-primary hover:underline">
+                {t('auth.login.joinLinkLabel')}
+              </Link>
+            </p>
 
             {isTauri && (
               <>

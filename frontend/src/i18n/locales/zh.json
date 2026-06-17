@@ -17,7 +17,9 @@
         "button": "加入房间",
         "joining": "加入中...",
         "invalid": "无效的分享链接格式"
-      }
+      },
+      "joinPrompt": "有分享链接或代码？",
+      "joinLinkLabel": "加入房间"
     },
     "register": {
       "title": "注册",
@@ -33,6 +35,21 @@
       "loginLink": "登录",
       "disabled": "注册功能已被禁用。请联系管理员获取访问权限。"
     }
+  },
+  "join": {
+    "title": "加入房间",
+    "tagline": "实时协作代码编辑，支持实时光标、语法高亮和会话回放。",
+    "label": "分享链接或代码",
+    "placeholder": "粘贴链接或输入代码...",
+    "button": "加入房间",
+    "joining": "加入中...",
+    "invalid": "无效的分享链接或代码，请检查后重试。",
+    "haveAccount": "已有账号？",
+    "loginLink": "登录",
+    "featureCollaborateTitle": "协作",
+    "featureCollaborateDesc": "实时共同编写代码",
+    "featureInstantTitle": "即时",
+    "featureInstantDesc": "无需任何配置"
   },
   "rooms": {
     "title": "所有房间",

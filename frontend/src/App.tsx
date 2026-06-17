@@ -11,6 +11,7 @@ import {
   PlaybackPage,
   SettingsPage,
   SharePage,
+  JoinPage,
   NotificationsPage,
 } from '@/pages'
 import { useAuthStore, useThemeStore } from '@/stores'
@@ -107,6 +108,7 @@ function AppRoutes() {
       />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/s/:shareToken" element={<SharePage />} />
+      <Route path="/join" element={<JoinPage />} />
 
       {/* Protected routes */}
       <Route

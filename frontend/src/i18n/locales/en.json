@@ -17,7 +17,9 @@
         "button": "Join Room",
         "joining": "Joining...",
         "invalid": "Invalid share link format"
-      }
+      },
+      "joinPrompt": "Have a share link or code?",
+      "joinLinkLabel": "Join a room"
     },
     "register": {
       "title": "Register",
@@ -33,6 +35,21 @@
       "loginLink": "Login",
       "disabled": "Registration is currently disabled. Please contact an administrator for access."
     }
+  },
+  "join": {
+    "title": "Join a Room",
+    "tagline": "Real-time collaborative code editing with live cursors, syntax highlighting, and session playback.",
+    "label": "Share Link or Code",
+    "placeholder": "Paste link or enter code...",
+    "button": "Join Room",
+    "joining": "Joining...",
+    "invalid": "Invalid share link or code. Please check and try again.",
+    "haveAccount": "Already have an account?",
+    "loginLink": "Login",
+    "featureCollaborateTitle": "Collaborate",
+    "featureCollaborateDesc": "Code together in real-time",
+    "featureInstantTitle": "Instant",
+    "featureInstantDesc": "No setup required"
   },
   "rooms": {
     "title": "All Rooms",
