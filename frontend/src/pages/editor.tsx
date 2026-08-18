@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -63,6 +63,10 @@ import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/
 import { ThemeToggle } from '@/components/layout'
 import { generateUserColor, cn, getTimezone } from '@/lib/utils'
 import type { Language } from '@/types'
+
+const MarkdownEditor = lazy(() =>
+  import('@/components/features/markdown-editor').then((m) => ({ default: m.MarkdownEditor }))
+)
 
 const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php', 'markdown', 'verilog']
 const RUNNER_POSITIONS = ['bottom', 'right'] as const
@@ -144,6 +148,8 @@ export function EditorPage() {
     setRoomEnded,
     setRoomEndedAt,
   } = useEditorRoom()
+
+  const isMarkdown = effectiveRoom?.language === 'markdown'
 
   const [localError, setLocalError] = useState('')
   const displayError = roomError || localError
@@ -568,7 +574,7 @@ export function EditorPage() {
             <ThemeToggle className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')} />
 
             {/* Blink Selection */}
-            {!isCompactViewport && (
+            {!isCompactViewport && !isMarkdown && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -586,7 +592,7 @@ export function EditorPage() {
             )}
 
             {/* Run Code (Visible on all sizes if editable) */}
-            {canEdit && (
+            {canEdit && !isMarkdown && (
               <Button
                 variant={isCompactViewport ? 'ghost' : 'default'}
                 size={isCompactViewport ? 'icon' : 'sm'}
@@ -650,10 +656,12 @@ export function EditorPage() {
                   </div>
                   <DropdownMenuSeparator />
 
-                  <DropdownMenuItem onClick={handleBlink} disabled={!canBlink}>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    {t('editor.toolbar.blink')}
-                  </DropdownMenuItem>
+                  {!isMarkdown && (
+                    <DropdownMenuItem onClick={handleBlink} disabled={!canBlink}>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      {t('editor.toolbar.blink')}
+                    </DropdownMenuItem>
+                  )}
 
                   {(canManageRoom || canEndRoom) && (
                     <>
@@ -731,7 +739,27 @@ export function EditorPage() {
         <div className="relative z-0 flex flex-1 overflow-hidden min-w-0">
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             <div className="relative z-0 flex-1 overflow-hidden">
-              <div ref={editorRef} className="h-full w-full" />
+              {isMarkdown ? (
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center">
+                      <Spinner size="lg" />
+                    </div>
+                  }
+                >
+                  <MarkdownEditor
+                    ytext={ytext}
+                    canEdit={canEdit}
+                    provider={provider}
+                    ydoc={ydoc}
+                    isSynced={isSynced}
+                    followingUserId={followingUserId}
+                    followingClientId={followingClientId}
+                  />
+                </Suspense>
+              ) : (
+                <div ref={editorRef} className="h-full w-full" />
+              )}
               {isFullscreenSupported && (
                 <Button
                   type="button"
@@ -752,7 +780,7 @@ export function EditorPage() {
               )}
             </div>
 
-            {codeRunnerPosition === 'bottom' && (
+            {codeRunnerPosition === 'bottom' && !isMarkdown && (
               <CodeRunnerPanel
                 ref={codeRunnerRef}
                 language={effectiveRoom.language}
@@ -769,7 +797,7 @@ export function EditorPage() {
             )}
           </div>
 
-          {codeRunnerPosition === 'right' && (
+          {codeRunnerPosition === 'right' && !isMarkdown && (
             <CodeRunnerPanel
               ref={codeRunnerRef}
               language={effectiveRoom.language}

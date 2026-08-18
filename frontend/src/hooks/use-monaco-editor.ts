@@ -82,9 +82,11 @@ export function useMonacoEditor({
     sessionAwarenessColor?.colorLight,
   ])
 
+  const isMarkdownMode = effectiveRoom?.language === 'markdown'
+
   useEffect(() => {
     if (!effectiveRoom || !editorRef.current || !provider || !ytext || editorInstanceRef.current) return
-    if (effectiveRoom.isEnded || roomEnded) return
+    if (effectiveRoom.isEnded || roomEnded || isMarkdownMode) return
 
     let cancelled = false
 
@@ -164,6 +166,7 @@ export function useMonacoEditor({
     provider,
     ytext,
     roomEnded,
+    isMarkdownMode,
     setError,
     destroyEditor,
   ])
