@@ -14,24 +14,27 @@ function generateId(): string {
 }
 
 /**
- * Transforms fenced ` ```mermaid ` code blocks in the remark AST into a custom
- * `diagram` node so the schema below can create a ProseMirror diagram node.
+ * Attacher for the remark processor. `unified.use()` treats any function as an
+ * *attacher* that must return a transformer, so we wrap the actual transformer
+ * here instead of passing it directly (which would silently no-op).
  */
-function transformMermaidTree(tree: MarkdownNode): void {
-  const visit = (node: MarkdownNode | undefined | null): void => {
-    if (!node || typeof node !== 'object') return
-    if (node.type === 'code' && (node as { lang?: string }).lang === 'mermaid') {
-      node.type = 'diagram'
-      delete (node as { lang?: unknown }).lang
-      delete (node as { meta?: unknown }).meta
-      return
+function remarkMermaid() {
+  return function transform(tree: { type?: string; lang?: string; meta?: unknown; children?: unknown[] }): void {
+    const visit = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return
+      const n = node as { type?: string; lang?: string; meta?: unknown; children?: unknown[] }
+      if (n.type === 'code' && n.lang === 'mermaid') {
+        n.type = 'diagram'
+        delete n.lang
+        delete n.meta
+        return
+      }
+      if (Array.isArray(n.children)) {
+        for (const child of n.children) visit(child)
+      }
     }
-    const children = node.children as MarkdownNode[] | undefined
-    if (Array.isArray(children)) {
-      for (const child of children) visit(child)
-    }
+    visit(tree)
   }
-  visit(tree)
 }
 
 class MermaidNodeView implements NodeView {
@@ -163,7 +166,7 @@ class MermaidNodeView implements NodeView {
   }
 }
 
-const remarkDiagramPlugin = $remark('remarkMermaid', () => transformMermaidTree)
+const remarkDiagramPlugin = $remark('remarkMermaid', () => remarkMermaid)
 
 const diagramSchema = $nodeSchema('diagram', () => ({
   group: 'block',
