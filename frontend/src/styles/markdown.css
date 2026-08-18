@@ -1,18 +1,43 @@
 /* Milkdown WYSIWYG markdown editor styles.
-   Colors come from the Tailwind v4 theme variables in globals.css, so both
-   light and dark themes are handled automatically via [data-theme]. */
+   The markdown editor uses a neutral black/white/gray palette (independent of
+   the app's blue-tinted slate theme) so the writing surface stays monochrome. */
+
+/* ---------- Neutral monochrome palette ---------- */
+.md-editor {
+  --md-bg: #ffffff;
+  --md-fg: #18181b;
+  --md-surface: #f4f4f5;
+  --md-surface-fg: #71717a;
+  --md-border: #e4e4e7;
+  --md-input: #d4d4d8;
+  --md-ring: #a1a1aa;
+  --md-accent: #52525b;
+  --md-selection: rgba(24, 24, 27, 0.14);
+}
+
+[data-theme='dark'] .md-editor {
+  --md-bg: #18181b;
+  --md-fg: #e4e4e7;
+  --md-surface: #27272a;
+  --md-surface-fg: #a1a1aa;
+  --md-border: #3f3f46;
+  --md-input: #3f3f46;
+  --md-ring: #71717a;
+  --md-accent: #d4d4d8;
+  --md-selection: rgba(228, 228, 231, 0.18);
+}
 
 .md-editor {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+  background-color: var(--md-bg);
+  color: var(--md-fg);
 }
 
 .md-toolbar {
-  background-color: var(--color-background);
+  background-color: var(--md-bg);
 }
 
 .md-editor-body {
-  background-color: var(--color-background);
+  background-color: var(--md-bg);
 }
 
 /* ---------- ProseMirror editor content ---------- */
@@ -23,7 +48,7 @@
   font-size: 0.9375rem;
   line-height: 1.7;
   word-wrap: break-word;
-  caret-color: var(--color-foreground);
+  caret-color: var(--md-fg);
 }
 
 .md-editor .ProseMirror > :first-child {
@@ -62,13 +87,14 @@
 }
 
 .md-editor .ProseMirror a {
-  color: var(--color-primary);
+  color: var(--md-fg);
   text-decoration: underline;
   text-underline-offset: 2px;
+  text-decoration-color: var(--md-surface-fg);
 }
 
 .md-editor .ProseMirror a:hover {
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
 .md-editor .ProseMirror strong {
@@ -105,8 +131,8 @@
 .md-editor .ProseMirror blockquote {
   margin: 0.6em 0;
   padding: 0.25em 1em;
-  border-left: 4px solid var(--color-border);
-  color: var(--color-muted-foreground);
+  border-left: 4px solid var(--md-border);
+  color: var(--md-surface-fg);
 }
 
 .md-editor .ProseMirror blockquote p {
@@ -116,7 +142,7 @@
 .md-editor .ProseMirror code {
   font-family: var(--font-mono);
   font-size: 0.85em;
-  background-color: var(--color-muted);
+  background-color: var(--md-surface);
   padding: 0.15em 0.4em;
   border-radius: 0.25rem;
 }
@@ -124,8 +150,8 @@
 .md-editor .ProseMirror pre {
   margin: 0.6em 0;
   padding: 0.9em 1em;
-  background-color: var(--color-muted);
-  border: 1px solid var(--color-border);
+  background-color: var(--md-surface);
+  border: 1px solid var(--md-border);
   border-radius: 0.375rem;
   overflow-x: auto;
 }
@@ -146,7 +172,7 @@
 .md-editor .ProseMirror hr {
   margin: 1.5em 0;
   border: 0;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--md-border);
 }
 
 .md-editor .ProseMirror table {
@@ -158,7 +184,7 @@
 
 .md-editor .ProseMirror th,
 .md-editor .ProseMirror td {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--md-border);
   padding: 0.4em 0.7em;
   text-align: left;
   vertical-align: top;
@@ -166,7 +192,7 @@
 }
 
 .md-editor .ProseMirror th {
-  background-color: var(--color-muted);
+  background-color: var(--md-surface);
   font-weight: 600;
 }
 
@@ -176,22 +202,22 @@
 
 /* Selection inside the editor */
 .md-editor .ProseMirror ::selection {
-  background-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
+  background-color: var(--md-selection);
 }
 
 /* ---------- Mermaid diagram node ---------- */
 .md-editor .md-mermaid {
   margin: 0.6em 0;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--md-border);
   border-radius: 0.375rem;
   padding: 0.9em 1em;
-  background-color: var(--color-background);
+  background-color: var(--md-bg);
   overflow-x: auto;
   cursor: default;
 }
 
 .md-editor .md-mermaid.selected {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--md-accent);
   outline-offset: 1px;
 }
 
@@ -206,7 +232,7 @@
 }
 
 .md-editor .md-mermaid-loading {
-  color: var(--color-muted-foreground);
+  color: var(--md-surface-fg);
   font-size: 0.85em;
   display: flex;
   align-items: center;
@@ -233,17 +259,17 @@
   font-family: var(--font-mono);
   font-size: 0.85em;
   line-height: 1.5;
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-  border: 1px solid var(--color-input);
+  background-color: var(--md-bg);
+  color: var(--md-fg);
+  border: 1px solid var(--md-input);
   border-radius: 0.25rem;
   padding: 0.6em 0.8em;
   outline: none;
 }
 
 .md-editor .md-mermaid-editor:focus {
-  border-color: var(--color-ring);
-  box-shadow: 0 0 0 1px var(--color-ring);
+  border-color: var(--md-ring);
+  box-shadow: 0 0 0 1px var(--md-ring);
 }
 
 /* ---------- Remote cursors (y-prosemirror yCursorPlugin) ---------- */
@@ -301,7 +327,7 @@
 }
 
 .md-editor .md-image.selected {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--md-accent);
   outline-offset: 1px;
   border-radius: 0.375rem;
 }
