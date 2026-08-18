@@ -1,7 +1,7 @@
-:80 {
-	# Plain HTTP only — the host-level Caddy (systemd) terminates TLS for the
-	# public domain and reverse-proxies to this container on 127.0.0.1:18080.
-
+{$DOMAIN:localhost} {
+	# Automatic HTTPS with Let's Encrypt
+	# Caddy will automatically obtain and renew SSL certificates
+	
 	# Logging
 	log {
 		output file /data/access.log
