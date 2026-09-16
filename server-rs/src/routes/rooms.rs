@@ -21,11 +21,12 @@ use crate::{
     ws,
 };
 
-const SUPPORTED_LANGUAGES: [&str; 10] = [
+const SUPPORTED_LANGUAGES: [&str; 11] = [
     "javascript",
     "typescript",
     "python",
     "java",
+    "c",
     "cpp",
     "rust",
     "go",
@@ -534,8 +535,7 @@ pub async fn get_room(
     let participants = fetch_participants(&state, &room.id).await?;
     let is_owner = room.owner_id == auth_user.id;
     let is_participant = participants.iter().any(|p| p.user_id == auth_user.id);
-    let is_admin =
-        auth_user.role == "admin" || auth_user.role == "superuser" || has_global_read(&auth_user);
+    let is_admin = has_global_read(&auth_user);
 
     if !is_admin && !is_owner && !is_participant {
         return Err(ApiError::not_found("Room not found"));
@@ -577,6 +577,8 @@ pub async fn update_room(
     Path(room_id): Path<String>,
     Json(payload): Json<UpdateRoomPayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    // Order setting updates with WebSocket authentication/reconnect snapshots.
+    let _access = state.ws.access.write().await;
     let room = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         SELECT
@@ -616,7 +618,11 @@ pub async fn update_room(
     let is_owner = room.owner_id == auth_user.id;
     let is_superuser = auth_user.role == "superuser";
     let is_participant = participants.iter().any(|p| p.user_id == auth_user.id);
-    let is_privileged = auth_user.role == "admin" || is_superuser || has_global_read(&auth_user);
+    let can_change_language = is_owner || matches!(auth_user.role.as_str(), "admin" | "superuser");
+    let language_only = payload.language.is_some() && payload.name.is_none()
+        && payload.company.is_none() && payload.position.is_none();
+    let language_permission = language_only && can_change_language;
+    let is_privileged = is_superuser || has_global_read(&auth_user) || language_permission;
 
     if !is_owner && !is_participant && !is_privileged {
         return Err(ApiError::not_found("Room not found"));
@@ -627,10 +633,19 @@ pub async fn update_room(
         || is_owner
         || participant.map(|p| p.can_edit).unwrap_or(false);
 
-    if !can_edit {
+    if !can_edit && !language_permission {
         return Err(ApiError::not_found("Room not found"));
     }
 
+    if payload.language.is_some() && !can_change_language {
+        return Err(ApiError::not_found("Room not found"));
+    }
+    if let Some(language) = payload.language.as_deref() {
+        if !SUPPORTED_LANGUAGES.contains(&language) {
+            return Err(ApiError::bad_request("Unsupported language"));
+        }
+    }
+    let language_requested = payload.language.is_some();
     let rename_requested = payload.name.is_some();
     if rename_requested && !is_owner && !is_superuser {
         return Err(ApiError::not_found("Room not found"));
@@ -685,6 +700,9 @@ pub async fn update_room(
     .await
     .map_err(|err| db_error(err, "Failed to update room"))?;
 
+    if language_requested {
+        state.ws.broadcast_room_language(&room_id, &updated.language).await;
+    }
     Ok(Json(json!({ "room": room_to_json_owner(&updated) })))
 }
 
@@ -771,6 +789,7 @@ pub async fn delete_room(
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let _access = state.ws.access.write().await;
     let room = sqlx::query_as::<_, RoomOwnerRow>(
         r#"
         SELECT "ownerId" as owner_id
@@ -815,6 +834,8 @@ pub async fn delete_room(
         "room deleted"
     );
 
+    state.ws.revoke_room(&room_id).await;
+
     Ok(Json(json!({ "message": "Room deleted" })))
 }
 
@@ -823,6 +844,7 @@ pub async fn end_room(
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let _access = state.ws.access.write().await;
     if room_id.is_empty() {
         return Err(ApiError::bad_request("Room ID is required"));
     }

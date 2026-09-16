@@ -1,3 +1,4 @@
+import { translateError } from '@/i18n/errors'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -64,22 +65,15 @@ export function SettingsPage() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [stealthSettings, setStealthSettings] = useState<StealthSettings>(getStealthSettings())
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
 
   const isTauri = isTauriApp()
   const canChangePassword = actorType === 'user' && !!user
-  const isNewPasswordValid = validatePasswordPolicy(newPassword)
 
   const changePasswordMutation = useMutation({
     mutationFn: ({ oldPassword, nextPassword }: { oldPassword: string; nextPassword: string }) =>
       api.changePassword(oldPassword, nextPassword),
     onSuccess: () => {
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
       setPasswordError('')
       toast.success(t('settings.password.success'))
     },
@@ -143,7 +137,7 @@ export function SettingsPage() {
     } catch (error) {
       setTestResult({
         success: false,
-        message: t('settings.connectionFailed', { error: error instanceof Error ? error.message : 'Unknown error' }),
+        message: t('settings.connectionFailed', { error: translateError(error instanceof Error ? error.message : 'Unknown error') }),
       })
     } finally {
       setTesting(false)
@@ -166,8 +160,13 @@ export function SettingsPage() {
     }
   }
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const form = e.currentTarget
+    const fields = new FormData(form)
+    const currentPassword = String(fields.get('currentPassword') ?? '')
+    const newPassword = String(fields.get('newPassword') ?? '')
+    const confirmPassword = String(fields.get('confirmPassword') ?? '')
     setPasswordError('')
 
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -175,7 +174,7 @@ export function SettingsPage() {
       return
     }
 
-    if (!isNewPasswordValid) {
+    if (!validatePasswordPolicy(newPassword)) {
       setPasswordError(t('common.passwordPolicyError'))
       return
     }
@@ -190,6 +189,7 @@ export function SettingsPage() {
         oldPassword: currentPassword,
         nextPassword: newPassword,
       })
+      form.reset()
     } catch (error) {
       setPasswordError(error instanceof Error ? error.message : t('settings.password.failed'))
     }
@@ -200,7 +200,7 @@ export function SettingsPage() {
       <Navbar
         leftContent={
           <Button variant="ghost" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
             {t('common.back')}
           </Button>
         }
@@ -211,7 +211,7 @@ export function SettingsPage() {
 
       <PageContainer className="max-w-4xl mx-auto">
         {/* User preferences — always visible */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {/* Appearance */}
           <Card>
             <CardHeader>
@@ -219,13 +219,13 @@ export function SettingsPage() {
               <CardDescription>{t('settings.appearance.description')}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-2">
+              <div className="flex gap-1">
                 <Button
                   variant={theme === 'light' ? 'default' : 'outline'}
                   className="flex-1"
                   onClick={() => setTheme('light')}
                 >
-                  <Sun className="h-4 w-4 mr-2" />
+                  <Sun className="h-4 w-4 mr-1.5" />
                   {t('settings.appearance.light')}
                 </Button>
                 <Button
@@ -233,7 +233,7 @@ export function SettingsPage() {
                   className="flex-1"
                   onClick={() => setTheme('dark')}
                 >
-                  <Moon className="h-4 w-4 mr-2" />
+                  <Moon className="h-4 w-4 mr-1.5" />
                   {t('settings.appearance.dark')}
                 </Button>
               </div>
@@ -247,7 +247,7 @@ export function SettingsPage() {
               <CardDescription>{t('settings.language.description')}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-2">
+              <div className="flex gap-1">
                 <Button
                   variant={i18n.language === 'en' ? 'default' : 'outline'}
                   className="flex-1"
@@ -276,7 +276,7 @@ export function SettingsPage() {
               <select
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="ui-field"
               >
                 {TIMEZONE_OPTIONS.map((tz) => (
                   <option key={tz} value={tz}>
@@ -289,54 +289,52 @@ export function SettingsPage() {
         </div>
 
         {canChangePassword && (
-          <Card className="mt-4">
+          <Card className="mt-2">
             <CardHeader>
               <CardTitle>{t('settings.password.title')}</CardTitle>
               <CardDescription>{t('settings.password.description')}</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleChangePassword} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
+              <form id="change-password-form" method="post" autoComplete="on" onSubmit={handleChangePassword} className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input type="hidden" name="username" autoComplete="username" value={user.username} />
+                <div className="space-y-1">
                   <Label htmlFor="currentPassword">{t('settings.password.current')}</Label>
                   <Input
                     id="currentPassword"
+                    name="currentPassword"
                     type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
                     placeholder={t('settings.password.currentPlaceholder')}
                     autoComplete="current-password"
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="newPassword">{t('settings.password.new')}</Label>
                   <Input
                     id="newPassword"
+                    name="newPassword"
                     type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
                     placeholder={t('settings.password.newPlaceholder')}
                     autoComplete="new-password"
                     minLength={10}
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="confirmPassword">{t('settings.password.confirm')}</Label>
                   <Input
                     id="confirmPassword"
+                    name="confirmPassword"
                     type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder={t('settings.password.confirmPlaceholder')}
                     autoComplete="new-password"
                     minLength={10}
                     required
                   />
                 </div>
-                <div className="md:col-span-3 flex flex-col gap-3">
+                <div className="md:col-span-3 flex flex-col gap-1.5">
                   <p className="text-xs text-muted-foreground">{t('common.passwordPolicyHint')}</p>
-                  {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+                  {passwordError && <p className="text-sm text-destructive">{translateError(passwordError)}</p>}
                   <div>
                     <Button type="submit" disabled={changePasswordMutation.isPending}>
                       {changePasswordMutation.isPending
@@ -353,14 +351,14 @@ export function SettingsPage() {
         {/* Server & stealth — Tauri only */}
         {isTauri && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
               <Card>
                 <CardHeader>
                   <CardTitle>{t('settings.server.title')}</CardTitle>
                   <CardDescription>{t('settings.server.description')}</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
+                <CardContent className="space-y-3">
+                  <div className="space-y-1">
                     <Label htmlFor="serverUrl">{t('settings.serverUrl.label')}</Label>
                     <Input
                       id="serverUrl"
@@ -371,7 +369,7 @@ export function SettingsPage() {
                     <p className="text-xs text-muted-foreground">{t('settings.serverUrl.hint')}</p>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <Label htmlFor="wsUrl">{t('settings.websocketUrl.label')}</Label>
                     <Input
                       id="wsUrl"
@@ -384,7 +382,7 @@ export function SettingsPage() {
 
                   {testResult && (
                     <div
-                      className={`flex items-center gap-2 p-3 rounded-md ${
+                      className={`flex items-center gap-1 p-2 rounded-md ${
                         testResult.success ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
                       }`}
                     >
@@ -401,11 +399,11 @@ export function SettingsPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Stealth Mode</CardTitle>
-                  <CardDescription>Privacy and window control settings</CardDescription>
+                  <CardTitle>{t('settings.privacy.title')}</CardTitle>
+                  <CardDescription>{t('settings.privacy.description')}</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <label className="flex items-start gap-3 cursor-pointer">
+                <CardContent className="space-y-3">
+                  <label className="flex items-start gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={stealthSettings.screenCaptureProtection}
@@ -413,12 +411,12 @@ export function SettingsPage() {
                       className="mt-1"
                     />
                     <div>
-                      <p className="font-medium text-sm">Hide from screen capture</p>
-                      <p className="text-xs text-muted-foreground">Window appears black in recordings</p>
+                      <p className="font-medium text-sm">{t('settings.privacy.hideFromCapture.label')}</p>
+                      <p className="text-xs text-muted-foreground">{t('settings.privacy.hideFromCapture.hint')}</p>
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-3 cursor-pointer">
+                  <label className="flex items-start gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={stealthSettings.hideFromTaskbar}
@@ -426,27 +424,27 @@ export function SettingsPage() {
                       className="mt-1"
                     />
                     <div>
-                      <p className="font-medium text-sm">Hide from taskbar</p>
-                      <p className="text-xs text-muted-foreground">Only show in system tray</p>
+                      <p className="font-medium text-sm">{t('settings.privacy.hideFromTaskbar.label')}</p>
+                      <p className="text-xs text-muted-foreground">{t('settings.privacy.hideFromTaskbar.hint')}</p>
                     </div>
                   </label>
 
-                  <div className="bg-muted p-3 rounded-md space-y-1.5">
-                    <div className="flex items-center gap-2">
+                  <div className="bg-muted p-2 rounded-md space-y-1">
+                    <div className="flex items-center gap-1">
                       <Keyboard className="h-3.5 w-3.5" />
-                      <span className="font-medium text-xs">Shortcuts</span>
+                      <span className="font-medium text-xs">{t('settings.shortcuts.title')}</span>
                     </div>
                     <div className="text-xs text-muted-foreground grid grid-cols-2 gap-1">
-                      <span><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+H</kbd> Hide</span>
-                      <span><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+T</kbd> Top</span>
-                      <span className="col-span-2"><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+U/I/O/J/K/L/M/,/.</kbd> Move</span>
+                      <span><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+H</kbd> {t('settings.shortcuts.hide')}</span>
+                      <span><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+T</kbd> {t('settings.shortcuts.top')}</span>
+                      <span className="col-span-2"><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+U/I/O/J/K/L/M/,/.</kbd> {t('settings.shortcuts.move')}</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-1 mt-2">
               <Button className="flex-1" onClick={handleSave}>
                 {t('settings.saveSettings')}
               </Button>

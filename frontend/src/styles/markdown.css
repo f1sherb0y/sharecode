@@ -2,29 +2,18 @@
    The markdown editor uses a neutral black/white/gray palette (independent of
    the app's blue-tinted slate theme) so the writing surface stays monochrome. */
 
-/* ---------- Neutral monochrome palette ---------- */
+/* Inherit the workspace palette so switching modes stays visually quiet. */
 .md-editor {
-  --md-bg: #ffffff;
-  --md-fg: #18181b;
-  --md-surface: #f4f4f5;
-  --md-surface-fg: #71717a;
-  --md-border: #e4e4e7;
-  --md-input: #d4d4d8;
-  --md-ring: #a1a1aa;
-  --md-accent: #52525b;
-  --md-selection: rgba(24, 24, 27, 0.14);
-}
-
-[data-theme='dark'] .md-editor {
-  --md-bg: #18181b;
-  --md-fg: #e4e4e7;
-  --md-surface: #27272a;
-  --md-surface-fg: #a1a1aa;
-  --md-border: #3f3f46;
-  --md-input: #3f3f46;
-  --md-ring: #71717a;
-  --md-accent: #d4d4d8;
-  --md-selection: rgba(228, 228, 231, 0.18);
+  --md-bg: var(--color-background);
+  --md-fg: var(--color-foreground);
+  --md-surface: var(--color-muted);
+  --md-surface-fg: var(--color-muted-foreground);
+  --md-border: var(--color-border);
+  --md-input: var(--color-input);
+  --md-ring: var(--color-ring);
+  --md-accent: var(--color-primary);
+  --md-selection: color-mix(in srgb, var(--color-foreground) 15%, transparent);
+  --font-mono: var(--md-font-family, ui-monospace, monospace);
 }
 
 .md-editor {
@@ -38,15 +27,77 @@
 
 .md-editor-body {
   background-color: var(--md-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Stretch the Milkdown wrapper chain so the editable surface fills the whole
+   body. Without this, a short document leaves the area below the content
+   unclickable (clicks there don't focus the editor / place the cursor). */
+.md-editor-body > div,
+.md-editor-body .milkdown {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Math ---------- */
+.md-editor .md-math {
+  color: var(--md-fg);
+}
+
+.md-editor .md-math-block {
+  margin: 0.5em 0;
+  max-width: 100%;
+}
+
+.md-editor .md-math-block .md-math-preview {
+  overflow-x: auto;
+  padding: 0.25em 0;
+}
+
+.md-editor .md-math-preview {
+  cursor: text;
+}
+
+.md-editor .md-math-source {
+  display: none;
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  background: var(--md-surface);
+  outline: 1px solid var(--md-border);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.md-editor .md-math-inline.md-math-editing .md-math-source {
+  display: inline;
+  margin-left: 0.4em;
+}
+
+.md-editor .md-math-block.md-math-editing .md-math-source {
+  display: block;
+}
+
+.md-editor .ProseMirror[contenteditable='false'] .md-math-source {
+  display: none;
+}
+
+.md-editor .md-math.ProseMirror-selectednode {
+  outline: 1px solid var(--md-ring);
 }
 
 /* ---------- ProseMirror editor content ---------- */
 .md-editor .ProseMirror {
+  flex: 1 0 auto;
   min-height: 100%;
-  padding: 1.25rem 1.5rem 4rem;
+  padding: 0.5rem 0.75rem 1.5rem;
   outline: none;
-  font-size: 0.9375rem;
-  line-height: 1.7;
+  font-size: var(--md-font-size, 12px);
+  font-family: var(--md-font-family, var(--font-sans));
+  line-height: 1.5;
   word-wrap: break-word;
   caret-color: var(--md-fg);
 }
@@ -61,7 +112,7 @@
 .md-editor .ProseMirror h4,
 .md-editor .ProseMirror h5,
 .md-editor .ProseMirror h6 {
-  margin: 1.4em 0 0.5em;
+  margin: 0.8em 0 0.3em;
   font-weight: 600;
   line-height: 1.3;
 }
@@ -83,7 +134,7 @@
 }
 
 .md-editor .ProseMirror p {
-  margin: 0.6em 0;
+  margin: 0.35em 0;
 }
 
 .md-editor .ProseMirror a {
@@ -103,8 +154,8 @@
 
 .md-editor .ProseMirror ul,
 .md-editor .ProseMirror ol {
-  margin: 0.6em 0;
-  padding-left: 1.5em;
+  margin: 0.35em 0;
+  padding-left: 1.25em;
 }
 
 .md-editor .ProseMirror ul {
@@ -116,12 +167,12 @@
 }
 
 .md-editor .ProseMirror li {
-  margin: 0.25em 0;
+  margin: 0.125em 0;
 }
 
 .md-editor .ProseMirror li > ul,
 .md-editor .ProseMirror li > ol {
-  margin: 0.25em 0;
+  margin: 0.125em 0;
 }
 
 .md-editor .ProseMirror li p {
@@ -129,9 +180,9 @@
 }
 
 .md-editor .ProseMirror blockquote {
-  margin: 0.6em 0;
-  padding: 0.25em 1em;
-  border-left: 4px solid var(--md-border);
+  margin: 0.35em 0;
+  padding: 0.125em 0.6em;
+  border-left: 2px solid var(--md-border);
   color: var(--md-surface-fg);
 }
 
@@ -148,8 +199,8 @@
 }
 
 .md-editor .ProseMirror pre {
-  margin: 0.6em 0;
-  padding: 0.9em 1em;
+  margin: 0.35em 0;
+  padding: 0.5em 0.65em;
   background-color: var(--md-surface);
   border: 1px solid var(--md-border);
   border-radius: 0.375rem;
@@ -170,13 +221,13 @@
 }
 
 .md-editor .ProseMirror hr {
-  margin: 1.5em 0;
+  margin: 0.75em 0;
   border: 0;
   border-top: 1px solid var(--md-border);
 }
 
 .md-editor .ProseMirror table {
-  margin: 0.6em 0;
+  margin: 0.35em 0;
   border-collapse: collapse;
   width: 100%;
   font-size: 0.9em;
@@ -185,7 +236,7 @@
 .md-editor .ProseMirror th,
 .md-editor .ProseMirror td {
   border: 1px solid var(--md-border);
-  padding: 0.4em 0.7em;
+  padding: 0.2em 0.4em;
   text-align: left;
   vertical-align: top;
   position: relative;
@@ -207,10 +258,10 @@
 
 /* ---------- Mermaid diagram node ---------- */
 .md-editor .md-mermaid {
-  margin: 0.6em 0;
+  margin: 0.35em 0;
   border: 1px solid var(--md-border);
   border-radius: 0.375rem;
-  padding: 0.9em 1em;
+  padding: 0.5em 0.65em;
   background-color: var(--md-bg);
   overflow-x: auto;
   cursor: default;
@@ -263,7 +314,7 @@
   color: var(--md-fg);
   border: 1px solid var(--md-input);
   border-radius: 0.25rem;
-  padding: 0.6em 0.8em;
+  padding: 0.35em 0.5em;
   outline: none;
 }
 

@@ -1,5 +1,8 @@
+import { LANGUAGES } from '@/types'
+import { translateError } from '@/i18n/errors'
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useViewportHeight } from '@/hooks/use-viewport-height'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
@@ -9,9 +12,6 @@ import {
   RefreshCw,
   Check,
   StopCircle,
-  Minus,
-  Plus,
-  Type,
   Share2,
   LogOut,
   Play,
@@ -20,6 +20,8 @@ import {
   Sparkles,
   Maximize,
   Minimize2,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import * as Y from 'yjs'
 import {
@@ -34,13 +36,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
   DropdownMenuLabel,
   Spinner,
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -48,7 +46,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
-import { useAuthStore, useFontStore } from '@/stores'
+import { useAuthStore, useThemeStore } from '@/stores'
 import {
   useEditorRoom,
   useMonacoEditor,
@@ -60,15 +58,19 @@ import {
 } from '@/hooks'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
-import { ThemeToggle } from '@/components/layout'
-import { generateUserColor, cn, getTimezone } from '@/lib/utils'
+import { RoomViewSwitch } from '@/components/features/room-view-switch'
+import { FontControls } from '@/components/features/font-controls'
+import { generateUserColor, cn, formatDateTime } from '@/lib/utils'
 import type { Language } from '@/types'
+import type { MarkdownEditorHandle } from '@/components/features/markdown-editor'
+
+const CanvasView = lazy(() => import('@/components/features/canvas-view').then(m => ({ default: m.CanvasView })))
 
 const MarkdownEditor = lazy(() =>
   import('@/components/features/markdown-editor').then((m) => ({ default: m.MarkdownEditor }))
 )
 
-const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php', 'markdown', 'verilog']
+
 const RUNNER_POSITIONS = ['bottom', 'right'] as const
 
 function parseRunnerPosition(value: string | null): 'bottom' | 'right' {
@@ -81,9 +83,11 @@ export function EditorPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
+  const viewportHeight = useViewportHeight()
   const { token: authToken } = useAuthStore()
-  const { font, fontSize, increaseFontSize, decreaseFontSize, setFont } = useFontStore()
+  const { theme, toggleTheme } = useThemeStore()
   const isCompactViewport = useCompactViewport()
+  const isNarrowViewport = useCompactViewport('(max-width: 767px)')
   const { isFullscreen, isSupported: isFullscreenSupported, toggleFullscreen } = useFullscreen()
   const [showShareManager, setShowShareManager] = useState(false)
   const [isCodeRunning, setIsCodeRunning] = useState(false)
@@ -93,17 +97,22 @@ export function EditorPage() {
     color: string
     colorLight: string
   } | null>(null)
+  const view = searchParams.get('view') === 'canvas' ? 'canvas' : 'editor'
+  const isCanvas = view === 'canvas'
+  const [canvasPending, setCanvasPending] = useState(false)
   const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
+  const visibleRunnerPosition = isNarrowViewport ? 'bottom' : codeRunnerPosition
   const shellRef = useRef<HTMLDivElement>(null)
 
   // State for End Room Dialog
   const [isEndRoomDialogOpen, setIsEndRoomDialogOpen] = useState(false)
+  const [endSaveError, setEndSaveError] = useState('')
+  const [isSavingBeforeEnd, setIsSavingBeforeEnd] = useState(false)
 
   const updateEditorParams = useCallback((updates: { runner?: 'bottom' | 'right' }) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.set('runner', updates.runner ?? codeRunnerPosition)
-      next.delete('view')
       return next
     })
   }, [setSearchParams, codeRunnerPosition])
@@ -112,10 +121,6 @@ export function EditorPage() {
     const normalized = new URLSearchParams(searchParams)
     let changed = false
 
-    if (normalized.has('view')) {
-      normalized.delete('view')
-      changed = true
-    }
     if (normalized.get('runner') !== codeRunnerPosition) {
       normalized.set('runner', codeRunnerPosition)
       changed = true
@@ -135,6 +140,7 @@ export function EditorPage() {
     error: roomError,
     isGuestMode,
     canEdit,
+    canChangeLanguage,
     isOwner,
     canManageRoom,
     canEndRoom,
@@ -150,11 +156,16 @@ export function EditorPage() {
   } = useEditorRoom()
 
   const isMarkdown = effectiveRoom?.language === 'markdown'
+  const markdownSourceRef = useRef<MarkdownEditorHandle | null>(null)
 
   const [localError, setLocalError] = useState('')
   const displayError = roomError || localError
 
   const handleStatelessMessage = useCallback((message: StatelessMessage) => {
+    if (message.type === 'room-language' && LANGUAGES.includes(message.language as Language)) {
+      setRoom(prev => prev ? { ...prev, language: message.language as Language } : prev)
+      return
+    }
     if (message.type === 'room-status' && message.status === 'ended') {
       setRoomEnded(true)
       setRoomEndedAt(message.endedAt ?? null)
@@ -173,21 +184,23 @@ export function EditorPage() {
         colorLight: message.colorLight,
       })
     }
-  }, [setRoomEnded, setRoomEndedAt])
+  }, [setRoom, setRoomEnded, setRoomEndedAt])
 
   const wsToken = authToken ?? ''
   const wsDocumentId = roomId ?? ''
-  const shouldConnectWs = !!wsToken && !!wsDocumentId && !roomEnded && !(effectiveRoom?.isEnded)
+  const shouldConnectWs = !!wsToken && !!wsDocumentId && effectiveRoom?.id === wsDocumentId && !isLoading && !roomError && !roomEnded && !(effectiveRoom?.isEnded)
 
   useEffect(() => {
     setSessionAwarenessColor(null)
   }, [wsDocumentId, wsToken])
 
-  const { provider, ydoc, ytext, ymeta, isConnected, isSynced } = useYjsProvider(
+  const { provider, ydoc, ytext, ymeta, isConnected, isSynced, canWrite, isSaved: documentSaved, waitForSaved, syncError, storageFailed, onlineUsers } = useYjsProvider(
     shouldConnectWs ? wsDocumentId : '',
     shouldConnectWs ? wsToken : '',
     handleStatelessMessage
   )
+
+  const isSaved = documentSaved && !canvasPending
 
   // 3. Monaco Hook
   const {
@@ -201,7 +214,7 @@ export function EditorPage() {
     effectiveRoom,
     ytext,
     provider,
-    canEdit,
+    canEdit: canEdit && canWrite,
     currentUser,
     sessionAwarenessColor,
     roomEnded,
@@ -217,7 +230,6 @@ export function EditorPage() {
 
   // 4. Awareness Hook
   const {
-    remoteUsers,
     followingUserId,
     setFollowingUserId,
     followingClientId,
@@ -232,6 +244,25 @@ export function EditorPage() {
     modelRef,
   })
 
+  const changeView = useCallback((nextView: 'editor' | 'canvas') => {
+    if (!window.dispatchEvent(new Event('sharecode:flush', { cancelable: true }))) return
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', nextView); return next }, { replace: true })
+  }, [setSearchParams])
+
+  useEffect(() => { provider?.awareness?.setLocalStateField('view', view) }, [provider, view])
+  useEffect(() => {
+    const awareness = provider?.awareness
+    if (!awareness || followingClientId == null) return
+    const followView = () => {
+      const next = awareness.getStates().get(followingClientId)?.view
+      if ((next === 'canvas' || next === 'editor') && next !== view) changeView(next)
+    }
+    followView()
+    awareness.on('change', followView)
+    return () => awareness.off('change', followView)
+  }, [provider, followingClientId, view, changeView])
+
+  const remoteUsers = onlineUsers.filter(user => user.clientId !== provider?.awareness?.clientID)
   const localClientId = provider?.awareness?.clientID ?? -1
   const localFallbackColor = generateUserColor(`${currentUser?.id ?? 'anonymous'}:${localClientId}`)
   const connectedUsers = [
@@ -262,7 +293,8 @@ export function EditorPage() {
   useEffect(() => {
     if (!ymeta) return
 
-    const handleMetaChange = () => {
+    const handleMetaChange = (event: { keysChanged: Set<string> }) => {
+      if (!event.keysChanged.has('language')) return
       const newLanguage = ymeta.get('language') as Language | undefined
       if (newLanguage && newLanguage !== effectiveRoom?.language) {
         // Update local room state
@@ -275,21 +307,8 @@ export function EditorPage() {
       }
     }
 
-    // Call updateLanguage immediately if we are already out of sync
-    if (effectiveRoom?.language) {
-      const metaLang = ymeta.get('language') as Language | undefined
-      if (metaLang && metaLang !== effectiveRoom.language) {
-        setRoom((prev) => {
-          if (!prev && !isGuestMode) return prev
-          return {
-            ...(prev ?? effectiveRoom),
-            language: metaLang,
-          }
-        })
-        updateLanguage(metaLang)
-      }
-    }
-
+    // Persisted room language is authoritative on load/reconnect; legacy Yjs
+    // metadata may predate a language change made by a read-only admin.
     ymeta.observe(handleMetaChange)
     return () => {
       ymeta.unobserve(handleMetaChange)
@@ -298,12 +317,28 @@ export function EditorPage() {
 
   // Wrapper for language change to update both API and Yjs
   const onLanguageChange = async (lang: Language) => {
-    await updateRoomLanguage(lang, ymeta)
-    updateLanguage(lang)
+    if (!canChangeLanguage) return
+    try {
+      if (canWrite && isMarkdown && lang !== 'markdown' && ytext && ymeta?.get('markdownInitialized')) {
+        const markdown = markdownSourceRef.current?.getMarkdown()
+        if (markdown != null) {
+          ytext.doc?.transact(() => {
+            ytext.delete(0, ytext.length)
+            ytext.insert(0, markdown)
+          })
+        }
+      }
+      await updateRoomLanguage(lang, canWrite ? ymeta : null)
+      updateLanguage(lang)
+      setLocalError('')
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'Failed to update room')
+    }
   }
 
   // Back Navigation
   const handleBack = () => {
+    if (!window.dispatchEvent(new Event('sharecode:flush', { cancelable: true }))) return
     if (isGuestMode) {
       navigate('/')
     } else {
@@ -355,10 +390,10 @@ export function EditorPage() {
   }
 
   // Error View
-  if (displayError) {
+  if (displayError || syncError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <p className="text-destructive">{displayError}</p>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-2">
+        <p className="text-destructive">{translateError(displayError || t(`editor.errors.${syncError}`, { defaultValue: syncError }))}</p>
         <Button onClick={handleBack}>{t('common.back')}</Button>
       </div>
     )
@@ -367,13 +402,13 @@ export function EditorPage() {
   // Room Ended View
   if (effectiveRoom?.isEnded || roomEnded) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-4 text-center">
+      <div className="flex flex-col items-center justify-center min-h-screen gap-2 p-2 text-center">
         <h2 className="text-2xl font-semibold">{t('editor.ended.title')}</h2>
         <p className="text-muted-foreground">{t('editor.ended.subtitle')}</p>
         <p className="text-sm text-muted-foreground max-w-md">{t('editor.ended.description')}</p>
         {roomEndedAt && (
           <p className="text-xs text-muted-foreground">
-            {t('editor.ended.endedAt', { time: new Date(roomEndedAt).toLocaleString(undefined, { timeZone: getTimezone() }) })}
+            {t('editor.ended.endedAt', { time: formatDateTime(roomEndedAt) })}
           </p>
         )}
         <Button onClick={handleBack}>{t('editor.ended.back')}</Button>
@@ -387,45 +422,260 @@ export function EditorPage() {
     <TooltipProvider>
       <div
         ref={shellRef}
-        className={cn(
-          'editor-shell isolate flex flex-col h-screen overflow-clip',
-          isCompactViewport && 'compact-ui'
-        )}
-        style={{ height: '100dvh' }}
+        className="editor-shell isolate flex flex-col h-screen overflow-clip"
+        style={{ height: viewportHeight }}
       >
         {/* Toolbar */}
         <header
           className={cn(
             'relative z-30 flex items-center justify-between border-b bg-background shrink-0 overflow-hidden safe-x',
-            isCompactViewport ? 'h-10 px-1.5 gap-1' : 'h-12 px-2 sm:px-3 gap-2'
+            'h-9 px-1.5 gap-1'
           )}
         >
-          {/* Left: Back + Title + Language */}
-          <div className="flex items-center gap-1.5 min-w-0 shrink">
+          {/* Document navigation */}
+          <div className="flex items-center gap-1 min-w-0 shrink">
             <Button
               variant="ghost"
               size="icon"
-              className={cn('shrink-0', isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}
+              className="shrink-0"
               onClick={handleBack}
+              aria-label={t('common.back')}
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <span
+              title={effectiveRoom.name}
               className={cn(
                 'font-medium truncate text-sm',
-                isCompactViewport ? 'max-w-[90px]' : 'max-w-[110px] sm:max-w-[220px]'
+                isCompactViewport ? 'max-w-[180px]' : 'max-w-[35vw] sm:max-w-[480px]'
               )}
             >
               {effectiveRoom.name}
             </span>
+          </div>
 
-            {isOwner ? (
-              <Select value={effectiveRoom.language} onValueChange={(v) => onLanguageChange(v as Language)}>
-                <SelectTrigger
-                  className={cn(
-                    'shrink-0',
-                    isCompactViewport ? 'h-7 w-[92px] text-xs' : 'h-8 w-24 sm:w-32'
+          <RoomViewSwitch value={view} onChange={next => { setFollowingUserId(null); setFollowingClientId(null); changeView(next) }} />
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-1 sm:gap-1 shrink-0">
+            {/* Run Code (Visible on all sizes if editable) */}
+            {canEdit && !isMarkdown && !isCanvas && (
+              <Button
+                variant={isCompactViewport ? 'ghost' : 'default'}
+                size={isCompactViewport ? 'icon' : 'default'}
+                aria-label={t('codeRunner.run')}
+                onClick={handleRunCode}
+                disabled={isCodeRunning || !canWrite}
+              >
+                {isCodeRunning ? (
+                  <Loader2 className="h-4 w-4 animate-spin sm:mr-1" />
+                ) : (
+                  <Play className="h-4 w-4 sm:mr-1" />
+                )}
+                {!isCompactViewport && <span className="hidden sm:inline">{t('codeRunner.run')}</span>}
+              </Button>
+            )}
+
+            {/* Primary room action; session management lives in the menu. */}
+            {!isCompactViewport && canManageRoom && (
+              <div className="hidden md:flex items-center gap-1">
+                <Button variant="outline" size="sm" className="sm:px-2" aria-label={t('editor.toolbar.share')} onClick={() => setShowShareManager(true)}>
+                  <Share2 className="h-4 w-4" />
+                  <span className="hidden xl:inline">{t('editor.toolbar.share')}</span>
+                </Button>
+              </div>
+            )}
+
+            {/* Secondary actions */}
+            <div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label={t('editor.toolbar.more')} >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={toggleTheme}>
+                    {theme === 'light' ? <Moon className="mr-1.5 h-4 w-4" /> : <Sun className="mr-1.5 h-4 w-4" />}
+                    {t('common.toggleTheme')}
+                  </DropdownMenuItem>
+                  {isFullscreenSupported && (
+                    <DropdownMenuItem onClick={() => { void toggleFullscreen(shellRef.current) }}>
+                      {isFullscreen ? <Minimize2 className="mr-1.5 h-4 w-4" /> : <Maximize className="mr-1.5 h-4 w-4" />}
+                      {isFullscreen ? t('common.exitFullscreen') : t('common.enterFullscreen')}
+                    </DropdownMenuItem>
                   )}
+                  {!isMarkdown && !isCanvas && (
+                    <DropdownMenuItem onClick={handleBlink} disabled={!canBlink}>
+                      <Sparkles className="h-4 w-4 mr-1.5" />
+                      {t('editor.toolbar.blink')}
+                    </DropdownMenuItem>
+                  )}
+
+                  {(canManageRoom || canEndRoom) && (
+                    <>
+                      {canManageRoom && (
+                        <DropdownMenuItem aria-label={t('editor.toolbar.share')} onClick={() => setShowShareManager(true)}>
+                          <Share2 className="h-4 w-4 mr-1.5" />
+                          {t('editor.toolbar.share')}
+                        </DropdownMenuItem>
+                      )}
+                      {canEndRoom && (
+                        <DropdownMenuItem
+                          onClick={() => setIsEndRoomDialogOpen(true)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <StopCircle className="h-4 w-4 mr-1.5" />
+                          {t('editor.toolbar.endRoom')}
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
+
+                  {isGuestMode && (
+                    <DropdownMenuItem onClick={() => { if (window.dispatchEvent(new Event('sharecode:flush', { cancelable: true }))) handleGuestLeave() }}>
+                      <LogOut className="h-4 w-4 mr-1.5" />
+                      {t('share.editor.leaveButton')}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </header>
+
+        {/* End Room Confirmation Dialog */}
+        <Dialog open={isEndRoomDialogOpen} onOpenChange={setIsEndRoomDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('editor.toolbar.endRoom')}</DialogTitle>
+              <DialogDescription>
+                {t('editor.toolbar.endConfirm')}
+              </DialogDescription>
+            </DialogHeader>
+            {endSaveError && <p role="alert" className="text-xs text-destructive">{endSaveError}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEndRoomDialogOpen(false)}>
+                {t('rooms.cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  try {
+                    setIsSavingBeforeEnd(true)
+                    setEndSaveError('')
+                    if (!window.dispatchEvent(new Event('sharecode:flush', { cancelable: true }))) throw new Error('Canvas pending')
+                    await waitForSaved()
+                    await handleEndRoom()
+                    setIsEndRoomDialogOpen(false)
+                  } catch { setEndSaveError(t('canvas.waitForSave')) } finally { setIsSavingBeforeEnd(false) }
+                }}
+                disabled={isEnding || isSavingBeforeEnd}
+              >
+                {isEnding || isSavingBeforeEnd ? <Loader2 className="h-4 w-4 animate-spin" /> : t('editor.toolbar.endRoom')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Share Manager Dialog */}
+        <Dialog open={showShareManager} onOpenChange={setShowShareManager}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('editor.toolbar.share')}</DialogTitle>
+            </DialogHeader>
+            <div className="py-1.5">
+              <ShareLinkManager roomId={roomId!} />
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Main Content */}
+        <div className="relative z-0 flex flex-1 overflow-hidden min-w-0">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+            <div className="relative z-0 flex-1 overflow-hidden">
+              <div className={isCanvas ? 'hidden' : 'h-full w-full'}>
+              {isMarkdown ? (
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center">
+                      <Spinner size="lg" />
+                    </div>
+                  }
+                >
+                  <MarkdownEditor
+                    key={ydoc?.guid}
+                    sourceRef={markdownSourceRef}
+                    ytext={ytext}
+                    canEdit={canEdit && canWrite}
+                    provider={provider}
+                    ydoc={ydoc}
+                    isSynced={isSynced}
+                    followingUserId={followingUserId}
+                    followingClientId={followingClientId}
+                  />
+                </Suspense>
+              ) : (
+                <div ref={editorRef} translate="no" className="notranslate h-full w-full" />
+              )}
+              </div>
+              {isCanvas && ydoc && isSynced && <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner /></div>}>
+                <CanvasView key={ydoc.guid} doc={ydoc} canEdit={canEdit && canWrite} theme={theme} provider={provider} followClientId={followingClientId} onPending={setCanvasPending} />
+              </Suspense>}
+            </div>
+
+            {visibleRunnerPosition === 'bottom' && !isMarkdown && !isCanvas && (
+              <CodeRunnerPanel
+                ref={codeRunnerRef}
+                language={effectiveRoom.language}
+                getCode={getCode}
+                canEdit={canEdit && canWrite}
+                ymeta={ymeta ?? undefined}
+                position="bottom"
+                onPositionChange={isNarrowViewport ? undefined : (position) => updateEditorParams({ runner: position })}
+                roomId={roomId}
+                isOwner={isOwner}
+                expanded={isRunnerExpanded}
+                onExpandedChange={setIsRunnerExpanded}
+              />
+            )}
+          </div>
+
+          {visibleRunnerPosition === 'right' && !isMarkdown && !isCanvas && (
+            <CodeRunnerPanel
+              ref={codeRunnerRef}
+              language={effectiveRoom.language}
+              getCode={getCode}
+              canEdit={canEdit && canWrite}
+              ymeta={ymeta ?? undefined}
+              position="right"
+              onPositionChange={isNarrowViewport ? undefined : (position) => updateEditorParams({ runner: position })}
+              roomId={roomId}
+              isOwner={isOwner}
+              expanded={isRunnerExpanded}
+              onExpandedChange={setIsRunnerExpanded}
+            />
+          )}
+        </div>
+
+        <footer className="editor-statusbar relative z-30 shrink-0 border-t bg-background px-1.5 text-[11px] text-muted-foreground safe-bottom">
+          <div className="flex min-w-0 items-center gap-1.5" role="status" aria-live="polite" aria-atomic="true">
+            <span className={cn('flex items-center gap-1', !isConnected && 'text-destructive')}>
+              {isConnected ? <Wifi className="h-3 w-3 text-success" /> : <WifiOff className="h-3 w-3" />}
+              <span>{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
+            </span>
+            <span className={cn('flex items-center gap-1', storageFailed && 'text-destructive')}>
+              {storageFailed ? <WifiOff className="h-3 w-3" /> : isSaved ? <Check className="h-3 w-3" /> : isConnected ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
+              <span>{storageFailed ? t('editor.status.saveFailed') : isSaved ? t('editor.status.saved') : isConnected ? t('editor.status.saving') : t('editor.status.pending')}</span>
+            </span>
+            <span className="hidden lg:inline">{canEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}</span>
+          </div>
+          <div className="editor-statusbar-controls flex min-w-0 items-center justify-end gap-0 min-[401px]:gap-1">
+            {canChangeLanguage ? (
+              <Select disabled={!isConnected} value={effectiveRoom.language} onValueChange={(v) => onLanguageChange(v as Language)}>
+                <SelectTrigger
+                  aria-label={t('rooms.create.language')}
+                  className="h-control-sm w-[84px] min-[401px]:w-[105px] shrink-0 border-transparent bg-transparent px-1.5 text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -442,60 +692,12 @@ export function EditorPage() {
                 variant="secondary"
                 className={cn(
                   'shrink-0 rounded-sm text-xs',
-                  isCompactViewport ? 'px-1 py-0 leading-5' : 'px-1.5 py-0'
+                  isCompactViewport ? 'px-1 py-0 leading-5' : 'px-1 py-0'
                 )}
               >
                 {effectiveRoom.language}
               </Badge>
             )}
-
-            {isGuestMode && !isCompactViewport && (
-              <Badge variant="outline" className="hidden sm:inline-flex shrink-0 rounded-sm text-xs px-1.5 py-0">
-                {canEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}
-              </Badge>
-            )}
-          </div>
-
-          {/* Right: Actions */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-
-            {/* Desktop: Font Controls */}
-            <div className="hidden md:flex items-center gap-1 border rounded-md mr-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={decreaseFontSize}>
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('editor.font.decreaseSize')}</TooltipContent>
-              </Tooltip>
-              <span className="text-xs w-6 text-center">{fontSize}</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={increaseFontSize}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('editor.font.increaseSize')}</TooltipContent>
-              </Tooltip>
-            </div>
-
-            {/* Desktop: Font Family */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hidden md:inline-flex h-8 w-8 mr-2">
-                  <Type className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => setFont('JetBrains Mono')}>
-                  JetBrains Mono {font === 'JetBrains Mono' && <Check className="h-4 w-4 ml-2" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setFont('JuliaMono')}>
-                  Julia Mono {font === 'JuliaMono' && <Check className="h-4 w-4 ml-2" />}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
             {/* Users Dropdown */}
             <DropdownMenu>
@@ -503,7 +705,8 @@ export function EditorPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={cn('gap-1', isCompactViewport ? 'h-7 px-2 text-xs' : 'h-8')}
+                  aria-label={t('editor.toolbar.users')}
+                  className="gap-1"
                 >
                   <Users className="h-4 w-4" />
                   <span>{connectedUsers.length}</span>
@@ -516,34 +719,22 @@ export function EditorPage() {
 
                 {/* Remote Users */}
                 {remoteUsers.length === 0 && (
-                  <div className="px-2 py-2 text-xs text-muted-foreground text-center">
-                    No other users connected
+                  <div className="px-1.5 py-1.5 text-xs text-muted-foreground text-center">
+                    {t('editor.toolbar.noOtherUsers')}
                   </div>
                 )}
 
                 {connectedUsers.map((u) => {
-                  const isFollowing =
-                    !u.isLocal &&
-                    (
-                      (followingUserId != null && u.id != null && followingUserId === u.id) ||
-                      (followingUserId == null &&
-                        followingClientId != null &&
-                        followingClientId === u.clientId)
-                    )
+                  const isFollowing = !u.isLocal && followingClientId === u.clientId
                   const toggleFollow = () => {
                     if (u.isLocal) return
-                    if (isFollowing) {
-                      setFollowingUserId(null)
-                      setFollowingClientId(null)
-                    } else {
-                      if (u.id) setFollowingUserId(u.id)
-                      else setFollowingClientId(u.clientId)
-                    }
+                    setFollowingUserId(isFollowing ? null : u.id ?? null)
+                    setFollowingClientId(isFollowing ? null : u.clientId)
                   }
                   return (
                     <DropdownMenuItem
                       key={u.clientId}
-                      className="gap-2 cursor-pointer"
+                      className="gap-1 cursor-pointer"
                       onClick={toggleFollow}
                     >
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
@@ -552,18 +743,9 @@ export function EditorPage() {
                         {u.isLocal ? ` (${t('share.editor.you')})` : ''}
                       </span>
                       {!u.isLocal && (
-                        <Button
-                          variant={isFollowing ? 'secondary' : 'ghost'}
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            toggleFollow()
-                          }}
-                        >
+                        <span className="ml-auto text-xs text-muted-foreground">
                           {isFollowing ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
-                        </Button>
+                        </span>
                       )}
                     </DropdownMenuItem>
                   )
@@ -571,269 +753,10 @@ export function EditorPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <ThemeToggle className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')} />
-
-            {/* Blink Selection */}
-            {!isCompactViewport && !isMarkdown && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={handleBlink}
-                    disabled={!canBlink}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('editor.toolbar.blink')}</TooltipContent>
-              </Tooltip>
-            )}
-
-            {/* Run Code (Visible on all sizes if editable) */}
-            {canEdit && !isMarkdown && (
-              <Button
-                variant={isCompactViewport ? 'ghost' : 'default'}
-                size={isCompactViewport ? 'icon' : 'sm'}
-                className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 px-2 sm:px-3')}
-                onClick={handleRunCode}
-                disabled={isCodeRunning}
-              >
-                {isCodeRunning ? (
-                  <Loader2 className="h-4 w-4 animate-spin sm:mr-1" />
-                ) : (
-                  <Play className="h-4 w-4 sm:mr-1" />
-                )}
-                {!isCompactViewport && <span className="hidden sm:inline">{t('codeRunner.run')}</span>}
-              </Button>
-            )}
-
-            {/* Desktop: Share & End Room Buttons */}
-            {!isCompactViewport && (canManageRoom || canEndRoom) && (
-              <div className="hidden md:flex items-center gap-2">
-                {canManageRoom && (
-                  <Button variant="outline" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setShowShareManager(true)}>
-                    <Share2 className="h-4 w-4 sm:mr-1" />
-                    <span className="hidden xl:inline">{t('editor.toolbar.share')}</span>
-                  </Button>
-                )}
-                {canEndRoom && (
-                  <Button variant="destructive" size="sm" className="h-8 px-2 sm:px-3" onClick={() => setIsEndRoomDialogOpen(true)}>
-                    <StopCircle className="h-4 w-4 sm:mr-1" />
-                    <span className="hidden xl:inline">{t('editor.toolbar.endRoom')}</span>
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Desktop: Leave Room (Guest) */}
-            {isGuestMode && !isCompactViewport && (
-              <Button variant="outline" size="sm" className="hidden md:flex h-8 px-2 sm:px-3" onClick={handleGuestLeave}>
-                <LogOut className="h-4 w-4 sm:mr-1" />
-                <span className="hidden xl:inline">{t('share.editor.leaveButton')}</span>
-              </Button>
-            )}
-
-            {/* Mobile: More Menu (Dropdown) */}
-            <div className={cn(isCompactViewport ? 'block' : 'md:hidden')}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}>
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {/* Font Controls Group */}
-                  <div className="flex items-center justify-between px-2 py-1">
-                    <Button variant="outline" size="icon" className="h-6 w-6" onClick={decreaseFontSize}>
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="text-xs">{fontSize}</span>
-                    <Button variant="outline" size="icon" className="h-6 w-6" onClick={increaseFontSize}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  <DropdownMenuSeparator />
-
-                  {!isMarkdown && (
-                    <DropdownMenuItem onClick={handleBlink} disabled={!canBlink}>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      {t('editor.toolbar.blink')}
-                    </DropdownMenuItem>
-                  )}
-
-                  {(canManageRoom || canEndRoom) && (
-                    <>
-                      {canManageRoom && (
-                        <DropdownMenuItem onClick={() => setShowShareManager(true)}>
-                          <Share2 className="h-4 w-4 mr-2" />
-                          {t('editor.toolbar.share')}
-                        </DropdownMenuItem>
-                      )}
-                      {canEndRoom && (
-                        <DropdownMenuItem
-                          onClick={() => setIsEndRoomDialogOpen(true)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <StopCircle className="h-4 w-4 mr-2" />
-                          {t('editor.toolbar.endRoom')}
-                        </DropdownMenuItem>
-                      )}
-                    </>
-                  )}
-
-                  {isGuestMode && (
-                    <DropdownMenuItem onClick={handleGuestLeave}>
-                      <LogOut className="h-4 w-4 mr-2" />
-                      {t('share.editor.leaveButton')}
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <span className="mx-1 hidden h-3 border-l min-[401px]:block" />
+            {!isCanvas && <FontControls />}
           </div>
-        </header>
-
-        {/* End Room Confirmation Dialog */}
-        <Dialog open={isEndRoomDialogOpen} onOpenChange={setIsEndRoomDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t('editor.toolbar.endRoom')}</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to end this session? All participants will be disconnected.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEndRoomDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  handleEndRoom()
-                  setIsEndRoomDialogOpen(false)
-                }}
-                disabled={isEnding}
-              >
-                {isEnding ? <Loader2 className="h-4 w-4 animate-spin" /> : 'End Session'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        
-        {/* Share Manager Dialog */}
-        <Dialog open={showShareManager} onOpenChange={setShowShareManager}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{t('editor.toolbar.share')}</DialogTitle>
-            </DialogHeader>
-            <div className="py-2">
-              <ShareLinkManager roomId={roomId!} />
-            </div>
-          </DialogContent>
-        </Dialog>
-
-
-        {/* Main Content */}
-        <div className="relative z-0 flex flex-1 overflow-hidden min-w-0">
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            <div className="relative z-0 flex-1 overflow-hidden">
-              {isMarkdown ? (
-                <Suspense
-                  fallback={
-                    <div className="flex h-full items-center justify-center">
-                      <Spinner size="lg" />
-                    </div>
-                  }
-                >
-                  <MarkdownEditor
-                    ytext={ytext}
-                    canEdit={canEdit}
-                    provider={provider}
-                    ydoc={ydoc}
-                    isSynced={isSynced}
-                    followingUserId={followingUserId}
-                    followingClientId={followingClientId}
-                  />
-                </Suspense>
-              ) : (
-                <div ref={editorRef} className="h-full w-full" />
-              )}
-              {isFullscreenSupported && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className={cn(
-                    'absolute right-3 bottom-3 z-20 rounded-full border bg-background/65 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/45',
-                    isCompactViewport ? 'h-9 w-9' : 'h-10 w-10'
-                  )}
-                  onClick={() => {
-                    void toggleFullscreen(shellRef.current)
-                  }}
-                  aria-label={isFullscreen ? t('common.exitFullscreen') : t('common.enterFullscreen')}
-                  title={isFullscreen ? t('common.exitFullscreen') : t('common.enterFullscreen')}
-                >
-                  {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-                </Button>
-              )}
-            </div>
-
-            {codeRunnerPosition === 'bottom' && !isMarkdown && (
-              <CodeRunnerPanel
-                ref={codeRunnerRef}
-                language={effectiveRoom.language}
-                getCode={getCode}
-                canEdit={canEdit}
-                ymeta={ymeta ?? undefined}
-                position="bottom"
-                onPositionChange={(position) => updateEditorParams({ runner: position })}
-                roomId={roomId}
-                isOwner={isOwner}
-                expanded={isRunnerExpanded}
-                onExpandedChange={setIsRunnerExpanded}
-              />
-            )}
-          </div>
-
-          {codeRunnerPosition === 'right' && !isMarkdown && (
-            <CodeRunnerPanel
-              ref={codeRunnerRef}
-              language={effectiveRoom.language}
-              getCode={getCode}
-              canEdit={canEdit}
-              ymeta={ymeta ?? undefined}
-              position="right"
-              onPositionChange={(position) => updateEditorParams({ runner: position })}
-              roomId={roomId}
-              isOwner={isOwner}
-              expanded={isRunnerExpanded}
-              onExpandedChange={setIsRunnerExpanded}
-            />
-          )}
-        </div>
-
-        {!isCompactViewport && (
-          <footer className="relative z-30 safe-bottom safe-x flex items-center justify-between h-7 px-2 sm:px-3 border-t bg-background text-[11px] text-muted-foreground shrink-0 overflow-hidden">
-            <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-              <div className={cn('flex items-center gap-1', isConnected ? 'text-success' : 'text-destructive')}>
-                {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-                <span className="hidden sm:inline">{isConnected ? t('editor.status.connected') : t('editor.status.disconnected')}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                {isSynced ? <Check className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
-                <span className="hidden sm:inline">{isSynced ? t('editor.status.synced') : t('editor.status.syncing')}</span>
-              </div>
-              {isGuestMode && currentUser && (
-                <span className="text-muted-foreground truncate max-w-[150px]">
-                  {t('share.editor.connectedAs', { name: currentUser.username })}
-                </span>
-              )}
-            </div>
-            <div>{effectiveRoom.language}</div>
-          </footer>
-        )}
+        </footer>
       </div>
     </TooltipProvider>
   )

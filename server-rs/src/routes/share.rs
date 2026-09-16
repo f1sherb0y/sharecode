@@ -8,12 +8,14 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::core::audit::{self, ClientInfo};
+
 use crate::{
     auth::{build_guest_claims, AuthUser},
     db::db_error,
     error::ApiError,
     models::{ShareLinkSummaryRow, ShareLinkWithRoomRow},
-    permissions::has_global_delete,
+    permissions::{has_global_delete, has_global_read},
     state::AppState,
     utils::colors::random_user_color,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -177,7 +179,6 @@ pub async fn list_share_links(
         FROM "RoomShareLink" l
         LEFT JOIN "GuestSession" g ON g."shareLinkId" = l.id
         WHERE l."roomId" = $1
-          AND l."consumedAt" IS NULL
         GROUP BY l.id
         ORDER BY l."createdAt" DESC
         "#,
@@ -195,8 +196,10 @@ pub async fn list_share_links(
 pub async fn delete_share_link(
     State(state): State<AppState>,
     auth_user: AuthUser,
+    client: ClientInfo,
     Path((room_id, share_link_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let _access = state.ws.access.write().await;
     let share_link = sqlx::query_as::<_, ShareLinkOwnerRow>(
         r#"
         SELECT l."roomId" as room_id, r."ownerId" as owner_id
@@ -219,9 +222,14 @@ pub async fn delete_share_link(
         return Err(ApiError::not_found("Share link not found"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start revocation"))?;
     sqlx::query(r#"DELETE FROM "RoomShareLink" WHERE id = $1"#)
         .bind(&share_link_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await
         .map_err(|err| db_error(err, "Failed to delete share link"))?;
 
@@ -234,11 +242,28 @@ pub async fn delete_share_link(
         "share link deleted"
     );
 
+    audit::record(
+        &mut *tx,
+        &client,
+        "share.revoke",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&share_link_id),
+        true,
+        None,
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit revocation"))?;
+    state.ws.revoke_share(&room_id, &share_link_id).await;
+
     Ok(Json(json!({ "message": "Share link deleted" })))
 }
 
 pub async fn join_share_link(
     State(state): State<AppState>,
+    client: ClientInfo,
     Path(token): Path<String>,
     Json(payload): Json<JoinSharePayload>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -378,6 +403,17 @@ pub async fn join_share_link(
 
     let jwt_token = crate::auth::generate_guest_token(&state.config, claims)?;
 
+    audit::record(
+        &mut *tx,
+        &client,
+        "guest.join",
+        Some(&guest_id),
+        Some(&username),
+        Some(&share_link.room_id),
+        true,
+        None,
+    )
+    .await?;
     tx.commit()
         .await
         .map_err(|err| db_error(err, "Failed to finalize share link join"))?;
@@ -417,13 +453,95 @@ pub async fn join_share_link(
     ))
 }
 
-fn format_share_link(_state: &AppState, link: &ShareLinkSummaryRow) -> serde_json::Value {
+/// A logged-in account follows the invitation to its exact room. Existing
+/// members do not consume the invitation intended for a guest. New members
+/// claim it atomically, with the invitation's maximum edit permission.
+pub async fn accept_share_link(
+    State(state): State<AppState>,
+    auth_user: AuthUser,
+    client: ClientInfo,
+    Path(token): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let _access = state.ws.access.read().await;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to begin invitation"))?;
+    let row = sqlx::query_as::<_, AccountInvitation>(r#"
+        SELECT l.id, l."roomId" as room_id, l."canEdit" AND r."allowEdit" as can_edit,
+            r."ownerId" as owner_id, l."consumedAt" IS NOT NULL as consumed,
+            l."expiresAt" <= NOW() as expired,
+            EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId"=r.id AND p."userId"=$2) as member
+        FROM "RoomShareLink" l JOIN "Room" r ON r.id=l."roomId"
+        WHERE l.token=$1 AND NOT r."isDeleted" AND NOT r."isEnded"
+        FOR UPDATE OF l
+    "#).bind(&token).bind(&auth_user.id).fetch_optional(&mut *tx).await
+      .map_err(|e| db_error(e, "Failed to load invitation"))?
+      .ok_or_else(|| ApiError::not_found("Share link or active room not found"))?;
+    if !(row.member || row.owner_id == auth_user.id || has_global_read(&auth_user)) {
+        if row.consumed {
+            return Err(ApiError::gone("This share link has already been used"));
+        }
+        if row.expired {
+            return Err(ApiError::gone("This share link has expired"));
+        }
+        // Keep a link association so revoking the invitation can also revoke
+        // membership granted through it, without changing pre-existing members.
+        sqlx::query(
+            r#"INSERT INTO "RoomParticipant" (id,"roomId","userId","canEdit","shareLinkId")
+            VALUES ($1,$2,$3,$4,$5) ON CONFLICT ("roomId","userId") DO NOTHING"#,
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(&row.room_id)
+        .bind(&auth_user.id)
+        .bind(row.can_edit)
+        .bind(&row.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| db_error(e, "Failed to join room"))?;
+        sqlx::query(r#"UPDATE "RoomShareLink" SET "consumedAt"=NOW() WHERE id=$1"#)
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| db_error(e, "Failed to claim invitation"))?;
+    }
+    audit::record(
+        &mut *tx,
+        &client,
+        "share.accept",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&row.room_id),
+        true,
+        None,
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to accept invitation"))?;
+    Ok(Json(json!({"roomId": row.room_id})))
+}
+
+#[derive(sqlx::FromRow)]
+struct AccountInvitation {
+    id: String,
+    room_id: String,
+    owner_id: String,
+    can_edit: bool,
+    member: bool,
+    consumed: bool,
+    expired: bool,
+}
+
+fn format_share_link(state: &AppState, link: &ShareLinkSummaryRow) -> serde_json::Value {
     let is_consumed = link.consumed_at.is_some();
     let is_expired = !is_consumed && link.expires_at <= Utc::now();
 
     json!({
         "id": link.id,
         "token": link.token,
+        "shareUrl": state.config.app_url.as_ref().or(state.config.frontend_url.as_ref()).map(|base| format!("{}/s/{}", base.trim_end_matches('/'), link.token)),
         "canEdit": link.can_edit,
         "createdAt": to_iso_string(link.created_at),
         "expiresAt": to_iso_string(link.expires_at),

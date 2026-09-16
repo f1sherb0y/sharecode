@@ -71,7 +71,9 @@ pub fn can_manage_room_lifecycle(
     }
 }
 
-// Admin and superuser roles implicitly have all three global-room capabilities,
+// Only superusers have implicit global capabilities; admin flags are authoritative.
+// Previously admin implied write access even after its checkbox was cleared.
+// Superusers have all three global-room capabilities,
 // regardless of whether the `canReadAllRooms` / `canWriteAllRooms` /
 // `canDeleteAllRooms` flags are explicitly set on their account. The flags
 // exist to grant the same room-wide access to normal users. This is enforced
@@ -84,11 +86,7 @@ pub fn role_has_global_read(
     can_write_all_rooms: bool,
     can_delete_all_rooms: bool,
 ) -> bool {
-    role == "admin"
-        || role == "superuser"
-        || can_read_all_rooms
-        || can_write_all_rooms
-        || can_delete_all_rooms
+    role == "superuser" || can_read_all_rooms || can_write_all_rooms || can_delete_all_rooms
 }
 
 pub fn role_has_global_write(
@@ -96,11 +94,11 @@ pub fn role_has_global_write(
     can_write_all_rooms: bool,
     can_delete_all_rooms: bool,
 ) -> bool {
-    role == "admin" || role == "superuser" || can_write_all_rooms || can_delete_all_rooms
+    role == "superuser" || can_write_all_rooms || can_delete_all_rooms
 }
 
 pub fn role_has_global_delete(role: &str, can_delete_all_rooms: bool) -> bool {
-    role == "admin" || role == "superuser" || can_delete_all_rooms
+    role == "superuser" || can_delete_all_rooms
 }
 
 pub fn has_global_read(user: &AuthUser) -> bool {

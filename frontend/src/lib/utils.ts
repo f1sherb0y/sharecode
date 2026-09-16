@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { useSettingsStore } from '@/stores/settings'
+import { getLocale } from '@/i18n'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -34,12 +35,12 @@ export function generateUserColor(identifier: string | number | undefined): {
 }
 
 export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleDateString(undefined, { timeZone: getTimezone() })
+  return new Date(date).toLocaleDateString(getLocale(), { timeZone: getTimezone() })
 }
 
 export function formatDateMinutes(date: string | Date): string {
   const d = new Date(date)
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(getLocale(), {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -50,12 +51,12 @@ export function formatDateMinutes(date: string | Date): string {
 }
 
 export function formatDateTime(date: string | Date): string {
-  return new Date(date).toLocaleString(undefined, { timeZone: getTimezone() })
+  return new Date(date).toLocaleString(getLocale(), { timeZone: getTimezone() })
 }
 
 export function formatTime(timestamp: number): string {
   const date = new Date(timestamp)
-  return date.toLocaleTimeString(undefined, {
+  return date.toLocaleTimeString(getLocale(), {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',

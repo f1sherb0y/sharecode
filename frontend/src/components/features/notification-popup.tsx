@@ -62,10 +62,10 @@ export function NotificationPopup() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/70 p-2 backdrop-blur-sm">
       <div className="w-full max-w-2xl rounded-xl border bg-background shadow-2xl">
-        <div className="border-b px-6 py-4">
-          <div className="flex items-center gap-2 text-lg font-semibold">
+        <div className="border-b px-3 py-2">
+          <div className="flex items-center gap-1 text-lg font-semibold">
             <BellRing className="h-5 w-5" />
             {t('notifications.popup.title', { count: unreadNotifications.length })}
           </div>
@@ -74,18 +74,18 @@ export function NotificationPopup() {
           </p>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto px-6 py-4 space-y-3">
+        <div className="max-h-[60vh] overflow-y-auto px-3 py-2 space-y-1.5">
           {previewNotifications.map((notification) => {
             const isEmergency = notification.severity === 'emergency'
             return (
             <div
               key={notification.id}
               className={cn(
-                'rounded-lg border p-4 space-y-2',
+                'rounded-lg border p-2 space-y-1',
                 isEmergency && 'border-l-4 border-l-destructive'
               )}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start justify-between gap-1.5">
                 <div>
                   <div className={cn('font-medium', isEmergency && 'font-bold')}>
                     {notification.title}
@@ -114,7 +114,7 @@ export function NotificationPopup() {
           )}
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-1 border-t px-3 py-2 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={() => setDismissed(true)}>
             {t('notifications.popup.later')}
           </Button>

@@ -19,7 +19,8 @@
         "invalid": "Invalid share link format"
       },
       "joinPrompt": "Have a share link or code?",
-      "joinLinkLabel": "Join a room"
+      "joinLinkLabel": "Join a room",
+      "failed": "Login failed. Please try again."
     },
     "register": {
       "title": "Register",
@@ -33,7 +34,8 @@
       "registering": "Creating account...",
       "hasAccount": "Already have an account?",
       "loginLink": "Login",
-      "disabled": "Registration is currently disabled. Please contact an administrator for access."
+      "disabled": "Registration is currently disabled. Please contact an administrator for access.",
+      "failed": "Registration failed. Please try again."
     }
   },
   "join": {
@@ -52,6 +54,7 @@
     "featureInstantDesc": "No setup required"
   },
   "rooms": {
+    "workspaceTitle": "Workspace",
     "title": "All Rooms",
     "welcome": "Welcome",
     "createButton": "Create New Room",
@@ -88,7 +91,9 @@
       "modalCancel": "Cancel",
       "modalConfirm": "Save selection",
       "button": "Create Room",
-      "creating": "Creating..."
+      "creating": "Creating...",
+      "selectedUsers_one": "{{count}} user selected",
+      "selectedUsers_other": "{{count}} users selected"
     },
     "list": {
       "loading": "Loading rooms...",
@@ -113,13 +118,14 @@
       "pinned": "Pinned",
       "pin": "Pin room",
       "unpin": "Unpin room",
-      "viewPlayback": "Playback"
+      "viewPlayback": "Playback",
+      "deleteTitle": "Delete room"
     },
     "filters": {
       "owner": "Owner",
       "allOwners": "All owners",
       "activeness": "Activeness",
-      "allActiveness": "All",
+      "allActiveness": "All statuses",
       "active": "Active",
       "ended": "Ended"
     },
@@ -128,11 +134,21 @@
       "pageSize": "Items per page",
       "prev": "Previous",
       "next": "Next",
-      "page": "Page {{page}} / {{totalPages}}"
+      "page": "Page {{page}} / {{totalPages}}",
+      "label": "Room pages",
+      "goToPage": "Go to page {{page}}",
+      "total_one": "{{count}} room",
+      "total_other": "{{count}} rooms",
+      "perPage": "{{count}} / page"
     }
   },
   "editor": {
     "toolbar": {
+      "endConfirm": "End this session? All participants will be disconnected.",
+      "noOtherUsers": "No other users connected",
+      "more": "More actions",
+      "inlineMath": "Insert inline math",
+      "blockMath": "Insert block math",
       "follow": "Follow",
       "following": "Following",
       "endRoom": "End Room",
@@ -140,13 +156,30 @@
       "share": "Share",
       "blink": "Blink Selection",
       "code": "Code",
-      "canvas": "Canvas"
+      "canvas": "Canvas",
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "heading": "Heading",
+      "inlineCode": "Inline code",
+      "quote": "Quote",
+      "bulletList": "Bullet list",
+      "link": "Link",
+      "table": "Table",
+      "diagram": "Mermaid diagram",
+      "image": "Insert image",
+      "linkPrompt": "Link URL:",
+      "renderingDiagram": "Rendering diagram…"
     },
     "status": {
+      "pending": "Changes kept on this device",
       "connected": "Connected",
       "disconnected": "Disconnected",
       "synced": "Synced",
-      "syncing": "Syncing..."
+      "syncing": "Syncing...",
+      "saved": "Saved",
+      "saving": "Saving…",
+      "saveFailed": "Saving unavailable — edits retained locally"
     },
     "ended": {
       "title": "This room has ended",
@@ -156,9 +189,19 @@
       "back": "Back to rooms"
     },
     "font": {
+      "size": "Font size",
+      "family": "Font family",
       "increaseSize": "Increase font size",
       "decreaseSize": "Decrease font size",
       "selectFont": "Select editor font"
+    },
+    "errors": {
+      "accessDenied": "Access denied. Open the invitation for this room again.",
+      "accessRevoked": "Your access to this room was revoked.",
+      "pendingReadOnly": "This tab has unconfirmed edits but currently has read-only access. Restore write access to recover them.",
+      "initializeFailed": "Could not initialize the editor. Please reload.",
+      "roomMismatch": "This tab is authorized for another room. Open the correct invitation in a new tab.",
+      "localRecoveryFailed": "Local recovery storage is unavailable. Keep this tab open and free up browser storage before retrying."
     }
   },
   "admin": {
@@ -246,7 +289,25 @@
         "updates": "Updates",
         "size": "Size",
         "actions": "Actions"
-      }
+      },
+      "pagePlayback": "Playback on this page",
+      "pageEndedRooms": "Ended rooms on this page"
+    },
+    "filters": {
+      "view": "View",
+      "searchUsers": "Search username or email",
+      "searchRooms": "Search room name",
+      "owner": "Owner username",
+      "allRoles": "All roles",
+      "allStatuses": "All statuses",
+      "allLanguages": "All languages",
+      "search": "Search",
+      "reset": "Reset"
+    },
+    "pagination": {
+      "label": "Management pages",
+      "total": "{{count}} results",
+      "page": "{{page}} / {{total}}"
     }
   },
   "playback": {
@@ -262,7 +323,10 @@
     "progress": "Progress",
     "duration": "Duration",
     "noUpdates": "No playback data available",
-    "notes": "Notes"
+    "notes": "Notes",
+    "goToStart": "Go to start",
+    "goToEnd": "Go to end",
+    "editorFailed": "Could not initialize playback. Please reload."
   },
   "settings": {
     "title": "Settings",
@@ -275,7 +339,7 @@
     },
     "language": {
       "title": "Language",
-      "description": "Choose your display language"
+      "description": "App language changes immediately; reload to update built-in editor menus."
     },
     "timezone": {
       "title": "Timezone",
@@ -335,14 +399,21 @@
         "label": "Hide from taskbar/dock",
         "hint": "Hide the application from taskbar (Windows) or dock (macOS)"
       },
-      "note": "Note: These settings are only available on Windows and macOS. Changes will take effect immediately."
+      "note": "Note: These settings are only available on Windows and macOS. Changes will take effect immediately.",
+      "description": "Privacy and window controls"
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "hide": "Hide window",
+      "top": "Always on top",
+      "move": "Move window"
     }
   },
   "share": {
     "manager": {
       "title": "Guest Share Links",
       "description": "Generate single-use invite links that let one guest join this room without an account. Unused links expire after 6 hours.",
-      "activeOnlyHint": "Only active, unused links are shown here. Once a guest joins, the link disappears from this list.",
+      "activeOnlyHint": "Used invitations stay visible so you can revoke their access.",
       "createView": "Create view-only link",
       "createEdit": "Create edit link",
       "loading": "Loading share links...",
@@ -369,8 +440,10 @@
       "openPanel": "Share room",
       "hidePanel": "Hide share panel",
       "created": "Share link created!",
+      "createdAndCopied": "Share link created and copied to clipboard!",
       "createFailed": "Failed to create share link.",
-      "deleted": "Share link deleted."
+      "deleted": "Share link deleted.",
+      "statusConsumed": "In use"
     },
     "join": {
       "title": "Join Shared Room",
@@ -391,7 +464,8 @@
       "validationName": "Please enter a display name.",
       "joining": "Joining...",
       "joinButton": "Join room",
-      "joinFailed": "Failed to join room."
+      "joinFailed": "Failed to join room.",
+      "description": "Enter your details to join this shared room."
     },
     "editor": {
       "loading": "Loading shared session...",
@@ -427,7 +501,11 @@
       "later": "Later",
       "openCenter": "Open center",
       "markAllRead": "Mark all read",
-      "marking": "Marking..."
+      "marking": "Marking...",
+      "title_one": "You have {{count}} unread notification",
+      "title_other": "You have {{count}} unread notifications",
+      "more_one": "{{count}} more unread notification in the notification center.",
+      "more_other": "{{count}} more unread notifications in the notification center."
     },
     "history": {
       "title": "Notification History",
@@ -452,6 +530,7 @@
     }
   },
   "common": {
+    "toggleTheme": "Toggle theme",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
@@ -468,7 +547,14 @@
     "error": "Error",
     "success": "Success",
     "passwordPolicyHint": "Password must be at least 10 characters and include uppercase, lowercase, a number, and a special character, with no spaces, and it must not be a common password.",
-    "passwordPolicyError": "Password does not meet the security requirements. It must be at least 10 characters and include uppercase, lowercase, a number, and a special character, with no spaces, and it must not be a common password."
+    "passwordPolicyError": "Password does not meet the security requirements. It must be at least 10 characters and include uppercase, lowercase, a number, and a special character, with no spaces, and it must not be a common password.",
+    "all": "All",
+    "toggleLanguage": "Switch language",
+    "userMenu": "Account menu",
+    "copy": "Copy",
+    "copied": "Copied",
+    "requestFailed": "Request failed. Please try again.",
+    "unknownError": "Unknown error"
   },
   "codeRunner": {
     "title": "Code Runner",
@@ -495,6 +581,63 @@
     "loading": "Loading notes...",
     "submitHint": "Ctrl+Enter to save",
     "copyAll": "Copy all",
-    "copiedAll": "Copied!"
+    "copiedAll": "Copied all"
+  },
+  "audit": {
+    "title": "Audit log",
+    "description": "Login attempts, guest joins and sensitive account actions. IPs identify network connections, not necessarily individual people.",
+    "denied": "Administrator access required.",
+    "account": "Account (exact match)",
+    "filter": "Filter",
+    "refresh": "Refresh",
+    "time": "Time",
+    "action": "Action",
+    "result": "Result",
+    "ip": "Client IP",
+    "browser": "Browser / device",
+    "target": "Target / request ID",
+    "success": "Success",
+    "failure": "Failed",
+    "empty": "No audit events yet.",
+    "latest": "Latest",
+    "older": "Older",
+    "peer": "peer"
+  },
+  "errors": {
+    "credentialsRequired": "Username and password are required.",
+    "invalidCredentials": "Incorrect username or password.",
+    "usernameTaken": "This username is already taken.",
+    "emailTaken": "This email is already in use.",
+    "currentPassword": "The current password is incorrect.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "roomNotFound": "This room is unavailable or you do not have access.",
+    "roomEnded": "This room has already ended.",
+    "shareNotFound": "This invitation is unavailable. Ask the owner for a new link.",
+    "shareExpired": "This invitation has expired.",
+    "shareUsed": "This invitation has already been used.",
+    "roomNameRequired": "Enter a room name.",
+    "usernameRequired": "Enter a username.",
+    "accessDenied": "You do not have permission to perform this action.",
+    "network": "Could not connect to the server. Check your connection and try again.",
+    "unsupportedLanguage": "This programming language is not supported.",
+    "createRoom": "Failed to create room",
+    "loadRoom": "Failed to load room",
+    "endRoom": "Failed to end room",
+    "deleteRoom": "Failed to delete room",
+    "renameRoom": "Failed to rename room",
+    "pinRoom": "Failed to update room pin status",
+    "createUser": "Failed to create user",
+    "updateUser": "Failed to update user",
+    "deleteUser": "Failed to delete user",
+    "compressPlayback": "Failed to compress playback data"
+  },
+  "canvas": {
+    "title": "Canvas",
+    "canvas": "Canvas",
+    "editor": "Editor",
+    "switchView": "Room view",
+    "anonymous": "Anonymous",
+    "fileTooLarge": "Image sync limit: 350 KB per image, 1 MB total (including encoding). Remove the large image or undo the import to continue saving.",
+    "waitForSave": "Changes are not yet saved. Reconnect and wait for Saved before ending the room."
   }
 }

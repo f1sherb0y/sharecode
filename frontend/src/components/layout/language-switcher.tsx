@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui'
 
 export function LanguageSwitcher() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   const toggleLanguage = () => {
     const nextLang = i18n.language.startsWith('zh') ? 'en' : 'zh'
@@ -15,7 +15,7 @@ export function LanguageSwitcher() {
       variant="ghost"
       size="icon"
       onClick={toggleLanguage}
-      aria-label="Toggle language"
+      aria-label={t('common.toggleLanguage')}
     >
       <Globe className="h-5 w-5" />
     </Button>

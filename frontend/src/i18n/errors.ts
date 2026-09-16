@@ -1,0 +1,60 @@
+import i18n from './index'
+
+// Leave API errors unchanged internally; translate known messages at the UI boundary.
+const errorKeys: Record<string, string> = {
+  "Username and password are required": "errors.credentialsRequired",
+  "Invalid credentials": "errors.invalidCredentials",
+  "Username already taken": "errors.usernameTaken",
+  "Email already in use": "errors.emailTaken",
+  "Current password is incorrect": "errors.currentPassword",
+  "Invalid token": "errors.sessionExpired",
+  "No token provided": "errors.sessionExpired",
+  "Session expired": "errors.sessionExpired",
+  "Session not found": "errors.sessionExpired",
+  "Session changed; sign in again": "errors.sessionExpired",
+  "Session token mismatch": "errors.sessionExpired",
+  "Room not found": "errors.roomNotFound",
+  "Room no longer available": "errors.roomNotFound",
+  "This room has already ended": "errors.roomEnded",
+  "Share link not found": "errors.shareNotFound",
+  "Share link or active room not found": "errors.shareNotFound",
+  "This share link has expired": "errors.shareExpired",
+  "This share link has already been used": "errors.shareUsed",
+  "Room name is required": "errors.roomNameRequired",
+  "Username is required": "errors.usernameRequired",
+  "Access denied": "errors.accessDenied",
+  "Forbidden": "errors.accessDenied",
+  "Unsupported language": "errors.unsupportedLanguage",
+  "Failed to fetch": "errors.network",
+  "NetworkError when attempting to fetch resource.": "errors.network",
+  "Load failed": "errors.network",
+  "Login failed": "auth.login.failed",
+  "Registration failed": "auth.register.failed",
+  "Failed to parse link": "join.invalid",
+  "Request failed": "common.requestFailed",
+  "Unknown error": "common.unknownError",
+  "Failed to initialize editor": "editor.errors.initializeFailed",
+  "Failed to initialize playback editor": "playback.editorFailed",
+  "Room has not ended yet": "playback.notEnded",
+  "Room access denied: this tab is authorized for another room. Open the correct invitation in a new tab.": "editor.errors.roomMismatch",
+  "Local recovery storage is blocked": "editor.errors.localRecoveryFailed",
+  "Local recovery buffer is full": "editor.errors.localRecoveryFailed",
+  "Local recovery write failed": "editor.errors.localRecoveryFailed",
+  "Local recovery storage unavailable": "editor.errors.localRecoveryFailed",
+  "Password must be at least 10 characters long, include uppercase and lowercase letters, a number, and a special character, must not contain spaces, and must not be a common password": "common.passwordPolicyError",
+  "Failed to create room": "errors.createRoom",
+  "Failed to load room": "errors.loadRoom",
+  "Failed to end room": "errors.endRoom",
+  "Failed to delete room": "errors.deleteRoom",
+  "Failed to rename room": "errors.renameRoom",
+  "Failed to update room pin status": "errors.pinRoom",
+  "Failed to create user": "errors.createUser",
+  "Failed to update user": "errors.updateUser",
+  "Failed to delete user": "errors.deleteUser",
+  "Failed to compress playback data": "errors.compressPlayback"
+}
+
+export function translateError(message: string): string {
+  const key = errorKeys[message]
+  return key ? i18n.t(key) : message
+}

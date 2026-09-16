@@ -38,8 +38,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let db = PgPoolOptions::new()
         .max_connections(10)
+        .acquire_timeout(Duration::from_secs(5))
         .connect(&strip_unsupported_params(&config.database_url))
         .await?;
+
+    let encoding: String = sqlx::query_scalar("SHOW server_encoding")
+        .fetch_one(&db)
+        .await?;
+    if encoding != "UTF8" {
+        return Err("ShareCode requires a UTF-8 PostgreSQL database".into());
+    }
 
     // Keep the embedded sqlx migration set in sync with the migrations directory.
     let migration_started_at = Instant::now();
@@ -86,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing::info_span!(
                 "http",
                 method = %request.method(),
-                path = %request.uri().path()
+                path = request.extensions().get::<axum::extract::MatchedPath>().map(|p| p.as_str()).unwrap_or("unmatched")
             )
         })
         .on_response(|response: &Response<_>, latency: Duration, span: &Span| {
@@ -100,11 +108,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = routes::router(state).layer(cors).layer(trace);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let addr = SocketAddr::new(config.bind_address, config.port);
     tracing::info!(%addr, "sharecode server-rs listening");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

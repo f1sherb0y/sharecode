@@ -75,7 +75,7 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
             sqlx::query(
                 r#"
                 UPDATE "User"
-                SET password = $1
+                SET password = $1, "tokenVersion" = "tokenVersion" + 1
                 WHERE id = $2
                 "#,
             )

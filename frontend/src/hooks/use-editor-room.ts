@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '@/api'
-import { canEndRoom as canEndRoomByMatrix, canManageRoomShares } from '@/lib/room-permissions'
+import { canEndRoom as canEndRoomByMatrix, canManageRoomShares, canChangeRoomLanguage } from '@/lib/room-permissions'
 import { useAuthStore } from '@/stores'
+import type * as Y from 'yjs'
 import type { Room, Language, User, ShareGuest } from '@/types'
 
 export interface EditorRoomState {
@@ -14,6 +15,7 @@ export interface EditorRoomState {
   error: string
   isGuestMode: boolean
   canEdit: boolean
+  canChangeLanguage: boolean
   isOwner: boolean
   canManageRoom: boolean
   canEndRoom: boolean
@@ -63,8 +65,10 @@ export function useEditorRoom(): EditorRoomState {
     return user
   }, [isGuestMode, guestProfile, user])
 
+  const roomMismatch = isGuestMode && guestProfile?.room.id !== roomId
   const effectiveRoom = useMemo((): Room | null => {
-    if (isGuestMode && guestRoom && guestProfile) {
+    if (roomMismatch) return null
+    if (isGuestMode && guestRoom && guestProfile && guestRoom.id === roomId) {
       return {
         id: guestRoom.id,
         name: guestRoom.name,
@@ -80,28 +84,32 @@ export function useEditorRoom(): EditorRoomState {
         owner: { id: '', username: '', color: '' },
       } as Room
     }
-    return room
-  }, [isGuestMode, guestRoom, guestProfile, roomEnded, room])
+    return room?.id === roomId ? room : null
+  }, [isGuestMode, guestRoom, guestProfile, roomEnded, room, roomId, roomMismatch])
 
   // Load room for authenticated users
   useEffect(() => {
     if (isGuestMode || !roomId || !user) return
+    const abort = new AbortController()
     const loadRoom = async () => {
       try {
         setIsLoading(true)
-        const { room: loaded } = await api.getRoom(roomId)
+        const { room: loaded } = await api.getRoom(roomId, abort.signal)
+        if (abort.signal.aborted) return
+        if (loaded.id !== roomId) throw new Error("Room identity mismatch")
         setRoom(loaded)
         if (loaded.isEnded) {
           setRoomEnded(true)
           setRoomEndedAt(loaded.endedAt ?? null)
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load room')
+        if (!abort.signal.aborted) setError(err instanceof Error ? err.message : 'Failed to load room')
       } finally {
-        setIsLoading(false)
+        if (!abort.signal.aborted) setIsLoading(false)
       }
     }
-    loadRoom()
+    void loadRoom()
+    return () => abort.abort()
   }, [roomId, user, isGuestMode])
 
   // Sync initial ended state from guest profile
@@ -113,6 +121,7 @@ export function useEditorRoom(): EditorRoomState {
   }, [isGuestMode, guestProfile])
 
   const isOwner = !isGuestMode && (effectiveRoom?.isOwner ?? effectiveRoom?.ownerId === user?.id)
+  const canChangeLanguage = !isGuestMode && canChangeRoomLanguage(user, effectiveRoom?.ownerId)
   const hasWriteAllPermission = !isGuestMode && (user?.canWriteAllRooms ?? false)
   const canEdit = isGuestMode
     ? (guestProfile?.guest.canEdit ?? false)
@@ -127,7 +136,7 @@ export function useEditorRoom(): EditorRoomState {
   const isPrivileged =
     !isGuestMode &&
     !!user &&
-    (user.role === 'admin' || user.role === 'superuser' || hasGlobalReadPermission)
+    (user.role === 'superuser' || hasGlobalReadPermission)
   const canViewPlayback = !isGuestMode && (isOwner || isPrivileged)
 
   // Redirect to playback when room ends (privileged users)
@@ -158,18 +167,31 @@ export function useEditorRoom(): EditorRoomState {
 
   const handleLanguageChange = useCallback(
     async (language: Language, ymeta: unknown) => {
-      if (!roomId || !isOwner) return
+      if (!roomId || !canChangeLanguage) return
       try {
-        const { room: updated } = await api.updateRoom(roomId, { language })
-        setRoom(updated)
-        if (ymeta && typeof (ymeta as { set?: unknown }).set === 'function') {
-          (ymeta as { set: (k: string, v: unknown) => void }).set('language', language)
+        const meta = ymeta && typeof (ymeta as { set?: unknown }).set === 'function'
+          ? ymeta as Y.Map<unknown> : null
+        // Prepare the inactive Markdown document BEFORE the request: the server
+        // broadcasts its language change over WebSocket before HTTP resolves.
+        // Clearing it afterwards erases the just-mounted editor's seeded content.
+        // Keep language unchanged until success; the code source remains intact
+        // even if the request fails, ready for the next conversion attempt.
+        if (language === 'markdown' && effectiveRoom?.language !== 'markdown') {
+          meta?.doc?.transact(() => {
+            const fragment = meta.doc!.getXmlFragment('prosemirror')
+            fragment.delete(0, fragment.length)
+            meta.delete('markdownInitialized')
+            meta.set('markdownSeeder', meta.doc!.clientID)
+          })
         }
+        const { room: updated } = await api.updateRoom(roomId, { language })
+        setRoom(prev => prev ? { ...prev, ...updated } : updated)
+        meta?.set('language', language)
       } catch (err) {
-        console.error('Failed to update language:', err)
+        throw err
       }
     },
-    [roomId, isOwner]
+    [roomId, canChangeLanguage, effectiveRoom?.language]
   )
 
   // setRoom wrapper: for guest mode updates (e.g. language from Yjs), update guestRoom state
@@ -195,9 +217,10 @@ export function useEditorRoom(): EditorRoomState {
     effectiveRoom,
     currentUser,
     isLoading,
-    error,
+    error: roomMismatch ? "Room access denied: this tab is authorized for another room. Open the correct invitation in a new tab." : error,
     isGuestMode,
     canEdit,
+    canChangeLanguage,
     isOwner,
     canManageRoom,
     canEndRoom,

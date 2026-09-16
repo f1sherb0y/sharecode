@@ -3,6 +3,7 @@ use sqlx::FromRow;
 
 #[derive(Debug, FromRow)]
 pub struct UserRow {
+    pub token_version: i64,
     pub id: String,
     pub email: Option<String>,
     pub username: String,

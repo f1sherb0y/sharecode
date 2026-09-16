@@ -1,7 +1,9 @@
 mod auth;
 mod handlers;
+mod persistence;
 mod protocol;
 mod state;
+mod transport;
 
 pub use state::WsState;
 
@@ -14,7 +16,9 @@ use chrono::{DateTime, Utc};
 use crate::state::AppState;
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handlers::handle_socket(socket, state))
+    ws.max_message_size(2 * 1024 * 1024)
+        .max_frame_size(2 * 1024 * 1024)
+        .on_upgrade(move |socket| handlers::handle_socket(socket, state))
 }
 
 pub async fn broadcast_room_ended(state: &AppState, room_id: &str, ended_at: DateTime<Utc>) {

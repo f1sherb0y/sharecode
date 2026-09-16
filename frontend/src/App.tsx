@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui'
 import {
@@ -13,6 +13,7 @@ import {
   SharePage,
   JoinPage,
   NotificationsPage,
+  AuditPage,
 } from '@/pages'
 import { useAuthStore, useThemeStore } from '@/stores'
 import {
@@ -86,6 +87,18 @@ function RoomRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RoomEditor() {
+  const { roomId } = useParams()
+  const token = useAuthStore((state) => state.token)
+  // Identity changes must tear down editor bindings and pending requests.
+  return <EditorPage key={`${roomId}:${token}`} />
+}
+
+function ShareRoute() {
+  const { shareToken } = useParams()
+  return <SharePage key={shareToken} />
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -107,8 +120,10 @@ function AppRoutes() {
         }
       />
       <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/s/:shareToken" element={<SharePage />} />
+      <Route path="/s/:shareToken" element={<ShareRoute />} />
       <Route path="/join" element={<JoinPage />} />
+
+      <Route path="/admin/audit" element={<PrivateRoute><AuditPage /></PrivateRoute>} />
 
       {/* Protected routes */}
       <Route
@@ -123,7 +138,7 @@ function AppRoutes() {
         path="/room/:roomId"
         element={
           <RoomRoute>
-            <EditorPage />
+            <RoomEditor />
           </RoomRoute>
         }
       />

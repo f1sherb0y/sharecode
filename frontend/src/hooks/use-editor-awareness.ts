@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type MutableRefObject } from 'react'
 import type { RemoteUser } from '@/types'
 import * as Y from 'yjs'
+import { toModelOffset } from '@/lib/monaco-binding'
 import type * as Monaco from 'monaco-editor'
 import type { HocuspocusProvider } from '@hocuspocus/provider'
 
@@ -18,7 +19,6 @@ export function useEditorAwareness({
   provider,
   ydoc,
   ytext,
-  isConnected,
   monacoRef,
   editorInstanceRef,
   modelRef,
@@ -97,7 +97,9 @@ export function useEditorAwareness({
       let targetClientId: number | null = null
       const localClientId = provider.awareness.clientID
 
-      if (followingUserId != null) {
+      if (followingClientId != null) {
+        targetClientId = followingClientId
+      } else if (followingUserId != null) {
         provider.awareness.getStates().forEach((state, clientId) => {
           if (targetClientId != null) return
           if (clientId === localClientId) return
@@ -115,7 +117,7 @@ export function useEditorAwareness({
       const state = provider.awareness.getStates().get(targetClientId) as
         | { cursor?: { head?: unknown } }
         | undefined
-      if (!state?.cursor?.head) return
+      if (provider.awareness.getStates().get(targetClientId)?.view === 'canvas' || !state?.cursor?.head) return
 
       try {
         const headRelative = Y.createRelativePositionFromJSON(state.cursor.head as object)
@@ -125,7 +127,7 @@ export function useEditorAwareness({
         if (lastFollowIndexRef.current === headAbs.index) return
         lastFollowIndexRef.current = headAbs.index
 
-        const position = modelRef.current.getPositionAt(headAbs.index)
+        const position = modelRef.current.getPositionAt(toModelOffset(ytext?.toString() ?? '', headAbs.index))
         editorInstanceRef.current.revealPositionInCenter(
           position,
           monacoRef.current.editor.ScrollType.Smooth,
@@ -143,12 +145,6 @@ export function useEditorAwareness({
     }
   }, [followingUserId, followingClientId, provider, ydoc, ytext, monacoRef, editorInstanceRef, modelRef])
 
-  useEffect(() => {
-    if (!isConnected) return
-    if (followingClientId != null && !remoteUsers.some((u) => u.clientId === followingClientId)) {
-      setFollowingClientId(null)
-    }
-  }, [remoteUsers, followingClientId, isConnected])
 
   return {
     remoteUsers,

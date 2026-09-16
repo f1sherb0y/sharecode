@@ -322,7 +322,7 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
       <button
         type="button"
         className={cn(
-          'px-2 py-0.5 rounded-sm text-xs font-medium transition-colors',
+          'px-1.5 py-0.5 rounded-sm text-xs font-medium transition-colors',
           activeTab === 'runner'
             ? 'bg-muted text-foreground'
             : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -334,7 +334,7 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
       <button
         type="button"
         className={cn(
-          'px-2 py-0.5 rounded-sm text-xs font-medium transition-colors',
+          'px-1.5 py-0.5 rounded-sm text-xs font-medium transition-colors',
           activeTab === 'notes'
             ? 'bg-muted text-foreground'
             : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -369,16 +369,16 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
         />
       )}
 
-      {/* Header - consistent size */}
+      {/* Compact disclosure bar; shared control sizing also fits touch buttons. */}
       <div
         className={cn(
           'flex items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors shrink-0',
-          isBottom ? 'px-2 h-7' : 'py-2 w-7 flex-col-reverse'
+          isBottom ? 'px-1 h-control-sm' : 'py-1 w-control-sm flex-col-reverse'
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className={cn(
-          'flex items-center gap-1.5',
+          'flex items-center gap-1',
           isRight && 'flex-col'
         )}>
           {activeTab === 'notes' ? (
@@ -387,16 +387,16 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
             <StatusIcon size="small" />
           )}
           <span
-            className="font-medium whitespace-nowrap text-xs"
+            className="font-medium whitespace-nowrap text-[11px]"
             style={isRight ? { writingMode: 'vertical-rl' } : undefined}
           >
             {headerLabel}
           </span>
           {activeTab === 'runner' && status === 'running' && isBottom && (
-            <span className="text-xs text-muted-foreground">{t('codeRunner.running')}</span>
+            <span className="text-[11px] text-muted-foreground">{t('codeRunner.running')}</span>
           )}
           {activeTab === 'runner' && !isExpanded && status === 'success' && execTime && isBottom && (
-            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
               <Clock className="h-2.5 w-2.5" />
               {execTime}s
             </span>
@@ -413,9 +413,8 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
               isRight && 'flex-col'
             )}>
               <Button
-                size="sm"
+                size="icon-sm"
                 variant={isBottom ? 'secondary' : 'ghost'}
-                className="h-5 w-5 p-0"
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation()
                   handlePositionToggle('bottom')
@@ -425,9 +424,8 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
                 <PanelBottom className="h-3 w-3" />
               </Button>
               <Button
-                size="sm"
+                size="icon-sm"
                 variant={isRight ? 'secondary' : 'ghost'}
-                className="h-5 w-5 p-0"
                 onClick={(e: React.MouseEvent) => {
                   e.stopPropagation()
                   handlePositionToggle('right')
@@ -447,15 +445,15 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
         <div
           className={cn(
             'flex flex-col overflow-hidden',
-            isBottom ? 'px-2 pb-2' : 'py-2 pr-2'
+            isBottom ? 'px-1.5 pb-1.5' : 'py-1.5 pr-1.5'
           )}
-          style={isBottom ? { height: panelSize } : { width: panelSize }}
+          style={isBottom ? { height: panelSize, maxHeight: '45dvh' } : { width: panelSize, maxWidth: '50vw' }}
         >
           {TabBar}
 
           {activeTab === 'runner' ? (
             <div className={cn(
-              'flex gap-2 flex-1 min-h-0 overflow-hidden',
+              'flex gap-1 flex-1 min-h-0 overflow-hidden',
               isBottom ? 'flex-row' : 'flex-col'
             )}>
               {/* Input */}
@@ -479,7 +477,7 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
                     {t('codeRunner.output')}
                   </label>
                   {status === 'success' && (execTime || execMemory) && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       {execTime && (
                         <span className="flex items-center gap-0.5">
                           <Clock className="h-2.5 w-2.5" />
@@ -495,7 +493,7 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
                     </div>
                   )}
                 </div>
-                <div className="flex-1 font-mono text-sm bg-muted/50 rounded-md p-2 overflow-auto min-h-0 whitespace-pre-wrap">
+                <div className="flex-1 font-mono text-sm bg-muted/50 rounded-md p-1.5 overflow-auto min-h-0 whitespace-pre-wrap">
                   {status === 'running' ? (
                     <span className="text-muted-foreground">{t('codeRunner.executing')}</span>
                   ) : stdout ? (

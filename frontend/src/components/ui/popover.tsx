@@ -71,7 +71,7 @@ function PopoverContent({ className, align = 'center', children, ...props }: Pop
     }
 
     setPosition({
-      top: rect.bottom + 8,
+      top: rect.bottom + 4,
       left,
     })
   }, [open, align, triggerRef])

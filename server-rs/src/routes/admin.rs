@@ -1,4 +1,6 @@
-use axum::{extract::Path, extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::Path, extract::Query, extract::State, http::StatusCode, response::IntoResponse, Json,
+};
 use bcrypt::hash;
 use chrono::{DateTime, Timelike, Utc};
 use serde_json::{json, Value};
@@ -6,11 +8,13 @@ use sqlx::QueryBuilder;
 use uuid::Uuid;
 use yrs::merge_updates_v1;
 
+use crate::core::audit::{self, ClientInfo};
+
 use crate::{
     auth::AdminUser,
     db::db_error,
     error::ApiError,
-    models::{RoomAdminRow, RoomParticipantWithUserRow, UserPublicRow, UserRow},
+    models::{RoomAdminRow, UserPublicRow, UserRow},
     permissions::{can_manage_room_lifecycle, RoomLifecycleAction},
     state::AppState,
     utils::colors::random_user_color,
@@ -19,6 +23,56 @@ use crate::{
 };
 
 const VALID_ROLES: [&str; 3] = ["user", "admin", "superuser"];
+
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminListQuery {
+    page: Option<u32>,
+    page_size: Option<u32>,
+    q: Option<String>,
+    role: Option<String>,
+    status: Option<String>,
+    language: Option<String>,
+    owner: Option<String>,
+}
+
+impl AdminListQuery {
+    fn pagination(&self, total: i64) -> (i64, i64, Value) {
+        let size = self.page_size.unwrap_or(25).clamp(1, 100) as i64;
+        let pages = (total + size - 1) / size;
+        let page = (self.page.unwrap_or(1).max(1) as i64).min(pages.max(1));
+        (
+            size,
+            (page - 1) * size,
+            json!({
+                "page": page, "pageSize": size, "total": total, "totalPages": pages,
+                "hasNext": page < pages, "hasPrev": page > 1,
+            }),
+        )
+    }
+}
+
+fn search_pattern(value: Option<&str>) -> String {
+    // Treat search text literally, including PostgreSQL LIKE metacharacters.
+    format!(
+        "%{}%",
+        value
+            .unwrap_or("")
+            .trim()
+            .chars()
+            .take(200)
+            .collect::<String>()
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    )
+}
+
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackSizesQuery {
+    room_ids: Option<String>,
+}
 
 #[derive(sqlx::FromRow)]
 struct DbSizeRow {
@@ -148,14 +202,7 @@ fn normalize_permissions_for_role(role: &str, permissions: PermissionFlags) -> P
         };
     }
 
-    let mut normalized = apply_permission_hierarchy(permissions);
-    if role == "admin" {
-        normalized.can_read_all_rooms = true;
-        normalized.can_write_all_rooms = true;
-        normalized = apply_permission_hierarchy(normalized);
-    }
-
-    normalized
+    apply_permission_hierarchy(permissions)
 }
 
 fn default_permissions_for_role(role: &str, requested: PermissionFlagsUpdate) -> PermissionFlags {
@@ -227,27 +274,37 @@ pub async fn create_user(
         return Err(ApiError::not_found("Not found"));
     }
 
-    let existing_user =
-        sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE username = $1 LIMIT 1"#)
-            .bind(username)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|err| db_error(err, "Failed to check username"))?;
+    let existing_user = sqlx::query_scalar::<_, bool>(
+        r#"SELECT "isDeleted" FROM "User" WHERE username = $1 LIMIT 1"#,
+    )
+    .bind(username)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to check username"))?;
 
-    if existing_user.is_some() {
-        return Err(ApiError::bad_request("Username already taken"));
+    if let Some(deleted) = existing_user {
+        return Err(ApiError::bad_request(if deleted {
+            "This username belongs to a deleted account and is still reserved. Restore that account or choose another username."
+        } else {
+            "Username already taken"
+        }));
     }
 
     if let Some(ref email_value) = email {
-        let existing_email =
-            sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE email = $1 LIMIT 1"#)
-                .bind(email_value)
-                .fetch_optional(&state.db)
-                .await
-                .map_err(|err| db_error(err, "Failed to check email"))?;
+        let existing_email = sqlx::query_scalar::<_, bool>(
+            r#"SELECT "isDeleted" FROM "User" WHERE email = $1 LIMIT 1"#,
+        )
+        .bind(email_value)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| db_error(err, "Failed to check email"))?;
 
-        if existing_email.is_some() {
-            return Err(ApiError::bad_request("Email already in use"));
+        if let Some(deleted) = existing_email {
+            return Err(ApiError::bad_request(if deleted {
+                "This email belongs to a deleted account and is still reserved. Restore that account or use another email."
+            } else {
+                "Email already in use"
+            }));
         }
     }
 
@@ -272,7 +329,7 @@ pub async fn create_user(
             "canWriteAllRooms" as can_write_all_rooms,
             "canDeleteAllRooms" as can_delete_all_rooms,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         "#,
     )
     .bind(Uuid::new_v4().to_string())
@@ -286,7 +343,7 @@ pub async fn create_user(
     .bind(permissions.can_delete_all_rooms)
     .fetch_one(&state.db)
     .await
-    .map_err(|err| db_error(err, "Failed to create user"))?;
+    .map_err(|err| crate::db::user_creation_error(err))?;
 
     tracing::info!(
         actor_id = %auth_user.id,
@@ -309,7 +366,24 @@ pub async fn create_user(
 pub async fn get_all_users(
     State(state): State<AppState>,
     _admin: AdminUser,
+    Query(query): Query<AdminListQuery>,
 ) -> Result<Json<Value>, ApiError> {
+    let pattern = search_pattern(query.q.as_deref());
+    let role = query.role.as_deref().filter(|value| *value != "all");
+    if role.is_some_and(|value| !VALID_ROLES.contains(&value)) {
+        return Err(ApiError::bad_request("Invalid role"));
+    }
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "User"
+        WHERE "isDeleted" = false AND (username ILIKE $1 OR COALESCE(email, '') ILIKE $1)
+        AND ($2::text IS NULL OR role = $2)"#,
+    )
+    .bind(&pattern)
+    .bind(role)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to count users"))?;
+    let (limit, offset, pagination) = query.pagination(total);
     let users = sqlx::query_as::<_, UserPublicRow>(
         r#"
         SELECT
@@ -322,17 +396,24 @@ pub async fn get_all_users(
             "canWriteAllRooms" as can_write_all_rooms,
             "canDeleteAllRooms" as can_delete_all_rooms,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
         WHERE "isDeleted" = false
-        ORDER BY "createdAt" DESC
+        AND (username ILIKE $1 OR COALESCE(email, '') ILIKE $1)
+        AND ($2::text IS NULL OR role = $2)
+        ORDER BY "createdAt" DESC, id DESC LIMIT $3 OFFSET $4
         "#,
     )
+    .bind(&pattern)
+    .bind(role)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to load users"))?;
 
     Ok(Json(json!({
+        "pagination": pagination,
         "users": users.into_iter().map(|u| user_to_json(&u)).collect::<Vec<_>>()
     })))
 }
@@ -340,9 +421,11 @@ pub async fn get_all_users(
 pub async fn update_user(
     State(state): State<AppState>,
     AdminUser(auth_user): AdminUser,
+    client: ClientInfo,
     Path(user_id): Path<String>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
+    let _access = state.ws.access.write().await;
     let requested_role = payload.get("role").and_then(|v| v.as_str());
     let permission_updates = extract_permission_input(&payload);
     let has_permission_changes = has_permission_changes(&permission_updates);
@@ -361,7 +444,7 @@ pub async fn update_user(
             "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
         WHERE id = $1
         "#,
@@ -435,6 +518,11 @@ pub async fn update_user(
     let final_role = requested_role.unwrap_or(&target_user.role);
     permissions = normalize_permissions_for_role(final_role, permissions);
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start user update"))?;
     let updated = sqlx::query_as::<_, UserPublicRow>(
         r#"
         UPDATE "User"
@@ -453,7 +541,7 @@ pub async fn update_user(
             "canWriteAllRooms" as can_write_all_rooms,
             "canDeleteAllRooms" as can_delete_all_rooms,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         "#,
     )
     .bind(&user_id)
@@ -461,9 +549,25 @@ pub async fn update_user(
     .bind(permissions.can_read_all_rooms)
     .bind(permissions.can_write_all_rooms)
     .bind(permissions.can_delete_all_rooms)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to update user"))?;
+
+    audit::record(
+        &mut *tx,
+        &client,
+        "user.updated",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&user_id),
+        true,
+        None,
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit user update"))?;
+    state.ws.revoke_actor(&user_id).await;
 
     Ok(Json(json!({ "user": user_to_json(&updated) })))
 }
@@ -471,8 +575,10 @@ pub async fn update_user(
 pub async fn delete_user(
     State(state): State<AppState>,
     AdminUser(auth_user): AdminUser,
+    client: ClientInfo,
     Path(user_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let _access = state.ws.access.write().await;
     let user = sqlx::query_as::<_, UserRow>(
         r#"
         SELECT
@@ -487,7 +593,7 @@ pub async fn delete_user(
             "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
         WHERE id = $1
         "#,
@@ -531,15 +637,20 @@ pub async fn delete_user(
         return Err(ApiError::not_found("Not found"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start user update"))?;
     sqlx::query(
         r#"
         UPDATE "User"
-        SET "isDeleted" = true
+        SET "isDeleted" = true, "tokenVersion" = "tokenVersion" + 1
         WHERE id = $1
         "#,
     )
     .bind(&user_id)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to delete user"))?;
 
@@ -553,13 +664,53 @@ pub async fn delete_user(
         "user deleted"
     );
 
+    audit::record(
+        &mut *tx,
+        &client,
+        "user.deleted",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&user_id),
+        true,
+        None,
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit user update"))?;
+    state.ws.revoke_actor(&user_id).await;
+
     Ok(Json(json!({ "message": "User deleted successfully" })))
 }
 
 pub async fn get_all_rooms(
     State(state): State<AppState>,
     AdminUser(_auth_user): AdminUser,
+    Query(query): Query<AdminListQuery>,
 ) -> Result<Json<Value>, ApiError> {
+    let pattern = search_pattern(query.q.as_deref());
+    let owner = search_pattern(query.owner.as_deref());
+    let language = query.language.as_deref().filter(|value| *value != "all");
+    let ended = match query.status.as_deref() {
+        None | Some("all") => None,
+        Some("active") => Some(false),
+        Some("ended") => Some(true),
+        _ => return Err(ApiError::bad_request("Invalid room status")),
+    };
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "Room" r
+        JOIN "User" o ON o.id = r."ownerId"
+        WHERE r."isDeleted" = false AND r.name ILIKE $1 AND o.username ILIKE $2
+        AND ($3::text IS NULL OR r.language = $3) AND ($4::boolean IS NULL OR r."isEnded" = $4)"#,
+    )
+    .bind(&pattern)
+    .bind(&owner)
+    .bind(language)
+    .bind(ended)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to count rooms"))?;
+    let (limit, offset, pagination) = query.pagination(total);
     let rooms = sqlx::query_as::<_, RoomAdminRow>(
         r#"
         SELECT
@@ -583,16 +734,23 @@ pub async fn get_all_rooms(
         FROM "Room" r
         JOIN "User" o ON o.id = r."ownerId"
         WHERE r."isDeleted" = false
-        ORDER BY r."createdAt" DESC
+        AND r.name ILIKE $1 AND o.username ILIKE $2
+        AND ($3::text IS NULL OR r.language = $3) AND ($4::boolean IS NULL OR r."isEnded" = $4)
+        ORDER BY r."createdAt" DESC, r.id DESC LIMIT $5 OFFSET $6
         "#,
     )
+    .bind(&pattern)
+    .bind(&owner)
+    .bind(language)
+    .bind(ended)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to load rooms"))?;
 
     let mut response = Vec::with_capacity(rooms.len());
     for room in rooms {
-        let participants = fetch_participants(&state, &room.id).await?;
         response.push(json!({
             "id": room.id,
             "name": room.name,
@@ -614,23 +772,10 @@ pub async fn get_all_rooms(
                 "username": room.owner_username,
                 "email": room.owner_email,
             },
-            "participants": participants.into_iter().map(|p| {
-                json!({
-                    "id": p.id,
-                    "roomId": p.room_id,
-                    "userId": p.user_id,
-                    "canEdit": p.can_edit,
-                    "joinedAt": to_iso_string(p.joined_at),
-                    "user": {
-                        "id": p.user_id,
-                        "username": p.user_username,
-                    }
-                })
-            }).collect::<Vec<_>>(),
         }));
     }
 
-    Ok(Json(json!({ "rooms": response })))
+    Ok(Json(json!({ "rooms": response, "pagination": pagination })))
 }
 
 pub async fn get_db_storage_size(
@@ -661,11 +806,25 @@ pub async fn get_db_storage_size(
 pub async fn get_room_playback_sizes(
     State(state): State<AppState>,
     AdminUser(auth_user): AdminUser,
+    Query(query): Query<PlaybackSizesQuery>,
 ) -> Result<Json<Value>, ApiError> {
     if auth_user.role != "superuser" {
         return Err(ApiError::not_found("Not found"));
     }
 
+    let ids: Vec<String> = query
+        .room_ids
+        .unwrap_or_default()
+        .split(',')
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .collect();
+    if ids.len() > 100 || ids.iter().any(|id| Uuid::parse_str(id).is_err()) {
+        return Err(ApiError::bad_request("Provide at most 100 valid room IDs"));
+    }
+    if ids.is_empty() {
+        return Ok(Json(json!({"rooms": []})));
+    }
     let rows = sqlx::query_as::<_, PlaybackSizeRow>(
         r#"
         SELECT
@@ -677,11 +836,12 @@ pub async fn get_room_playback_sizes(
             COALESCE(SUM(octet_length(du.update)), 0) as bytes
         FROM "Room" r
         LEFT JOIN "DocumentUpdate" du ON du."documentId" = r.id
-        WHERE r."isDeleted" = false
+        WHERE r."isDeleted" = false AND r.id = ANY($1)
         GROUP BY r.id, r.name, r."isEnded", r."endedAt"
         ORDER BY bytes DESC
         "#,
     )
+    .bind(&ids)
     .fetch_all(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to load playback storage sizes"))?;
@@ -737,12 +897,13 @@ pub async fn compress_room_playback(
         return Err(ApiError::bad_request("Room has not ended yet"));
     }
 
+    state.ws.wait_for_saved(&room_id).await?;
     let updates = sqlx::query_as::<_, PlaybackUpdateRow>(
         r#"
         SELECT update, timestamp, "userId" as user_id
         FROM "DocumentUpdate"
         WHERE "documentId" = $1
-        ORDER BY timestamp ASC
+        ORDER BY timestamp ASC, seq ASC
         "#,
     )
     .bind(&room_id)
@@ -852,6 +1013,7 @@ pub async fn delete_room(
     AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let _access = state.ws.access.write().await;
     let room = sqlx::query_as::<_, RoomOwnerRow>(
         r#"
         SELECT "ownerId" as owner_id
@@ -898,6 +1060,8 @@ pub async fn delete_room(
         "room deleted"
     );
 
+    state.ws.revoke_room(&room_id).await;
+
     Ok(Json(json!({ "message": "Room deleted successfully" })))
 }
 
@@ -942,29 +1106,4 @@ fn user_to_json(user: &UserPublicRow) -> Value {
         "createdAt": to_iso_string(user.created_at),
         "lastSeen": to_iso_string(user.last_seen),
     })
-}
-
-async fn fetch_participants(
-    state: &AppState,
-    room_id: &str,
-) -> Result<Vec<RoomParticipantWithUserRow>, ApiError> {
-    sqlx::query_as::<_, RoomParticipantWithUserRow>(
-        r#"
-        SELECT
-            rp.id,
-            rp."roomId" as room_id,
-            u.id as user_id,
-            rp."canEdit" as can_edit,
-            rp."joinedAt" as joined_at,
-            u.username as user_username,
-            u.color as user_color
-        FROM "RoomParticipant" rp
-        JOIN "User" u ON u.id = rp."userId"
-        WHERE rp."roomId" = $1
-        "#,
-    )
-    .bind(room_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load participants"))
 }

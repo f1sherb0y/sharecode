@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, type Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import * as Y from 'yjs'
 import type { HocuspocusProvider } from '@hocuspocus/provider'
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react'
-import { Editor, editorViewCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/kit/core'
+import { Editor, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/kit/core'
 import { commonmark } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { cursor } from '@milkdown/kit/plugin/cursor'
 import { trailing } from '@milkdown/kit/plugin/trailing'
-import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { upload, uploadConfig, type Uploader } from '@milkdown/kit/plugin/upload'
 import { collab, collabServiceCtx } from '@milkdown/plugin-collab'
 import { TextSelection } from '@milkdown/kit/prose/state'
@@ -40,18 +40,27 @@ import {
   Link2,
   Image as ImageIcon,
   Workflow,
+  Sigma,
+  Radical,
   Table,
   Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui'
+import { useFontStore } from '@/stores'
+import { fontFamilyStack } from '@/stores/font'
 import { compressImageFile } from '@/lib/image-compress'
 import { mermaidPlugins } from '@/lib/milkdown-mermaid'
 import { imagePlugins } from '@/lib/milkdown-image'
+import { mathPlugins } from '@/lib/milkdown-math'
 import '@/styles/markdown.css'
 
 // Must-have ProseMirror layout CSS + table base styles for the GFM table node.
 import '@milkdown/kit/prose/view/style/prosemirror.css'
 import '@milkdown/kit/prose/tables/style/tables.css'
+
+export interface MarkdownEditorHandle {
+  getMarkdown: () => string | null
+}
 
 interface MarkdownEditorProps {
   ytext: Y.Text | null
@@ -61,35 +70,10 @@ interface MarkdownEditorProps {
   isSynced: boolean
   followingUserId: string | null
   followingClientId: number | null
+  sourceRef?: Ref<MarkdownEditorHandle>
 }
 
 const MERMAID_SNIPPET = '```mermaid\nflowchart TD\n    A[Start] --> B[End]\n```'
-
-/** Minimal diff binding used only to mirror the markdown into `ytext` so the
- *  existing playback pipeline (which reads `ytext`) keeps working. */
-function applyTextDiff(oldText: string, newText: string, ytext: Y.Text, origin: object) {
-  if (oldText === newText) return
-
-  let start = 0
-  const maxStart = Math.min(oldText.length, newText.length)
-  while (start < maxStart && oldText.charCodeAt(start) === newText.charCodeAt(start)) start++
-
-  let oldEnd = oldText.length
-  let newEnd = newText.length
-  while (
-    oldEnd > start &&
-    newEnd > start &&
-    oldText.charCodeAt(oldEnd - 1) === newText.charCodeAt(newEnd - 1)
-  ) {
-    oldEnd--
-    newEnd--
-  }
-
-  ytext.doc!.transact(() => {
-    if (oldEnd > start) ytext.delete(start, oldEnd - start)
-    if (newEnd > start) ytext.insert(start, newText.slice(start, newEnd))
-  }, origin)
-}
 
 const compressedUploader: Uploader = async (files, schema) => {
   const images: File[] = []
@@ -128,10 +112,11 @@ const remoteSelectionBuilder = (user: RemoteUserAwareness) => {
 }
 
 export function MarkdownEditor(props: MarkdownEditorProps) {
+  const { font, fontSize } = useFontStore()
   return (
-    <MilkdownProvider>
+    <div translate="no" className="notranslate h-full" style={{ '--md-font-size': `${fontSize}px`, '--md-font-family': fontFamilyStack(font) } as CSSProperties}><MilkdownProvider key={props.ydoc?.guid}>
       <MarkdownEditorInner {...props} />
-    </MilkdownProvider>
+    </MilkdownProvider></div>
   )
 }
 
@@ -143,7 +128,9 @@ function MarkdownEditorInner({
   isSynced,
   followingUserId,
   followingClientId,
+  sourceRef,
 }: MarkdownEditorProps) {
+  const { t } = useTranslation()
   const [isImageLoading, setIsImageLoading] = useState(false)
 
   const canEditRef = useRef(canEdit)
@@ -158,9 +145,7 @@ function MarkdownEditorInner({
   const ydocRef = useRef<Y.Doc | null>(null)
   ydocRef.current = ydoc
 
-  const mirrorOriginRef = useRef<object>({})
   const collabConnectedRef = useRef(false)
-  const mirrorRegisteredRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastFollowPosRef = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -181,10 +166,10 @@ function MarkdownEditorInner({
         .use(clipboard)
         .use(cursor)
         .use(trailing)
-        .use(listener)
         .use(upload)
         .use(mermaidPlugins)
         .use(imagePlugins)
+        .use(mathPlugins)
         .use(collab),
     [],
   )
@@ -216,30 +201,33 @@ function MarkdownEditorInner({
       if (provider.awareness) {
         collabService.setAwareness(provider.awareness)
       }
-      collabService
-        .setOptions({ yCursorOpts: { selectionBuilder: remoteSelectionBuilder } })
-        .applyTemplate(legacy || '')
-        .connect()
+      collabService.setOptions({ yCursorOpts: { selectionBuilder: remoteSelectionBuilder } })
+      const seedClient = ydoc.getMap('meta').get('markdownSeeder')
+      if (canEditRef.current && (seedClient == null || seedClient === ydoc.clientID) && !ydoc.getMap('meta').get('markdownInitialized')) {
+        ydoc.transact(() => {
+          if (legacy && ydoc.getXmlFragment('prosemirror').length === 0) collabService.applyTemplate(legacy)
+          ydoc.getMap('meta').set('markdownInitialized', true)
+        })
+      }
+      collabService.connect()
     })
+    return () => {
+      collabConnectedRef.current = false
+      editor.action((ctx) => ctx.get(collabServiceCtx).disconnect())
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, isSynced, ydoc, provider])
+  }, [loading, ydoc, provider, isSynced, canEdit])
 
-  // Mirror the serialized markdown into `ytext` so playback keeps working.
-  useEffect(() => {
-    if (loading || !ytext) return
-    const editor = get()
-    if (!editor || mirrorRegisteredRef.current) return
-    mirrorRegisteredRef.current = true
-
-    editor.action((ctx) => {
-      ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-        const yt = ytextRef.current
-        if (!yt || markdown === yt.toString()) return
-        applyTextDiff(yt.toString(), markdown, yt, mirrorOriginRef.current)
-      })
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, ytext])
+  // Read the current document synchronously when changing modes. Milkdown's
+  // debounced change listener can still hold unsent edits when we unmount.
+  // XML remains the sole collaborative source of truth while editing Markdown.
+  useImperativeHandle(sourceRef, () => ({
+    getMarkdown: () => {
+      const editor = get()
+      if (loading || !editor || !collabConnectedRef.current) return null
+      return editor.action((ctx) => ctx.get(serializerCtx)(ctx.get(editorViewCtx).state.doc))
+    },
+  }), [get, loading])
 
   // Re-evaluate the `editable` predicate when permissions change.
   useEffect(() => {
@@ -271,7 +259,9 @@ function MarkdownEditorInner({
       const localClientId = awareness.clientID
       let targetClientId: number | null = null
 
-      if (followingUserId != null) {
+      if (followingClientId != null) {
+        targetClientId = followingClientId
+      } else if (followingUserId != null) {
         awareness.getStates().forEach((state, clientId) => {
           if (targetClientId != null || clientId === localClientId) return
           const user = (state as { user?: { id?: string } }).user
@@ -341,113 +331,133 @@ function MarkdownEditorInner({
   )
 
   const insertLink = useCallback(() => {
-    const href = window.prompt('Link URL:')
+    const href = window.prompt(t('editor.toolbar.linkPrompt'))
     if (!href) return
     run(callCommand(toggleLinkCommand.key, { href }))
-  }, [run])
+  }, [run, t])
 
   const toolbarButtonClass =
-    'h-7 w-7 p-0 text-muted-foreground hover:text-foreground disabled:opacity-40'
+    'text-muted-foreground hover:text-foreground'
 
   return (
     <div className="md-editor flex h-full flex-col">
       {canEdit && (
-        <div className="md-toolbar flex shrink-0 items-center gap-0.5 border-b px-1.5 py-1 overflow-x-auto">
+        <div className="md-toolbar flex shrink-0 items-center gap-0.5 border-b px-1 py-0.5 overflow-x-auto">
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Bold"
+            title={t('editor.toolbar.bold')} aria-label={t('editor.toolbar.bold')}
             onClick={() => run(callCommand(toggleStrongCommand.key))}
           >
             <Bold className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Italic"
+            title={t('editor.toolbar.italic')} aria-label={t('editor.toolbar.italic')}
             onClick={() => run(callCommand(toggleEmphasisCommand.key))}
           >
             <Italic className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Strikethrough"
+            title={t('editor.toolbar.strikethrough')} aria-label={t('editor.toolbar.strikethrough')}
             onClick={() => run(callCommand(toggleStrikethroughCommand.key))}
           >
             <Strikethrough className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Heading"
+            title={t('editor.toolbar.heading')} aria-label={t('editor.toolbar.heading')}
             onClick={() => run(callCommand(wrapInHeadingCommand.key, 2))}
           >
             <Heading2 className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Inline code"
+            title={t('editor.toolbar.inlineCode')} aria-label={t('editor.toolbar.inlineCode')}
             onClick={() => run(callCommand(toggleInlineCodeCommand.key))}
           >
             <Code className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Quote"
+            title={t('editor.toolbar.inlineMath')}
+            aria-label={t('editor.toolbar.inlineMath')}
+            onClick={() => run(insert('$x^2$'))}
+          >
+            <Radical className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={toolbarButtonClass}
+            title={t('editor.toolbar.blockMath')}
+            aria-label={t('editor.toolbar.blockMath')}
+            onClick={() => run(insert('$$\nE = mc^2\n$$'))}
+          >
+            <Sigma className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={toolbarButtonClass}
+            title={t('editor.toolbar.quote')} aria-label={t('editor.toolbar.quote')}
             onClick={() => run(callCommand(wrapInBlockquoteCommand.key))}
           >
             <Quote className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Bullet list"
+            title={t('editor.toolbar.bulletList')} aria-label={t('editor.toolbar.bulletList')}
             onClick={() => run(callCommand(wrapInBulletListCommand.key))}
           >
             <List className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Link"
+            title={t('editor.toolbar.link')} aria-label={t('editor.toolbar.link')}
             onClick={insertLink}
           >
             <Link2 className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Table"
+            title={t('editor.toolbar.table')} aria-label={t('editor.toolbar.table')}
             onClick={() => run(callCommand(insertTableCommand.key, { row: 3, col: 3 }))}
           >
             <Table className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Mermaid diagram"
+            title={t('editor.toolbar.diagram')} aria-label={t('editor.toolbar.diagram')}
             onClick={() => run(insert(MERMAID_SNIPPET))}
           >
             <Workflow className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             className={toolbarButtonClass}
-            title="Insert image"
+            title={t('editor.toolbar.image')} aria-label={t('editor.toolbar.image')}
             disabled={isImageLoading}
             onClick={() => fileInputRef.current?.click()}
           >

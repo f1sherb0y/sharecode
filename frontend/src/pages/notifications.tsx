@@ -1,3 +1,4 @@
+import { translateError } from '@/i18n/errors'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -108,7 +109,7 @@ export function NotificationsPage() {
       <Navbar
         leftContent={
           <Button variant="ghost" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
             {t('common.back')}
           </Button>
         }
@@ -116,7 +117,7 @@ export function NotificationsPage() {
         centerContent={<span className="font-semibold">{t('notifications.title')}</span>}
       />
 
-      <PageContainer className="max-w-5xl mx-auto space-y-4">
+      <PageContainer className="max-w-5xl mx-auto space-y-2">
         {canPublish && (
           <Card>
             <CardHeader>
@@ -124,9 +125,9 @@ export function NotificationsPage() {
               <CardDescription>{t('notifications.publish.description')}</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handlePublish} className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-[1fr_180px]">
-                  <div className="space-y-2">
+              <form onSubmit={handlePublish} className="space-y-2">
+                <div className="grid gap-2 md:grid-cols-[1fr_180px]">
+                  <div className="space-y-1">
                     <Label htmlFor="notificationTitle">{t('notifications.publish.fields.title')}</Label>
                     <Input
                       id="notificationTitle"
@@ -136,7 +137,7 @@ export function NotificationsPage() {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <Label>{t('notifications.publish.fields.severity')}</Label>
                     <Select value={severity} onValueChange={(value) => setSeverity(value as NotificationSeverity)}>
                       <SelectTrigger>
@@ -154,7 +155,7 @@ export function NotificationsPage() {
                     </Select>
                   </div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <Label htmlFor="notificationContent">{t('notifications.publish.fields.content')}</Label>
                   <Textarea
                     id="notificationContent"
@@ -165,7 +166,7 @@ export function NotificationsPage() {
                     required
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
+                {error && <p className="text-sm text-destructive">{translateError(error)}</p>}
                 <Button type="submit" disabled={createNotificationMutation.isPending}>
                   {createNotificationMutation.isPending
                     ? t('notifications.publish.submitting')
@@ -178,15 +179,15 @@ export function NotificationsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-1">
               <BellRing className="h-5 w-5" />
               {t('notifications.history.title')}
             </CardTitle>
             <CardDescription>{t('notifications.history.description')}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-2">
             {notificationsQuery.isLoading ? (
-              <div className="flex justify-center py-8">
+              <div className="flex justify-center py-4">
                 <Spinner />
               </div>
             ) : notifications.length === 0 ? (
@@ -198,13 +199,13 @@ export function NotificationsPage() {
                 <div
                   key={notification.id}
                   className={cn(
-                    'rounded-lg border p-4 space-y-3',
+                    'rounded-lg border p-2 space-y-1.5',
                     isEmergency && 'border-l-4 border-l-destructive'
                   )}
                 >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <h3 className={cn('font-medium', isEmergency && 'font-bold')}>
                           {notification.title}
                         </h3>

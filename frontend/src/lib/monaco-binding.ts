@@ -1,4 +1,5 @@
 import * as Y from 'yjs'
+import { normalizeLineEndings, normalizeCollaborativeText } from './line-endings'
 import type { Awareness } from 'y-protocols/awareness'
 import type * as Monaco from 'monaco-editor'
 
@@ -16,6 +17,19 @@ type CursorState = {
   anchor: Y.RelativePosition
   head: Y.RelativePosition
 }
+
+// Monaco uses LF offsets. Legacy CRLF is projected without mutating remote
+// CRDT state (read-only clients must never send normalization updates).
+export const toYTextOffset = (raw: string, offset: number): number => {
+  let visible = 0
+  let index = raw.startsWith('\ufeff') ? 1 : 0
+  while (index < raw.length && visible < offset) {
+    if (raw[index] === '\r' && raw[index + 1] === '\n') index++
+    index++; visible++
+  }
+  return index
+}
+export const toModelOffset = (raw: string, offset: number) => normalizeLineEndings(raw.slice(0, offset)).replace(/^\ufeff/, '').length
 
 const createMutex = () => {
   let locked = false
@@ -40,11 +54,11 @@ const createRelativeSelection = (
 
   const start = Y.createRelativePositionFromTypeIndex(
     ytext,
-    model.getOffsetAt(selection.getStartPosition()),
+    toYTextOffset(ytext.toString(), model.getOffsetAt(selection.getStartPosition())),
   )
   const end = Y.createRelativePositionFromTypeIndex(
     ytext,
-    model.getOffsetAt(selection.getEndPosition()),
+    toYTextOffset(ytext.toString(), model.getOffsetAt(selection.getEndPosition())),
   )
 
   return {
@@ -70,8 +84,8 @@ const createMonacoSelectionFromRelative = (
   const model = editor.getModel()
   if (!model) return null
 
-  const startPos = model.getPositionAt(start.index)
-  const endPos = model.getPositionAt(end.index)
+  const startPos = model.getPositionAt(toModelOffset(ytext.toString(), start.index))
+  const endPos = model.getPositionAt(toModelOffset(ytext.toString(), end.index))
   return monacoInstance.Selection.createWithDirection(
     startPos.lineNumber,
     startPos.column,
@@ -156,6 +170,11 @@ export class MonacoBinding {
   private readonly selectionDisposables: Monaco.IDisposable[] = []
   private rerenderHandle = 0
   private lastDecorationsSignature = ''
+  private destroyed = false
+  private readonly undoManager: Y.UndoManager
+  private readonly undoModel: MonacoModel & { undo: () => void | Promise<void>; redo: () => void | Promise<void> }
+  private readonly nativeUndo: () => void | Promise<void>
+  private readonly nativeRedo: () => void | Promise<void>
 
   private savedSelections = new Map<EditorInstance, RelativeSelection>()
   private decorations = new Map<EditorInstance, string[]>()
@@ -180,33 +199,7 @@ export class MonacoBinding {
     }
 
     this.mux(() => {
-      let index = 0
-      event.delta.forEach((op) => {
-        if (op.retain !== undefined) {
-          index += op.retain
-        } else if (op.insert !== undefined) {
-          const pos = this.monacoModel.getPositionAt(index)
-          const range = new this.monaco.Selection(
-            pos.lineNumber,
-            pos.column,
-            pos.lineNumber,
-            pos.column,
-          )
-          const text = String(op.insert)
-          this.monacoModel.applyEdits([{ range, text }])
-          index += text.length
-        } else if (op.delete !== undefined) {
-          const pos = this.monacoModel.getPositionAt(index)
-          const endPos = this.monacoModel.getPositionAt(index + op.delete)
-          const range = new this.monaco.Selection(
-            pos.lineNumber,
-            pos.column,
-            endPos.lineNumber,
-            endPos.column,
-          )
-          this.monacoModel.applyEdits([{ range, text: '' }])
-        }
-      })
+      this.projectDocument()
 
       this.savedSelections.forEach((selection, editor) => {
         const nextSelection = createMonacoSelectionFromRelative(
@@ -223,6 +216,23 @@ export class MonacoBinding {
     })
 
     this.scheduleRerenderDecorations()
+  }
+
+  private projectDocument() {
+    const target = normalizeLineEndings(this.ytext.toString()).replace(/^\ufeff/, '')
+    this.monacoModel.setEOL(this.monaco.editor.EndOfLineSequence.LF)
+    const current = this.monacoModel.getValue()
+    if (current === target) return
+    let start = 0
+    while (start < current.length && start < target.length && current[start] === target[start]) start++
+    // Never split a surrogate pair while computing the minimal replacement.
+    if (start > 0 && /[\uD800-\uDBFF]/.test(current[start - 1]!)) start--
+    let oldEnd = current.length, newEnd = target.length
+    while (oldEnd > start && newEnd > start && current[oldEnd - 1] === target[newEnd - 1]) { oldEnd--; newEnd-- }
+    if (oldEnd < current.length && /[\uDC00-\uDFFF]/.test(current[oldEnd]!)) { oldEnd++; newEnd++ }
+    const from = this.monacoModel.getPositionAt(start)
+    const to = this.monacoModel.getPositionAt(oldEnd)
+    this.monacoModel.applyEdits([{ range: new this.monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column), text: target.slice(start, newEnd) }])
   }
 
   private readonly rerenderDecorations = () => {
@@ -295,8 +305,8 @@ export class MonacoBinding {
         const selectionLen = endIndex - startIndex
         const hasSelection = selectionLen > 0
 
-        const startPos = this.monacoModel.getPositionAt(startIndex)
-        const endPos = this.monacoModel.getPositionAt(endIndex)
+        const startPos = this.monacoModel.getPositionAt(toModelOffset(this.ytext.toString(), startIndex))
+        const endPos = this.monacoModel.getPositionAt(toModelOffset(this.ytext.toString(), endIndex))
 
         nextDecorations.push({
           range: new this.monaco.Range(
@@ -356,21 +366,28 @@ export class MonacoBinding {
     this.doc.on('beforeAllTransactions', this.beforeTransaction)
     this.ytext.observe(this.ytextObserver)
 
-    const yValue = this.ytext.toString()
-    if (this.monacoModel.getValue() !== yValue) {
-      this.monacoModel.setValue(yValue)
-    }
-
+    this.undoManager = new Y.UndoManager(ytext, { trackedOrigins: new Set([this]) })
+    this.undoModel = monacoModel as typeof this.undoModel
+    this.nativeUndo = this.undoModel.undo
+    this.nativeRedo = this.undoModel.redo
+    // All Monaco undo entry points (keyboard, context menu and commands) call
+    // the model. Native offset-based history must not undo remote operations.
+    this.undoModel.undo = () => { if (this.isEditable()) this.undoManager.undo() }
+    this.undoModel.redo = () => { if (this.isEditable()) this.undoManager.redo() }
+    this.mux(() => this.projectDocument())
     this.monacoChangeHandler = this.monacoModel.onDidChangeContent((event) => {
       this.mux(() => {
+        if (event.isEolChange) { this.projectDocument(); return }
+        const raw = this.ytext.toString()
         this.doc.transact(() => {
-          event.changes
-            .sort((a, b) => b.rangeOffset - a.rangeOffset)
-            .forEach((change) => {
-              this.ytext.delete(change.rangeOffset, change.rangeLength)
-              this.ytext.insert(change.rangeOffset, change.text)
-            })
+          [...event.changes].sort((a, b) => b.rangeOffset - a.rangeOffset).forEach((change) => {
+            const start = toYTextOffset(raw, change.rangeOffset)
+            const end = toYTextOffset(raw, change.rangeOffset + change.rangeLength)
+            if (end > start) this.ytext.delete(start, end - start)
+            if (change.text) this.ytext.insert(start, normalizeCollaborativeText(change.text))
+          })
         }, this)
+        this.projectDocument()
       })
     })
 
@@ -394,11 +411,11 @@ export class MonacoBinding {
             const cursor: CursorState = {
               anchor: Y.createRelativePositionFromTypeIndex(
                 this.ytext,
-                direction === this.monaco.SelectionDirection.RTL ? headOffset : anchorOffset,
+                toYTextOffset(this.ytext.toString(), direction === this.monaco.SelectionDirection.RTL ? headOffset : anchorOffset),
               ),
               head: Y.createRelativePositionFromTypeIndex(
                 this.ytext,
-                direction === this.monaco.SelectionDirection.RTL ? anchorOffset : headOffset,
+                toYTextOffset(this.ytext.toString(), direction === this.monaco.SelectionDirection.RTL ? anchorOffset : headOffset),
               ),
             }
 
@@ -411,7 +428,17 @@ export class MonacoBinding {
     }
   }
 
+  private isEditable() {
+    return !this.destroyed && (this.editors.size === 0 || [...this.editors].some(editor =>
+      !editor.getOption(this.monaco.editor.EditorOption.readOnly)))
+  }
+
   destroy() {
+    if (this.destroyed) return
+    this.destroyed = true
+    this.undoModel.undo = this.nativeUndo
+    this.undoModel.redo = this.nativeRedo
+    this.undoManager.destroy()
     this.monacoChangeHandler.dispose()
     this.monacoDisposeHandler.dispose()
     this.selectionDisposables.forEach((disposable) => disposable.dispose())

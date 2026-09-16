@@ -26,13 +26,13 @@ export function Navbar({
   const { user } = useAuthStore()
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className={cn('flex h-14 items-center gap-4 px-4', !fullWidth && 'container')}>
+    <header className="sticky top-0 z-50 w-full border-b bg-background">
+      <div className={cn('app-navbar flex h-9 items-center gap-1.5', fullWidth ? 'px-2' : 'app-container')}>
         {/* Left section */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           {leftContent ?? (
-            <Link to="/rooms" className="flex items-center gap-2 font-semibold">
-              <Code2 className="h-6 w-6 text-primary" />
+            <Link to="/rooms" className="flex items-center gap-1 font-semibold">
+              <Code2 className="h-5 w-5 text-foreground" />
               {title !== null && <span className="hidden sm:inline">{title ?? 'ShareCode'}</span>}
             </Link>
           )}
@@ -45,7 +45,7 @@ export function Navbar({
         {!centerContent && <div className="flex-1" />}
 
         {/* Right section */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {rightContent}
           <LanguageSwitcher />
           <ThemeToggle />

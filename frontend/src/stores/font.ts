@@ -48,7 +48,7 @@ export const useFontStore = create<FontState>()(
   persist(
     (set, get) => ({
       font: 'JuliaMono',
-      fontSize: 14,
+      fontSize: 12,
 
       setFont: (font: SelectableFont) => {
         set({ font })
@@ -76,7 +76,8 @@ export const useFontStore = create<FontState>()(
       // Bump whenever the shape of persisted state changes. Without a version
       // bump, zustand's persist treats stored and current version both as 0
       // and skips migrate — so pre-refactor entries stay in localStorage.
-      version: 1,
+      version: 2,
+      // Version 2 lowers the previous default (14px) to 12px.
       migrate: (state: unknown) => {
         const s = (state ?? {}) as Partial<FontState> & { font?: unknown }
         return {
@@ -84,8 +85,8 @@ export const useFontStore = create<FontState>()(
           font: normalizeFont(s.font),
           fontSize:
             typeof s.fontSize === 'number'
-              ? Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, s.fontSize))
-              : 14,
+              ? Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, s.fontSize === 14 ? 12 : s.fontSize))
+              : 12,
         } as FontState
       },
     }

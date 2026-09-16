@@ -112,10 +112,12 @@ class ApiClient {
     oldPassword: string,
     newPassword: string
   ): Promise<{ message: string }> {
-    return this.request<{ message: string }>('/api/auth/change-password', {
+    const result = await this.request<{ message: string; token: string }>('/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ oldPassword, newPassword }),
     })
+    useAuthStore.getState().replaceToken(result.token)
+    return result
   }
 
   async getNotifications(): Promise<{ notifications: NotificationItem[] }> {
@@ -141,6 +143,18 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(payload),
     })
+  }
+
+  async getAuditEvents(before?: number, username?: string): Promise<{
+    events: Array<{ id: number; createdAt: string; action: string; username: string | null;
+      actorId: string | null; targetId: string | null; success: boolean; clientIp: string;
+      peerIp: string; ipSource: string; userAgent: string; requestId: string; reason: string | null }>;
+    nextCursor: number | null
+  }> {
+    const query = new URLSearchParams()
+    if (before) query.set('before', String(before))
+    if (username) query.set('username', username)
+    return this.request(`/api/admin/audit?${query}`)
   }
 
   // Users
@@ -181,8 +195,8 @@ class ApiClient {
     return this.request<{ rooms: Room[]; pagination: PaginationMeta }>(endpoint)
   }
 
-  async getRoom(roomId: string): Promise<{ room: Room }> {
-    return this.request<{ room: Room }>(`/api/rooms/${roomId}`)
+  async getRoom(roomId: string, signal?: AbortSignal): Promise<{ room: Room }> {
+    return this.request<{ room: Room }>(`/api/rooms/${roomId}`, { signal })
   }
 
   async getRoomByDocumentId(documentId: string): Promise<{ room: Room }> {
@@ -213,6 +227,10 @@ class ApiClient {
     return this.request<{ room: Room }>(`/api/rooms/${roomId}/end`, {
       method: 'POST',
     })
+  }
+
+  async acceptShareLink(token: string, signal?: AbortSignal): Promise<{ roomId: string }> {
+    return this.request(`/api/share/${encodeURIComponent(token)}/accept`, { method: 'POST', signal })
   }
 
   // Share Links
@@ -249,8 +267,9 @@ class ApiClient {
     })
   }
 
-  async getAllUsers(): Promise<{ users: User[] }> {
-    return this.request<{ users: User[] }>('/api/admin/users')
+  async getAdminUsers(params: { page: number; pageSize: number; q?: string; role?: string }, signal?: AbortSignal): Promise<{ users: User[]; pagination: PaginationMeta }> {
+    const query = new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)]))
+    return this.request(`/api/admin/users?${query}`, { signal })
   }
 
   async updateUser(
@@ -274,8 +293,9 @@ class ApiClient {
     })
   }
 
-  async getAllRoomsAdmin(): Promise<{ rooms: Room[] }> {
-    return this.request<{ rooms: Room[] }>('/api/admin/rooms')
+  async getAdminRooms(params: { page: number; pageSize: number; q?: string; status?: string; language?: string; owner?: string }, signal?: AbortSignal): Promise<{ rooms: Room[]; pagination: PaginationMeta }> {
+    const query = new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)]))
+    return this.request(`/api/admin/rooms?${query}`, { signal })
   }
 
   async deleteRoomAdmin(roomId: string): Promise<{ message: string }> {
@@ -288,8 +308,9 @@ class ApiClient {
     return this.request<DbStorageSize>('/api/admin/storage/db-size')
   }
 
-  async getRoomPlaybackSizes(): Promise<{ rooms: RoomPlaybackSize[] }> {
-    return this.request<{ rooms: RoomPlaybackSize[] }>('/api/admin/storage/playback')
+  async getRoomPlaybackSizes(roomIds: string[], signal?: AbortSignal): Promise<{ rooms: RoomPlaybackSize[] }> {
+    const query = new URLSearchParams({ roomIds: roomIds.join(',') })
+    return this.request(`/api/admin/storage/playback?${query}`, { signal })
   }
 
   async compressRoomPlayback(roomId: string): Promise<PlaybackCompressionResult> {
@@ -390,7 +411,7 @@ export async function getSessionProfile(authToken: string): Promise<
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || 'Request failed')
+    throw Object.assign(new Error(error.error || 'Request failed'), { status: response.status })
   }
 
   return response.json()

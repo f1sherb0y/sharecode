@@ -1,15 +1,16 @@
+import { LANGUAGES } from '@/types'
+import { translateError } from '@/i18n/errors'
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Users, Clock, Trash2, Play, Calendar, Share2, Pencil, Pin, PinOff } from 'lucide-react'
+import { Plus, Users, Trash2, Play, Share2, Pencil, Pin, PinOff, MoreHorizontal } from 'lucide-react'
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
   Input,
   Label,
   Select,
@@ -36,8 +37,8 @@ import { cn, formatDateMinutes } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import type { Room, Language, User, PaginationMeta, RoomActiveness } from '@/types'
 
-const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'cpp', 'rust', 'go', 'php', 'markdown', 'verilog']
-const DEFAULT_PAGE_SIZE = 20
+
+const DEFAULT_PAGE_SIZE = 50
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const VALID_ACTIVENESS: RoomActiveness[] = ['all', 'active', 'ended']
 const ELLIPSIS_LEFT = 'ellipsis-left'
@@ -389,8 +390,8 @@ export function RoomsPage() {
         rightContent={
           <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
+              <Button aria-label={t('rooms.createButton')}>
+                <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('rooms.createButton')}</span>
               </Button>
             </DialogTrigger>
@@ -400,23 +401,23 @@ export function RoomsPage() {
                   <DialogTitle>{t('rooms.create.title')}</DialogTitle>
                   <DialogDescription>{t('rooms.create.allowedUsersHint')}</DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-3 py-3">
-                  <div className="space-y-1.5">
+                <div className="grid gap-1.5 py-2">
+                  <div className="space-y-1">
                     <Label htmlFor="roomName" className="text-xs">{t('rooms.create.name')}</Label>
                     <Input
                       id="roomName"
-                      className="h-9 text-xs"
+                      className="text-xs"
                       value={newRoomName}
                       onChange={(e) => setNewRoomName(e.target.value)}
                       placeholder={t('rooms.create.namePlaceholder')}
                       required
                     />
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
+                  <div className="grid gap-1.5 sm:grid-cols-2">
+                    <div className="space-y-1">
                       <Label className="text-xs">{t('rooms.create.language')}</Label>
                       <Select value={newRoomLanguage} onValueChange={(v) => setNewRoomLanguage(v as Language)}>
-                        <SelectTrigger className="h-9 text-xs">
+                        <SelectTrigger className="text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -428,33 +429,33 @@ export function RoomsPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label htmlFor="roomCompany" className="text-xs">{t('rooms.create.company')}</Label>
                       <Input
                         id="roomCompany"
-                        className="h-9 text-xs"
+                        className="text-xs"
                         value={newRoomCompany}
                         onChange={(e) => setNewRoomCompany(e.target.value)}
                         placeholder={t('rooms.create.companyPlaceholder')}
                       />
                     </div>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
+                  <div className="grid gap-1.5 sm:grid-cols-2">
+                    <div className="space-y-1">
                       <Label htmlFor="roomPosition" className="text-xs">{t('rooms.create.position')}</Label>
                       <Input
                         id="roomPosition"
-                        className="h-9 text-xs"
+                        className="text-xs"
                         value={newRoomPosition}
                         onChange={(e) => setNewRoomPosition(e.target.value)}
                         placeholder={t('rooms.create.positionPlaceholder')}
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label htmlFor="duration" className="text-xs">{t('rooms.create.duration')}</Label>
                       <Input
                         id="duration"
-                        className="h-9 text-xs"
+                        className="text-xs"
                         type="number"
                         value={duration}
                         onChange={(e) => setDuration(e.target.value)}
@@ -463,18 +464,18 @@ export function RoomsPage() {
                       />
                     </div>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <Label htmlFor="scheduledTime" className="text-xs">{t('rooms.create.scheduledTime')}</Label>
                     <Input
                       id="scheduledTime"
-                      className="h-9 text-xs"
+                      className="text-xs"
                       type="datetime-local"
                       value={scheduledTime}
                       onChange={(e) => setScheduledTime(e.target.value)}
                     />
                   </div>
                   {availableUsers.length > 0 && (
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <Label className="text-xs">{t('rooms.create.allowedUsers')}</Label>
                       <div className="border rounded-md max-h-32 overflow-y-auto">
                         {availableUsers.map((u) => {
@@ -483,7 +484,7 @@ export function RoomsPage() {
                             <div
                               key={u.id}
                               className={cn(
-                                'flex items-center justify-between px-2.5 py-1.5 hover:bg-accent cursor-pointer',
+                                'flex items-center justify-between px-1.5 py-1 hover:bg-accent cursor-pointer',
                                 selected && 'bg-accent/50'
                               )}
                               onClick={() => toggleUserSelection(u.id)}
@@ -494,7 +495,6 @@ export function RoomsPage() {
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-6 px-2 text-xs"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     toggleUserCanEdit(u.id)
@@ -542,7 +542,7 @@ export function RoomsPage() {
               {t('rooms.cancel')}
             </Button>
             <Button variant="destructive" onClick={confirmDeleteRoom} disabled={deleteRoomMutation.isPending}>
-              {t('rooms.delete')}
+              {t('common.delete')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -564,7 +564,7 @@ export function RoomsPage() {
               {t('rooms.list.renameConfirm', { name: roomToRename?.name })}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="renameRoomName">{t('rooms.create.name')}</Label>
             <Input
               id="renameRoomName"
@@ -592,7 +592,7 @@ export function RoomsPage() {
             <DialogTitle>{t('share.manager.title')}</DialogTitle>
           </DialogHeader>
           {roomToShare && (
-             <div className="py-2">
+             <div className="py-1.5">
                <ShareLinkManager roomId={roomToShare.id} />
              </div>
           )}
@@ -600,13 +600,12 @@ export function RoomsPage() {
       </Dialog>
 
       <PageContainer>
-        {error && (
-          <div className="mb-4 p-4 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
-        )}
-
-        <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+        <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="text-base font-semibold tracking-tight">{t('rooms.workspaceTitle')}</h1>
+          <span className="text-xs text-muted-foreground">{t('rooms.pagination.total', { count: pagination.total })}</span>
+          <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1 sm:ml-auto sm:w-auto sm:grid-cols-[10rem_8rem_6rem]">
             <div className="space-y-1">
-              <Label>{t('rooms.filters.owner')}</Label>
+              <Label className="sr-only">{t('rooms.filters.owner')}</Label>
               <Select
                 value={ownerFilter}
                 onValueChange={(value) => {
@@ -616,7 +615,7 @@ export function RoomsPage() {
                   })
                 }}
               >
-                <SelectTrigger className="h-9">
+                <SelectTrigger aria-label={t('rooms.filters.owner')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -630,7 +629,7 @@ export function RoomsPage() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>{t('rooms.filters.activeness')}</Label>
+              <Label className="sr-only">{t('rooms.filters.activeness')}</Label>
               <Select
                 value={activenessFilter}
                 onValueChange={(value) => {
@@ -640,7 +639,7 @@ export function RoomsPage() {
                   })
                 }}
               >
-                <SelectTrigger className="h-9">
+                <SelectTrigger aria-label={t('rooms.filters.activeness')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -651,7 +650,7 @@ export function RoomsPage() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>{t('rooms.pagination.pageSize')}</Label>
+              <Label className="sr-only">{t('rooms.pagination.pageSize')}</Label>
               <Select
                 value={String(pageSize)}
                 onValueChange={(value) => {
@@ -661,35 +660,34 @@ export function RoomsPage() {
                   })
                 }}
               >
-                <SelectTrigger className="h-9">
+                <SelectTrigger aria-label={t('rooms.pagination.pageSize')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {PAGE_SIZE_OPTIONS.map((size) => (
                     <SelectItem key={size} value={String(size)}>
-                      {size}
+                      {t('rooms.pagination.perPage', { count: size })}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="text-sm text-muted-foreground lg:pb-1 lg:text-right">
-              {t('rooms.pagination.total', { count: pagination.total })}
-            </div>
+          </div>
         </div>
+        {error && <p role="alert" className="mb-2 text-sm text-destructive">{translateError(error)}</p>}
 
         {isLoading ? (
-          <div className="flex justify-center items-center py-12">
+          <div className="flex justify-center items-center py-6">
             <Spinner size="lg" />
           </div>
         ) : rooms.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-6">
             <p className="text-muted-foreground">{t('rooms.list.empty')}</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="room-list divide-y border-y">
             {rooms.map((room) => (
-              <RoomCard
+              <RoomRow
                 key={room.id}
                 room={room}
                 currentUser={user ?? undefined}
@@ -699,14 +697,13 @@ export function RoomsPage() {
                 onTogglePin={() => handleTogglePin(room)}
                 isPinUpdating={pinUpdatingRoomId === room.id}
                 onPlayback={() => navigate(`/playback/${room.id}`)}
-                onClick={() => navigate(`/room/${room.id}`)}
               />
             ))}
           </div>
         )}
 
         {!isLoading && pagination.totalPages > 0 && (
-          <div className="mt-4 flex items-center justify-center gap-2">
+          <nav aria-label={t('rooms.pagination.label')} className="mt-2 flex flex-wrap items-center justify-center gap-1">
             <Button
               variant="outline"
               size="sm"
@@ -721,6 +718,8 @@ export function RoomsPage() {
                   key={`page-${item}`}
                   variant={item === pagination.page ? 'default' : 'outline'}
                   size="sm"
+                  aria-label={t('rooms.pagination.goToPage', { page: item })}
+                  aria-current={item === pagination.page ? 'page' : undefined}
                   onClick={() => updateListParams({ page: item })}
                 >
                   {item}
@@ -739,14 +738,14 @@ export function RoomsPage() {
             >
               {t('rooms.pagination.next')}
             </Button>
-          </div>
+          </nav>
         )}
       </PageContainer>
     </div>
   )
 }
 
-interface RoomCardProps {
+interface RoomRowProps {
   room: Room
   currentUser?: User
   onDelete: () => void
@@ -755,10 +754,9 @@ interface RoomCardProps {
   onTogglePin: () => void
   isPinUpdating: boolean
   onPlayback: () => void
-  onClick: () => void
 }
 
-function RoomCard({
+function RoomRow({
   room,
   currentUser,
   onDelete,
@@ -767,8 +765,7 @@ function RoomCard({
   onTogglePin,
   isPinUpdating,
   onPlayback,
-  onClick,
-}: RoomCardProps) {
+}: RoomRowProps) {
   const { t } = useTranslation()
 
   const isOwner = room.ownerId === currentUser?.id
@@ -781,152 +778,49 @@ function RoomCard({
   const participantCount = (room.participants?.length ?? 0) + 1
   const canViewPlayback = room.isEnded && (isOwner || isPrivileged)
 
-  const handleOpen = () => {
-    if (canViewPlayback) {
-      onPlayback()
-    } else {
-      onClick()
-    }
-  }
-
   return (
-    <Card
-      className={cn(
-        'cursor-pointer transition-colors hover:border-primary/50 flex flex-col',
-        room.isEnded && 'opacity-60'
-      )}
-      onClick={handleOpen}
-    >
-      <CardHeader className="p-3 pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-sm font-medium line-clamp-1">{room.name}</CardTitle>
-          <Badge variant={room.isEnded ? 'secondary' : 'default'} className="shrink-0 text-xs px-1.5 py-0 rounded-sm">
-            {room.language}
-          </Badge>
+    <article className={cn('room-row group flex items-center gap-1', room.isEnded && 'text-muted-foreground')}>
+      <Link
+        to={canViewPlayback ? `/playback/${room.id}` : `/room/${room.id}`}
+        aria-label={room.name}
+        className="room-row-link grid min-w-0 flex-1 items-center gap-x-3 gap-y-0.5 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <div className="room-row-name flex min-w-0 items-center gap-1">
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', room.isEnded ? 'bg-muted-foreground/40' : 'bg-success')} />
+          <span title={room.name} className="min-w-0 truncate text-sm font-medium group-hover:underline underline-offset-4">{room.name}</span>
+          {room.isPinned && <Pin className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('rooms.list.pinned')} />}
+          <Badge variant="secondary" className="shrink-0">{room.language}</Badge>
+          {room.isEnded && <span className="shrink-0 text-xs">{t('rooms.list.ended')}</span>}
         </div>
-        <CardDescription className="flex items-center gap-1 text-xs">
-          <span>{room.owner.username}</span>
-          {room.isPinned && (
-            <Badge variant="secondary" className="ml-1 text-xs px-1 py-0">
-              {t('rooms.list.pinned')}
-            </Badge>
-          )}
-          {canShareRoom && (
-            <Badge variant="outline" className="ml-1 text-xs px-1 py-0">
-              {isOwner ? t('rooms.list.owned') : t('rooms.list.manage')}
-            </Badge>
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-3 pt-0 flex flex-col flex-1">
-        <div className="flex flex-col gap-1 text-xs text-muted-foreground flex-1">
-          {(room.company || room.position) && (
-            <div className="truncate">
-              {[room.company, room.position].filter(Boolean).join(' • ')}
-            </div>
-          )}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              <span>{participantCount}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              <span>{formatDateMinutes(room.createdAt)}</span>
-            </div>
-          </div>
-
-          {room.scheduledTime && (
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              <span>{formatDateMinutes(room.scheduledTime)}</span>
-              {room.duration && <span>• {room.duration} {t('rooms.list.durationUnit')}</span>}
-            </div>
-          )}
-
-          {room.isEnded && (
-            <Badge variant="destructive" className="w-fit text-xs px-1.5 py-0 rounded-sm">
-              {t('rooms.list.ended')}
-            </Badge>
-          )}
+        <div className="room-row-owner flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <span className="truncate" title={room.owner.username}>{room.owner.username}</span>
+          {isOwner && <span className="shrink-0">· {t('rooms.list.owned')}</span>}
+          {(room.company || room.position) && <span className="truncate" title={[room.company, room.position].filter(Boolean).join(' / ')}>· {[room.company, room.position].filter(Boolean).join(' / ')}</span>}
         </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-1 mt-2 pt-2 border-t min-h-[36px]">
-          {canShareRoom && !room.isEnded && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={(e) => {
-                e.stopPropagation()
-                onShare()
-              }}
-            >
-              <Share2 className="h-3 w-3" />
-            </Button>
-          )}
-
-          {canRenameRoom && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={(e) => {
-                e.stopPropagation()
-                onRename()
-              }}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          )}
-
-          {canPinRoom && (
-            <Button
-              variant={room.isPinned ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 px-2"
-              disabled={isPinUpdating}
-              onClick={(e) => {
-                e.stopPropagation()
-                onTogglePin()
-              }}
-              title={room.isPinned ? t('rooms.list.unpin') : t('rooms.list.pin')}
-            >
-              {room.isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
-            </Button>
-          )}
-
-          {room.isEnded && (isOwner || isPrivileged) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={(e) => {
-                e.stopPropagation()
-                onPlayback()
-              }}
-            >
-              <Play className="h-3 w-3 mr-1" />
-              <span className="text-xs">{t('rooms.list.viewPlayback')}</span>
-            </Button>
-          )}
-
-          {canDeleteCurrentRoom && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete()
-              }}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          )}
+        <div className="room-row-meta flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="flex shrink-0 items-center gap-1"><Users className="h-3 w-3" />{participantCount}</span>
+          <time className="truncate" dateTime={room.scheduledTime || room.createdAt} title={formatDateMinutes(room.scheduledTime || room.createdAt)}>
+            {formatDateMinutes(room.scheduledTime || room.createdAt)}
+          </time>
+          {room.scheduledTime && room.duration && <span className="hidden shrink-0 lg:inline">· {room.duration} {t('rooms.list.durationUnit')}</span>}
         </div>
-      </CardContent>
-    </Card>
+      </Link>
+      <div className="room-row-actions flex items-center justify-end">
+        {(canShareRoom || canRenameRoom || canPinRoom || canViewPlayback || canDeleteCurrentRoom) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label={`${t('editor.toolbar.more')} · ${room.name}`} title={t('editor.toolbar.more')}><MoreHorizontal /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canShareRoom && !room.isEnded && <DropdownMenuItem onClick={onShare}><Share2 className="mr-1.5 h-4 w-4" />{t('editor.toolbar.share')}</DropdownMenuItem>}
+              {canRenameRoom && <DropdownMenuItem onClick={onRename}><Pencil className="mr-1.5 h-4 w-4" />{t('rooms.list.rename')}</DropdownMenuItem>}
+              {canPinRoom && <DropdownMenuItem onClick={onTogglePin} disabled={isPinUpdating}>{room.isPinned ? <PinOff className="mr-1.5 h-4 w-4" /> : <Pin className="mr-1.5 h-4 w-4" />}{room.isPinned ? t('rooms.list.unpin') : t('rooms.list.pin')}</DropdownMenuItem>}
+              {canViewPlayback && <DropdownMenuItem onClick={onPlayback}><Play className="mr-1.5 h-4 w-4" />{t('rooms.list.viewPlayback')}</DropdownMenuItem>}
+              {canDeleteCurrentRoom && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}><Trash2 className="mr-1.5 h-4 w-4" />{t('common.delete')}</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    </article>
   )
 }

@@ -1,11 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
+import { translateError } from '@/i18n/errors'
+import { type CSSProperties, useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useViewportHeight } from '@/hooks/use-viewport-height'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, StickyNote, PanelRightClose } from 'lucide-react'
 import type * as Monaco from 'monaco-editor'
 import pako from 'pako'
-import * as Y from 'yjs'
+import type * as Y from 'yjs'
+import { DocumentReplay } from '@/lib/document-replay'
+import { RoomViewSwitch } from '@/components/features/room-view-switch'
+const CanvasView = lazy(() => import('@/components/features/canvas-view').then(m => ({ default: m.CanvasView })))
 import {
   Button,
   Badge,
@@ -26,6 +31,18 @@ import { useCompactViewport } from '@/hooks'
 import { cn, formatTime } from '@/lib/utils'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
 import { loadMonaco } from '@/lib/monaco-loader'
+import { mermaidPlugins } from '@/lib/milkdown-mermaid'
+import { imagePlugins } from '@/lib/milkdown-image'
+import { mathPlugins } from '@/lib/milkdown-math'
+import { Editor, editorViewOptionsCtx, rootCtx, schemaCtx, serializerCtx } from '@milkdown/kit/core'
+import { commonmark } from '@milkdown/kit/preset/commonmark'
+import { gfm } from '@milkdown/kit/preset/gfm'
+import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror'
+import { replaceAll } from '@milkdown/kit/utils'
+import '@/styles/markdown.css'
+// Must-have ProseMirror layout CSS + table base styles (same as live editor).
+import '@milkdown/kit/prose/view/style/prosemirror.css'
+import '@milkdown/kit/prose/tables/style/tables.css'
 import type { Room } from '@/types'
 
 const PLAYBACK_SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const
@@ -59,19 +76,12 @@ function decompressUpdate(compressedBase64: string): Uint8Array {
   return pako.ungzip(compressed)
 }
 
-function getCodeAtTimestamp(updates: Update[], timestamp: number): string {
-  const doc = new Y.Doc()
-
-  updates
-    .filter((u) => u.timestampMs <= timestamp)
-    .forEach((u) => {
-      try {
-        Y.applyUpdate(doc, u.update)
-      } catch (err) {
-        console.error('Error applying playback update:', err)
-      }
-    })
-
+function getCodeFromDocument(doc: Y.Doc, markdownEditor?: Editor | null): string {
+  if (markdownEditor && (doc.getMap('meta').get('markdownInitialized') || doc.getXmlFragment('prosemirror').length > 0)) {
+    return markdownEditor.action((ctx) => ctx.get(serializerCtx)(
+      yXmlFragmentToProseMirrorRootNode(doc.getXmlFragment('prosemirror'), ctx.get(schemaCtx)),
+    ))
+  }
   return doc.getText('codemirror').toString()
 }
 
@@ -80,11 +90,16 @@ export function PlaybackPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
+  const viewportHeight = useViewportHeight()
   const { user } = useAuthStore()
   const { theme } = useThemeStore()
   const { font, fontSize } = useFontStore()
   const isCompactViewport = useCompactViewport()
 
+  const view = searchParams.get('view') === 'canvas' ? 'canvas' : 'editor'
+  const replayRef = useRef<DocumentReplay | null>(null)
+  const [replayDoc, setReplayDoc] = useState<Y.Doc | null>(null)
+  const timestampRef = useRef(0)
   const [room, setRoom] = useState<Room | null>(null)
   const [updates, setUpdates] = useState<Update[]>([])
   const playbackSpeed = parsePlaybackSpeed(searchParams.get('speed'))
@@ -110,14 +125,15 @@ export function PlaybackPage() {
   const playbackEditorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const playbackModelRef = useRef<Monaco.editor.ITextModel | null>(null)
 
+  const isMarkdown = room?.language === 'markdown'
+  const markdownContainerRef = useRef<HTMLDivElement>(null)
+  const markdownEditorRef = useRef<Editor | null>(null)
+  const lastMarkdownRef = useRef<string | null>(null)
+
   useEffect(() => {
     const normalized = new URLSearchParams(searchParams)
     let changed = false
 
-    if (normalized.has('view')) {
-      normalized.delete('view')
-      changed = true
-    }
     if (normalized.get('speed') !== String(playbackSpeed)) {
       normalized.set('speed', String(playbackSpeed))
       changed = true
@@ -152,7 +168,7 @@ export function PlaybackPage() {
         setRoom(room)
 
         const isOwner = room.ownerId === user.id
-        const isPrivileged = user.role === 'admin' || user.role === 'superuser' ||
+        const isPrivileged = user.role === 'superuser' ||
           user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
 
         if (!isOwner && !isPrivileged) {
@@ -209,15 +225,30 @@ export function PlaybackPage() {
     }
   }, [roomId, user, t])
 
-  // Initialize Monaco playback editor
   useEffect(() => {
+    const replay = new DocumentReplay(updates)
+    replayRef.current = replay
+    setReplayDoc(replay.seek(timestampRef.current))
+    return () => { replay.destroy(); replayRef.current = null }
+  }, [updates])
+
+  useEffect(() => {
+    timestampRef.current = currentTimestamp
+    try {
+      if (replayRef.current) setReplayDoc(replayRef.current.seek(currentTimestamp))
+    } catch { setError(t('playback.loadFailed')) }
+  }, [currentTimestamp, updates, t])
+
+  // Initialize Monaco playback editor (code rooms only)
+  useEffect(() => {
+    if (isMarkdown) return
     if (!room || !editorRef.current || playbackEditorRef.current) return
     if (updates.length === 0) return
 
     let cancelled = false
 
     try {
-      const initialText = getCodeAtTimestamp(updates, currentTimestamp)
+      const initialText = getCodeFromDocument(replayRef.current!.doc, markdownEditorRef.current)
       loadMonaco().then((monaco) => {
         if (cancelled || !editorRef.current) return
         monacoRef.current = monaco
@@ -253,7 +284,54 @@ export function PlaybackPage() {
       playbackModelRef.current?.dispose()
       playbackModelRef.current = null
     }
-  }, [room, updates, currentTimestamp, theme, font, fontSize])
+  }, [room, updates, isMarkdown])
+
+  // Initialize read-only Milkdown preview for markdown rooms.
+  // Reconstruct the canonical XML fragment, then serialize with the same schema as the
+  // live editor (including mermaid diagrams and inline images) instead of
+  // showing raw base64 data-URLs in a code editor.
+  useEffect(() => {
+    if (!isMarkdown || !room || updates.length === 0) return
+    if (!markdownContainerRef.current || markdownEditorRef.current) return
+
+    let cancelled = false
+    const container = markdownContainerRef.current
+
+    const editor = Editor.make()
+      .config((ctx) => {
+        ctx.set(rootCtx, container)
+        ctx.update(editorViewOptionsCtx, (prev) => ({
+          ...prev,
+          editable: () => false,
+        }))
+      })
+      .use(commonmark)
+      .use(gfm)
+      .use(mermaidPlugins)
+      .use(imagePlugins)
+      .use(mathPlugins)
+
+    editor
+      .create()
+      .then(() => {
+        if (cancelled) return
+        markdownEditorRef.current = editor
+        lastMarkdownRef.current = null
+        const text = getCodeFromDocument(replayRef.current!.doc, markdownEditorRef.current)
+        editor.action(replaceAll(text))
+        lastMarkdownRef.current = text
+      })
+      .catch((err) => {
+        console.error('Failed to initialize markdown playback:', err)
+      })
+
+    return () => {
+      cancelled = true
+      void editor.destroy()
+      markdownEditorRef.current = null
+      lastMarkdownRef.current = null
+    }
+  }, [isMarkdown, room, updates])
 
   // Cleanup
   useEffect(() => {
@@ -279,8 +357,19 @@ export function PlaybackPage() {
   // Update content at timestamp
   useEffect(() => {
     if (updates.length === 0) return
+
+    if (isMarkdown) {
+      const editor = markdownEditorRef.current
+      if (!editor) return
+      const text = getCodeFromDocument(replayRef.current!.doc, markdownEditorRef.current)
+      if (text === lastMarkdownRef.current) return
+      editor.action(replaceAll(text))
+      lastMarkdownRef.current = text
+      return
+    }
+
     if (playbackModelRef.current) {
-      const newText = getCodeAtTimestamp(updates, currentTimestamp)
+      const newText = getCodeFromDocument(replayRef.current!.doc, markdownEditorRef.current)
       const currentText = playbackModelRef.current.getValue()
 
       if (newText !== currentText) {
@@ -298,7 +387,7 @@ export function PlaybackPage() {
         resolveMonacoLanguage(room.language),
       )
     }
-  }, [currentTimestamp, updates, room?.language])
+  }, [currentTimestamp, updates, isMarkdown, room?.language])
 
   // Auto-play
   useEffect(() => {
@@ -328,8 +417,8 @@ export function PlaybackPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <p className="text-destructive">{error}</p>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-2">
+        <p className="text-destructive">{translateError(error)}</p>
         <Button onClick={() => navigate('/rooms')}>{t('playback.backToRooms')}</Button>
       </div>
     )
@@ -337,24 +426,21 @@ export function PlaybackPage() {
 
   return (
     <div
-      className={cn(
-        'playback-shell flex flex-col h-screen safe-x',
-        isCompactViewport && 'compact-ui'
-      )}
-      style={{ height: '100dvh' }}
+      className="playback-shell flex flex-col h-screen safe-x"
+      style={{ height: viewportHeight }}
     >
       {/* Header */}
       <header
         className={cn(
-          'flex items-center justify-between border-b bg-background shrink-0 gap-2',
-          isCompactViewport ? 'h-10 px-2' : 'h-11 px-3 sm:px-4'
+          'flex items-center justify-between border-b bg-background shrink-0 gap-1',
+          'h-9 px-1.5'
         )}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1 min-w-0">
           <Button
             variant="ghost"
             size="icon"
-            className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}
+            aria-label={t('common.back')}
             onClick={() => navigate('/rooms')}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -371,18 +457,18 @@ export function PlaybackPage() {
             variant="secondary"
             className={cn(
               'rounded-sm text-xs',
-              isCompactViewport ? 'px-1 py-0 leading-5' : 'px-1.5 py-0'
+              isCompactViewport ? 'px-1 py-0 leading-5' : 'px-1 py-0'
             )}
           >
             {room?.language}
           </Badge>
         </div>
+        <RoomViewSwitch value={view} onChange={value => setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', value); return next }, { replace: true })} />
         <div className="flex items-center gap-1">
-          <ThemeToggle className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')} />
+          <ThemeToggle />
           <Button
             variant={showNotes ? 'secondary' : 'ghost'}
             size="icon"
-            className={cn(isCompactViewport ? 'h-7 w-7' : 'h-8 w-8')}
             onClick={() => setShowNotes(!showNotes)}
             title={t('playback.notes')}
           >
@@ -394,7 +480,19 @@ export function PlaybackPage() {
       {/* Editor + Notes */}
       <div className="relative flex-1 flex overflow-hidden min-w-0">
         <div className="flex-1 overflow-hidden min-w-0">
-          <div ref={editorRef} className="h-full w-full" />
+          <div className={view === 'canvas' ? 'hidden' : 'h-full w-full'}>
+          {isMarkdown ? (
+            // `.md-editor` wrapper reuses the live editor's typography & theme CSS
+            <div className="md-editor h-full w-full overflow-y-auto" style={{ '--md-font-size': `${fontSize}px`, '--md-font-family': fontFamilyStack(font) } as CSSProperties}>
+              <div translate="no" className="notranslate min-h-full" ref={markdownContainerRef} />
+            </div>
+          ) : (
+            <div ref={editorRef} className="h-full w-full" />
+          )}
+          </div>
+          {view === 'canvas' && replayDoc && <Suspense fallback={<Spinner />}>
+            <CanvasView key={replayDoc.guid} doc={replayDoc} canEdit={false} theme={theme} replay />
+          </Suspense>}
         </div>
 
         {/* Notes panel */}
@@ -407,8 +505,8 @@ export function PlaybackPage() {
                 : 'w-64 shrink-0'
             )}
           >
-            <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
-              <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between px-2 py-1.5 border-b shrink-0">
+              <div className="flex items-center gap-1">
                 <StickyNote className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs font-medium">{t('playback.notes')}</span>
                 {notes.length > 0 && (
@@ -417,14 +515,14 @@ export function PlaybackPage() {
               </div>
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-6 w-6"
+                size="icon-sm"
+                aria-label={t('common.close')}
                 onClick={() => setShowNotes(false)}
               >
                 <PanelRightClose className="h-3.5 w-3.5" />
               </Button>
             </div>
-            <div className="flex-1 overflow-hidden p-2">
+            <div className="flex-1 overflow-hidden p-1.5">
               <NotesView roomId={roomId} readOnly />
             </div>
           </div>
@@ -435,13 +533,14 @@ export function PlaybackPage() {
       <footer
         className={cn(
           'safe-bottom border-t bg-background shrink-0',
-          isCompactViewport ? 'px-2 py-1.5' : 'px-3 py-2.5 sm:px-4 sm:py-3'
+          'px-2 py-1'
         )}
       >
         {/* Timeline with marks */}
-        <div className={cn('relative', isCompactViewport ? 'mb-2' : 'mb-3')}>
+        <div className="relative mb-1">
           <input
             type="range"
+            aria-label={t('playback.progress')}
             min={startMs}
             max={endMs}
             step="any"
@@ -495,12 +594,12 @@ export function PlaybackPage() {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[auto_1fr_auto]">
+          <div className="order-1 flex items-center gap-1">
             <Button
               variant="outline"
               size="icon"
-              className={cn(isCompactViewport ? 'h-7 w-7' : 'h-9 w-9')}
+              aria-label={t('playback.goToStart')}
               onClick={() => {
                 setCurrentTimestamp(startMs)
                 setIsPlaying(false)
@@ -511,7 +610,7 @@ export function PlaybackPage() {
             <Button
               variant="outline"
               size="icon"
-              className={cn(isCompactViewport ? 'h-7 w-7' : 'h-9 w-9')}
+              aria-label={t(isPlaying ? 'playback.pause' : 'playback.play')}
               onClick={() => setIsPlaying(!isPlaying)}
             >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -519,7 +618,7 @@ export function PlaybackPage() {
             <Button
               variant="outline"
               size="icon"
-              className={cn(isCompactViewport ? 'h-7 w-7' : 'h-9 w-9')}
+              aria-label={t('playback.goToEnd')}
               onClick={() => {
                 setCurrentTimestamp(endMs)
                 setIsPlaying(false)
@@ -527,17 +626,12 @@ export function PlaybackPage() {
             >
               <SkipForward className="h-4 w-4" />
             </Button>
-            <span
-              className={cn(
-                'ml-1 text-muted-foreground font-mono whitespace-nowrap',
-                isCompactViewport ? 'text-xs' : 'ml-2 text-sm'
-              )}
-            >
-              {formatTime(currentTimestamp)} / {formatTime(endMs)}
-            </span>
           </div>
+          <span className="order-3 col-span-2 text-center text-xs text-muted-foreground font-mono tabular-nums sm:order-2 sm:col-span-1 sm:text-left">
+            {formatTime(currentTimestamp)} / {formatTime(endMs)}
+          </span>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="order-2 flex items-center gap-1 sm:order-3">
             {!isCompactViewport && <span className="text-sm text-muted-foreground">{t('playback.speed')}:</span>}
             <Select
               value={String(playbackSpeed)}
@@ -547,7 +641,7 @@ export function PlaybackPage() {
                 setSearchParams(next)
               }}
             >
-              <SelectTrigger className={cn(isCompactViewport ? 'h-7 w-[4.5rem]' : 'w-20 h-8')}>
+              <SelectTrigger aria-label={t('playback.speed')} className="w-20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

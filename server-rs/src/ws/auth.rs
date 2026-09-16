@@ -1,5 +1,4 @@
 use chrono::Utc;
-use uuid::Uuid;
 
 use crate::{
     auth::{verify_token, TokenPayload},
@@ -11,6 +10,9 @@ use crate::{
 pub(crate) struct AuthOutcome {
     pub(crate) read_only: bool,
     pub(crate) actor_id: Option<String>,
+    pub(crate) share_link_id: Option<String>,
+    pub(crate) expires_at: i64,
+    pub(crate) username: String,
 }
 
 pub(crate) async fn authenticate(
@@ -45,15 +47,18 @@ async fn authenticate_user(
         SELECT
             u.id as user_id,
             u.role,
+            u.username,
+            u."tokenVersion" as token_version,
             u."canReadAllRooms" as can_read_all_rooms,
             u."canWriteAllRooms" as can_write_all_rooms,
             u."canDeleteAllRooms" as can_delete_all_rooms,
             u."isDeleted" as user_is_deleted,
-            r.id as room_id,
+
             r."ownerId" as owner_id,
             r."isDeleted" as room_is_deleted,
             r."isEnded" as is_ended,
-            p."canEdit" as participant_can_edit
+            p."canEdit" as participant_can_edit,
+            p."shareLinkId" as participant_share_link_id
         FROM "User" u
         CROSS JOIN "Room" r
         LEFT JOIN "RoomParticipant" p ON p."roomId" = r.id AND p."userId" = u.id
@@ -72,7 +77,7 @@ async fn authenticate_user(
     })?;
 
     let row = match result {
-        Some(row) if !row.user_is_deleted => row,
+        Some(row) if !row.user_is_deleted && row.token_version == payload.token_version => row,
         _ => return Err("Authentication failed: User or Room not found".to_string()),
     };
 
@@ -109,27 +114,7 @@ async fn authenticate_user(
 
     let db = state.db.clone();
     let user_id = row.user_id.clone();
-    let room_id = row.room_id.clone();
-    let is_ended = row.is_ended;
-    let needs_participant = !is_ended && !is_owner && row.participant_can_edit.is_none();
-
     tokio::spawn(async move {
-        if needs_participant {
-            let _ = sqlx::query(
-                r#"
-                INSERT INTO "RoomParticipant" (id, "roomId", "userId", "canEdit")
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT ("roomId", "userId") DO NOTHING
-                "#,
-            )
-            .bind(Uuid::new_v4().to_string())
-            .bind(&room_id)
-            .bind(&user_id)
-            .bind(can_write_globally)
-            .execute(&db)
-            .await;
-        }
-
         let _ = sqlx::query(
             r#"
             UPDATE "User"
@@ -145,6 +130,9 @@ async fn authenticate_user(
     Ok(AuthOutcome {
         read_only: !can_edit,
         actor_id: Some(row.user_id),
+        share_link_id: row.participant_share_link_id,
+        expires_at: payload.exp,
+        username: row.username,
     })
 }
 
@@ -158,6 +146,7 @@ async fn authenticate_guest(
         SELECT
             g.id,
             g.token,
+            g."displayName" as display_name,
             g."canEdit" as can_edit,
             r.id as room_id,
             r."allowEdit" as room_allow_edit,
@@ -167,10 +156,11 @@ async fn authenticate_guest(
         FROM "GuestSession" g
         JOIN "Room" r ON r.id = g."roomId"
         JOIN "RoomShareLink" l ON l.id = g."shareLinkId"
-        WHERE g.id = $1
+        WHERE g.id = $1 AND g."shareLinkId" = $2 AND l."roomId" = g."roomId"
         "#,
     )
     .bind(&payload.guest_id)
+    .bind(&payload.share_link_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|err| {
@@ -189,7 +179,7 @@ async fn authenticate_guest(
         return Err("Authentication failed: Guest session token mismatch".to_string());
     }
 
-    if guest.room_id != document_name {
+    if guest.room_id != document_name || payload.room_id != document_name {
         return Err(
             "Authentication failed: Guest session does not match this document".to_string(),
         );
@@ -223,26 +213,32 @@ async fn authenticate_guest(
     Ok(AuthOutcome {
         read_only: !effective_can_edit,
         actor_id: Some(guest.id),
+        share_link_id: Some(payload.share_link_id.clone()),
+        expires_at: payload.exp,
+        username: guest.display_name,
     })
 }
 
 #[derive(sqlx::FromRow)]
 struct WsAuthCombinedRow {
+    token_version: i64,
+    username: String,
     user_id: String,
     role: String,
     can_read_all_rooms: bool,
     can_write_all_rooms: bool,
     can_delete_all_rooms: bool,
     user_is_deleted: bool,
-    room_id: String,
     owner_id: String,
     room_is_deleted: bool,
     is_ended: bool,
     participant_can_edit: Option<bool>,
+    participant_share_link_id: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
 struct WsGuestRow {
+    display_name: String,
     id: String,
     token: String,
     can_edit: bool,

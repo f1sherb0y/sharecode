@@ -1,7 +1,10 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { queryClient } from '@/lib/query-client'
 import type { User, ShareGuest, ShareRoomDetails } from '@/types'
 import { api, getSessionProfile } from '@/api'
+
+let sessionRevision = 0
 
 type ActorType = 'user' | 'guest' | null
 type GuestProfile = {
@@ -19,6 +22,7 @@ interface AuthState {
   isInitialized: boolean
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string) => Promise<void>
+  replaceToken: (token: string) => void
   logout: () => void
   setGuestSession: (token: string, guest: ShareGuest, room: ShareRoomDetails, shareToken: string) => void
   clearGuestSession: () => void
@@ -37,43 +41,53 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (username, password) => {
         const { user, token } = await api.login(username, password)
-        set({ user, token, actorType: 'user', guestProfile: null })
+        sessionRevision++
+        queryClient.clear()
+        set({ user, token, actorType: 'user', guestProfile: null, isLoading: false, isInitialized: true })
       },
 
       register: async (username, password, email) => {
         const { user, token } = await api.register(username, password, email)
-        set({ user, token, actorType: 'user', guestProfile: null })
+        sessionRevision++
+        queryClient.clear()
+        set({ user, token, actorType: 'user', guestProfile: null, isLoading: false, isInitialized: true })
       },
 
+      replaceToken: (token) => { sessionRevision++; set({ token }) },
+
       logout: () => {
-        set({ user: null, token: null, actorType: null, guestProfile: null })
+        sessionRevision++
+        queryClient.clear()
+        set({ user: null, token: null, actorType: null, guestProfile: null, isLoading: false, isInitialized: true })
       },
 
       setGuestSession: (token, guest, room, shareToken) => {
-        set({ token, guestProfile: { guest, room, shareToken }, actorType: 'guest', user: null })
+        sessionRevision++
+        queryClient.clear()
+        set({ token, guestProfile: { guest, room, shareToken }, actorType: 'guest', user: null, isLoading: false, isInitialized: true })
       },
 
       clearGuestSession: () => {
+        sessionRevision++
+        queryClient.clear()
         set({ token: null, guestProfile: null, actorType: null })
       },
 
       initialize: async () => {
-        const { isInitialized } = get()
-        if (isInitialized) return
+        const { isInitialized, isLoading } = get()
+        if (isInitialized || isLoading) return
+        const revision = sessionRevision
 
         set({ isLoading: true })
 
-        // Prefer the persisted zustand token; fall back to the legacy `token`
-        // localStorage key for users upgrading from a pre-persist build.
-        const legacyToken =
-          typeof window !== 'undefined' ? window.localStorage.getItem('token') : null
-        const storedToken = get().token || legacyToken
-        if (legacyToken) {
-          window.localStorage.removeItem('token')
-        }
+        // Never import an origin-wide guest token: another tab may own it.
+        const storedToken = get().token
+        localStorage.removeItem('auth-storage')
+        localStorage.removeItem('token')
         if (storedToken) {
           try {
             const data = await getSessionProfile(storedToken)
+            if (revision !== sessionRevision) return
             if (data.actorType === 'user') {
               set({ user: data.user, token: storedToken, actorType: 'user', isLoading: false, isInitialized: true })
             } else {
@@ -86,7 +100,18 @@ export const useAuthStore = create<AuthState>()(
                 isInitialized: true,
               })
             }
-          } catch {
+          } catch (error) {
+            if (revision !== sessionRevision) return
+            const status = (error as { status?: number }).status
+            if (status !== 401 && status !== 403) {
+              // A network outage must not destroy a valid identity or its
+              // room-scoped recovery journal. Retry while this identity lives.
+              set({ isLoading: false })
+              setTimeout(() => {
+                if (revision === sessionRevision && !get().isInitialized) void get().initialize()
+              }, 1500)
+              return
+            }
             set({ user: null, guestProfile: null, token: null, actorType: null, isLoading: false, isInitialized: true })
           }
         } else {
@@ -95,7 +120,8 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'auth-storage',
+      name: 'sharecode-tab-auth',
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({ token: state.token }),
     }
   )

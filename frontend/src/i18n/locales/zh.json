@@ -19,7 +19,8 @@
         "invalid": "无效的分享链接格式"
       },
       "joinPrompt": "有分享链接或代码？",
-      "joinLinkLabel": "加入房间"
+      "joinLinkLabel": "加入房间",
+      "failed": "登录失败，请重试。"
     },
     "register": {
       "title": "注册",
@@ -33,7 +34,8 @@
       "registering": "正在创建账户...",
       "hasAccount": "已有账户？",
       "loginLink": "登录",
-      "disabled": "注册功能已被禁用。请联系管理员获取访问权限。"
+      "disabled": "注册功能已被禁用。请联系管理员获取访问权限。",
+      "failed": "注册失败，请重试。"
     }
   },
   "join": {
@@ -52,6 +54,7 @@
     "featureInstantDesc": "无需任何配置"
   },
   "rooms": {
+    "workspaceTitle": "工作空间",
     "title": "所有房间",
     "welcome": "欢迎",
     "createButton": "创建新房间",
@@ -88,7 +91,9 @@
       "modalCancel": "取消",
       "modalConfirm": "保存选择",
       "button": "创建房间",
-      "creating": "创建中..."
+      "creating": "创建中...",
+      "selectedUsers_one": "已选择 {{count}} 个用户",
+      "selectedUsers_other": "已选择 {{count}} 个用户"
     },
     "list": {
       "loading": "加载房间中...",
@@ -113,13 +118,14 @@
       "pinned": "已置顶",
       "pin": "置顶房间",
       "unpin": "取消置顶",
-      "viewPlayback": "查看回放"
+      "viewPlayback": "查看回放",
+      "deleteTitle": "删除房间"
     },
     "filters": {
       "owner": "所有者",
       "allOwners": "全部所有者",
       "activeness": "活跃状态",
-      "allActiveness": "全部",
+      "allActiveness": "全部状态",
       "active": "活跃",
       "ended": "已结束"
     },
@@ -128,11 +134,21 @@
       "pageSize": "每页条数",
       "prev": "上一页",
       "next": "下一页",
-      "page": "第 {{page}} / {{totalPages}} 页"
+      "page": "第 {{page}} / {{totalPages}} 页",
+      "label": "房间分页",
+      "goToPage": "转到第 {{page}} 页",
+      "total_one": "共 {{count}} 个房间",
+      "total_other": "共 {{count}} 个房间",
+      "perPage": "{{count}} / 页"
     }
   },
   "editor": {
     "toolbar": {
+      "endConfirm": "确定结束本次会话？所有参与者将断开连接。",
+      "noOtherUsers": "暂无其他在线用户",
+      "more": "更多操作",
+      "inlineMath": "插入行内公式",
+      "blockMath": "插入块级公式",
       "follow": "跟随",
       "following": "跟随中",
       "endRoom": "结束房间",
@@ -140,13 +156,30 @@
       "share": "分享",
       "blink": "闪烁选区",
       "code": "代码",
-      "canvas": "画板"
+      "canvas": "画板",
+      "bold": "粗体",
+      "italic": "斜体",
+      "strikethrough": "删除线",
+      "heading": "标题",
+      "inlineCode": "行内代码",
+      "quote": "引用",
+      "bulletList": "无序列表",
+      "link": "链接",
+      "table": "表格",
+      "diagram": "Mermaid 图表",
+      "image": "插入图片",
+      "linkPrompt": "链接地址：",
+      "renderingDiagram": "正在渲染图表…"
     },
     "status": {
+      "pending": "更改已保留在本机",
       "connected": "已连接",
       "disconnected": "未连接",
       "synced": "已同步",
-      "syncing": "同步中..."
+      "syncing": "同步中...",
+      "saved": "已保存",
+      "saving": "保存中…",
+      "saveFailed": "暂时无法保存，编辑已保留在本机"
     },
     "ended": {
       "title": "房间已结束",
@@ -156,9 +189,19 @@
       "back": "返回房间列表"
     },
     "font": {
+      "size": "字号",
+      "family": "字体",
       "increaseSize": "增大字号",
       "decreaseSize": "减小字号",
       "selectFont": "选择字体"
+    },
+    "errors": {
+      "accessDenied": "访问被拒绝，请重新打开此房间的分享链接。",
+      "accessRevoked": "你对此房间的访问权限已被撤销。",
+      "pendingReadOnly": "本标签页有尚未确认的编辑，但当前只有只读权限。请恢复编辑权限后重试，未确认内容仍保留在本机。",
+      "initializeFailed": "无法初始化编辑器，请刷新页面。",
+      "roomMismatch": "此标签页已授权访问其他房间，请在新标签页中打开正确的邀请链接。",
+      "localRecoveryFailed": "本地恢复存储不可用，请保持此标签页打开，清理浏览器存储空间后重试。"
     }
   },
   "admin": {
@@ -246,7 +289,25 @@
         "updates": "更新数",
         "size": "占用",
         "actions": "操作"
-      }
+      },
+      "pagePlayback": "本页回放大小",
+      "pageEndedRooms": "本页已结束房间"
+    },
+    "filters": {
+      "view": "显示内容",
+      "searchUsers": "搜索用户名或邮箱",
+      "searchRooms": "搜索房间名称",
+      "owner": "创建者用户名",
+      "allRoles": "所有角色",
+      "allStatuses": "所有状态",
+      "allLanguages": "所有语言",
+      "search": "搜索",
+      "reset": "重置"
+    },
+    "pagination": {
+      "label": "管理列表分页",
+      "total": "共 {{count}} 条",
+      "page": "{{page}} / {{total}}"
     }
   },
   "playback": {
@@ -262,7 +323,10 @@
     "progress": "进度",
     "duration": "时长",
     "noUpdates": "无可用回放数据",
-    "notes": "笔记"
+    "notes": "笔记",
+    "goToStart": "跳到开头",
+    "goToEnd": "跳到末尾",
+    "editorFailed": "无法初始化回放，请刷新页面。"
   },
   "settings": {
     "title": "设置",
@@ -275,7 +339,7 @@
     },
     "language": {
       "title": "语言",
-      "description": "选择界面显示语言"
+      "description": "界面语言即时切换；编辑器内置菜单刷新后生效。"
     },
     "timezone": {
       "title": "时区",
@@ -335,14 +399,21 @@
         "label": "隐藏任务栏/程序坞图标",
         "hint": "从任务栏（Windows）或程序坞（macOS）中隐藏应用程序"
       },
-      "note": "注意：这些设置仅在 Windows 和 macOS 上可用。更改将立即生效。"
+      "note": "注意：这些设置仅在 Windows 和 macOS 上可用。更改将立即生效。",
+      "description": "隐私与窗口控制"
+    },
+    "shortcuts": {
+      "title": "快捷键",
+      "hide": "隐藏窗口",
+      "top": "窗口置顶",
+      "move": "移动窗口"
     }
   },
   "share": {
     "manager": {
       "title": "访客分享链接",
       "description": "生成一次性访客邀请链接。每个链接仅能使用一次，未使用的链接会在 6 小时后过期。",
-      "activeOnlyHint": "这里只显示当前仍可使用的链接。链接一旦被访客使用，就会从列表中消失。",
+      "activeOnlyHint": "已使用的邀请仍会列出，删除后立即撤销对应访问权限。",
       "createView": "创建仅查看链接",
       "createEdit": "创建可编辑链接",
       "loading": "加载分享链接中...",
@@ -369,8 +440,10 @@
       "openPanel": "分享房间",
       "hidePanel": "收起分享面板",
       "created": "已创建新的分享链接！",
+      "createdAndCopied": "分享链接已创建并复制到剪贴板！",
       "createFailed": "创建分享链接失败。",
-      "deleted": "分享链接已删除。"
+      "deleted": "分享链接已删除。",
+      "statusConsumed": "已使用"
     },
     "join": {
       "title": "加入分享房间",
@@ -391,7 +464,8 @@
       "validationName": "请输入显示名称。",
       "joining": "加入中...",
       "joinButton": "加入房间",
-      "joinFailed": "加入房间失败。"
+      "joinFailed": "加入房间失败。",
+      "description": "输入信息以加入此分享房间。"
     },
     "editor": {
       "loading": "正在加载访客会话...",
@@ -427,7 +501,11 @@
       "later": "稍后",
       "openCenter": "打开通知中心",
       "markAllRead": "全部标记已读",
-      "marking": "标记中..."
+      "marking": "标记中...",
+      "title_one": "你有 {{count}} 条未读通知",
+      "title_other": "你有 {{count}} 条未读通知",
+      "more_one": "通知中心中还有 {{count}} 条未读通知。",
+      "more_other": "通知中心中还有 {{count}} 条未读通知。"
     },
     "history": {
       "title": "历史通知",
@@ -452,6 +530,7 @@
     }
   },
   "common": {
+    "toggleTheme": "切换主题",
     "save": "保存",
     "cancel": "取消",
     "delete": "删除",
@@ -468,7 +547,14 @@
     "error": "错误",
     "success": "成功",
     "passwordPolicyHint": "密码至少 10 位，且必须包含大写字母、小写字母、数字和特殊字符，不能包含空格，也不能是常见弱密码。",
-    "passwordPolicyError": "密码不符合安全要求。密码至少 10 位，且必须包含大写字母、小写字母、数字和特殊字符，不能包含空格，也不能是常见弱密码。"
+    "passwordPolicyError": "密码不符合安全要求。密码至少 10 位，且必须包含大写字母、小写字母、数字和特殊字符，不能包含空格，也不能是常见弱密码。",
+    "all": "全部",
+    "toggleLanguage": "切换语言",
+    "userMenu": "账号菜单",
+    "copy": "复制",
+    "copied": "已复制",
+    "requestFailed": "请求失败，请重试。",
+    "unknownError": "未知错误"
   },
   "codeRunner": {
     "title": "代码运行器",
@@ -493,6 +579,65 @@
     "add": "添加",
     "editPlaceholder": "点击编辑",
     "loading": "加载笔记中...",
-    "submitHint": "Ctrl+Enter 保存"
+    "submitHint": "Ctrl+Enter 保存",
+    "copyAll": "复制全部",
+    "copiedAll": "已复制全部"
+  },
+  "audit": {
+    "title": "审计日志",
+    "description": "记录登录尝试、访客加入及敏感账号操作。IP 代表网络连接，不一定能识别具体操作者。",
+    "denied": "需要管理员权限。",
+    "account": "账号（精确匹配）",
+    "filter": "筛选",
+    "refresh": "刷新",
+    "time": "时间",
+    "action": "操作",
+    "result": "结果",
+    "ip": "客户端 IP",
+    "browser": "浏览器 / 设备",
+    "target": "目标 / 请求编号",
+    "success": "成功",
+    "failure": "失败",
+    "empty": "暂无审计记录。",
+    "latest": "最新记录",
+    "older": "更早记录",
+    "peer": "直连地址"
+  },
+  "errors": {
+    "credentialsRequired": "请输入用户名和密码。",
+    "invalidCredentials": "用户名或密码错误。",
+    "usernameTaken": "此用户名已被使用。",
+    "emailTaken": "此邮箱已被使用。",
+    "currentPassword": "当前密码错误。",
+    "sessionExpired": "会话已过期，请重新登录。",
+    "roomNotFound": "房间不可用，或你没有访问权限。",
+    "roomEnded": "此房间已结束。",
+    "shareNotFound": "此邀请不可用，请向房主索取新链接。",
+    "shareExpired": "此邀请已过期。",
+    "shareUsed": "此邀请已被使用。",
+    "roomNameRequired": "请输入房间名称。",
+    "usernameRequired": "请输入用户名。",
+    "accessDenied": "你没有执行此操作的权限。",
+    "network": "无法连接服务器，请检查网络连接后重试。",
+    "unsupportedLanguage": "不支持此编程语言。",
+    "createRoom": "创建房间失败。",
+    "loadRoom": "加载房间失败。",
+    "endRoom": "结束房间失败。",
+    "deleteRoom": "删除房间失败。",
+    "renameRoom": "重命名房间失败。",
+    "pinRoom": "更新房间置顶状态失败。",
+    "createUser": "创建用户失败。",
+    "updateUser": "更新用户失败。",
+    "deleteUser": "删除用户失败。",
+    "compressPlayback": "压缩回放数据失败。"
+  },
+  "canvas": {
+    "title": "画布",
+    "canvas": "画布",
+    "editor": "编辑器",
+    "switchView": "房间视图",
+    "anonymous": "匿名用户",
+    "fileTooLarge": "图片同步上限：每张 350 KB、合计 1 MB（含编码）。请删除大图片或撤销导入以继续保存。",
+    "waitForSave": "更改尚未保存。请重新连接，等到显示“已保存”后再结束房间。"
   }
 }

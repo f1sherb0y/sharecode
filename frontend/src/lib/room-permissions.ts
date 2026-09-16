@@ -77,7 +77,7 @@ export function hasGlobalDeletePermission(
   user: Pick<User, 'role' | 'canDeleteAllRooms'> | null | undefined
 ): boolean {
   if (!user) return false
-  return user.role === 'admin' || user.role === 'superuser' || user.canDeleteAllRooms
+  return user.role === 'superuser' || user.canDeleteAllRooms
 }
 
 export function canManageRoomShares(
@@ -89,4 +89,13 @@ export function canManageRoomShares(
   }
 
   return user.id === roomOwnerId || user.role === 'superuser' || hasGlobalDeletePermission(user)
+}
+
+// Language is a room setting, independent of global document-write flags.
+export function canChangeRoomLanguage(
+  user: Pick<User, 'id' | 'role'> | null | undefined,
+  roomOwnerId: string | null | undefined
+): boolean {
+  return !!user && !!roomOwnerId &&
+    (user.id === roomOwnerId || user.role === 'admin' || user.role === 'superuser')
 }

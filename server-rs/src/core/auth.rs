@@ -14,6 +14,8 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserTokenPayload {
+    #[serde(default)]
+    pub token_version: i64,
     pub user_id: String,
     pub email: Option<String>,
     pub username: String,
@@ -50,6 +52,7 @@ pub enum TokenPayload {
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub id: String,
+    pub token_version: i64,
     pub username: String,
     pub email: Option<String>,
     pub role: String,
@@ -81,6 +84,7 @@ pub fn build_user_claims(user: &UserRow, now: chrono::DateTime<Utc>) -> UserToke
     let exp = (now + Duration::days(7)).timestamp();
 
     UserTokenPayload {
+        token_version: user.token_version,
         user_id: user.id.clone(),
         email: user.email.clone(),
         username: user.username.clone(),
@@ -181,7 +185,7 @@ where
                     "canDeleteAllRooms" as can_delete_all_rooms,
                     "isDeleted" as is_deleted,
                     "createdAt" as created_at,
-                    "lastSeen" as last_seen
+                    "tokenVersion" as token_version, "lastSeen" as last_seen
                 FROM "User"
                 WHERE id = $1
                 "#,
@@ -196,11 +200,12 @@ where
                 None => return Err(ApiError::unauthorized("Invalid token")),
             };
 
-            if user.is_deleted {
+            if user.is_deleted || user.token_version != user_payload.token_version {
                 return Err(ApiError::unauthorized("Invalid token"));
             }
 
             Ok(AuthUser {
+                token_version: user.token_version,
                 id: user.id,
                 username: user.username,
                 email: user.email,

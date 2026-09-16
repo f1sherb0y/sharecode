@@ -44,6 +44,8 @@ export function useMonacoEditor({
   const editorInstanceRef = useRef<MonacoEditorInstance | null>(null)
   const modelRef = useRef<MonacoModelInstance | null>(null)
   const bindingRef = useRef<MonacoBinding | null>(null)
+  const canEditRef = useRef(canEdit)
+  canEditRef.current = canEdit
   const [isEditorReady, setIsEditorReady] = useState(false)
 
   const { theme } = useThemeStore()
@@ -86,7 +88,7 @@ export function useMonacoEditor({
 
   useEffect(() => {
     if (!effectiveRoom || !editorRef.current || !provider || !ytext || editorInstanceRef.current) return
-    if (effectiveRoom.isEnded || roomEnded || isMarkdownMode) return
+    if (effectiveRoom.isEnded || roomEnded || isMarkdownMode || provider.configuration.name !== effectiveRoom.id) return
 
     let cancelled = false
 
@@ -122,7 +124,7 @@ export function useMonacoEditor({
             fontFamily: fontFamilyStack(font),
             fontSize,
             theme,
-            readOnly: !canEdit,
+            readOnly: !canEditRef.current,
           }),
         )
         editorInstanceRef.current = editor

@@ -43,6 +43,7 @@ const FILE_EXTENSIONS: &[(&str, &str)] = &[
     ("go", "go"),
     ("java", "java"),
     ("javascript", "js"),
+    ("node", "js"),
     ("typescript", "ts"),
     ("python", "py"),
     ("rust", "rs"),
@@ -93,22 +94,20 @@ struct PistonRuntime {
 
 #[derive(Debug, Deserialize)]
 struct PistonResult {
-    run: PistonRunResult,
+    compile: Option<PistonRunResult>,
+    run: Option<PistonRunResult>,
 }
 
 #[derive(Debug, Deserialize)]
 struct PistonRunResult {
     stdout: String,
     stderr: String,
-    code: i32,
-    #[allow(dead_code)]
+    code: Option<i32>,
     signal: Option<String>,
-    #[allow(dead_code)]
     message: Option<String>,
-    #[allow(dead_code)]
     status: Option<String>,
-    memory: i64,
-    wall_time: f64,
+    memory: Option<i64>,
+    wall_time: Option<f64>,
 }
 
 struct RuntimeCache {
@@ -170,25 +169,31 @@ pub async fn execute_code(
         }
     };
 
-    let ext = file_extension(&runtime.language);
-    let file_name = format!("main.{ext}");
+    // Let the Java runtime choose its source-launcher filename. Other
+    // runtimes use the editor language extension (not package aliases).
+    let file_name = if piston_language == "java" {
+        None
+    } else {
+        Some(format!("main.{}", file_extension(piston_language)))
+    };
 
     let piston_request = PistonExecuteRequest {
         language: runtime.language.clone(),
         version: runtime.version.clone(),
         files: vec![PistonFile {
-            name: Some(file_name),
+            name: file_name,
             content: source_code,
         }],
         stdin: Some(payload.stdin.unwrap_or_default()),
         run_timeout: 3000,
-        compile_timeout: 3000,
+        compile_timeout: 10000,
     };
 
     let client = Client::new();
     let result = client
         .post(format!("{}/api/v2/execute", state.config.piston_url))
         .json(&piston_request)
+        .timeout(Duration::from_secs(20))
         .send()
         .await;
 
@@ -229,30 +234,53 @@ pub async fn execute_code(
         .await
         .map_err(|err| ApiError::internal(format!("Failed to parse piston response: {err}")))?;
 
-    let output = result.run.stdout;
-    let error = result.run.stderr;
-    let is_success = result.run.code == 0;
-    let status = if is_success {
-        "Accepted"
-    } else {
-        "Runtime Error"
+    Ok((StatusCode::OK, Json(execution_result(result))))
+}
+
+fn execution_result(result: PistonResult) -> serde_json::Value {
+    let compile_failed = result.compile.as_ref().is_some_and(|stage| !stage.succeeded());
+    let stage = if compile_failed { result.compile } else { result.run };
+    let Some(stage) = stage else {
+        return json!({"output":"", "error":"Code execution returned no result", "status":"Internal Error", "statusId":13, "isSuccess":false});
     };
-    let status_id = if is_success { 3 } else { 11 };
+    let timed_out = stage.status.as_deref() == Some("TO");
+    let is_success = !compile_failed && stage.succeeded();
+    let (status, status_id) = if timed_out {
+        ("Time Limit Exceeded", 5)
+    } else if compile_failed {
+        ("Compilation Error", 6)
+    } else if is_success {
+        ("Accepted", 3)
+    } else {
+        ("Runtime Error", 11)
+    };
+    let error = if !stage.stderr.is_empty() {
+        stage.stderr
+    } else if !is_success {
+        stage.message.filter(|s| !s.is_empty()).unwrap_or_else(|| {
+            stage.signal.map(|signal| format!("{status} ({signal})")).unwrap_or_else(|| status.to_string())
+        })
+    } else {
+        String::new()
+    };
+    let mut response = json!({
+        "output": stage.stdout, "error": error, "status": status,
+        "statusId": status_id, "isSuccess": is_success,
+    });
+    if let Some(time) = stage.wall_time {
+        response["time"] = json!(format!("{:.3}", time / 1000.0));
+    }
+    if let Some(memory) = stage.memory {
+        response["memory"] = json!((memory as f64 / 1024.0).round() as i64);
+    }
+    response
+}
 
-    let memory_kb = (result.run.memory as f64 / 1024.0).round() as i64;
-
-    Ok((
-        StatusCode::OK,
-        Json(json!({
-            "output": output,
-            "error": error,
-            "status": status,
-            "statusId": status_id,
-            "isSuccess": is_success,
-            "time": format!("{:.3}", result.run.wall_time / 1000.0),
-            "memory": memory_kb,
-        })),
-    ))
+impl PistonRunResult {
+    fn succeeded(&self) -> bool {
+        self.code == Some(0) && self.signal.is_none()
+            && self.status.as_deref().is_none_or(|status| status == "OK")
+    }
 }
 
 pub async fn get_languages(
@@ -286,6 +314,7 @@ pub async fn check_piston_health(
     let client = Client::new();
     let response = client
         .get(format!("{}/api/v2/runtimes", state.config.piston_url))
+        .timeout(Duration::from_secs(5))
         .send()
         .await;
 
@@ -317,10 +346,14 @@ pub async fn check_piston_health(
         .await
         .map_err(|err| ApiError::internal(format!("Failed to parse runtimes: {err}")))?;
 
+    let missing = ["python", "java", "c", "c++", "javascript", "typescript"]
+        .into_iter().filter(|language| find_runtime(&runtimes, language).is_none()).collect::<Vec<_>>();
+    let ready = missing.is_empty();
     Ok((
-        StatusCode::OK,
+        if ready { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE },
         Json(json!({
-            "status": "ok",
+            "status": if ready { "ok" } else { "error" },
+            "missingLanguages": missing,
             "piston": {
                 "runtimes": runtimes.len(),
                 "languages": runtimes.iter().map(|r| r.language.clone()).collect::<Vec<_>>(),
@@ -344,6 +377,7 @@ async fn get_runtimes(state: &AppState) -> Result<Vec<PistonRuntime>, ApiError> 
     let client = Client::new();
     let response = client
         .get(format!("{}/api/v2/runtimes", state.config.piston_url))
+        .timeout(Duration::from_secs(5))
         .send()
         .await
         .map_err(|err| ApiError::internal(format!("Piston API error: {err}")))?;
@@ -394,4 +428,61 @@ fn file_extension(language: &str) -> &str {
         .find(|(lang, _)| lang == &language)
         .map(|(_, ext)| *ext)
         .unwrap_or("txt")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn normalize(value: serde_json::Value) -> serde_json::Value {
+        execution_result(serde_json::from_value(value).unwrap())
+    }
+
+    #[test]
+    fn accepts_success_without_optional_runtime_metrics() {
+        let result = normalize(json!({"run":{"stdout":"42\n", "stderr":"", "code":0}}));
+        assert_eq!(result["isSuccess"], true);
+        assert_eq!(result["output"], "42\n");
+        assert!(result.get("time").is_none());
+    }
+
+    #[test]
+    fn reports_compile_diagnostics_without_run_stage() {
+        let result = normalize(json!({"compile":{"stdout":"type error", "stderr":"", "code":1}}));
+        assert_eq!(result["statusId"], 6);
+        assert_eq!(result["output"], "type error");
+        assert_eq!(result["isSuccess"], false);
+    }
+
+    #[test]
+    fn reports_timeout_with_null_exit_code_and_signal() {
+        let result = normalize(json!({"run":{"stdout":"", "stderr":"", "code":null, "signal":"SIGKILL", "status":"TO", "memory":1024, "wall_time":3000}}));
+        assert_eq!(result["statusId"], 5);
+        assert_eq!(result["time"], "3.000");
+        assert_eq!(result["memory"], 1);
+        assert!(result["error"].as_str().unwrap().contains("SIGKILL"));
+    }
+
+    #[test]
+    fn compile_failure_takes_precedence_over_compatibility_run_field() {
+        let stage = json!({"stdout":"", "stderr":"syntax error", "code":1});
+        let result = normalize(json!({"compile":stage, "run":stage}));
+        assert_eq!(result["statusId"], 6);
+        assert_eq!(result["error"], "syntax error");
+    }
+
+    #[test]
+    fn distinguishes_runtime_failure_and_missing_result() {
+        let result = normalize(json!({"run":{"stdout":"before crash", "stderr":"exception", "code":1}}));
+        assert_eq!(result["statusId"], 11);
+        assert_eq!(normalize(json!({}))["statusId"], 13);
+    }
+
+    #[test]
+    fn resolves_cpp_alias_and_uses_source_extensions() {
+        assert_eq!(map_language("cpp"), "c++");
+        assert_eq!(file_extension(map_language("cpp")), "cpp");
+        assert_eq!(file_extension(map_language("typescript")), "ts");
+        assert_eq!(file_extension(map_language("c")), "c");
+    }
 }

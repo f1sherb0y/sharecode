@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><body><div id="a" style="width:600px;height:200px" translate="no"></div><div id="b" style="width:600px;height:200px" translate="no"></div><script type="module">
+import { loadMonaco } from '/src/lib/monaco-loader.ts'
+import { MonacoBinding } from '/src/lib/monaco-binding.ts'
+import { PendingDocument } from '/src/lib/pending-document.ts'
+import * as Y from 'yjs'
+const monaco = await loadMonaco()
+window.collaborationTest = {monaco, MonacoBinding, PendingDocument, Y}
+</script></body></html>

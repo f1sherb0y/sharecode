@@ -27,7 +27,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        <Button variant="ghost" size="icon" aria-label={t('common.userMenu')}>
           <User className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
@@ -46,26 +46,29 @@ export function UserMenu() {
         {isAdmin && (
           <DropdownMenuItem asChild>
             <Link to="/admin" className="cursor-pointer">
-              <Shield className="mr-2 h-4 w-4" />
+              <Shield className="mr-1.5 h-4 w-4" />
               {t('common.admin')}
             </Link>
           </DropdownMenuItem>
         )}
+        {isAdmin && <DropdownMenuItem asChild>
+          <Link to="/admin/audit"><Shield className="mr-1.5 h-4 w-4" />{t('audit.title')}</Link>
+        </DropdownMenuItem>}
         <DropdownMenuItem asChild>
           <Link to="/notifications" className="cursor-pointer">
-            <Bell className="mr-2 h-4 w-4" />
+            <Bell className="mr-1.5 h-4 w-4" />
             {t('notifications.title')}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/settings" className="cursor-pointer">
-            <Settings className="mr-2 h-4 w-4" />
+            <Settings className="mr-1.5 h-4 w-4" />
             {t('common.settings')}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
-          <LogOut className="mr-2 h-4 w-4" />
+          <LogOut className="mr-1.5 h-4 w-4" />
           {t('common.logout')}
         </DropdownMenuItem>
       </DropdownMenuContent>

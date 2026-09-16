@@ -45,8 +45,7 @@ pub async fn get_playback_updates(
     };
 
     let is_owner = room.owner_id == auth_user.id;
-    let is_privileged =
-        auth_user.role == "admin" || auth_user.role == "superuser" || has_global_read(&auth_user);
+    let is_privileged = has_global_read(&auth_user);
 
     if !is_owner && !is_privileged {
         return Err(ApiError::not_found("Room not found"));
@@ -56,6 +55,7 @@ pub async fn get_playback_updates(
         return Err(ApiError::bad_request("Room has not ended yet"));
     }
 
+    state.ws.wait_for_saved(&room_id).await?;
     let updates = sqlx::query_as::<_, DocumentUpdateRow>(
         r#"
         SELECT
@@ -66,7 +66,7 @@ pub async fn get_playback_updates(
             "userId" as user_id
         FROM "DocumentUpdate"
         WHERE "documentId" = $1
-        ORDER BY timestamp ASC
+        ORDER BY timestamp ASC, seq ASC
         "#,
     )
     .bind(&room.id)

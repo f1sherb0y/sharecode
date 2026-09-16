@@ -1,7 +1,9 @@
+import { translateError } from '@/i18n/errors'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import * as Tabs from '@radix-ui/react-tabs'
 import { ArrowLeft, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import {
   Button,
@@ -33,7 +35,8 @@ import { validatePasswordPolicy } from '@/lib/password-policy'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import type { Role, RoomPlaybackSize } from '@/types'
+import { LANGUAGES } from '@/types'
+import type { Language, Role, RoomPlaybackSize, PaginationMeta } from '@/types'
 
 type PermissionState = {
   canReadAllRooms: boolean
@@ -42,7 +45,7 @@ type PermissionState = {
 }
 
 const ROLES: Role[] = ['user', 'admin', 'superuser']
-const ADMIN_SECTIONS = ['all', 'users', 'rooms'] as const
+const ADMIN_SECTIONS = ['users', 'rooms'] as const
 const ROOM_STATUS_FILTERS = ['all', 'active', 'ended'] as const
 
 type AdminSection = (typeof ADMIN_SECTIONS)[number]
@@ -50,7 +53,7 @@ type RoomStatusFilter = (typeof ROOM_STATUS_FILTERS)[number]
 type UserRoleFilter = Role | 'all'
 
 function parseAdminSection(value: string | null): AdminSection {
-  return ADMIN_SECTIONS.includes((value ?? '') as AdminSection) ? (value as AdminSection) : 'all'
+  return ADMIN_SECTIONS.includes((value ?? '') as AdminSection) ? (value as AdminSection) : 'users'
 }
 
 function parseUserRoleFilter(value: string | null): UserRoleFilter {
@@ -62,6 +65,24 @@ function parseRoomStatusFilter(value: string | null): RoomStatusFilter {
   return ROOM_STATUS_FILTERS.includes((value ?? '') as RoomStatusFilter)
     ? (value as RoomStatusFilter)
     : 'all'
+}
+
+const PAGE_SIZES = [10, 25, 50, 100]
+const EMPTY_PAGE: PaginationMeta = { page: 1, pageSize: 25, total: 0, totalPages: 0, hasNext: false, hasPrev: false }
+function parsePage(value: string | null) {
+  const number = Number(value)
+  return Number.isSafeInteger(number) && number > 0 && number <= 4294967295 ? number : 1
+}
+function AdminPagination({ pagination, disabled, onPage }: { pagination: PaginationMeta; disabled: boolean; onPage: (page: number) => void }) {
+  const { t } = useTranslation()
+  return <nav aria-label={t('admin.pagination.label')} className="mt-2 flex flex-wrap items-center justify-between gap-1 text-xs">
+    <span className="text-muted-foreground">{t('admin.pagination.total', { count: pagination.total })}</span>
+    <div className="flex items-center gap-1">
+      <Button size="sm" variant="outline" disabled={disabled || !pagination.hasPrev} onClick={() => onPage(pagination.page - 1)}>{t('rooms.pagination.prev')}</Button>
+      <span aria-live="polite">{t('admin.pagination.page', { page: pagination.totalPages ? pagination.page : 0, total: pagination.totalPages })}</span>
+      <Button size="sm" variant="outline" disabled={disabled || !pagination.hasNext} onClick={() => onPage(pagination.page + 1)}>{t('rooms.pagination.next')}</Button>
+    </div>
+  </nav>
 }
 
 function formatBytes(bytes: number): string {
@@ -93,13 +114,9 @@ function CreateUserDialog({
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [email, setEmail] = useState('')
   const [role, setRole] = useState<Role>('user')
   const [permissions, setPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
   const [error, setError] = useState('')
-  const isPasswordValid = validatePasswordPolicy(password)
 
   const createUserMutation = useMutation({
     mutationFn: (payload: {
@@ -119,9 +136,6 @@ function CreateUserDialog({
 
   useEffect(() => {
     if (open) return
-    setUsername('')
-    setPassword('')
-    setEmail('')
     setRole('user')
     setPermissions(getInitialPermissionsForRole('user'))
     setError('')
@@ -138,11 +152,15 @@ function CreateUserDialog({
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const fields = new FormData(e.currentTarget)
+    const username = String(fields.get('username') ?? '')
+    const password = String(fields.get('password') ?? '')
+    const email = String(fields.get('email') ?? '')
     setError('')
 
-    if (!isPasswordValid) {
+    if (!validatePasswordPolicy(password)) {
       setError(t('common.passwordPolicyError'))
       return
     }
@@ -163,26 +181,31 @@ function CreateUserDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <form onSubmit={handleSubmit}>
+        <form id="create-user-form" method="post" autoComplete="on" onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t('admin.users.createForm.title')}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label>{t('admin.users.createForm.username')}</Label>
+          <div className="grid gap-2 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="create-user-username">{t('admin.users.createForm.username')}</Label>
               <Input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                id="create-user-username"
+                name="username"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder={t('admin.users.createForm.usernamePlaceholder')}
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label>{t('admin.users.createForm.password')}</Label>
+            <div className="space-y-1">
+              <Label htmlFor="create-user-password">{t('admin.users.createForm.password')}</Label>
               <Input
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                id="create-user-password"
+                name="password"
+                autoComplete="new-password"
                 placeholder={t('admin.users.createForm.passwordPlaceholder')}
                 minLength={10}
                 required
@@ -191,16 +214,20 @@ function CreateUserDialog({
                 {t('common.passwordPolicyHint')}
               </p>
             </div>
-            <div className="space-y-2">
-              <Label>{t('admin.users.createForm.email')}</Label>
+            <div className="space-y-1">
+              <Label htmlFor="create-user-email">{t('admin.users.createForm.email')}</Label>
               <Input
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="create-user-email"
+                name="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder={t('admin.users.createForm.emailPlaceholder')}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>{t('admin.users.createForm.role')}</Label>
               <Select
                 value={role}
@@ -222,7 +249,7 @@ function CreateUserDialog({
                 </SelectContent>
               </Select>
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-sm text-destructive">{translateError(error)}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -249,6 +276,17 @@ export function AdminPage() {
   const section = parseAdminSection(searchParams.get('section'))
   const userRoleFilter = parseUserRoleFilter(searchParams.get('userRole'))
   const roomStatusFilter = parseRoomStatusFilter(searchParams.get('roomStatus'))
+  const userPage = parsePage(searchParams.get('userPage'))
+  const roomPage = parsePage(searchParams.get('roomPage'))
+  const pageSize = PAGE_SIZES.includes(Number(searchParams.get('pageSize'))) ? Number(searchParams.get('pageSize')) : 25
+  const roomLanguage = LANGUAGES.includes(searchParams.get('language') as Language) ? searchParams.get('language')! : 'all'
+  const searchKey = section === 'users' ? 'userSearch' : 'roomSearch'
+  const search = searchParams.get(searchKey) ?? ''
+  const ownerSearch = searchParams.get('owner') ?? ''
+  const [searchDraft, setSearchDraft] = useState(search)
+  const [ownerDraft, setOwnerDraft] = useState(ownerSearch)
+  useEffect(() => { setSearchDraft(search) }, [search, section])
+  useEffect(() => { setOwnerDraft(ownerSearch) }, [ownerSearch])
 
   const [error, setError] = useState('')
   const [storageNotice, setStorageNotice] = useState('')
@@ -268,41 +306,47 @@ export function AdminPage() {
 
   const isSuperuser = user?.role === 'superuser'
   const isAdmin = user?.role === 'admin'
-  const showUsersSection = section === 'all' || section === 'users'
-  const showRoomsSection = section === 'all' || section === 'rooms'
+  const showUsersSection = section === 'users'
+  const showRoomsSection = section === 'rooms'
   const canAccessAdmin = !!user && (user.role === 'admin' || user.role === 'superuser')
 
+  const usersParams = { page: userPage, pageSize, role: userRoleFilter, q: searchParams.get('userSearch') ?? '' }
+  const roomsParams = { page: roomPage, pageSize, status: roomStatusFilter, language: roomLanguage, owner: ownerSearch, q: searchParams.get('roomSearch') ?? '' }
   const usersQuery = useQuery({
-    queryKey: queryKeys.adminUsers,
-    queryFn: async () => {
-      const { users } = await api.getAllUsers()
-      return users
-    },
-    enabled: canAccessAdmin,
+    queryKey: [...queryKeys.adminUsers, usersParams],
+    queryFn: ({ signal }) => api.getAdminUsers(usersParams, signal),
+    enabled: canAccessAdmin && showUsersSection,
   })
-
   const roomsQuery = useQuery({
-    queryKey: queryKeys.adminRooms,
-    queryFn: async () => {
-      const { rooms } = await api.getAllRoomsAdmin()
-      return rooms
+    queryKey: [...queryKeys.adminRooms, roomsParams],
+    queryFn: ({ signal }) => api.getAdminRooms(roomsParams, signal),
+    enabled: canAccessAdmin && showRoomsSection,
+  })
+  const visibleRoomIds = roomsQuery.data?.rooms.map(room => room.id) ?? []
+
+  const roomLanguageMutation = useMutation({
+    mutationFn: ({ roomId, language }: { roomId: string; language: Language }) => api.updateRoom(roomId, { language }),
+    onSuccess: () => {
+      setError('')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.adminRooms })
+      void queryClient.invalidateQueries({ queryKey: ['rooms'] })
     },
-    enabled: canAccessAdmin,
+    onError: (err: Error) => setError(err.message),
   })
 
   const dbSizeQuery = useQuery({
     queryKey: queryKeys.adminDbSize,
     queryFn: () => api.getDbStorageSize(),
-    enabled: !!user && user.role === 'superuser',
+    enabled: isSuperuser && showRoomsSection,
   })
 
   const playbackSizesQuery = useQuery({
-    queryKey: queryKeys.adminPlaybackSizes,
-    queryFn: async () => {
-      const { rooms } = await api.getRoomPlaybackSizes()
+    queryKey: [...queryKeys.adminPlaybackSizes, visibleRoomIds],
+    queryFn: async ({ signal }) => {
+      const { rooms } = await api.getRoomPlaybackSizes(visibleRoomIds, signal)
       return rooms
     },
-    enabled: !!user && user.role === 'superuser',
+    enabled: isSuperuser && showRoomsSection && visibleRoomIds.length > 0,
   })
 
   const clearPendingEditFor = useCallback((userId: string) => {
@@ -347,8 +391,8 @@ export function AdminPage() {
     mutationFn: (roomId: string) => api.compressRoomPlayback(roomId),
   })
 
-  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
-  const rooms = useMemo(() => roomsQuery.data ?? [], [roomsQuery.data])
+  const users = useMemo(() => usersQuery.data?.users ?? [], [usersQuery.data])
+  const rooms = useMemo(() => roomsQuery.data?.rooms ?? [], [roomsQuery.data])
   const dbSize = dbSizeQuery.data ?? null
   const playbackSizes = useMemo(() => playbackSizesQuery.data ?? [], [playbackSizesQuery.data])
   const isLoadingUsers = usersQuery.isLoading
@@ -356,41 +400,28 @@ export function AdminPage() {
   const isLoadingStorage = isSuperuser ? dbSizeQuery.isLoading : false
   const isLoadingPlaybackSizes = isSuperuser ? playbackSizesQuery.isLoading : false
 
-  const updateAdminParams = useCallback((updates: {
-    section?: AdminSection
-    userRole?: UserRoleFilter
-    roomStatus?: RoomStatusFilter
-  }) => {
-    setSearchParams((prev) => {
+  const updateAdminParams = useCallback((updates: Record<string, string | number>) => {
+    setSearchParams(prev => {
       const next = new URLSearchParams(prev)
-      next.set('section', updates.section ?? section)
-      next.set('userRole', updates.userRole ?? userRoleFilter)
-      next.set('roomStatus', updates.roomStatus ?? roomStatusFilter)
+      for (const [key, value] of Object.entries(updates)) next.set(key, String(value))
+      if (['userRole', 'userSearch', 'pageSize'].some(key => key in updates)) next.set('userPage', '1')
+      if (['roomStatus', 'roomSearch', 'language', 'owner', 'pageSize'].some(key => key in updates)) next.set('roomPage', '1')
       return next
     })
-  }, [setSearchParams, section, userRoleFilter, roomStatusFilter])
+  }, [setSearchParams])
 
+  const pagination = (showUsersSection ? usersQuery.data?.pagination : roomsQuery.data?.pagination) ?? EMPTY_PAGE
   useEffect(() => {
-    const normalized = new URLSearchParams(searchParams)
-    let changed = false
-
-    if (normalized.get('section') !== section) {
-      normalized.set('section', section)
-      changed = true
+    const requested = showUsersSection ? userPage : roomPage
+    const resolved = showUsersSection ? usersQuery.data?.pagination.page : roomsQuery.data?.pagination.page
+    if (resolved && resolved !== requested) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev)
+        next.set(showUsersSection ? 'userPage' : 'roomPage', String(resolved))
+        return next
+      }, { replace: true })
     }
-    if (normalized.get('userRole') !== userRoleFilter) {
-      normalized.set('userRole', userRoleFilter)
-      changed = true
-    }
-    if (normalized.get('roomStatus') !== roomStatusFilter) {
-      normalized.set('roomStatus', roomStatusFilter)
-      changed = true
-    }
-
-    if (changed) {
-      setSearchParams(normalized, { replace: true })
-    }
-  }, [searchParams, section, userRoleFilter, roomStatusFilter, setSearchParams])
+  }, [showUsersSection, userPage, roomPage, usersQuery.data, roomsQuery.data, setSearchParams])
 
   useEffect(() => {
     if (!canAccessAdmin) {
@@ -540,23 +571,12 @@ export function AdminPage() {
     return map
   }, [playbackSizes])
 
-  const filteredUsers = useMemo(() => {
-    if (userRoleFilter === 'all') return users
-    return users.filter((u) => u.role === userRoleFilter)
-  }, [users, userRoleFilter])
-
-  const filteredRooms = useMemo(() => {
-    if (roomStatusFilter === 'all') return rooms
-    const ended = roomStatusFilter === 'ended'
-    return rooms.filter((room) => !!room.isEnded === ended)
-  }, [rooms, roomStatusFilter])
-
   return (
     <div className="flex flex-col min-h-screen">
       <Navbar
         leftContent={
           <Button variant="ghost" onClick={() => navigate('/rooms')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
             {t('admin.backToRooms')}
           </Button>
         }
@@ -632,67 +652,66 @@ export function AdminPage() {
         </Dialog>
 
         {error && (
-          <div className="mb-4 p-4 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
+          <div className="mb-2 p-2 text-sm text-destructive bg-destructive/10 rounded-md">{translateError(error)}</div>
         )}
 
-        <div className="mb-4 grid gap-2 sm:grid-cols-3 lg:max-w-3xl">
-          <div className="space-y-1">
-            <Label>View</Label>
-            <Select
-              value={section}
-              onValueChange={(value) => updateAdminParams({ section: value as AdminSection })}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
+        <Tabs.Root value={section} onValueChange={value => updateAdminParams({ section: value })}>
+          <Tabs.List aria-label={t('admin.filters.view')} className="mb-2 flex gap-1 border-b">
+            {ADMIN_SECTIONS.map(value => <Tabs.Trigger key={value} value={value}
+              className="min-h-control px-2 text-sm border-b-2 border-transparent text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+              {value === 'users' ? t('admin.users.title') : t('admin.rooms.title')}
+            </Tabs.Trigger>)}
+          </Tabs.List>
+          <Tabs.Content value={section} className="outline-none">
+        <form className="mb-2 flex flex-wrap items-center gap-1" onSubmit={event => {
+          event.preventDefault()
+          updateAdminParams({ [searchKey]: searchDraft.trim(), ...(showRoomsSection ? { owner: ownerDraft.trim() } : {}) })
+        }}>
+          <Input className="w-full sm:w-56" value={searchDraft} onChange={event => setSearchDraft(event.target.value)}
+            aria-label={showUsersSection ? t('admin.filters.searchUsers') : t('admin.filters.searchRooms')}
+            placeholder={showUsersSection ? t('admin.filters.searchUsers') : t('admin.filters.searchRooms')} />
+          {showUsersSection ? (
+            <Select value={userRoleFilter} onValueChange={value => updateAdminParams({ userRole: value })}>
+              <SelectTrigger className="w-32" aria-label={t('admin.users.table.role')}><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="users">{t('admin.users.title')}</SelectItem>
-                <SelectItem value="rooms">{t('admin.rooms.title')}</SelectItem>
+                <SelectItem value="all">{t('admin.filters.allRoles')}</SelectItem>
+                {ROLES.map(role => <SelectItem key={role} value={role}>{roleDisplay(role)}</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>{t('admin.users.table.role')}</Label>
-            <Select
-              value={userRoleFilter}
-              onValueChange={(value) => updateAdminParams({ userRole: value as UserRoleFilter })}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
+          ) : <>
+            <Input className="w-36" value={ownerDraft} onChange={event => setOwnerDraft(event.target.value)}
+              aria-label={t('admin.filters.owner')} placeholder={t('admin.filters.owner')} />
+            <Select value={roomStatusFilter} onValueChange={value => updateAdminParams({ roomStatus: value })}>
+              <SelectTrigger className="w-32" aria-label={t('admin.rooms.table.status')}><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {ROLES.map((role) => (
-                  <SelectItem key={role} value={role}>
-                    {roleDisplay(role)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>{t('admin.rooms.table.status')}</Label>
-            <Select
-              value={roomStatusFilter}
-              onValueChange={(value) => updateAdminParams({ roomStatus: value as RoomStatusFilter })}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="all">{t('admin.filters.allStatuses')}</SelectItem>
                 <SelectItem value="active">{t('admin.rooms.table.statusActive')}</SelectItem>
                 <SelectItem value="ended">{t('admin.rooms.table.statusEnded')}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </div>
+            <Select value={roomLanguage} onValueChange={value => updateAdminParams({ language: value })}>
+              <SelectTrigger className="w-32" aria-label={t('admin.rooms.table.language')}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('admin.filters.allLanguages')}</SelectItem>
+                {LANGUAGES.map(language => <SelectItem key={language} value={language}>{language}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </>}
+          <Button type="submit" variant="outline">{t('admin.filters.search')}</Button>
+          <Button type="button" variant="ghost" onClick={() => {
+            setSearchDraft(''); setOwnerDraft('')
+            updateAdminParams(showUsersSection ? { userSearch: '', userRole: 'all' } : { roomSearch: '', owner: '', roomStatus: 'all', language: 'all' })
+          }}>{t('admin.filters.reset')}</Button>
+          <Select value={String(pageSize)} onValueChange={value => updateAdminParams({ pageSize: value })}>
+            <SelectTrigger className="w-32 sm:ml-auto" aria-label={t('rooms.pagination.pageSize')}><SelectValue /></SelectTrigger>
+            <SelectContent>{PAGE_SIZES.map(size => <SelectItem key={size} value={String(size)}>{t('rooms.pagination.perPage', { count: size })}</SelectItem>)}</SelectContent>
+          </Select>
+        </form>
 
         {/* Users Section */}
         {showUsersSection && (
-        <Card className="mb-6">
-          <CardHeader className="py-3">
+        <Card className="mb-3">
+          <CardHeader className="py-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">{t('admin.users.title')}</CardTitle>
               <Button size="sm" onClick={() => setIsCreateOpen(true)}>
@@ -706,28 +725,28 @@ export function AdminPage() {
               />
             </div>
           </CardHeader>
-          <CardContent className="pt-0 px-2 sm:px-6">
+          <CardContent className="pt-0 px-1.5 sm:px-3">
             {isLoadingUsers ? (
-              <div className="flex justify-center py-6">
+              <div className="flex justify-center py-3">
                 <Spinner />
               </div>
             ) : (
               <div className="overflow-x-auto -mx-2 sm:mx-0">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm [&_th]:whitespace-nowrap">
                   <thead>
                     <tr className="border-b text-left">
-                      <th className="px-2 py-1.5 font-medium">{t('admin.users.table.username')}</th>
-                      <th className="px-2 py-1.5 font-medium hidden sm:table-cell">{t('admin.users.table.email')}</th>
-                      <th className="px-2 py-1.5 font-medium">{t('admin.users.table.role')}</th>
-                      <th className="px-2 py-1.5 font-medium text-center w-12">{t('admin.users.table.read')}</th>
-                      <th className="px-2 py-1.5 font-medium text-center w-12">{t('admin.users.table.write')}</th>
-                      <th className="px-2 py-1.5 font-medium text-center w-12">{t('admin.users.table.delete')}</th>
-                      <th className="px-2 py-1.5 font-medium hidden md:table-cell">{t('admin.users.table.created')}</th>
-                      <th className="px-2 py-1.5 font-medium">{t('admin.users.table.actions')}</th>
+                      <th className="px-1.5 py-1 font-medium">{t('admin.users.table.username')}</th>
+                      <th className="px-1.5 py-1 font-medium hidden sm:table-cell">{t('admin.users.table.email')}</th>
+                      <th className="px-1.5 py-1 font-medium">{t('admin.users.table.role')}</th>
+                      <th className="px-1.5 py-1 font-medium text-center w-12">{t('admin.users.table.read')}</th>
+                      <th className="px-1.5 py-1 font-medium text-center w-12">{t('admin.users.table.write')}</th>
+                      <th className="px-1.5 py-1 font-medium text-center w-12">{t('admin.users.table.delete')}</th>
+                      <th className="px-1.5 py-1 font-medium hidden md:table-cell">{t('admin.users.table.created')}</th>
+                      <th className="px-1.5 py-1 font-medium">{t('admin.users.table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map((u) => {
+                    {users.map((u) => {
                       const edits = pendingEdits.get(u.id)
                       const canDelete = isSuperuser
                         ? u.id !== user?.id && u.role !== 'superuser'
@@ -735,18 +754,18 @@ export function AdminPage() {
 
                       return (
                         <tr key={u.id} className="border-b">
-                          <td className="px-2 py-1.5">
+                          <td className="px-1.5 py-1">
                             <div>{u.username}</div>
                             <div className="text-xs text-muted-foreground sm:hidden">{u.email ?? '-'}</div>
                           </td>
-                          <td className="px-2 py-1.5 text-muted-foreground hidden sm:table-cell">{u.email ?? '-'}</td>
-                          <td className="px-2 py-1.5">
+                          <td className="px-1.5 py-1 text-muted-foreground hidden sm:table-cell">{u.email ?? '-'}</td>
+                          <td className="px-1.5 py-1">
                             {isSuperuser && u.id !== user?.id ? (
                               <Select
                                 value={edits?.role ?? u.role}
                                 onValueChange={(v) => updateEditedUser(u.id, { role: v as Role })}
                               >
-                                <SelectTrigger className="w-24 sm:w-28 h-7 text-xs">
+                                <SelectTrigger className="w-24 sm:w-28 h-control-sm text-xs">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -758,10 +777,10 @@ export function AdminPage() {
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">{roleDisplay(u.role)}</Badge>
+                              <Badge variant="secondary" className="rounded-sm text-xs px-1 py-0">{roleDisplay(u.role)}</Badge>
                             )}
                           </td>
-                          <td className="px-2 py-1.5 text-center">
+                          <td className="px-1.5 py-1 text-center">
                             <Checkbox
                               checked={edits?.canReadAllRooms ?? u.canReadAllRooms}
                               onCheckedChange={(checked) =>
@@ -770,7 +789,7 @@ export function AdminPage() {
                               disabled={!isSuperuser || u.role === 'superuser'}
                             />
                           </td>
-                          <td className="px-2 py-1.5 text-center">
+                          <td className="px-1.5 py-1 text-center">
                             <Checkbox
                               checked={edits?.canWriteAllRooms ?? u.canWriteAllRooms}
                               onCheckedChange={(checked) =>
@@ -779,7 +798,7 @@ export function AdminPage() {
                               disabled={!isSuperuser || u.role === 'superuser'}
                             />
                           </td>
-                          <td className="px-2 py-1.5 text-center">
+                          <td className="px-1.5 py-1 text-center">
                             <Checkbox
                               checked={edits?.canDeleteAllRooms ?? u.canDeleteAllRooms}
                               onCheckedChange={(checked) =>
@@ -788,14 +807,13 @@ export function AdminPage() {
                               disabled={!isSuperuser || u.role === 'superuser'}
                             />
                           </td>
-                          <td className="px-2 py-1.5 text-muted-foreground hidden md:table-cell">{formatDate(u.createdAt ?? '')}</td>
-                          <td className="px-2 py-1.5">
+                          <td className="px-1.5 py-1 text-muted-foreground hidden md:table-cell">{formatDate(u.createdAt ?? '')}</td>
+                          <td className="px-1.5 py-1">
                             <div className="flex items-center gap-1">
                               {hasChanges(u.id) && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 px-2 text-xs"
                                   onClick={() => handleUpdateUser(u.id)}
                                   disabled={savingUserId === u.id}
                                 >
@@ -807,7 +825,6 @@ export function AdminPage() {
                                 <Button
                                   size="sm"
                                   variant="destructive"
-                                  className="h-7 px-2"
                                   onClick={() => handleDeleteUser(u.id, u.username)}
                                 >
                                   <Trash2 className="h-3 w-3" />
@@ -818,9 +835,9 @@ export function AdminPage() {
                         </tr>
                       )
                     })}
-                    {filteredUsers.length === 0 && (
+                    {users.length === 0 && (
                       <tr>
-                        <td className="px-2 py-3 text-center text-muted-foreground" colSpan={8}>
+                        <td className="px-1.5 py-2 text-center text-muted-foreground" colSpan={8}>
                           {t('rooms.list.empty')}
                         </td>
                       </tr>
@@ -836,7 +853,7 @@ export function AdminPage() {
         {/* Rooms + Storage Section */}
         {showRoomsSection && (isSuperuser || isAdmin) ? (
           <Card>
-            <CardHeader className="py-3">
+            <CardHeader className="py-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
                 <Button
@@ -850,24 +867,24 @@ export function AdminPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="pt-0 px-2 sm:px-6">
+            <CardContent className="pt-0 px-1.5 sm:px-3">
               {isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes ? (
-                <div className="flex justify-center py-6">
+                <div className="flex justify-center py-3">
                   <Spinner />
                 </div>
               ) : (
                 <>
                   {isSuperuser && (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-4">
-                    <div className="rounded-md border p-3">
+                  <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 mb-2">
+                    <div className="rounded-md border p-2">
                       <div className="text-xs text-muted-foreground">{t('admin.storage.dbSize')}</div>
                       <div className="text-lg font-semibold">{dbSize?.pretty ?? '--'}</div>
                       {dbSize && (
                         <div className="text-xs text-muted-foreground">{formatBytes(dbSize.bytes)}</div>
                       )}
                     </div>
-                    <div className="rounded-md border p-3">
-                      <div className="text-xs text-muted-foreground">{t('admin.storage.playbackTotal')}</div>
+                    <div className="rounded-md border p-2">
+                      <div className="text-xs text-muted-foreground">{t('admin.storage.pagePlayback')}</div>
                       <div className="text-lg font-semibold">
                         {formatBytes(playbackSizes.reduce((sum, room) => sum + room.bytes, 0))}
                       </div>
@@ -875,8 +892,8 @@ export function AdminPage() {
                         {t('admin.storage.roomsTracked', { count: playbackSizes.length })}
                       </div>
                     </div>
-                    <div className="rounded-md border p-3">
-                      <div className="text-xs text-muted-foreground">{t('admin.storage.endedRooms')}</div>
+                    <div className="rounded-md border p-2">
+                      <div className="text-xs text-muted-foreground">{t('admin.storage.pageEndedRooms')}</div>
                       <div className="text-lg font-semibold">
                         {playbackSizes.filter((room) => room.isEnded).length}
                       </div>
@@ -890,30 +907,30 @@ export function AdminPage() {
                   )}
 
                   {storageNotice && (
-                    <div className="mb-3 text-xs text-muted-foreground">{storageNotice}</div>
+                    <div className="mb-2 text-xs text-muted-foreground">{storageNotice}</div>
                   )}
 
                   <div className="overflow-x-auto -mx-2 sm:mx-0">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm [&_th]:whitespace-nowrap">
                       <thead>
                         <tr className="border-b text-left">
-                          <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.name')}</th>
-                          <th className="px-2 py-1.5 font-medium hidden sm:table-cell">{t('admin.rooms.table.owner')}</th>
-                          <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.language')}</th>
-                          <th className="px-2 py-1.5 font-medium">{t('admin.rooms.table.status')}</th>
-                          <th className="px-2 py-1.5 font-medium hidden lg:table-cell">
+                          <th className="px-1.5 py-1 font-medium">{t('admin.rooms.table.name')}</th>
+                          <th className="px-1.5 py-1 font-medium hidden sm:table-cell">{t('admin.rooms.table.owner')}</th>
+                          <th className="px-1.5 py-1 font-medium">{t('admin.rooms.table.language')}</th>
+                          <th className="px-1.5 py-1 font-medium">{t('admin.rooms.table.status')}</th>
+                          <th className="px-1.5 py-1 font-medium hidden lg:table-cell">
                             {t('admin.storage.table.endedAt')}
                           </th>
-                          <th className="px-2 py-1.5 font-medium hidden md:table-cell">
+                          <th className="px-1.5 py-1 font-medium hidden md:table-cell">
                             {t('admin.rooms.table.created')}
                           </th>
-                          <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.updates')}</th>
-                          <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.size')}</th>
-                          <th className="px-2 py-1.5 font-medium">{t('admin.storage.table.actions')}</th>
+                          <th className="px-1.5 py-1 font-medium">{t('admin.storage.table.updates')}</th>
+                          <th className="px-1.5 py-1 font-medium">{t('admin.storage.table.size')}</th>
+                          <th className="px-1.5 py-1 font-medium">{t('admin.storage.table.actions')}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredRooms.map((room) => {
+                        {rooms.map((room) => {
                           const playback = playbackByRoomId.get(room.id)
                           const updates = playback?.updateCount ?? 0
                           const sizeBytes = playback?.bytes ?? 0
@@ -924,40 +941,46 @@ export function AdminPage() {
 
                           return (
                             <tr key={room.id} className="border-b">
-                              <td className="px-2 py-1.5">
+                              <td className="px-1.5 py-1">
                                 <div>{room.name}</div>
                                 <div className="text-xs text-muted-foreground sm:hidden">{room.owner.username}</div>
                               </td>
-                              <td className="px-2 py-1.5 text-muted-foreground hidden sm:table-cell">
+                              <td className="px-1.5 py-1 text-muted-foreground hidden sm:table-cell">
                                 {room.owner.username}
                               </td>
-                              <td className="px-2 py-1.5">
-                                <Badge variant="secondary" className="rounded-sm text-xs px-1.5 py-0">
-                                  {room.language}
-                                </Badge>
+                              <td className="px-1.5 py-1">
+                                <Select value={room.language}
+                                  disabled={roomLanguageMutation.isPending || room.isDeleted}
+                                  onValueChange={language => roomLanguageMutation.mutate({ roomId: room.id, language: language as Language })}>
+                                  <SelectTrigger className="h-control-sm w-[105px] text-xs" aria-label={`${t('admin.rooms.table.language')}: ${room.name}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {LANGUAGES.map(language => <SelectItem key={language} value={language}>{language}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
                               </td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1.5 py-1">
                                 <Badge
                                   variant={isEnded ? 'destructive' : 'success'}
-                                  className="rounded-sm text-xs px-1.5 py-0"
+                                  className="rounded-sm text-xs px-1 py-0"
                                 >
                                   {isEnded ? t('admin.rooms.table.statusEnded') : t('admin.rooms.table.statusActive')}
                                 </Badge>
                               </td>
-                              <td className="px-2 py-1.5 text-muted-foreground hidden lg:table-cell">
+                              <td className="px-1.5 py-1 text-muted-foreground hidden lg:table-cell">
                                 {endedAt ? formatDateTime(endedAt) : '-'}
                               </td>
-                              <td className="px-2 py-1.5 text-muted-foreground hidden md:table-cell">
+                              <td className="px-1.5 py-1 text-muted-foreground hidden md:table-cell">
                                 {formatDate(room.createdAt)}
                               </td>
-                              <td className="px-2 py-1.5">{updates}</td>
-                              <td className="px-2 py-1.5">{formatBytes(sizeBytes)}</td>
-                              <td className="px-2 py-1.5">
+                              <td className="px-1.5 py-1">{playback ? updates : '—'}</td>
+                              <td className="px-1.5 py-1">{playback ? formatBytes(sizeBytes) : '—'}</td>
+                              <td className="px-1.5 py-1">
                                 <div className="flex items-center gap-1">
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 px-2"
                                     disabled={!canCompress || compressingRoomId === room.id}
                                     onClick={() =>
                                       setRoomToCompress({
@@ -978,7 +1001,6 @@ export function AdminPage() {
                                     <Button
                                       size="sm"
                                       variant="destructive"
-                                      className="h-7 px-2"
                                       onClick={() => handleDeleteRoom(room.id, room.name)}
                                     >
                                       <Trash2 className="h-3 w-3" />
@@ -989,9 +1011,9 @@ export function AdminPage() {
                             </tr>
                           )
                         })}
-                        {filteredRooms.length === 0 && (
+                        {rooms.length === 0 && (
                           <tr>
-                            <td className="px-2 py-3 text-center text-muted-foreground" colSpan={9}>
+                            <td className="px-1.5 py-2 text-center text-muted-foreground" colSpan={9}>
                               {t('rooms.list.empty')}
                             </td>
                           </tr>
@@ -1005,14 +1027,18 @@ export function AdminPage() {
           </Card>
         ) : showRoomsSection ? (
           <Card>
-            <CardHeader className="py-3">
+            <CardHeader className="py-2">
               <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
             </CardHeader>
-            <CardContent className="pt-0 px-2 sm:px-6">
+            <CardContent className="pt-0 px-1.5 sm:px-3">
               <p className="text-sm text-muted-foreground">{t('admin.rooms.superuserOnly')}</p>
             </CardContent>
           </Card>
         ) : null}
+        <AdminPagination pagination={pagination} disabled={showUsersSection ? usersQuery.isFetching : roomsQuery.isFetching}
+          onPage={page => updateAdminParams({ [showUsersSection ? 'userPage' : 'roomPage']: page })} />
+          </Tabs.Content>
+        </Tabs.Root>
       </PageContainer>
     </div>
   )

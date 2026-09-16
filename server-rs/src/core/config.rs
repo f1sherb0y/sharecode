@@ -3,6 +3,8 @@ use std::env;
 #[derive(Clone, Debug)]
 pub struct Config {
     pub port: u16,
+    pub bind_address: std::net::IpAddr,
+    pub trusted_proxy_cidrs: Vec<String>,
     pub database_url: String,
     pub jwt_secret: String,
     pub frontend_url: Option<String>,
@@ -50,6 +52,17 @@ impl Config {
 
         Self {
             port,
+            bind_address: env::var("BIND_ADDRESS")
+                .unwrap_or_else(|_| "0.0.0.0".into())
+                .parse()
+                .expect("Invalid BIND_ADDRESS"),
+            trusted_proxy_cidrs: env::var("TRUSTED_PROXY_CIDRS")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect(),
             database_url,
             jwt_secret,
             frontend_url,

@@ -1,17 +1,29 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>window.EXCALIDRAW_ASSET_PATH = new URL("%BASE_URL%excalidraw/", document.baseURI).href;</script>
     <meta charset="UTF-8" />
+    <script>
+      // Apply before the app/CSS loads to avoid a flash of the opposite theme.
+      (() => {
+        let theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        try {
+          const saved = JSON.parse(localStorage.getItem('theme-storage') || 'null')?.state?.theme;
+          if (saved === 'light' || saved === 'dark') theme = saved;
+        } catch { /* Storage can be unavailable in restricted browser contexts. */ }
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ShareCode" />
-    <meta name="theme-color" content="#3b82f6" />
+    <meta name="theme-color" content="#202124" />
     <meta name="description" content="Real-time collaborative code editing with live cursors, syntax highlighting, and session playback." />
     <link
       rel="preload"

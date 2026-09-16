@@ -10,6 +10,8 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::core::audit::{self, ClientInfo};
+
 use crate::{
     auth::{build_user_claims, generate_user_token, verify_token, TokenPayload},
     db::db_error,
@@ -59,24 +61,26 @@ pub async fn register(
 
     validate_password(&password).map_err(ApiError::bad_request)?;
 
-    let existing_user =
-        sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE username = $1 LIMIT 1"#)
-            .bind(&username)
-            .fetch_optional(&state.db)
-            .await
-            .map_err(|err| db_error(err, "Failed to check existing username"))?;
+    let existing_user = sqlx::query_scalar::<_, bool>(
+        r#"SELECT "isDeleted" FROM "User" WHERE username = $1 LIMIT 1"#,
+    )
+    .bind(&username)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to check existing username"))?;
 
     if existing_user.is_some() {
         return Err(ApiError::bad_request("Username already taken"));
     }
 
     if let Some(ref email_value) = email {
-        let existing_email =
-            sqlx::query_scalar::<_, i64>(r#"SELECT 1 FROM "User" WHERE email = $1 LIMIT 1"#)
-                .bind(email_value)
-                .fetch_optional(&state.db)
-                .await
-                .map_err(|err| db_error(err, "Failed to check existing email"))?;
+        let existing_email = sqlx::query_scalar::<_, bool>(
+            r#"SELECT "isDeleted" FROM "User" WHERE email = $1 LIMIT 1"#,
+        )
+        .bind(email_value)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|err| db_error(err, "Failed to check existing email"))?;
 
         if existing_email.is_some() {
             return Err(ApiError::bad_request("Email already in use"));
@@ -103,7 +107,7 @@ pub async fn register(
             "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         "#,
     )
     .bind(Uuid::new_v4().to_string())
@@ -113,7 +117,7 @@ pub async fn register(
     .bind(&color)
     .fetch_one(&state.db)
     .await
-    .map_err(|err| db_error(err, "Failed to create user"))?;
+    .map_err(|err| crate::db::user_creation_error(err))?;
 
     let claims = build_user_claims(&user, Utc::now());
     let token = generate_user_token(&state.config, claims)?;
@@ -138,12 +142,24 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
+    client: ClientInfo,
     Json(payload): Json<LoginPayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let username = payload.username.unwrap_or_default();
     let password = payload.password.unwrap_or_default();
 
     if username.is_empty() || password.is_empty() {
+        audit::record(
+            &state.db,
+            &client,
+            "login",
+            None,
+            Some(&username),
+            None,
+            false,
+            Some("missing_credentials"),
+        )
+        .await?;
         return Err(ApiError::bad_request("Username and password are required"));
     }
 
@@ -161,7 +177,7 @@ pub async fn login(
             "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
         WHERE username = $1
         "#,
@@ -173,10 +189,34 @@ pub async fn login(
 
     let user = match user {
         Some(user) => user,
-        None => return Err(ApiError::unauthorized("Invalid credentials")),
+        None => {
+            audit::record(
+                &state.db,
+                &client,
+                "login",
+                None,
+                Some(&username),
+                None,
+                false,
+                Some("invalid_credentials"),
+            )
+            .await?;
+            return Err(ApiError::unauthorized("Invalid credentials"));
+        }
     };
 
     if user.is_deleted {
+        audit::record(
+            &state.db,
+            &client,
+            "login",
+            Some(&user.id),
+            Some(&username),
+            None,
+            false,
+            Some("account_disabled"),
+        )
+        .await?;
         return Err(ApiError::unauthorized("Invalid credentials"));
     }
 
@@ -184,11 +224,34 @@ pub async fn login(
         .map_err(|err| ApiError::internal(format!("Failed to verify password: {err}")))?;
 
     if !valid_password {
+        audit::record(
+            &state.db,
+            &client,
+            "login",
+            Some(&user.id),
+            Some(&username),
+            None,
+            false,
+            Some("invalid_credentials"),
+        )
+        .await?;
         return Err(ApiError::unauthorized("Invalid credentials"));
     }
 
     let claims = build_user_claims(&user, Utc::now());
     let token = generate_user_token(&state.config, claims)?;
+
+    audit::record(
+        &state.db,
+        &client,
+        "login",
+        Some(&user.id),
+        Some(&username),
+        None,
+        true,
+        None,
+    )
+    .await?;
 
     Ok(Json(json!({
         "user": {
@@ -208,6 +271,7 @@ pub async fn login(
 pub async fn change_password(
     State(state): State<AppState>,
     auth_user: crate::auth::AuthUser,
+    client: ClientInfo,
     Json(payload): Json<ChangePasswordPayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let old_password = payload.old_password.unwrap_or_default();
@@ -241,7 +305,7 @@ pub async fn change_password(
             "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
-            "lastSeen" as last_seen
+            "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
         WHERE id = $1
         "#,
@@ -266,28 +330,38 @@ pub async fn change_password(
     let hashed_password = hash(&new_password, 12)
         .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
 
-    sqlx::query(
-        r#"
-        UPDATE "User"
-        SET password = $1
-        WHERE id = $2
-        "#,
+    // Compare-and-swap prevents two simultaneous password changes from
+    // overwriting one another. Invalidate JWTs in the same transaction.
+    let _access = state.ws.access.write().await;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start password update"))?;
+    let version = sqlx::query_scalar::<_,i64>(r#"UPDATE "User" SET password=$1, "tokenVersion"="tokenVersion"+1
+        WHERE id=$2 AND password=$3 AND "tokenVersion"=$4 AND NOT "isDeleted" RETURNING "tokenVersion""#)
+        .bind(&hashed_password).bind(&auth_user.id).bind(&user.password).bind(auth_user.token_version)
+        .fetch_optional(&mut *tx).await.map_err(|e|db_error(e,"Failed to update password"))?
+        .ok_or_else(||ApiError::unauthorized("Session changed; sign in again"))?;
+    audit::record(
+        &mut *tx,
+        &client,
+        "password.changed",
+        Some(&user.id),
+        Some(&user.username),
+        Some(&user.id),
+        true,
+        None,
     )
-    .bind(&hashed_password)
-    .bind(&auth_user.id)
-    .execute(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to update password"))?;
-
-    tracing::info!(
-        actor_id = %auth_user.id,
-        username = %auth_user.username,
-        "password changed"
-    );
-
-    Ok(Json(json!({
-        "message": "Password updated"
-    })))
+    .await?;
+    let mut claims = build_user_claims(&user, Utc::now());
+    claims.token_version = version;
+    let token = generate_user_token(&state.config, claims)?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit password update"))?;
+    state.ws.revoke_actor(&auth_user.id).await;
+    Ok(Json(json!({"message":"Password updated", "token": token})))
 }
 
 pub async fn get_profile(
@@ -317,19 +391,20 @@ pub async fn get_profile(
                     "canWriteAllRooms" as can_write_all_rooms,
                     "canDeleteAllRooms" as can_delete_all_rooms,
                     "createdAt" as created_at,
-                    "lastSeen" as last_seen
+                    "tokenVersion" as token_version, "lastSeen" as last_seen
                 FROM "User"
-                WHERE id = $1
+                WHERE id = $1 AND "tokenVersion" = $2 AND NOT "isDeleted"
                 "#,
             )
             .bind(&user_payload.user_id)
+            .bind(user_payload.token_version)
             .fetch_optional(&state.db)
             .await
             .map_err(|err| db_error(err, "Failed to load profile"))?;
 
             let user = match user {
                 Some(user) => user,
-                None => return Err(ApiError::not_found("User not found")),
+                None => return Err(ApiError::unauthorized("Session expired")),
             };
 
             Ok(Json(json!({

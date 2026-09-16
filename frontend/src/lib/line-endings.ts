@@ -40,3 +40,22 @@ export function normalizeYTextLineEndings(
 
   return true
 }
+
+/** Canonical input: Unicode scalar values and LF. No NFC/NFKC folding: code
+ * identifiers and combining sequences must retain their exact meaning.
+ * Isolated UTF-16 surrogates have no UTF-8 representation. Match the wire
+ * encoder's U+FFFD replacement locally so display and peers cannot disagree. */
+export function normalizeCollaborativeText(text: string): string {
+  const lf = normalizeLineEndings(text)
+  let result = ''
+  for (let i = 0; i < lf.length; i++) {
+    const code = lf.charCodeAt(i)
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = lf.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) { result += lf[i]! + lf[++i]!; continue }
+      result += '\ufffd'
+    } else if (code >= 0xdc00 && code <= 0xdfff) result += '\ufffd'
+    else result += lf[i]
+  }
+  return result
+}

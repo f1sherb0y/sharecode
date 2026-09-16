@@ -51,6 +51,8 @@ pub fn spawn_inactive_room_cleanup(state: AppState) {
 }
 
 pub async fn auto_end_inactive_rooms(state: &AppState) -> Result<u64, sqlx::Error> {
+    let _access = state.ws.access.write().await;
+    let occupied = state.ws.occupied_rooms().await;
     let ended_rooms = sqlx::query_as::<_, AutoEndedRoomRow>(
         r#"
         UPDATE "Room"
@@ -60,11 +62,13 @@ pub async fn auto_end_inactive_rooms(state: &AppState) -> Result<u64, sqlx::Erro
         WHERE "isDeleted" = false
           AND "isEnded" = false
           AND "isPinned" = false
+          AND NOT (id = ANY($2))
           AND "updatedAt" <= NOW() - ($1 * INTERVAL '1 hour')
         RETURNING id, "endedAt" as ended_at
         "#,
     )
     .bind(ROOM_INACTIVITY_TIMEOUT_HOURS)
+    .bind(&occupied)
     .fetch_all(&state.db)
     .await?;
 

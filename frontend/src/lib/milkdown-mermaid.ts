@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import type { MilkdownPlugin } from '@milkdown/ctx'
 import type { Node as ProseNode } from '@milkdown/kit/prose/model'
 import type { EditorView, NodeView } from '@milkdown/kit/prose/view'
@@ -74,7 +75,7 @@ class MermaidNodeView implements NodeView {
     this.dom.innerHTML = ''
     const loading = document.createElement('div')
     loading.className = 'md-mermaid-loading'
-    loading.textContent = 'Rendering diagram…'
+    loading.textContent = i18n.t('editor.toolbar.renderingDiagram')
     this.dom.appendChild(loading)
 
     try {

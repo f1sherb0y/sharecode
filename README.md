@@ -120,6 +120,47 @@ docker compose exec postgres psql -U sharecode_app -d sharecode
 
 ### Option 2: Local Development
 
+With [just](https://github.com/casey/just), Docker Compose, Rust, Bun, and Node.js installed:
+
+```bash
+just install
+just up      # Start PostgreSQL, the API, and the frontend in one terminal
+```
+
+For separate terminals, use `just server` and `just dev` instead. `just up`
+uses `concurrently` to stream labeled application logs and stop both process trees on Ctrl+C or if
+either application exits. PostgreSQL stays running; use `just db-stop` to stop it.
+
+Open http://localhost:5173. On a fresh development database, sign in with
+`local_admin` / `LocalTest#2026Strong`. Override these local defaults using
+`SHARECODE_DEV_ADMIN_USERNAME`, `SHARECODE_DEV_ADMIN_PASSWORD`, and
+`SHARECODE_DEV_DATABASE_URL`. The database URL defaults to the credentials in
+`docker-compose.dev.yml`. `just` does not load `.env` files; the server still reads
+`server-rs/.env` for settings not explicitly supplied by the recipe.
+
+```bash
+just                     # List commands
+just browsers            # Install test browsers and system dependencies
+just test-ui             # Chromium UI tests; no backend required
+just test-ui firefox      # Firefox UI tests
+just test-ui-all          # Chromium, Firefox, and WebKit
+just test-editor          # Collaboration and Markdown regression tests
+just test-i18n            # Translation keys, parameters, and untranslated labels
+just test-server          # Rust unit tests
+just check               # TypeScript and Rust checks
+just build               # Production frontend build
+just db-stop             # Stop PostgreSQL and keep its data
+```
+
+Stop the API and frontend with Ctrl+C in their terminals. UI test screenshots
+are written to `/tmp/sharecode-ui-review/<browser>/`. For the full disposable
+database integration suite, use `just test-integration`; it requires local
+PostgreSQL server binaries (`initdb`, `pg_ctl`, and `createdb`) and cached Rust
+dependencies from `just install`. Set `PG_BIN` if the PostgreSQL binaries are
+outside the paths detected by the script.
+
+Alternatively, start each service manually:
+
 ### 1. Database Setup
 
 Make sure PostgreSQL is running. Update the connection string in `server-rs/.env`:
@@ -374,3 +415,16 @@ sharecode/
 ## License
 
 MIT
+
+## Code runner setup
+
+For local development, run `just runner-up` once to install the required runtimes, then use `just up` as usual. Runtime packages persist across container restarts. `just test-runner` tests execution and stdin for Python, Java, C, C++, JavaScript and TypeScript, error/timeout handling, and administrator room-language permissions with a disposable local database.
+
+For production, from the deployment checkout:
+
+```bash
+docker compose -f docker-compose.production.yml --env-file .env.production up -d piston
+docker compose -f docker-compose.production.yml --env-file .env.production exec -T piston node < scripts/setup-piston.cjs
+```
+
+The installer is idempotent and uses the persistent Piston packages volume. An empty Piston container does not include language runtimes. `/api/code/health` returns 503 if any required language is missing; `/api/code/languages` lists installed languages. Piston's package-management API must remain internal to the deployment network.

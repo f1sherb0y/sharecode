@@ -13,6 +13,8 @@ i18n
       zh: { translation: zh },
     },
     fallbackLng: 'en',
+    supportedLngs: ['en', 'zh'],
+    nonExplicitSupportedLngs: true,
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
@@ -21,5 +23,18 @@ i18n
       escapeValue: false,
     },
   })
+
+// Keep browser accessibility and native form controls in the selected language.
+function updateDocumentLanguage() {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = i18n.resolvedLanguage === 'zh' ? 'zh-CN' : 'en'
+  }
+}
+i18n.on('languageChanged', updateDocumentLanguage)
+updateDocumentLanguage()
+
+export function getLocale() {
+  return i18n.resolvedLanguage === 'zh' ? 'zh-CN' : 'en-US'
+}
 
 export default i18n

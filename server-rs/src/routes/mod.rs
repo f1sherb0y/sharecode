@@ -61,6 +61,7 @@ pub fn router(state: AppState) -> Router {
             delete(share::delete_share_link),
         )
         // Admin
+        .route("/api/admin/audit", get(crate::core::audit::list_events))
         .route("/api/admin/users", post(admin::create_user))
         .route("/api/admin/users", get(admin::get_all_users))
         .route(
@@ -101,6 +102,7 @@ pub fn router(state: AppState) -> Router {
         )
         // Share
         .route("/api/share/{token}/join", post(share::join_share_link))
+        .route("/api/share/{token}/accept", post(share::accept_share_link))
         // Code execution
         .route("/api/code/execute", post(code::execute_code))
         .route("/api/code/languages", get(code::get_languages))

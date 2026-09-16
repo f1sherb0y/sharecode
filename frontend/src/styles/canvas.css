@@ -1,0 +1,118 @@
+/* Capture the app theme before Excalidraw defines its own same-named tokens.
+   All overrides stay inside Canvas; drawing colors remain user-controlled. */
+.sharecode-canvas {
+  --canvas-bg: var(--color-background);
+  --canvas-fg: var(--color-foreground);
+  --canvas-muted: var(--color-muted-foreground);
+  --canvas-secondary: var(--color-secondary);
+  --canvas-border: var(--color-border);
+  --canvas-primary: var(--color-primary);
+  --canvas-primary-fg: var(--color-primary-foreground);
+  --canvas-ring: var(--color-ring);
+}
+.sharecode-canvas .excalidraw,
+.sharecode-canvas .excalidraw.theme--dark {
+  --ui-font: var(--font-sans);
+  --space-factor: 3px;
+  --editor-container-padding: 6px;
+  --border-radius-lg: var(--radius-md);
+  --border-radius-md: var(--radius-sm);
+  --border-radius-sm: var(--radius-sm);
+  --color-primary: var(--canvas-primary);
+  --color-primary-darker: var(--canvas-primary);
+  --color-primary-darkest: var(--canvas-primary);
+  --color-primary-hover: var(--canvas-fg);
+  --color-primary-light: var(--canvas-secondary);
+  --color-primary-light-darker: var(--canvas-border);
+  --color-brand-hover: var(--canvas-ring);
+  --color-brand-active: var(--canvas-ring);
+  --color-selection: var(--canvas-ring);
+  --focus-highlight-color: var(--canvas-ring);
+  --color-on-primary-container: var(--canvas-fg);
+  --color-surface-primary-container: var(--canvas-secondary);
+  --color-surface-lowest: var(--canvas-bg);
+  --color-surface-low: var(--canvas-secondary);
+  --color-surface-mid: var(--canvas-secondary);
+  --color-surface-high: var(--canvas-border);
+  --color-on-surface: var(--canvas-fg);
+  --color-border-outline: var(--canvas-ring);
+  --color-border-outline-variant: var(--canvas-border);
+  --island-bg-color: var(--canvas-bg);
+  --popup-bg-color: var(--canvas-bg);
+  --popup-secondary-bg-color: var(--canvas-secondary);
+  --popup-text-color: var(--canvas-fg);
+  --popup-text-inverted-color: var(--canvas-bg);
+  --input-bg-color: var(--canvas-bg);
+  --input-border-color: var(--canvas-border);
+  --input-hover-bg-color: var(--canvas-secondary);
+  --input-label-color: var(--canvas-muted);
+  --button-hover-bg: var(--canvas-secondary);
+  --button-active-bg: var(--canvas-secondary);
+  --button-active-border: var(--canvas-ring);
+  --default-border-color: var(--canvas-border);
+  --dialog-border-color: var(--canvas-border);
+  --keybinding-color: var(--canvas-muted);
+  --color-slider-track: var(--canvas-border);
+  --color-slider-thumb: var(--canvas-primary);
+  --shadow-island: 0 0 0 1px var(--canvas-border);
+  --modal-shadow: 0 4px 16px #00000018;
+  --sidebar-shadow: none;
+  --library-dropdown-shadow: 0 2px 8px #00000012;
+  --default-button-size: var(--spacing-control);
+  --lg-button-size: var(--spacing-control);
+  --default-icon-size: 14px;
+  --lg-icon-size: 16px;
+  font-size: var(--text-sm);
+}
+.sharecode-canvas .excalidraw .Island { transition: none; }
+.sharecode-canvas .excalidraw .App-menu_top { grid-gap: 8px; }
+.sharecode-canvas .excalidraw .App-menu__left { padding: 8px; width: 184px; }
+.sharecode-canvas .excalidraw .panelColumn { row-gap: 8px; }
+.sharecode-canvas .excalidraw .panelColumn :is(h3, legend, .control-label) { font-size: var(--text-xs); }
+.sharecode-canvas .excalidraw .dropdown-menu { margin-top: 4px; }
+.sharecode-canvas .excalidraw .dropdown-menu .dropdown-menu-container { padding: 4px; --gap: 1; }
+.sharecode-canvas .excalidraw .dropdown-menu .dropdown-menu-item-base { font-size: var(--text-sm); column-gap: 6px; }
+.sharecode-canvas .excalidraw .dropdown-menu .dropdown-menu-item {
+  height: var(--spacing-control);
+  min-height: var(--spacing-control);
+  margin: 0;
+  padding: 0 6px;
+  width: 100%;
+  line-height: 1.25;
+}
+.sharecode-canvas .excalidraw .dropdown-menu .dropdown-menu-item__text { gap: 6px; }
+.sharecode-canvas .excalidraw .dropdown-menu .dropdown-menu-item__shortcut { font-size: var(--text-xs); }
+/* Compact buttons need compact padding too, or flex shrinks their SVGs. */
+.sharecode-canvas .excalidraw :is(.dropdown-menu-button, .help-icon) { padding: 4px; }
+.sharecode-canvas .excalidraw :is(.dropdown-menu-button, .help-icon) svg {
+  width: var(--lg-icon-size);
+  height: var(--lg-icon-size);
+  flex-shrink: 0;
+}
+/* Shortcuts remain in tooltips; corner digits collide with icons at this size. */
+.sharecode-canvas .excalidraw .App-toolbar-container .ToolIcon__keybinding { display: none; }
+.sharecode-canvas .excalidraw .welcome-screen-center,
+.sharecode-canvas .excalidraw .welcome-screen-decor { display: none; }
+/* Keep touch hit targets large without enlarging fine-pointer desktop chrome. */
+@media (pointer: coarse) {
+  .sharecode-canvas .excalidraw :is(.ToolIcon__icon, .dropdown-menu .dropdown-menu-item, .dropdown-menu-item-custom, .dropdown-menu-button, .help-icon) { min-height: 44px; }
+  .sharecode-canvas .excalidraw :is(.ToolIcon__icon, .dropdown-menu-button, .help-icon) { min-width: 44px; }
+}
+@media (pointer: coarse) and (max-width: 767px) {
+  .sharecode-canvas .excalidraw .App-toolbar-container {
+    max-width: calc(100vw - 24px);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+  }
+  /* Let the popup escape the toolbar's horizontal scrolling clip. Its static
+     vertical position follows the toolbar when the room header changes size. */
+  .sharecode-canvas .excalidraw .App-toolbar__extra-tools-dropdown {
+    position: fixed;
+    inset-inline: 12px;
+    top: auto;
+    bottom: auto;
+    width: auto;
+    margin-top: calc(var(--spacing-control) + 12px);
+  }
+}

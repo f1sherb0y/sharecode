@@ -8,3 +8,5 @@ export { AdminPage } from './admin'
 export { PlaybackPage } from './playback'
 export { SettingsPage } from './settings'
 export { NotificationsPage } from './notifications'
+
+export { AuditPage } from './audit'

@@ -1,3 +1,4 @@
+import { getLocale } from '@/i18n'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -11,15 +12,15 @@ function formatNoteTime(iso: string): string {
   const d = new Date(iso)
   const now = new Date()
   const tz = getTimezone()
-  const fmt = new Intl.DateTimeFormat(undefined, { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' })
+  const fmt = new Intl.DateTimeFormat(getLocale(), { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' })
   const dParts = fmt.formatToParts(d)
   const nowParts = fmt.formatToParts(now)
   const get = (parts: Intl.DateTimeFormatPart[], type: string) => parts.find(p => p.type === type)?.value
   const sameYear = get(dParts, 'year') === get(nowParts, 'year')
   const sameDay = sameYear && get(dParts, 'month') === get(nowParts, 'month') && get(dParts, 'day') === get(nowParts, 'day')
-  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: tz })
+  const time = d.toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit', timeZone: tz })
   if (sameDay) return time
-  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }), timeZone: tz })
+  const date = d.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }), timeZone: tz })
   return `${date} ${time}`
 }
 
@@ -190,7 +191,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground"
             onClick={handleCopyAll}
           >
             {copiedAll ? (
@@ -226,7 +227,6 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-5 px-1.5 text-[10px]"
                       onClick={cancelEdit}
                     >
                       {t('common.cancel')}
@@ -234,7 +234,6 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="h-5 px-1.5 text-[10px]"
                       onClick={commitEdit}
                       disabled={!editText.trim() || isSaving}
                     >
@@ -243,26 +242,25 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
                   </div>
                 </div>
               ) : (
-                <div className="relative px-1.5 py-1">
+                <div className="relative px-1 py-1">
                   <pre className={cn(
-                    'text-xs text-foreground whitespace-pre-wrap break-words font-sans leading-normal pr-12',
+                    'text-xs text-foreground whitespace-pre-wrap break-words font-sans leading-normal',
                     !readOnly && 'cursor-pointer'
                   )}
                     onClick={() => startEdit(note.id, note.text)}
                   >
                     {note.text}
                   </pre>
-                  <span className="text-[10px] text-muted-foreground leading-none mt-0.5 block">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                  <span className="text-xs text-muted-foreground">
                     {formatNoteTime(note.updatedAt !== note.createdAt ? note.updatedAt : note.createdAt)}
                   </span>
-                  <div className={cn(
-                      'absolute top-0.5 right-0.5 flex items-center gap-0.5',
-                      'opacity-0 group-hover:opacity-100 transition-opacity'
-                    )}>
+                  <div className="flex items-center gap-0.5">
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                        size="icon-sm"
+                        aria-label={t(copiedId === note.id ? 'common.copied' : 'common.copy')}
+                        className="text-muted-foreground hover:text-foreground"
                         onClick={() => handleCopy(note.id, note.text)}
                       >
                         {copiedId === note.id ? (
@@ -275,16 +273,18 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
                         <>
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                            size="icon-sm"
+                            aria-label={t('common.edit')}
+                            className="text-muted-foreground hover:text-foreground"
                             onClick={() => startEdit(note.id, note.text)}
                           >
                             <Pencil className="h-2.5 w-2.5" />
                           </Button>
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                            size="icon-sm"
+                            aria-label={t('common.delete')}
+                            className="text-muted-foreground hover:text-destructive"
                             onClick={() => handleRemove(note.id)}
                             disabled={isSaving}
                           >
@@ -293,6 +293,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
                         </>
                       )}
                     </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -317,7 +318,6 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
             <Button
               variant="secondary"
               size="sm"
-              className="h-6 px-2 text-xs"
               onClick={handleAdd}
               disabled={!newText.trim() || isSaving}
             >

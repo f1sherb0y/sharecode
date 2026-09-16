@@ -6,12 +6,15 @@ export type Language =
   | 'typescript'
   | 'python'
   | 'java'
+  | 'c'
   | 'cpp'
   | 'rust'
   | 'go'
   | 'php'
   | 'markdown'
   | 'verilog'
+
+export const LANGUAGES: Language[] = ['javascript', 'typescript', 'python', 'java', 'c', 'cpp', 'rust', 'go', 'php', 'markdown', 'verilog']
 
 export type RoomActiveness = 'all' | 'active' | 'ended'
 
@@ -80,6 +83,7 @@ export interface RoomParticipant {
 
 export interface ShareLink {
   id: string
+  shareUrl?: string | null
   token: string
   canEdit: boolean
   createdAt: string
