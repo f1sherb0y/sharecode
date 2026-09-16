@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Users, Trash2, Play, Share2, Pencil, Pin, PinOff, MoreHorizontal } from 'lucide-react'
+import { Plus, Users, Trash2, Play, Share2, Pencil, Pin, PinOff, MoreHorizontal, Download } from 'lucide-react'
 import {
   Button,
   DropdownMenu,
@@ -102,6 +102,18 @@ export function RoomsPage() {
   const { timezone } = useSettingsStore()
 
   const [error, setError] = useState('')
+  const [exportingRoomId, setExportingRoomId] = useState<string | null>(null)
+  const handleExport = async (room: Room) => {
+    if (exportingRoomId) return
+    setExportingRoomId(room.id)
+    setError('')
+    try {
+      const { downloadSession, ExportImageError } = await import('@/export/download')
+      try { await downloadSession(room) }
+      catch (error) { if (error instanceof ExportImageError) { setError(t('playback.exportImageFailed')); return }; throw error }
+    } catch { setError(t('playback.exportFailed')) }
+    finally { setExportingRoomId(null) }
+  }
   const [pinUpdatingRoomId, setPinUpdatingRoomId] = useState<string | null>(null)
   const page = useMemo(() => {
     const raw = Number(searchParams.get('page') ?? '')
@@ -674,6 +686,7 @@ export function RoomsPage() {
             </div>
           </div>
         </div>
+        {exportingRoomId && <p role="status" className="mb-2 text-sm text-muted-foreground">{t('playback.exporting')}</p>}
         {error && <p role="alert" className="mb-2 text-sm text-destructive">{translateError(error)}</p>}
 
         {isLoading ? (
@@ -697,6 +710,8 @@ export function RoomsPage() {
                 onTogglePin={() => handleTogglePin(room)}
                 isPinUpdating={pinUpdatingRoomId === room.id}
                 onPlayback={() => navigate(`/playback/${room.id}`)}
+                onExport={() => void handleExport(room)}
+                isExporting={exportingRoomId !== null}
               />
             ))}
           </div>
@@ -754,6 +769,8 @@ interface RoomRowProps {
   onTogglePin: () => void
   isPinUpdating: boolean
   onPlayback: () => void
+  onExport: () => void
+  isExporting: boolean
 }
 
 function RoomRow({
@@ -765,6 +782,8 @@ function RoomRow({
   onTogglePin,
   isPinUpdating,
   onPlayback,
+  onExport,
+  isExporting,
 }: RoomRowProps) {
   const { t } = useTranslation()
 
@@ -816,6 +835,7 @@ function RoomRow({
               {canRenameRoom && <DropdownMenuItem onClick={onRename}><Pencil className="mr-1.5 h-4 w-4" />{t('rooms.list.rename')}</DropdownMenuItem>}
               {canPinRoom && <DropdownMenuItem onClick={onTogglePin} disabled={isPinUpdating}>{room.isPinned ? <PinOff className="mr-1.5 h-4 w-4" /> : <Pin className="mr-1.5 h-4 w-4" />}{room.isPinned ? t('rooms.list.unpin') : t('rooms.list.pin')}</DropdownMenuItem>}
               {canViewPlayback && <DropdownMenuItem onClick={onPlayback}><Play className="mr-1.5 h-4 w-4" />{t('rooms.list.viewPlayback')}</DropdownMenuItem>}
+              {canViewPlayback && <DropdownMenuItem disabled={isExporting} onClick={onExport}><Download className="mr-1.5 h-4 w-4" />{t('playback.export')}</DropdownMenuItem>}
               {canDeleteCurrentRoom && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}><Trash2 className="mr-1.5 h-4 w-4" />{t('common.delete')}</DropdownMenuItem>}
             </DropdownMenuContent>
           </DropdownMenu>

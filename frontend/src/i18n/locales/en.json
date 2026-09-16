@@ -326,7 +326,14 @@
     "notes": "Notes",
     "goToStart": "Go to start",
     "goToEnd": "Go to end",
-    "editorFailed": "Could not initialize playback. Please reload."
+    "editorFailed": "Could not initialize playback. Please reload.",
+    "export": "Export session",
+    "exporting": "Preparing session replay…",
+    "exportFailed": "Could not export this session. Please retry.",
+    "exportImageFailed": "Could not include an image in the session replay. The image may be unavailable or block cross-origin access. Please make it accessible and retry.",
+    "exportTitle": "Session replay",
+    "exportTheme": "Toggle theme",
+    "exportUsers": "Participants"
   },
   "settings": {
     "title": "Settings",

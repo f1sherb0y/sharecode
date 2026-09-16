@@ -244,6 +244,12 @@ export function EditorPage() {
     modelRef,
   })
 
+  const handleCanvasFollowChange = useCallback((clientId: number | null) => {
+    const user = clientId == null ? null : provider?.awareness?.getStates().get(clientId)?.user
+    setFollowingClientId(clientId)
+    setFollowingUserId(user?.id ?? null)
+  }, [provider, setFollowingClientId, setFollowingUserId])
+
   const changeView = useCallback((nextView: 'editor' | 'canvas') => {
     if (!window.dispatchEvent(new Event('sharecode:flush', { cancelable: true }))) return
     setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', nextView); return next }, { replace: true })
@@ -620,7 +626,7 @@ export function EditorPage() {
               )}
               </div>
               {isCanvas && ydoc && isSynced && <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner /></div>}>
-                <CanvasView key={ydoc.guid} doc={ydoc} canEdit={canEdit && canWrite} theme={theme} provider={provider} followClientId={followingClientId} onPending={setCanvasPending} />
+                <CanvasView key={ydoc.guid} doc={ydoc} canEdit={canEdit && canWrite} theme={theme} provider={provider} followClientId={followingClientId} onFollowChange={handleCanvasFollowChange} onPending={setCanvasPending} />
               </Suspense>}
             </div>
 

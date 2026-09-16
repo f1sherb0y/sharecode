@@ -50,7 +50,13 @@ try {
  b.doc.getMap('canvas-elements').set('forbidden',{element:element('forbidden')})
  await new Promise(r=>setTimeout(r,150));assert.equal(a.doc.getMap('canvas-elements').has('forbidden'),false)
  console.log('PASS real backend canvas edits, read-only sync/enforcement, persistence barrier, fresh join and code isolation')
- const web=await createServer({cacheDir:'node_modules/.vite-canvas-tests',server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},define:{'import.meta.env.VITE_API_URL':JSON.stringify(API),'import.meta.env.VITE_WS_URL':JSON.stringify(API.replace('http','ws'))},logLevel:'error'})
+ const web=await createServer({plugins:[{
+  name:'capture-native-canvas-api', enforce:'pre',
+  transform(source,id) {
+   if(!id.endsWith('/components/features/canvas-view.tsx')) return
+   return source.replace('excalidrawAPI={setApi}', 'excalidrawAPI={instance => { setApi(instance); (window as any).__testCanvasApi = instance }}')
+  },
+ }],cacheDir:'node_modules/.vite-canvas-tests',server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},define:{'import.meta.env.VITE_API_URL':JSON.stringify(API),'import.meta.env.VITE_WS_URL':JSON.stringify(API.replace('http','ws'))},logLevel:'error'})
  await web.listen()
  try {
   for(const [engine,type] of Object.entries({chromium,firefox,webkit})) {
@@ -84,6 +90,60 @@ try {
     await page.getByRole('menuitem',{name:'Toggle theme',exact:true}).click()
     await page.locator('.excalidraw.theme--dark').waitFor()
     await page.screenshot({path:`/tmp/sharecode-canvas-dark-${engine}.png`})
+    // Both website and native avatar controls must operate the same Follow state.
+    // Camera/navigation checks only; no drawing gestures are simulated.
+    if(engine==='webkit') await page.setViewportSize({width:1280,height:800})
+    b.p.sendStateless(JSON.stringify({type:'presence',clientId:b.doc.clientID}))
+    b.p.awareness?.setLocalState({user:{id:'viewer',name:'canvas_viewer',username:'canvas_viewer'}})
+    b.p.awareness?.setLocalStateField('view','canvas')
+    b.p.awareness?.setLocalStateField('canvas',{viewport:{x:-100,y:-200,width:1280,height:720}})
+    await page.getByRole('button',{name:'Users',exact:true}).click()
+    await page.getByRole('menuitem').filter({hasText:'canvas_viewer'}).click()
+    await page.locator('.follow-mode__badge').filter({hasText:'canvas_viewer'}).waitFor()
+    await page.locator('.UserList__collaborator.is-followed').waitFor()
+    const assertContainment=async () => page.waitForFunction(() => {
+      const app=(window as any).__testCanvasApi?.getAppState()
+      if(!app) return false
+      const z=Math.min(app.width/1280,app.height/720)
+      return Math.abs(app.zoom.value-z)<0.00001 && Math.abs(app.scrollX-(app.width/(2*z)+100-640))<0.01 && Math.abs(app.scrollY-(app.height/(2*z)+200-360))<0.01
+    })
+    await assertContainment()
+    await page.setViewportSize({width:950,height:600})
+    await assertContainment()
+    await page.setViewportSize({width:1280,height:800})
+    await assertContainment()
+    await wait(()=>[...b.p.awareness!.getStates()].some(([id,state])=>id!==b.doc.clientID&&state.canvas?.following===b.doc.clientID),'native follow published')
+    await page.locator('.follow-mode__disconnect-btn').click()
+    await page.locator('.follow-mode').waitFor({state:'hidden'})
+    await page.getByRole('button',{name:'Users',exact:true}).click()
+    assert.ok(!(await page.getByRole('menuitem').filter({hasText:'canvas_viewer'}).innerText()).includes('Following'))
+    await page.keyboard.press('Escape')
+    const avatar=page.locator('.UserList .Avatar').filter({hasText:/^C$/})
+    await avatar.click()
+    await page.locator('.follow-mode').waitFor()
+    await page.getByRole('button',{name:'Users',exact:true}).click()
+    assert.ok((await page.getByRole('menuitem').filter({hasText:'canvas_viewer'}).innerText()).includes('Following'))
+    await page.keyboard.press('Escape')
+    await page.getByRole('button',{name:'Zoom in',exact:true}).click()
+    await page.locator('.follow-mode').waitFor({state:'hidden'})
+    // A later presence tick must not re-enable native follow after manual zoom.
+    b.p.awareness?.setLocalStateField('canvas',{viewport:{x:200,y:100,width:640,height:480}})
+    await wait(()=>![...b.p.awareness!.getStates()].some(([id,state])=>id!==b.doc.clientID&&state.canvas?.following===b.doc.clientID),'native unfollow published')
+    assert.equal(await page.locator('.follow-mode').count(),0)
+    await avatar.click()
+    await page.locator('.follow-mode').waitFor()
+    b.p.awareness?.setLocalStateField('view','editor')
+    await page.waitForFunction(()=>new URL(location.href).searchParams.get('view')==='editor')
+    b.p.awareness?.setLocalStateField('view','canvas')
+    await page.waitForFunction(()=>new URL(location.href).searchParams.get('view')==='canvas')
+    await page.locator('.follow-mode__badge').filter({hasText:'canvas_viewer'}).waitFor()
+    // Leaving the room (as opposed to changing views) cancels native follow.
+    b.p.awareness?.setLocalState(null)
+    await page.locator('.follow-mode').waitFor({state:'hidden'})
+    await page.getByRole('button',{name:'Users',exact:true}).click()
+    assert.equal(await page.getByRole('menuitem').filter({hasText:'Following'}).count(),0)
+    await page.keyboard.press('Escape')
+    console.log('PASS',engine,'native avatars, website follow, disconnect/zoom cancellation, cross-view continuity and peer leave')
     // UI mounting and cross-mode follow only; no drawing gestures are simulated.
     await page.getByRole('button',{name:'Editor',exact:true}).click()
     await page.locator('.monaco-editor').waitFor({state:'visible'})

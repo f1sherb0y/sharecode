@@ -1,6 +1,6 @@
 import { Code2, PencilRuler } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui'
+import { Button } from '@/components/ui/button'
 
 export function RoomViewSwitch({ value, onChange }: { value: 'editor' | 'canvas'; onChange: (value: 'editor' | 'canvas') => void }) {
   const { t } = useTranslation()

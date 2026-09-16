@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { sessionPlayerPlugin } from './tooling/session-player'
 import { analyzer } from 'vite-bundle-analyzer'
 import { resolve, join } from 'path'
 import { readdirSync, readFileSync, createReadStream } from 'node:fs'
@@ -14,6 +15,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      sessionPlayerPlugin(),
       {
         name: 'canvas-font-assets',
         generateBundle() {

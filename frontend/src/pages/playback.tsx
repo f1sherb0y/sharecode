@@ -4,21 +4,17 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useViewportHeight } from '@/hooks/use-viewport-height'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Play, Pause, SkipBack, SkipForward, StickyNote, PanelRightClose } from 'lucide-react'
+import { ArrowLeft, StickyNote, PanelRightClose } from 'lucide-react'
 import type * as Monaco from 'monaco-editor'
 import pako from 'pako'
 import type * as Y from 'yjs'
 import { DocumentReplay } from '@/lib/document-replay'
+import { PlaybackControls } from '@/components/features/playback-controls'
 import { RoomViewSwitch } from '@/components/features/room-view-switch'
 const CanvasView = lazy(() => import('@/components/features/canvas-view').then(m => ({ default: m.CanvasView })))
 import {
   Button,
   Badge,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Spinner,
 } from '@/components/ui'
 import { ThemeToggle } from '@/components/layout'
@@ -530,131 +526,11 @@ export function PlaybackPage() {
       </div>
 
       {/* Playback controls */}
-      <footer
-        className={cn(
-          'safe-bottom border-t bg-background shrink-0',
-          'px-2 py-1'
-        )}
-      >
-        {/* Timeline with marks */}
-        <div className="relative mb-1">
-          <input
-            type="range"
-            aria-label={t('playback.progress')}
-            min={startMs}
-            max={endMs}
-            step="any"
-            value={currentTimestamp}
-            onChange={(e) => {
-              setCurrentTimestamp(Number(e.target.value))
-              setIsPlaying(false)
-            }}
-            className={cn(
-              'w-full bg-secondary rounded-lg appearance-none cursor-pointer relative z-10',
-              isCompactViewport ? 'h-1.5' : 'h-2'
-            )}
-          />
-          {/* Update marks - group close updates into regions */}
-          <div className={cn('absolute top-0 left-0 right-0 pointer-events-none', isCompactViewport ? 'h-1.5' : 'h-2')}>
-            {(() => {
-              const duration = endMs - startMs
-              if (duration === 0) return null
-
-              const regions: { start: number; end: number }[] = []
-              const threshold = 0.5 // 0.5% threshold for grouping
-
-              updates.forEach((update) => {
-                const pos = ((update.timestampMs - startMs) / duration) * 100
-                const lastRegion = regions[regions.length - 1]
-
-                if (lastRegion && pos - lastRegion.end < threshold) {
-                  // Extend existing region
-                  lastRegion.end = pos
-                } else {
-                  // Start new region
-                  regions.push({ start: pos, end: pos })
-                }
-              })
-
-              return regions.map((region, i) => {
-                const width = Math.max(region.end - region.start, 0.3) // Min width for visibility
-                return (
-                  <div
-                    key={i}
-                    className={cn('absolute top-0 bg-primary/50 rounded-sm', isCompactViewport ? 'h-1.5' : 'h-2')}
-                    style={{
-                      left: `${region.start}%`,
-                      width: `${width}%`,
-                    }}
-                  />
-                )
-              })
-            })()}
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[auto_1fr_auto]">
-          <div className="order-1 flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t('playback.goToStart')}
-              onClick={() => {
-                setCurrentTimestamp(startMs)
-                setIsPlaying(false)
-              }}
-            >
-              <SkipBack className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t(isPlaying ? 'playback.pause' : 'playback.play')}
-              onClick={() => setIsPlaying(!isPlaying)}
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t('playback.goToEnd')}
-              onClick={() => {
-                setCurrentTimestamp(endMs)
-                setIsPlaying(false)
-              }}
-            >
-              <SkipForward className="h-4 w-4" />
-            </Button>
-          </div>
-          <span className="order-3 col-span-2 text-center text-xs text-muted-foreground font-mono tabular-nums sm:order-2 sm:col-span-1 sm:text-left">
-            {formatTime(currentTimestamp)} / {formatTime(endMs)}
-          </span>
-
-          <div className="order-2 flex items-center gap-1 sm:order-3">
-            {!isCompactViewport && <span className="text-sm text-muted-foreground">{t('playback.speed')}:</span>}
-            <Select
-              value={String(playbackSpeed)}
-              onValueChange={(v) => {
-                const next = new URLSearchParams(searchParams)
-                next.set('speed', String(parsePlaybackSpeed(v)))
-                setSearchParams(next)
-              }}
-            >
-              <SelectTrigger aria-label={t('playback.speed')} className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0.5">0.5x</SelectItem>
-                <SelectItem value="1">1x</SelectItem>
-                <SelectItem value="2">2x</SelectItem>
-                <SelectItem value="5">5x</SelectItem>
-                <SelectItem value="10">10x</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </footer>
+      <PlaybackControls startMs={startMs} endMs={endMs} currentTimestamp={currentTimestamp}
+        playbackSpeed={playbackSpeed} isPlaying={isPlaying} updates={updates}
+        timeLabel={`${formatTime(currentTimestamp)} / ${formatTime(endMs)}`}
+        onSeek={setCurrentTimestamp} onPlayingChange={setIsPlaying}
+        onSpeedChange={speed => { const next = new URLSearchParams(searchParams); next.set('speed', String(speed)); setSearchParams(next) }} />
     </div>
   )
 }

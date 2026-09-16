@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Excalidraw, CaptureUpdateAction, MainMenu } from '@excalidraw/excalidraw'
-import type { AppState, BinaryFiles, Collaborator, ExcalidrawImperativeAPI, SocketId } from '@excalidraw/excalidraw/types'
+import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { HocuspocusProvider } from '@hocuspocus/provider'
 import type * as Y from 'yjs'
-import { CanvasSync, canvasFiles, orderedCanvasElements, containViewport, CANVAS_INTERVAL, type CanvasViewport } from '@/lib/canvas-sync'
+import { CanvasSync, canvasFiles, orderedCanvasElements } from '@/lib/canvas-sync'
+import { useCanvasFollow, type CanvasPresence } from '@/hooks/use-canvas-follow'
 import '@excalidraw/excalidraw/index.css'
 import '@/styles/canvas.css'
 
@@ -15,16 +16,11 @@ interface CanvasViewProps {
   theme: 'light' | 'dark'
   provider?: HocuspocusProvider | null
   followClientId?: number | null
+  onFollowChange?: (clientId: number | null) => void
   onPending?: (pending: boolean) => void
   replay?: boolean
 }
-interface CanvasPresence {
-  viewport?: CanvasViewport
-  pointer?: Collaborator['pointer']
-  button?: 'up' | 'down'
-}
-
-export function CanvasView({ doc, canEdit, theme, provider, followClientId, onPending, replay = false }: CanvasViewProps) {
+export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFollowChange, onPending, replay = false }: CanvasViewProps) {
   const { t, i18n } = useTranslation()
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null)
   const [error, setError] = useState('')
@@ -97,55 +93,7 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onPe
   // Flush already accepted edits before a disconnect/permission transition.
   useEffect(() => { if (!canEdit) syncRef.current?.flush() }, [canEdit])
 
-  useEffect(() => {
-    const awareness = provider?.awareness
-    if (!api || !awareness) return
-    let lastPresence = ''
-    const applyFollow = () => {
-      const app = api.getAppState()
-      const target = followClientId != null ? awareness.getStates().get(followClientId) : undefined
-      const viewport = (target?.canvas as CanvasPresence | undefined)?.viewport
-      if (target?.view === 'canvas' && viewport) {
-        const fit = containViewport(viewport, app.width, app.height)
-        if (fit && (Math.abs(app.zoom.value - fit.zoom) > 0.00001 || Math.abs(app.scrollX - fit.scrollX) > 0.01 || Math.abs(app.scrollY - fit.scrollY) > 0.01)) {
-          api.updateScene({ appState: { scrollX: fit.scrollX, scrollY: fit.scrollY, zoom: { value: fit.zoom as AppState['zoom']['value'] } }, captureUpdate: CaptureUpdateAction.NEVER })
-        }
-      }
-    }
-    const refresh = () => {
-      applyFollow()
-      const collaborators = new Map<SocketId, Collaborator>()
-      awareness.getStates().forEach((state, id) => {
-        if (id === awareness.clientID || state.view !== 'canvas') return
-        const p = state.canvas as CanvasPresence | undefined
-        collaborators.set(String(id) as SocketId, { pointer: p?.pointer, button: p?.button,
-          username: state.user?.name ?? state.user?.username ?? t('canvas.anonymous'),
-          color: state.user?.color ? { background: state.user.color, stroke: state.user.color } : undefined })
-      })
-      api.updateScene({ collaborators, captureUpdate: CaptureUpdateAction.NEVER })
-    }
-    const publish = () => {
-      const app = api.getAppState()
-      // Followers advertise the original viewport, avoiding recursive zoom-out
-      // when someone follows a follower with a different aspect ratio.
-      const target = followClientId != null ? awareness.getStates().get(followClientId) : undefined
-      const viewport = target?.view === 'canvas' ? target.canvas?.viewport as CanvasViewport | undefined : undefined
-      const next: CanvasPresence = { ...presence.current, viewport: viewport ?? {
-        x: -app.scrollX, y: -app.scrollY, width: app.width / app.zoom.value, height: app.height / app.zoom.value,
-      } }
-      const signature = JSON.stringify(next)
-      if (signature !== lastPresence) { lastPresence = signature; awareness.setLocalStateField('canvas', next) }
-      applyFollow() // Also handles follower viewport resize without a presenter event.
-    }
-    awareness.on('change', refresh)
-    publish()
-    const timer = setInterval(publish, CANVAS_INTERVAL)
-    return () => {
-      clearInterval(timer)
-      awareness.off('change', refresh)
-      awareness.setLocalStateField('canvas', null)
-    }
-  }, [api, provider, followClientId, t])
+  useCanvasFollow({ api, provider, followClientId, onFollowChange, presence, anonymous: t('canvas.anonymous') })
 
   const onChange = useCallback((elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
     if (applying.current || !canEditRef.current) return

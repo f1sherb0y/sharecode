@@ -24,6 +24,8 @@ Excalidraw is feature-complete, not tiny. Canvas is lazy loaded separately from 
 
 ## Follow
 
+Canvas now uses Excalidraw's native `userToFollow` state and `api.onUserFollow` subscription. The website user menu and Excalidraw avatars control the same state: native badges, avatar selection, cancel, and manual pan/zoom exit stay synchronized with the website. The SDK provides interactions but not network camera transport; existing awareness still sends cameras at 10 Hz and applies the contain/center calculation below. Follow metadata remains ephemeral and is not recorded in drawing history. All room participants remain in the native collaborator list so switching Editor/Canvas does not look like leaving the room; pointers are shown only while a participant is on Canvas.
+
 Follow selects the exact browser client, rather than an arbitrary tab belonging to the same user. It switches between Editor and Canvas with the presenter. Canvas world viewport is `(-scrollX, -scrollY, CSS width/zoom, CSS height/zoom)`.
 
 For follower dimensions `(W,H)` and presenter rectangle `(x,y,w,h)`:
@@ -59,3 +61,7 @@ Not deployed. User explicitly requires permission before deployment.
 - Existing workspace UI regression: 10/10 passed (including Markdown, i18n, mobile/DPI and Monaco Find close). Locale checks: 3/3 passed.
 - Production frontend build passed. Vite still warns about large vendor chunks; Canvas is lazy loaded but is not a micro-library.
 - Local development restarted at http://localhost:5173 with the new API/index migration; existing local database retained. Nothing was deployed.
+
+## Native Follow verification — 2026-09-17 (local, not deployed)
+
+Real-backend Canvas integration passed in Chromium, Firefox and WebKit: website menu activates native mode, native avatar activates website follow, native close and zoom cancel both, subsequent presence updates do not re-enable cancelled follow, view switching retains the target, and peer departure cancels it. The actual Excalidraw camera was checked for exact centering/containment before and after follower resizing. Existing persistence, permissions and ended-room replay checks passed; production frontend build passed. No drawing gestures were automated.

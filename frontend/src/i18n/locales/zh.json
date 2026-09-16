@@ -326,7 +326,14 @@
     "notes": "笔记",
     "goToStart": "跳到开头",
     "goToEnd": "跳到末尾",
-    "editorFailed": "无法初始化回放，请刷新页面。"
+    "editorFailed": "无法初始化回放，请刷新页面。",
+    "export": "导出会话",
+    "exporting": "正在生成回放文件…",
+    "exportFailed": "会话导出失败，请重试。",
+    "exportImageFailed": "无法将图片包含在回放文件中，图片可能已失效或不允许跨域访问。请确保图片可访问后重试。",
+    "exportTitle": "会话回放",
+    "exportTheme": "切换主题",
+    "exportUsers": "参与者"
   },
   "settings": {
     "title": "设置",
