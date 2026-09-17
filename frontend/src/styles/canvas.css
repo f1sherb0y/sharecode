@@ -101,9 +101,19 @@
 @media (pointer: coarse) and (max-width: 767px) {
   .sharecode-canvas .excalidraw .App-toolbar-container {
     max-width: calc(100vw - 24px);
+  }
+  /* Scroll inside the Island so its background and border frame every visible
+     tool, rather than letting the tools overflow a narrow grid item. */
+  .sharecode-canvas .excalidraw .App-toolbar-container > .App-toolbar {
+    min-width: 0;
+    width: max-content;
+    max-width: calc(100vw - 24px);
     overflow-x: auto;
     overscroll-behavior-x: contain;
     touch-action: pan-x;
+  }
+  .sharecode-canvas .excalidraw .App-toolbar-container > .App-toolbar > .Stack {
+    width: max-content;
   }
   /* Let the popup escape the toolbar's horizontal scrolling clip. Its static
      vertical position follows the toolbar when the room header changes size. */

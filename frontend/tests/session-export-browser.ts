@@ -113,20 +113,33 @@ try {
       await replay.getByText('Original note Alice', { exact: true }).waitFor()
       await replay.getByRole('button', { name: 'Notes', exact: true }).click()
       console.log(engine, 'Markdown verified')
+      // Seek while Canvas is unmounted; switching views must render this frame
+      // without another seek, including after the lazy library has been cached.
+      await seek(replay, 6000)
       await replay.getByRole('button', { name: 'Canvas', exact: true }).click()
       await replay.locator('.excalidraw canvas').first().waitFor()
-      await replay.getByRole('button', { name: 'Go to end' }).click()
       await replay.getByText('00:06 / 00:06', { exact: true }).waitFor()
       console.log(engine, 'Canvas mounted')
-      let redPixels = 0
-      for (let attempt = 0; attempt < 40 && redPixels < 100; attempt++) {
-        const { data: pixels, info } = await sharp(await replay.locator('.excalidraw').screenshot()).raw().toBuffer({ resolveWithObject: true })
-        redPixels = 0
-        for (let i = 0; i < pixels.length; i += info.channels) if (pixels[i]! > 240 && pixels[i + 1]! < 15 && pixels[i + 2]! < 15) redPixels++
-        console.log(engine, 'Canvas image pixels', redPixels)
-        if (redPixels < 100) await replay.waitForTimeout(100)
+      const assertCanvasImage = async () => {
+        let redPixels = 0
+        for (let attempt = 0; attempt < 40 && redPixels < 100; attempt++) {
+          const { data: pixels, info } = await sharp(await replay.locator('.excalidraw').screenshot()).raw().toBuffer({ resolveWithObject: true })
+          redPixels = 0
+          for (let i = 0; i < pixels.length; i += info.channels) if (pixels[i]! > 240 && pixels[i + 1]! < 15 && pixels[i + 2]! < 15) redPixels++
+          console.log(engine, 'Canvas image pixels', redPixels)
+          if (redPixels < 100) await replay.waitForTimeout(100)
+        }
+        if (redPixels < 100) await replay.screenshot({ path: join(temp, `${engine}-canvas-failure.png`) })
+        assert(redPixels >= 100, `Canvas image did not render; artifacts: ${temp}`)
       }
-      assert(redPixels >= 100, 'Canvas image did not render')
+      await assertCanvasImage()
+      await replay.getByRole('button', { name: 'Editor', exact: true }).click()
+      await seek(replay, 3000)
+      await replay.getByRole('button', { name: 'Canvas', exact: true }).click()
+      await assertCanvasImage()
+      await seek(replay, 0)
+      await seek(replay, 6000)
+      await assertCanvasImage()
       await replay.screenshot({ path: join(temp, `${engine}-canvas.png`) })
       console.log(engine, 'Canvas verified')
       await replay.getByRole('button', { name: 'Toggle theme' }).click()

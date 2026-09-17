@@ -96,17 +96,30 @@ function Canvas({ doc, timestamp, theme }: { doc: Y.Doc; timestamp: number; them
   const { i18n } = useTranslation()
   const [library, setLibrary] = useState<typeof import('@excalidraw/excalidraw') | null>(null)
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null)
+  const [ready, setReady] = useState(false)
+  const scene = useMemo(() => ({
+    elements: orderedCanvasElements(doc), files: canvasFiles(doc),
+    appState: { viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' },
+    scrollToContent: true,
+  }), [doc, timestamp])
   useEffect(() => { void import('@excalidraw/excalidraw').then(setLibrary) }, [])
   useEffect(() => {
-    if (!api || !library) return
-    const elements = orderedCanvasElements(doc)
-    api.addFiles(Object.values(canvasFiles(doc)))
-    api.updateScene({ elements, appState: { viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' }, captureUpdate: library.CaptureUpdateAction.NEVER })
-    if (elements.some(e => !e.isDeleted)) api.scrollToContent(elements.filter(e => !e.isDeleted), { fitToContent: true, animate: false })
-  }, [api, doc, timestamp, library])
+    // The API arrives before async scene initialization, which would overwrite
+    // an early updateScene. Apply the latest frame once initialization finishes.
+    if (!api || !library || !ready) return
+    // Let Excalidraw finish clearing its initial image cache before adding files.
+    const frame = requestAnimationFrame(() => {
+      const { elements, files, appState } = scene
+      api.updateScene({ elements, appState, captureUpdate: library.CaptureUpdateAction.NEVER })
+      api.addFiles(Object.values(files))
+      if (elements.some(e => !e.isDeleted)) api.scrollToContent(elements.filter(e => !e.isDeleted), { fitToContent: true, animate: false })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [api, scene, library, ready])
   if (!library) return null
   const { Excalidraw, MainMenu } = library
   return <div className="sharecode-canvas h-full w-full"><Excalidraw excalidrawAPI={setApi} theme={theme} langCode={i18n.resolvedLanguage === 'zh' ? 'zh-CN' : 'en'}
+    initialData={scene} onChange={(_, state) => { if (!state.isLoading) setReady(true) }}
     viewModeEnabled handleKeyboardGlobally={false} aiEnabled={false} validateEmbeddable={false}
     UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, clearCanvas: false, export: false, saveAsImage: false, toggleTheme: false } }}>
     <MainMenu />

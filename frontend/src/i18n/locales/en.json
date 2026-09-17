@@ -420,7 +420,7 @@
     "manager": {
       "title": "Guest Share Links",
       "description": "Generate single-use invite links that let one guest join this room without an account. Unused links expire after 6 hours.",
-      "activeOnlyHint": "Used invitations stay visible so you can revoke their access.",
+      "activeOnlyHint": "Only unused invitations are listed.",
       "createView": "Create view-only link",
       "createEdit": "Create edit link",
       "loading": "Loading share links...",

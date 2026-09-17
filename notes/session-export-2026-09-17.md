@@ -62,3 +62,11 @@ cd frontend
 SESSION_EXPORT_DEV=1 ENGINE=chromium bun tests/session-export-browser.ts
 SESSION_EXPORT_DEV=1 ENGINE=webkit bun tests/session-export-browser.ts
 ```
+
+## Canvas initialization after seeking
+
+Switching to Canvas after seeking in the editor could leave the exported replay blank: Excalidraw exposes its API before its asynchronous initial scene restore, so that restore could overwrite the frame sent by `updateScene`. The player now supplies the current frame as `initialData` and waits for the first non-loading scene notification before applying the latest replay frame. This also handles a seek during initialization. Frame updates run in a cancellable animation frame after initialization, with elements applied before files; this avoids the initial image-cache reset leaving Firefox/WebKit images at placeholders.
+
+The browser regression seeks before the first Canvas mount, switches back to the editor and seeks backward before remounting Canvas, and seeks while Canvas is mounted. It checks actual rendered image pixels without requiring another seek to make the scene appear. The first case reproduced the failure before the fix.
+
+Validation: production build and the updated local-file replay suite passed in Chromium, Firefox and WebKit, including first mount, remount after backward seeking, and subsequent frame updates with rendered images.

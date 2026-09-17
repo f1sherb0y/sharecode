@@ -420,7 +420,7 @@
     "manager": {
       "title": "访客分享链接",
       "description": "生成一次性访客邀请链接。每个链接仅能使用一次，未使用的链接会在 6 小时后过期。",
-      "activeOnlyHint": "已使用的邀请仍会列出，删除后立即撤销对应访问权限。",
+      "activeOnlyHint": "仅显示尚未使用的邀请链接。",
       "createView": "创建仅查看链接",
       "createEdit": "创建可编辑链接",
       "loading": "加载分享链接中...",
