@@ -1,5 +1,6 @@
 import { type CSSProperties, type Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { loadEditorFont } from '@/lib/editor-font'
 import * as Y from 'yjs'
 import type { HocuspocusProvider } from '@hocuspocus/provider'
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react'
@@ -11,7 +12,7 @@ import { cursor } from '@milkdown/kit/plugin/cursor'
 import { trailing } from '@milkdown/kit/plugin/trailing'
 import { upload, uploadConfig, type Uploader } from '@milkdown/kit/plugin/upload'
 import { collab, collabServiceCtx } from '@milkdown/plugin-collab'
-import { TextSelection } from '@milkdown/kit/prose/state'
+import { Plugin, TextSelection } from '@milkdown/kit/prose/state'
 import {
   toggleStrongCommand,
   toggleEmphasisCommand,
@@ -26,7 +27,7 @@ import {
   toggleStrikethroughCommand,
   insertTableCommand,
 } from '@milkdown/kit/preset/gfm'
-import { insert, callCommand, forceUpdate } from '@milkdown/kit/utils'
+import { $prose, insert, callCommand, forceUpdate } from '@milkdown/kit/utils'
 import { ySyncPluginKey, relativePositionToAbsolutePosition } from 'y-prosemirror'
 import type { Ctx } from '@milkdown/ctx'
 import {
@@ -52,6 +53,7 @@ import { compressImageFile } from '@/lib/image-compress'
 import { mermaidPlugins } from '@/lib/milkdown-mermaid'
 import { imagePlugins } from '@/lib/milkdown-image'
 import { mathPlugins } from '@/lib/milkdown-math'
+import { MarkdownSelectionBlink } from '@/lib/markdown-selection-blink'
 import '@/styles/markdown.css'
 
 // Must-have ProseMirror layout CSS + table base styles for the GFM table node.
@@ -60,6 +62,7 @@ import '@milkdown/kit/prose/tables/style/tables.css'
 
 export interface MarkdownEditorHandle {
   getMarkdown: () => string | null
+  blinkSelection: () => void
 }
 
 interface MarkdownEditorProps {
@@ -71,6 +74,7 @@ interface MarkdownEditorProps {
   followingUserId: string | null
   followingClientId: number | null
   sourceRef?: Ref<MarkdownEditorHandle>
+  onSelectionChange?: (hasSelection: boolean) => void
 }
 
 const MERMAID_SNIPPET = '```mermaid\nflowchart TD\n    A[Start] --> B[End]\n```'
@@ -103,15 +107,25 @@ interface RemoteUserAwareness {
  * selection becomes invisible. We use `colorLight` directly instead, matching
  * the Monaco remote-selection highlight.
  */
-const remoteSelectionBuilder = (user: RemoteUserAwareness) => {
-  const highlight = user.colorLight || 'rgba(59, 130, 246, 0.35)'
+const remoteSelectionBuilder = (user: RemoteUserAwareness, variant?: number) => {
+  const highlight = user.colorLight || 'rgba(59, 130, 246, 0.3)'
   return {
-    style: `background-color: ${highlight}`,
-    class: 'ProseMirror-yjs-selection',
+    style: `--collaborator-selection: ${highlight}; --selection-blink-color: ${user.color || '#3b82f6'}`,
+    class: `ProseMirror-yjs-selection yRemoteSelection${variant == null ? '' : ` selection-blink-${variant}`}`,
   }
 }
 
+const remoteCursorBuilder = (user: RemoteUserAwareness) => {
+  const cursor = document.createElement('span')
+  cursor.className = 'ProseMirror-yjs-cursor collaboration-caret'
+  cursor.style.setProperty('--collaborator-color', user.color || '#3b82f6')
+  cursor.setAttribute('aria-hidden', 'true')
+  cursor.append(document.createTextNode('\u2060'))
+  return cursor
+}
+
 export function MarkdownEditor(props: MarkdownEditorProps) {
+  useEffect(() => { void loadEditorFont().catch(() => {}) }, [])
   const { font, fontSize } = useFontStore()
   return (
     <div translate="no" className="notranslate h-full" style={{ '--md-font-size': `${fontSize}px`, '--md-font-family': fontFamilyStack(font) } as CSSProperties}><MilkdownProvider key={props.ydoc?.guid}>
@@ -129,6 +143,7 @@ function MarkdownEditorInner({
   followingUserId,
   followingClientId,
   sourceRef,
+  onSelectionChange,
 }: MarkdownEditorProps) {
   const { t } = useTranslation()
   const [isImageLoading, setIsImageLoading] = useState(false)
@@ -149,6 +164,9 @@ function MarkdownEditorInner({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastFollowPosRef = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const blinkRef = useRef<MarkdownSelectionBlink | null>(null)
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  onSelectionChangeRef.current = onSelectionChange
 
   const getEditor = useCallback(
     (container: HTMLElement) =>
@@ -158,6 +176,12 @@ function MarkdownEditorInner({
           ctx.update(editorViewOptionsCtx, (prev) => ({
             ...prev,
             editable: () => canEditRef.current,
+            // Read-only text still needs focus for native selection tracking
+            // and y-prosemirror's remote cursor publication.
+            attributes: (state) => ({
+              ...(typeof prev.attributes === 'function' ? prev.attributes(state) : prev.attributes),
+              tabindex: '0',
+            }),
           }))
           ctx.update(uploadConfig.key, (prev) => ({ ...prev, uploader: compressedUploader }))
         })
@@ -170,6 +194,15 @@ function MarkdownEditorInner({
         .use(mermaidPlugins)
         .use(imagePlugins)
         .use(mathPlugins)
+        .use($prose(() => new Plugin({
+          props: { decorations: () => blinkRef.current?.localDecorations() ?? null },
+          view: () => ({
+            update: (view) => {
+              onSelectionChangeRef.current?.(!view.state.selection.empty)
+              blinkRef.current?.update()
+            },
+          }),
+        })))
         .use(collab),
     [],
   )
@@ -201,17 +234,30 @@ function MarkdownEditorInner({
       if (provider.awareness) {
         collabService.setAwareness(provider.awareness)
       }
-      collabService.setOptions({ yCursorOpts: { selectionBuilder: remoteSelectionBuilder } })
+      const cursorOptions = {
+        cursorBuilder: remoteCursorBuilder,
+        selectionBuilder: (user: RemoteUserAwareness, clientId?: number) => remoteSelectionBuilder(user, blinkRef.current?.variant(clientId)),
+        awarenessStateFilter: (_docClientId: number, clientId: number) => clientId !== provider.awareness?.clientID,
+      }
+      collabService.setOptions({ yCursorOpts: cursorOptions })
       const seedClient = ydoc.getMap('meta').get('markdownSeeder')
       if (canEditRef.current && (seedClient == null || seedClient === ydoc.clientID) && !ydoc.getMap('meta').get('markdownInitialized')) {
-        ydoc.transact(() => {
-          if (legacy && ydoc.getXmlFragment('prosemirror').length === 0) collabService.applyTemplate(legacy)
-          ydoc.getMap('meta').set('markdownInitialized', true)
-        })
+        // applyTemplate uses Y.applyUpdate (a remote transaction). Mixing that
+        // with a local metadata write in one transaction makes Yjs detect a
+        // false client-ID collision, leaving awareness with a different ID.
+        if (legacy && ydoc.getXmlFragment('prosemirror').length === 0) collabService.applyTemplate(legacy)
+        ydoc.getMap('meta').set('markdownInitialized', true)
       }
       collabService.connect()
+      if (provider.awareness && bodyRef.current) {
+        blinkRef.current = new MarkdownSelectionBlink(ctx.get(editorViewCtx), provider.awareness, bodyRef.current)
+      }
+      onSelectionChangeRef.current?.(!ctx.get(editorViewCtx).state.selection.empty)
     })
     return () => {
+      blinkRef.current?.destroy()
+      blinkRef.current = null
+      onSelectionChangeRef.current?.(false)
       collabConnectedRef.current = false
       editor.action((ctx) => ctx.get(collabServiceCtx).disconnect())
     }
@@ -222,6 +268,7 @@ function MarkdownEditorInner({
   // debounced change listener can still hold unsent edits when we unmount.
   // XML remains the sole collaborative source of truth while editing Markdown.
   useImperativeHandle(sourceRef, () => ({
+    blinkSelection: () => blinkRef.current?.send(),
     getMarkdown: () => {
       const editor = get()
       if (loading || !editor || !collabConnectedRef.current) return null

@@ -6,8 +6,10 @@ import { useThemeStore, useFontStore } from '@/stores'
 import { fontFamilyStack } from '@/stores/font'
 import { generateUserColor } from '@/lib/utils'
 import { MonacoBinding } from '@/lib/monaco-binding'
+import { MonacoSelectionBlink } from '@/lib/monaco-selection-blink'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
 import { loadMonaco } from '@/lib/monaco-loader'
+import { loadEditorFont, watchEditorFontMetrics } from '@/lib/editor-font'
 import type { Room, Language, User } from '@/types'
 
 type MonacoModule = typeof Monaco
@@ -15,6 +17,7 @@ type MonacoEditorInstance = Monaco.editor.IStandaloneCodeEditor
 type MonacoModelInstance = Monaco.editor.ITextModel
 
 interface UseMonacoEditorProps {
+  enabled?: boolean
   effectiveRoom: Room | null
   ytext: Y.Text | null
   provider: HocuspocusProvider | null
@@ -30,6 +33,7 @@ interface UseMonacoEditorProps {
 }
 
 export function useMonacoEditor({
+  enabled = true,
   effectiveRoom,
   ytext,
   provider,
@@ -44,14 +48,18 @@ export function useMonacoEditor({
   const editorInstanceRef = useRef<MonacoEditorInstance | null>(null)
   const modelRef = useRef<MonacoModelInstance | null>(null)
   const bindingRef = useRef<MonacoBinding | null>(null)
+  const blinkRef = useRef<MonacoSelectionBlink | null>(null)
   const canEditRef = useRef(canEdit)
   canEditRef.current = canEdit
   const [isEditorReady, setIsEditorReady] = useState(false)
+  const [hasSelection, setHasSelection] = useState(false)
 
   const { theme } = useThemeStore()
   const { font, fontSize } = useFontStore()
 
   const destroyEditor = useCallback(() => {
+    blinkRef.current?.destroy()
+    blinkRef.current = null
     bindingRef.current?.destroy()
     bindingRef.current = null
     editorInstanceRef.current?.dispose()
@@ -59,6 +67,7 @@ export function useMonacoEditor({
     modelRef.current?.dispose()
     modelRef.current = null
     setIsEditorReady(false)
+    setHasSelection(false)
   }, [])
 
   useEffect(() => {
@@ -87,10 +96,11 @@ export function useMonacoEditor({
   const isMarkdownMode = effectiveRoom?.language === 'markdown'
 
   useEffect(() => {
-    if (!effectiveRoom || !editorRef.current || !provider || !ytext || editorInstanceRef.current) return
+    if (!enabled || !effectiveRoom || !editorRef.current || !provider || !ytext || editorInstanceRef.current) return
     if (effectiveRoom.isEnded || roomEnded || isMarkdownMode || provider.configuration.name !== effectiveRoom.id) return
 
     let cancelled = false
+    let stopFontWatch: (() => void) | undefined
 
     loadMonaco()
       .then(async (monaco) => {
@@ -101,9 +111,11 @@ export function useMonacoEditor({
         // cached metrics never update — text ends up mispositioned even
         // after the real font arrives. Wait for font loading, with a hard
         // cap so a stalled fetch never blocks the editor from appearing.
+        stopFontWatch = watchEditorFontMetrics(() => monaco.editor.remeasureFonts())
+        const fontReady = loadEditorFont()
         await Promise.race([
-          document.fonts.ready,
-          new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+          fontReady.catch(() => {}),
+          new Promise<void>((resolve) => setTimeout(resolve, 250)),
         ])
         if (cancelled || !editorRef.current) return
 
@@ -131,7 +143,7 @@ export function useMonacoEditor({
 
         // If fonts.ready timed out above, the real font may still arrive
         // afterwards; remeasure then so metrics match the displayed glyphs.
-        document.fonts.ready
+        fontReady
           .then(() => {
             if (cancelled) return
             monaco.editor.remeasureFonts()
@@ -149,6 +161,8 @@ export function useMonacoEditor({
           new Set([editor]),
           provider.awareness ?? null,
         )
+        if (provider.awareness) blinkRef.current = new MonacoSelectionBlink(editor, ytext, provider.awareness, bindingRef.current)
+        editor.onDidChangeCursorSelection(event => setHasSelection(!event.selection.isEmpty()))
 
         editor.focus()
         setIsEditorReady(true)
@@ -160,9 +174,11 @@ export function useMonacoEditor({
 
     return () => {
       cancelled = true
+      stopFontWatch?.()
       destroyEditor()
     }
   }, [
+    enabled,
     effectiveRoom?.id,
     effectiveRoom?.isEnded,
     provider,
@@ -198,12 +214,16 @@ export function useMonacoEditor({
     monacoRef.current.editor.setModelLanguage(modelRef.current, resolveMonacoLanguage(language))
   }, [])
 
+  const blinkSelection = useCallback(() => { blinkRef.current?.send() }, [])
+
   return {
     editorRef,
     monacoRef,
     editorInstanceRef,
     modelRef,
     isEditorReady,
+    hasSelection,
     updateLanguage,
+    blinkSelection,
   }
 }

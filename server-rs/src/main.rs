@@ -83,8 +83,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     room_activity::spawn_inactive_room_cleanup(state.clone());
     share_links::spawn_expired_share_link_cleanup(state.db.clone());
 
+    let cors_config = Arc::clone(&config);
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::mirror_request())
+        .allow_origin(AllowOrigin::predicate(move |origin, _| {
+            origin.to_str().is_ok_and(|value| core::sessions::allowed_origin(&cors_config, value))
+        }))
         .allow_credentials(true)
         .allow_headers(AllowHeaders::mirror_request())
         .allow_methods(AllowMethods::mirror_request());

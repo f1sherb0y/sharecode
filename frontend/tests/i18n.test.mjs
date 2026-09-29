@@ -62,6 +62,9 @@ test('app chrome has no untranslated text or accessible labels', () => {
     function record(node, text) {
       text = text.trim()
       if (!/[a-zA-Z\u4e00-\u9fff]/.test(text) || literals.has(text)) return
+      // Portable exports deliberately use stable user1/user2 identifiers and a
+      // bilingual language selector, independent of the selected UI language.
+      if (source.fileName === 'export/runtime.tsx' && ['user', 'Language / 语言'].includes(text)) return
       untranslated.push(`${source.fileName}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}: ${text}`)
     }
     function visit(node) {

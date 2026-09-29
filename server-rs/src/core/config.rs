@@ -9,6 +9,8 @@ pub struct Config {
     pub jwt_secret: String,
     pub frontend_url: Option<String>,
     pub app_url: Option<String>,
+    /// Extra exact origins (other domains, the public IP) that serve the same app.
+    pub allowed_origins: Vec<String>,
     pub frontend_hash_router: bool,
     pub allow_registration: bool,
     pub log_level: String,
@@ -35,6 +37,13 @@ impl Config {
 
         let frontend_url = env::var("FRONTEND_URL").ok();
         let app_url = env::var("APP_URL").ok();
+        let allowed_origins = env::var("ALLOWED_ORIGINS")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect();
         let frontend_hash_router = env_bool("FRONTEND_HASH_ROUTER", false);
         let allow_registration = env_bool("ALLOW_REGISTRATION", true);
 
@@ -67,6 +76,7 @@ impl Config {
             jwt_secret,
             frontend_url,
             app_url,
+            allowed_origins,
             frontend_hash_router,
             allow_registration,
             log_level,

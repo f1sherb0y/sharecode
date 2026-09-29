@@ -39,6 +39,12 @@ export interface Room {
   position?: string | null
   ownerId: string
   allowEdit: boolean
+  isPrivate?: boolean
+  canViewPlayback?: boolean
+  canManageNotes?: boolean
+  canReadNotes?: boolean
+  canWriteNotes?: boolean
+  shareReadOnly?: boolean
   isPinned?: boolean
   isDeleted?: boolean
   scheduledTime?: string | null
@@ -115,6 +121,7 @@ export interface ShareRoomDetails {
 export interface AuthResponse {
   user: User
   token: string
+  browserSessionId: string
 }
 
 export interface RemoteUser {

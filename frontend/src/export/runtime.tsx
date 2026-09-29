@@ -15,6 +15,8 @@ import { mermaidPlugins } from '@/lib/milkdown-mermaid'
 import { loadMonaco } from '@/lib/monaco-loader'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
 import { DocumentReplay } from '@/lib/document-replay'
+import { CANVAS_FONT, monoCanvasElements } from '@/lib/canvas-font'
+import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_STACK, loadEditorFont, watchEditorFontMetrics } from '@/lib/editor-font'
 import { canvasFiles, orderedCanvasElements } from '@/lib/canvas-sync'
 import { PlaybackControls } from '@/components/features/playback-controls'
 import { RoomViewSwitch } from '@/components/features/room-view-switch'
@@ -31,7 +33,7 @@ import '@/styles/canvas.css'
 
 (window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = 'https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/'
 const session = unpackSession(document.getElementById('session-data')!.textContent!)
-const fontFamily = "'JuliaMono', ui-monospace, monospace"
+const fontFamily = EDITOR_FONT_STACK
 const clock = (ms: number) => {
   const seconds = Math.floor(ms / 1000)
   const hours = Math.floor(seconds / 3600)
@@ -51,13 +53,18 @@ function Code({ doc, language, theme, timestamp }: { doc: Y.Doc; language: Langu
   useEffect(() => {
     let cancelled = false
     let model: Monaco.editor.ITextModel | undefined
+    let stopFontWatch: (() => void) | undefined
     void loadMonaco().then(monaco => {
       if (cancelled || !root.current) return
       const state = latest.current
+      stopFontWatch = watchEditorFontMetrics(() => monaco.editor.remeasureFonts())
+      void loadEditorFont().then(() => {
+        if (!cancelled) monaco.editor.remeasureFonts()
+      }).catch(() => {})
       model = monaco.editor.createModel(state.doc.getText('codemirror').toString(), resolveMonacoLanguage(state.language))
-      editor.current = monaco.editor.create(root.current, createMonacoEditorOptions({ model, fontFamily, fontSize: 12, readOnly: true, theme: state.theme }))
+      editor.current = monaco.editor.create(root.current, createMonacoEditorOptions({ model, fontFamily, fontSize: DEFAULT_EDITOR_FONT_SIZE, readOnly: true, theme: state.theme }))
     })
-    return () => { cancelled = true; editor.current?.dispose(); editor.current = null; model?.dispose() }
+    return () => { cancelled = true; stopFontWatch?.(); editor.current?.dispose(); editor.current = null; model?.dispose() }
   }, [])
   useEffect(() => {
     void loadMonaco().then(monaco => {
@@ -90,7 +97,7 @@ function Markdown({ doc, timestamp, theme }: { doc: Y.Doc; timestamp: number; th
     return () => { cancelled = true; editor.current = null; void instance.destroy() }
   }, [theme])
   useEffect(render, [doc, timestamp])
-  return <div className="md-editor h-full overflow-y-auto" style={{ '--md-font-size': '12px', '--md-font-family': fontFamily } as CSSProperties}><div ref={root} translate="no" className="notranslate min-h-full" /></div>
+  return <div className="md-editor h-full overflow-y-auto" style={{ '--md-font-size': `${DEFAULT_EDITOR_FONT_SIZE}px`, '--md-font-family': fontFamily } as CSSProperties}><div ref={root} translate="no" className="notranslate min-h-full" /></div>
 }
 function Canvas({ doc, timestamp, theme }: { doc: Y.Doc; timestamp: number; theme: 'light' | 'dark' }) {
   const { i18n } = useTranslation()
@@ -98,11 +105,26 @@ function Canvas({ doc, timestamp, theme }: { doc: Y.Doc; timestamp: number; them
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null)
   const [ready, setReady] = useState(false)
   const scene = useMemo(() => ({
-    elements: orderedCanvasElements(doc), files: canvasFiles(doc),
-    appState: { viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' },
+    elements: monoCanvasElements(orderedCanvasElements(doc)), files: canvasFiles(doc),
+    appState: { currentItemFontFamily: CANVAS_FONT, viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' },
     scrollToContent: true,
   }), [doc, timestamp])
-  useEffect(() => { void import('@excalidraw/excalidraw').then(setLibrary) }, [])
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all([import('@excalidraw/excalidraw'), Promise.race([
+      loadEditorFont().catch(() => {}), new Promise(resolve => setTimeout(resolve, 250)),
+    ])]).then(([library]) => {
+      // The standalone player uses upstream CDN JS. Keep the legacy numeric
+      // ID accessible to vendor internals, but let its family-name lookup
+      // resolve to Sarasa. No browser globals or drawing APIs are patched.
+      const families = library.FONT_FAMILY as unknown as Record<string, number>
+      if (families.Cascadia !== CANVAS_FONT) throw new Error('Unexpected Canvas font IDs')
+      Object.defineProperty(families, 'Cascadia', { enumerable: false })
+      families[EDITOR_FONT_STACK] = CANVAS_FONT
+      if (!cancelled) setLibrary(library)
+    })
+    return () => { cancelled = true }
+  }, [])
   useEffect(() => {
     // The API arrives before async scene initialization, which would overwrite
     // an early updateScene. Apply the latest frame once initialization finishes.

@@ -1,3 +1,4 @@
+import { loadCanvasView, prepareEditorView } from '@/lib/editor-loaders'
 import { translateError } from '@/i18n/errors'
 import { type CSSProperties, useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
@@ -9,9 +10,10 @@ import type * as Monaco from 'monaco-editor'
 import pako from 'pako'
 import type * as Y from 'yjs'
 import { DocumentReplay } from '@/lib/document-replay'
+import { canViewRoomPlayback } from '@/lib/room-permissions'
 import { PlaybackControls } from '@/components/features/playback-controls'
 import { RoomViewSwitch } from '@/components/features/room-view-switch'
-const CanvasView = lazy(() => import('@/components/features/canvas-view').then(m => ({ default: m.CanvasView })))
+const CanvasView = lazy(() => loadCanvasView().then(m => ({ default: m.CanvasView })))
 import {
   Button,
   Badge,
@@ -27,18 +29,8 @@ import { useCompactViewport } from '@/hooks'
 import { cn, formatTime } from '@/lib/utils'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
 import { loadMonaco } from '@/lib/monaco-loader'
-import { mermaidPlugins } from '@/lib/milkdown-mermaid'
-import { imagePlugins } from '@/lib/milkdown-image'
-import { mathPlugins } from '@/lib/milkdown-math'
-import { Editor, editorViewOptionsCtx, rootCtx, schemaCtx, serializerCtx } from '@milkdown/kit/core'
-import { commonmark } from '@milkdown/kit/preset/commonmark'
-import { gfm } from '@milkdown/kit/preset/gfm'
-import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror'
-import { replaceAll } from '@milkdown/kit/utils'
-import '@/styles/markdown.css'
-// Must-have ProseMirror layout CSS + table base styles (same as live editor).
-import '@milkdown/kit/prose/view/style/prosemirror.css'
-import '@milkdown/kit/prose/tables/style/tables.css'
+import { loadEditorFont, watchEditorFontMetrics } from '@/lib/editor-font'
+import type { Editor } from '@milkdown/kit/core'
 import type { Room } from '@/types'
 
 const PLAYBACK_SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const
@@ -72,15 +64,6 @@ function decompressUpdate(compressedBase64: string): Uint8Array {
   return pako.ungzip(compressed)
 }
 
-function getCodeFromDocument(doc: Y.Doc, markdownEditor?: Editor | null): string {
-  if (markdownEditor && (doc.getMap('meta').get('markdownInitialized') || doc.getXmlFragment('prosemirror').length > 0)) {
-    return markdownEditor.action((ctx) => ctx.get(serializerCtx)(
-      yXmlFragmentToProseMirrorRootNode(doc.getXmlFragment('prosemirror'), ctx.get(schemaCtx)),
-    ))
-  }
-  return doc.getText('codemirror').toString()
-}
-
 export function PlaybackPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
@@ -93,6 +76,8 @@ export function PlaybackPage() {
   const isCompactViewport = useCompactViewport()
 
   const view = searchParams.get('view') === 'canvas' ? 'canvas' : 'editor'
+  const [editorActivated, setEditorActivated] = useState(view === 'editor')
+  useEffect(() => { if (view === 'editor') setEditorActivated(true) }, [view])
   const replayRef = useRef<DocumentReplay | null>(null)
   const [replayDoc, setReplayDoc] = useState<Y.Doc | null>(null)
   const timestampRef = useRef(0)
@@ -125,6 +110,9 @@ export function PlaybackPage() {
   const markdownContainerRef = useRef<HTMLDivElement>(null)
   const markdownEditorRef = useRef<Editor | null>(null)
   const lastMarkdownRef = useRef<string | null>(null)
+  const markdownRuntime = useRef<typeof import('@/lib/playback-markdown') | null>(null)
+  const getCodeFromDocument = (doc: Y.Doc, editor?: Editor | null) => editor && markdownRuntime.current
+    ? markdownRuntime.current.getMarkdown(doc, editor) : doc.getText('codemirror').toString()
 
   useEffect(() => {
     const normalized = new URLSearchParams(searchParams)
@@ -163,11 +151,7 @@ export function PlaybackPage() {
         if (isCancelled) return
         setRoom(room)
 
-        const isOwner = room.ownerId === user.id
-        const isPrivileged = user.role === 'superuser' ||
-          user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms
-
-        if (!isOwner && !isPrivileged) {
+        if (!canViewRoomPlayback(user, room)) {
           setError(t('playback.accessDenied'))
           setIsLoading(false)
           return
@@ -237,17 +221,22 @@ export function PlaybackPage() {
 
   // Initialize Monaco playback editor (code rooms only)
   useEffect(() => {
-    if (isMarkdown) return
+    if (!editorActivated || isMarkdown) return
     if (!room || !editorRef.current || playbackEditorRef.current) return
     if (updates.length === 0) return
 
     let cancelled = false
+    let stopFontWatch: (() => void) | undefined
 
     try {
       const initialText = getCodeFromDocument(replayRef.current!.doc, markdownEditorRef.current)
       loadMonaco().then((monaco) => {
         if (cancelled || !editorRef.current) return
         monacoRef.current = monaco
+        stopFontWatch = watchEditorFontMetrics(() => monaco.editor.remeasureFonts())
+        void loadEditorFont().then(() => {
+          if (!cancelled) monaco.editor.remeasureFonts()
+        }).catch(() => {})
 
         const model = monaco.editor.createModel(
           initialText,
@@ -275,46 +264,41 @@ export function PlaybackPage() {
 
     return () => {
       cancelled = true
+      stopFontWatch?.()
       playbackEditorRef.current?.dispose()
       playbackEditorRef.current = null
       playbackModelRef.current?.dispose()
       playbackModelRef.current = null
     }
-  }, [room, updates, isMarkdown])
+  }, [editorActivated, room, updates, isMarkdown])
 
   // Initialize read-only Milkdown preview for markdown rooms.
   // Reconstruct the canonical XML fragment, then serialize with the same schema as the
   // live editor (including mermaid diagrams and inline images) instead of
   // showing raw base64 data-URLs in a code editor.
   useEffect(() => {
-    if (!isMarkdown || !room || updates.length === 0) return
+    if (!editorActivated || !isMarkdown || !room || updates.length === 0) return
     if (!markdownContainerRef.current || markdownEditorRef.current) return
 
     let cancelled = false
     const container = markdownContainerRef.current
 
-    const editor = Editor.make()
-      .config((ctx) => {
-        ctx.set(rootCtx, container)
-        ctx.update(editorViewOptionsCtx, (prev) => ({
-          ...prev,
-          editable: () => false,
-        }))
-      })
-      .use(commonmark)
-      .use(gfm)
-      .use(mermaidPlugins)
-      .use(imagePlugins)
-      .use(mathPlugins)
-
-    editor
-      .create()
-      .then(() => {
+    let editor: Editor | undefined
+    void import('@/lib/playback-markdown').then(async runtime => {
+      if (cancelled) return
+      markdownRuntime.current = runtime
+      editor = runtime.createMarkdownPlayback(container)
+      await editor.create()
+      if (cancelled) { await editor.destroy(); return }
+      return editor
+    })
+      .then((editor) => {
+        if (!editor) return
         if (cancelled) return
         markdownEditorRef.current = editor
         lastMarkdownRef.current = null
         const text = getCodeFromDocument(replayRef.current!.doc, markdownEditorRef.current)
-        editor.action(replaceAll(text))
+        markdownRuntime.current!.replaceMarkdown(editor, text)
         lastMarkdownRef.current = text
       })
       .catch((err) => {
@@ -323,11 +307,11 @@ export function PlaybackPage() {
 
     return () => {
       cancelled = true
-      void editor.destroy()
+      void editor?.destroy()
       markdownEditorRef.current = null
       lastMarkdownRef.current = null
     }
-  }, [isMarkdown, room, updates])
+  }, [editorActivated, isMarkdown, room, updates])
 
   // Cleanup
   useEffect(() => {
@@ -359,7 +343,7 @@ export function PlaybackPage() {
       if (!editor) return
       const text = getCodeFromDocument(replayRef.current!.doc, markdownEditorRef.current)
       if (text === lastMarkdownRef.current) return
-      editor.action(replaceAll(text))
+      markdownRuntime.current!.replaceMarkdown(editor, text)
       lastMarkdownRef.current = text
       return
     }
@@ -459,24 +443,24 @@ export function PlaybackPage() {
             {room?.language}
           </Badge>
         </div>
-        <RoomViewSwitch value={view} onChange={value => setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', value); return next }, { replace: true })} />
+        <RoomViewSwitch onPrepare={target => prepareEditorView(target, isMarkdown)} value={view} onChange={value => setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', value); return next }, { replace: true })} />
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <Button
+          {room && <Button
             variant={showNotes ? 'secondary' : 'ghost'}
             size="icon"
             onClick={() => setShowNotes(!showNotes)}
             title={t('playback.notes')}
           >
             <StickyNote className="h-4 w-4" />
-          </Button>
+          </Button>}
         </div>
       </header>
 
       {/* Editor + Notes */}
       <div className="relative flex-1 flex overflow-hidden min-w-0">
         <div className="flex-1 overflow-hidden min-w-0">
-          <div className={view === 'canvas' ? 'hidden' : 'h-full w-full'}>
+          {editorActivated && <div className={view === 'canvas' ? 'hidden' : 'h-full w-full'}>
           {isMarkdown ? (
             // `.md-editor` wrapper reuses the live editor's typography & theme CSS
             <div className="md-editor h-full w-full overflow-y-auto" style={{ '--md-font-size': `${fontSize}px`, '--md-font-family': fontFamilyStack(font) } as CSSProperties}>
@@ -485,14 +469,14 @@ export function PlaybackPage() {
           ) : (
             <div ref={editorRef} className="h-full w-full" />
           )}
-          </div>
+          </div>}
           {view === 'canvas' && replayDoc && <Suspense fallback={<Spinner />}>
             <CanvasView key={replayDoc.guid} doc={replayDoc} canEdit={false} theme={theme} replay />
           </Suspense>}
         </div>
 
         {/* Notes panel */}
-        {showNotes && roomId && (
+        {showNotes && roomId && room && (
           <div
             className={cn(
               'border-l bg-background flex flex-col',
@@ -506,7 +490,7 @@ export function PlaybackPage() {
                 <StickyNote className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs font-medium">{t('playback.notes')}</span>
                 {notes.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">{notes.length}</Badge>
+                  <Badge variant="secondary" className="text-[11px] px-1 py-0 h-4">{notes.length}</Badge>
                 )}
               </div>
               <Button

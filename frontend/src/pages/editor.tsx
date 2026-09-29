@@ -1,3 +1,4 @@
+import { loadCanvasView, loadMarkdownEditor, prepareEditorView } from '@/lib/editor-loaders'
 import { LANGUAGES } from '@/types'
 import { translateError } from '@/i18n/errors'
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
@@ -23,7 +24,6 @@ import {
   Sun,
   Moon,
 } from 'lucide-react'
-import * as Y from 'yjs'
 import {
   Button,
   Badge,
@@ -64,10 +64,10 @@ import { generateUserColor, cn, formatDateTime } from '@/lib/utils'
 import type { Language } from '@/types'
 import type { MarkdownEditorHandle } from '@/components/features/markdown-editor'
 
-const CanvasView = lazy(() => import('@/components/features/canvas-view').then(m => ({ default: m.CanvasView })))
+const CanvasView = lazy(() => loadCanvasView().then(m => ({ default: m.CanvasView })))
 
 const MarkdownEditor = lazy(() =>
-  import('@/components/features/markdown-editor').then((m) => ({ default: m.MarkdownEditor }))
+  loadMarkdownEditor().then((m) => ({ default: m.MarkdownEditor }))
 )
 
 
@@ -84,7 +84,7 @@ export function EditorPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
   const viewportHeight = useViewportHeight()
-  const { token: authToken } = useAuthStore()
+  const { token: authToken, sessionId } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
   const isCompactViewport = useCompactViewport()
   const isNarrowViewport = useCompactViewport('(max-width: 767px)')
@@ -99,10 +99,11 @@ export function EditorPage() {
   } | null>(null)
   const view = searchParams.get('view') === 'canvas' ? 'canvas' : 'editor'
   const isCanvas = view === 'canvas'
+  const [editorActivated, setEditorActivated] = useState(!isCanvas)
+  useEffect(() => { if (!isCanvas) setEditorActivated(true) }, [isCanvas])
   const [canvasPending, setCanvasPending] = useState(false)
   const codeRunnerPosition = parseRunnerPosition(searchParams.get('runner'))
   const visibleRunnerPosition = isNarrowViewport ? 'bottom' : codeRunnerPosition
-  const shellRef = useRef<HTMLDivElement>(null)
 
   // State for End Room Dialog
   const [isEndRoomDialogOpen, setIsEndRoomDialogOpen] = useState(false)
@@ -141,7 +142,6 @@ export function EditorPage() {
     isGuestMode,
     canEdit,
     canChangeLanguage,
-    isOwner,
     canManageRoom,
     canEndRoom,
     roomEnded,
@@ -157,6 +157,7 @@ export function EditorPage() {
 
   const isMarkdown = effectiveRoom?.language === 'markdown'
   const markdownSourceRef = useRef<MarkdownEditorHandle | null>(null)
+  const [markdownHasSelection, setMarkdownHasSelection] = useState(false)
 
   const [localError, setLocalError] = useState('')
   const displayError = roomError || localError
@@ -197,7 +198,7 @@ export function EditorPage() {
   const { provider, ydoc, ytext, ymeta, isConnected, isSynced, canWrite, isSaved: documentSaved, waitForSaved, syncError, storageFailed, onlineUsers } = useYjsProvider(
     shouldConnectWs ? wsDocumentId : '',
     shouldConnectWs ? wsToken : '',
-    handleStatelessMessage
+    handleStatelessMessage, sessionId
   )
 
   const isSaved = documentSaved && !canvasPending
@@ -209,8 +210,11 @@ export function EditorPage() {
     editorInstanceRef,
     modelRef,
     isEditorReady,
+    hasSelection,
     updateLanguage,
+    blinkSelection,
   } = useMonacoEditor({
+    enabled: editorActivated,
     effectiveRoom,
     ytext,
     provider,
@@ -368,23 +372,14 @@ export function EditorPage() {
   }, [canEdit])
 
   const handleBlink = useCallback(() => {
-    if (!provider?.awareness || !editorInstanceRef.current || !modelRef.current || !ytext) return
-
-    const selection = editorInstanceRef.current.getSelection()
-    if (!selection) return
-
-    const anchor = modelRef.current.getOffsetAt(selection.getStartPosition())
-    const head = modelRef.current.getOffsetAt(selection.getEndPosition())
-
-    provider.awareness.setLocalStateField('blink', {
-      anchor: Y.createRelativePositionFromTypeIndex(ytext, anchor),
-      head: Y.createRelativePositionFromTypeIndex(ytext, head),
-      ts: Date.now(),
-    })
-  }, [provider, editorInstanceRef, modelRef, ytext])
+    if (!isConnected || !isSynced || isCanvas) return
+    if (isMarkdown) markdownSourceRef.current?.blinkSelection()
+    else blinkSelection()
+  }, [isConnected, isSynced, isMarkdown, isCanvas, blinkSelection])
 
   const canBlink =
-    !!provider?.awareness && isEditorReady
+    !!provider?.awareness && isConnected && isSynced && !isCanvas &&
+    (isMarkdown ? markdownHasSelection : isEditorReady && hasSelection)
 
   // Loading View
   if (isLoading) {
@@ -427,7 +422,6 @@ export function EditorPage() {
   return (
     <TooltipProvider>
       <div
-        ref={shellRef}
         className="editor-shell isolate flex flex-col h-screen overflow-clip"
         style={{ height: viewportHeight }}
       >
@@ -460,25 +454,25 @@ export function EditorPage() {
             </span>
           </div>
 
-          <RoomViewSwitch value={view} onChange={next => { setFollowingUserId(null); setFollowingClientId(null); changeView(next) }} />
+          <RoomViewSwitch onPrepare={target => prepareEditorView(target, isMarkdown)} value={view} onChange={next => { setFollowingUserId(null); setFollowingClientId(null); changeView(next) }} />
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-1 sm:gap-1 shrink-0">
+          <div className="editor-toolbar-actions flex items-center gap-1 shrink-0">
             {/* Run Code (Visible on all sizes if editable) */}
             {canEdit && !isMarkdown && !isCanvas && (
               <Button
-                variant={isCompactViewport ? 'ghost' : 'default'}
-                size={isCompactViewport ? 'icon' : 'default'}
+                variant={isCompactViewport || isNarrowViewport ? 'ghost' : 'default'}
+                size={isCompactViewport || isNarrowViewport ? 'icon' : 'default'}
                 aria-label={t('codeRunner.run')}
                 onClick={handleRunCode}
                 disabled={isCodeRunning || !canWrite}
               >
                 {isCodeRunning ? (
-                  <Loader2 className="h-4 w-4 animate-spin sm:mr-1" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Play className="h-4 w-4 sm:mr-1" />
+                  <Play className="h-4 w-4" />
                 )}
-                {!isCompactViewport && <span className="hidden sm:inline">{t('codeRunner.run')}</span>}
+                {!isCompactViewport && !isNarrowViewport && <span>{t('codeRunner.run')}</span>}
               </Button>
             )}
 
@@ -492,6 +486,16 @@ export function EditorPage() {
               </div>
             )}
 
+            {!isCanvas && (
+              <Button variant="ghost" size="icon" aria-label={t('editor.toolbar.blink')} title={t('editor.toolbar.blink')}
+                onPointerDown={event => event.preventDefault()} onClick={handleBlink} disabled={!canBlink}>
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" aria-label={t('common.toggleTheme')} title={t('common.toggleTheme')} onClick={toggleTheme}>
+              {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </Button>
+
             {/* Secondary actions */}
             <div>
               <DropdownMenu>
@@ -501,20 +505,11 @@ export function EditorPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={toggleTheme}>
-                    {theme === 'light' ? <Moon className="mr-1.5 h-4 w-4" /> : <Sun className="mr-1.5 h-4 w-4" />}
-                    {t('common.toggleTheme')}
-                  </DropdownMenuItem>
+                  {/* Include body portals (menus, dialogs and editor popups) in fullscreen. */}
                   {isFullscreenSupported && (
-                    <DropdownMenuItem onClick={() => { void toggleFullscreen(shellRef.current) }}>
+                    <DropdownMenuItem onClick={() => { void toggleFullscreen(document.documentElement) }}>
                       {isFullscreen ? <Minimize2 className="mr-1.5 h-4 w-4" /> : <Maximize className="mr-1.5 h-4 w-4" />}
                       {isFullscreen ? t('common.exitFullscreen') : t('common.enterFullscreen')}
-                    </DropdownMenuItem>
-                  )}
-                  {!isMarkdown && !isCanvas && (
-                    <DropdownMenuItem onClick={handleBlink} disabled={!canBlink}>
-                      <Sparkles className="h-4 w-4 mr-1.5" />
-                      {t('editor.toolbar.blink')}
                     </DropdownMenuItem>
                   )}
 
@@ -600,7 +595,7 @@ export function EditorPage() {
         <div className="relative z-0 flex flex-1 overflow-hidden min-w-0">
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             <div className="relative z-0 flex-1 overflow-hidden">
-              <div className={isCanvas ? 'hidden' : 'h-full w-full'}>
+              {editorActivated && <div className={isCanvas ? 'hidden' : 'h-full w-full'}>
               {isMarkdown ? (
                 <Suspense
                   fallback={
@@ -612,6 +607,7 @@ export function EditorPage() {
                   <MarkdownEditor
                     key={ydoc?.guid}
                     sourceRef={markdownSourceRef}
+                    onSelectionChange={setMarkdownHasSelection}
                     ytext={ytext}
                     canEdit={canEdit && canWrite}
                     provider={provider}
@@ -624,7 +620,7 @@ export function EditorPage() {
               ) : (
                 <div ref={editorRef} translate="no" className="notranslate h-full w-full" />
               )}
-              </div>
+              </div>}
               {isCanvas && ydoc && isSynced && <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner /></div>}>
                 <CanvasView key={ydoc.guid} doc={ydoc} canEdit={canEdit && canWrite} theme={theme} provider={provider} followClientId={followingClientId} onFollowChange={handleCanvasFollowChange} onPending={setCanvasPending} />
               </Suspense>}
@@ -640,7 +636,6 @@ export function EditorPage() {
                 position="bottom"
                 onPositionChange={isNarrowViewport ? undefined : (position) => updateEditorParams({ runner: position })}
                 roomId={roomId}
-                isOwner={isOwner}
                 expanded={isRunnerExpanded}
                 onExpandedChange={setIsRunnerExpanded}
               />
@@ -657,14 +652,13 @@ export function EditorPage() {
               position="right"
               onPositionChange={isNarrowViewport ? undefined : (position) => updateEditorParams({ runner: position })}
               roomId={roomId}
-              isOwner={isOwner}
               expanded={isRunnerExpanded}
               onExpandedChange={setIsRunnerExpanded}
             />
           )}
         </div>
 
-        <footer className="editor-statusbar relative z-30 shrink-0 border-t bg-background px-1.5 text-[11px] text-muted-foreground safe-bottom">
+        <footer className="editor-statusbar relative z-30 shrink-0 border-t bg-background px-1.5 text-xs text-muted-foreground safe-bottom">
           <div className="flex min-w-0 items-center gap-1.5" role="status" aria-live="polite" aria-atomic="true">
             <span className={cn('flex items-center gap-1', !isConnected && 'text-destructive')}>
               {isConnected ? <Wifi className="h-3 w-3 text-success" /> : <WifiOff className="h-3 w-3" />}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '@/api'
-import { canEndRoom as canEndRoomByMatrix, canManageRoomShares, canChangeRoomLanguage } from '@/lib/room-permissions'
+import { canEndRoom as canEndRoomByMatrix, canManageRoomShares, canChangeRoomLanguage, canViewRoomPlayback } from '@/lib/room-permissions'
 import { useAuthStore } from '@/stores'
 import type * as Y from 'yjs'
 import type { Room, Language, User, ShareGuest } from '@/types'
@@ -19,7 +19,6 @@ export interface EditorRoomState {
   isOwner: boolean
   canManageRoom: boolean
   canEndRoom: boolean
-  isPrivileged: boolean
   canViewPlayback: boolean
   roomEnded: boolean
   roomEndedAt: string | null
@@ -121,23 +120,14 @@ export function useEditorRoom(): EditorRoomState {
   }, [isGuestMode, guestProfile])
 
   const isOwner = !isGuestMode && (effectiveRoom?.isOwner ?? effectiveRoom?.ownerId === user?.id)
-  const canChangeLanguage = !isGuestMode && canChangeRoomLanguage(user, effectiveRoom?.ownerId)
-  const hasWriteAllPermission = !isGuestMode && (user?.canWriteAllRooms ?? false)
+  const canChangeLanguage = !isGuestMode && !effectiveRoom?.shareReadOnly && canChangeRoomLanguage(user, effectiveRoom?.ownerId)
   const canEdit = isGuestMode
     ? (guestProfile?.guest.canEdit ?? false)
-    : hasWriteAllPermission || isOwner || effectiveRoom?.canEdit === true
+    : effectiveRoom?.canEdit === true
   const canManageRoom =
-    !isGuestMode && canManageRoomShares(user, effectiveRoom?.ownerId)
+    !isGuestMode && !effectiveRoom?.shareReadOnly && canManageRoomShares(user, effectiveRoom?.ownerId)
   const canEndRoom = !isGuestMode && canEndRoomByMatrix(user, effectiveRoom?.ownerId)
-  const hasGlobalReadPermission =
-    !isGuestMode &&
-    !!user &&
-    (user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms)
-  const isPrivileged =
-    !isGuestMode &&
-    !!user &&
-    (user.role === 'superuser' || hasGlobalReadPermission)
-  const canViewPlayback = !isGuestMode && (isOwner || isPrivileged)
+  const canViewPlayback = !isGuestMode && canViewRoomPlayback(user, effectiveRoom)
 
   // Redirect to playback when room ends (privileged users)
   useEffect(() => {
@@ -224,7 +214,6 @@ export function useEditorRoom(): EditorRoomState {
     isOwner,
     canManageRoom,
     canEndRoom,
-    isPrivileged,
     canViewPlayback,
     roomEnded,
     roomEndedAt,

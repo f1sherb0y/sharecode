@@ -25,19 +25,20 @@ const wait = async predicate => { for (let i=0;i<200;i++) { if(predicate())retur
 try {
   await wait(() => peer.synced)
   assert.equal(peer.authorizedScope, 'readonly')
-  for (const [token, language] of [[root,'java'], [actors.admin.token,'c'], [actors.readonly.token,'cpp'], [actors.restricted.token,'typescript'], [actors.owner.token,'javascript']]) {
+  for (const [token, language] of [[root,'java'], [actors.admin.token,'c'], [actors.readonly.token,'cpp'], [actors.owner.token,'javascript']]) {
     await ok('/api/rooms/' + room.id, 'PUT', { language }, token)
     await wait(() => messages.at(-1)?.language === language)
     assert.equal((await ok('/api/rooms/' + room.id, 'GET', undefined, actors.owner.token)).room.language, language)
   }
   assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors.member.token)).status, 404)
+  assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors.restricted.token)).status, 404)
   assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python', name:'not allowed' }, actors.restricted.token)).status, 404)
   assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'bogus' }, root)).status, 400)
   peer.destroy(); messages.length=0
   peer = new HocuspocusProvider({ url: API.replace('http','ws')+'/api/ws', name: room.id, document:doc, token:actors.readonly.token, onStateless:({payload})=>messages.push(JSON.parse(payload)) })
   await wait(() => messages.some(m=>m.type==='room-language' && m.language==='javascript'))
   assert.equal(peer.authorizedScope, 'readonly')
-  console.log('PASS owner/admin/superuser language permissions; restricted admin settings-only; ordinary member denied; read-only live sync and reconnect')
+  console.log('PASS owner/admin/superuser language permissions; restricted admin denied; ordinary member denied; read-only live sync and reconnect')
   const samples = [
     ['python', 'print(input())'],
     ['java', 'public class Main { public static void main(String[] args) { System.out.println(new java.util.Scanner(System.in).nextLine()); } }'],

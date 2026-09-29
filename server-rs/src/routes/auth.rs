@@ -11,6 +11,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::core::audit::{self, ClientInfo};
+use crate::core::sessions;
 
 use crate::{
     auth::{build_user_claims, generate_user_token, verify_token, TokenPayload},
@@ -45,8 +46,11 @@ pub struct ChangePasswordPayload {
 
 pub async fn register(
     State(state): State<AppState>,
+    mut client: ClientInfo,
+    headers: HeaderMap,
     Json(payload): Json<RegisterPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
+    sessions::check_origin(&state.config, &headers)?;
     if !state.config.allow_registration {
         return Err(ApiError::not_found("Not found"));
     }
@@ -91,6 +95,11 @@ pub async fn register(
         .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
     let color = random_user_color();
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let user = sqlx::query_as::<_, UserRow>(
         r#"
         INSERT INTO "User" (id, email, username, password, color)
@@ -115,15 +124,35 @@ pub async fn register(
     .bind(&username)
     .bind(&hashed_password)
     .bind(&color)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| crate::db::user_creation_error(err))?;
 
-    let claims = build_user_claims(&user, Utc::now());
+    audit::identify_login_device(&mut tx, &mut client, &user.id).await?;
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "user.registered",
+        Some(&user.id),
+        Some(&user.username),
+        Some(&user.id),
+        true,
+        None,
+        None,
+        json!({}),
+    )
+    .await?;
+    let (session_id, secret) = sessions::create(&mut tx, &user, client.device_id).await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
+    let mut claims = build_user_claims(&user, Utc::now());
+    claims.session_id = Some(session_id.clone());
     let token = generate_user_token(&state.config, claims)?;
 
     Ok((
         StatusCode::CREATED,
+        [(header::SET_COOKIE, sessions::cookie_header(&state.config, &secret)), (header::CACHE_CONTROL, "no-store".parse().unwrap())],
         Json(json!({
             "user": {
                 "id": user.id,
@@ -136,15 +165,18 @@ pub async fn register(
                 "canDeleteAllRooms": user.can_delete_all_rooms,
             },
             "token": token,
+            "browserSessionId": session_id,
         })),
     ))
 }
 
 pub async fn login(
     State(state): State<AppState>,
-    client: ClientInfo,
+    mut client: ClientInfo,
+    headers: HeaderMap,
     Json(payload): Json<LoginPayload>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<impl IntoResponse, ApiError> {
+    sessions::check_origin(&state.config, &headers)?;
     let username = payload.username.unwrap_or_default();
     let password = payload.password.unwrap_or_default();
 
@@ -238,11 +270,14 @@ pub async fn login(
         return Err(ApiError::unauthorized("Invalid credentials"));
     }
 
-    let claims = build_user_claims(&user, Utc::now());
-    let token = generate_user_token(&state.config, claims)?;
-
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
+    audit::identify_login_device(&mut tx, &mut client, &user.id).await?;
     audit::record(
-        &state.db,
+        &mut *tx,
         &client,
         "login",
         Some(&user.id),
@@ -253,7 +288,14 @@ pub async fn login(
     )
     .await?;
 
-    Ok(Json(json!({
+    let (session_id, secret) = sessions::create(&mut tx, &user, client.device_id).await?;
+    let mut claims = build_user_claims(&user, Utc::now());
+    claims.session_id = Some(session_id.clone());
+    let token = generate_user_token(&state.config, claims)?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
+    Ok(([(header::SET_COOKIE, sessions::cookie_header(&state.config, &secret)), (header::CACHE_CONTROL, "no-store".parse().unwrap())], Json(json!({
         "user": {
             "id": user.id,
             "email": user.email,
@@ -265,15 +307,18 @@ pub async fn login(
             "canDeleteAllRooms": user.can_delete_all_rooms,
         },
         "token": token,
-    })))
+        "browserSessionId": session_id,
+    }))))
 }
 
 pub async fn change_password(
     State(state): State<AppState>,
     auth_user: crate::auth::AuthUser,
     client: ClientInfo,
+    headers: HeaderMap,
     Json(payload): Json<ChangePasswordPayload>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<impl IntoResponse, ApiError> {
+    sessions::check_origin(&state.config, &headers)?;
     let old_password = payload.old_password.unwrap_or_default();
     let new_password = payload.new_password.unwrap_or_default();
 
@@ -315,7 +360,7 @@ pub async fn change_password(
     .await
     .map_err(|err| db_error(err, "Failed to load user"))?;
 
-    let user = match user {
+    let mut user = match user {
         Some(user) if !user.is_deleted => user,
         _ => return Err(ApiError::unauthorized("Invalid token")),
     };
@@ -324,6 +369,17 @@ pub async fn change_password(
         .map_err(|err| ApiError::internal(format!("Failed to verify password: {err}")))?;
 
     if !valid_password {
+        audit::record(
+            &state.db,
+            &client,
+            "password.changed",
+            Some(&user.id),
+            Some(&user.username),
+            Some(&user.id),
+            false,
+            Some("invalid_credentials"),
+        )
+        .await?;
         return Err(ApiError::bad_request("Current password is incorrect"));
     }
 
@@ -354,14 +410,16 @@ pub async fn change_password(
         None,
     )
     .await?;
+    user.token_version = version;
+    let (session_id, secret) = sessions::create(&mut tx, &user, client.device_id).await?;
     let mut claims = build_user_claims(&user, Utc::now());
-    claims.token_version = version;
+    claims.session_id = Some(session_id.clone());
     let token = generate_user_token(&state.config, claims)?;
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to commit password update"))?;
     state.ws.revoke_actor(&auth_user.id).await;
-    Ok(Json(json!({"message":"Password updated", "token": token})))
+    Ok(([(header::SET_COOKIE, sessions::cookie_header(&state.config, &secret)), (header::CACHE_CONTROL, "no-store".parse().unwrap())], Json(json!({"message":"Password updated", "token": token, "browserSessionId": session_id}))))
 }
 
 pub async fn get_profile(
@@ -394,10 +452,13 @@ pub async fn get_profile(
                     "tokenVersion" as token_version, "lastSeen" as last_seen
                 FROM "User"
                 WHERE id = $1 AND "tokenVersion" = $2 AND NOT "isDeleted"
+                  AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM "BrowserSession" s
+                    WHERE s.id=$3 AND s."userId"="User".id AND s."tokenVersion"=$2 AND s."expiresAt">NOW()))
                 "#,
             )
             .bind(&user_payload.user_id)
             .bind(user_payload.token_version)
+            .bind(&user_payload.session_id)
             .fetch_optional(&state.db)
             .await
             .map_err(|err| db_error(err, "Failed to load profile"))?;

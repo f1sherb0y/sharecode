@@ -435,9 +435,9 @@ export function SettingsPage() {
                       <span className="font-medium text-xs">{t('settings.shortcuts.title')}</span>
                     </div>
                     <div className="text-xs text-muted-foreground grid grid-cols-2 gap-1">
-                      <span><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+H</kbd> {t('settings.shortcuts.hide')}</span>
-                      <span><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+T</kbd> {t('settings.shortcuts.top')}</span>
-                      <span className="col-span-2"><kbd className="px-1 bg-background rounded text-[10px]">Ctrl+Shift+U/I/O/J/K/L/M/,/.</kbd> {t('settings.shortcuts.move')}</span>
+                      <span><kbd className="px-1 bg-background rounded text-[11px]">Ctrl+Shift+H</kbd> {t('settings.shortcuts.hide')}</span>
+                      <span><kbd className="px-1 bg-background rounded text-[11px]">Ctrl+Shift+T</kbd> {t('settings.shortcuts.top')}</span>
+                      <span className="col-span-2"><kbd className="px-1 bg-background rounded text-[11px]">Ctrl+Shift+U/I/O/J/K/L/M/,/.</kbd> {t('settings.shortcuts.move')}</span>
                     </div>
                   </div>
                 </CardContent>

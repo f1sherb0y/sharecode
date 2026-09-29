@@ -28,7 +28,7 @@ test('renders inline and multiline block math and preserves Markdown through pla
   const markdown = '行内 $x^2 + y^2$ 公式\n\n$$\n\\frac{a}{b} + \\sum_{i=1}^{n} i\n$$\n\n`$literal$`\n\n```js\nconst x = "$literal$"\n```'
   await page.evaluate((text) => window.mathTest.replace(text), markdown)
   assert.equal(await page.locator('.md-math-inline .katex').count(), 1)
-  assert.equal(await page.locator('.md-math-block .katex-display').count(), 1)
+  assert.equal(await page.locator('.md-math-block math[display="block"]').count(), 1)
   assert.equal(await page.locator('code .katex').count(), 0)
   const before = await page.evaluate(() => window.mathTest.json())
   const serialized = await page.evaluate(() => window.mathTest.markdown())
@@ -109,7 +109,7 @@ test('toolbar insertion renders math and read-only viewers cannot edit formulas'
     window.mathTest.insert('$$\nE = mc^2\n$$')
   })
   assert.equal(await page.locator('.md-math-inline .katex').count(), 1)
-  assert.equal(await page.locator('.md-math-block .katex-display').count(), 1)
+  assert.equal(await page.locator('.md-math-block math[display="block"]').count(), 1)
   const before = await page.evaluate(() => window.mathTest.markdown())
   await page.evaluate(() => window.mathTest.readonly(true))
   await page.locator('.md-math-block .md-math-preview').click()

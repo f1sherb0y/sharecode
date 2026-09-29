@@ -38,6 +38,10 @@ export const createMonacoEditorOptions = ({
   model,
   automaticLayout: true,
   minimap: { enabled: false },
+  // The runner owns the pane divider; Monaco's ruler border sits before the scrollbar.
+  overviewRulerBorder: false,
+  selectionHighlight: false,
+  occurrencesHighlight: 'off',
   wordWrap: 'on',
   wrappingStrategy: 'advanced',
   scrollBeyondLastLine: false,

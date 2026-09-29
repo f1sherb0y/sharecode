@@ -86,8 +86,7 @@ try {
     assert.equal(canvasTheme.primary,canvasTheme.appPrimary)
     assert.equal(canvasTheme.surface,canvasTheme.appSurface)
     await page.screenshot({path:`/tmp/sharecode-canvas-light-${engine}.png`})
-    await page.getByRole('button',{name:'More actions',exact:true}).click()
-    await page.getByRole('menuitem',{name:'Toggle theme',exact:true}).click()
+    await page.getByRole('button',{name:'Toggle theme',exact:true}).click()
     await page.locator('.excalidraw.theme--dark').waitFor()
     await page.screenshot({path:`/tmp/sharecode-canvas-dark-${engine}.png`})
     // Both website and native avatar controls must operate the same Follow state.

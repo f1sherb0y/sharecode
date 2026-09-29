@@ -36,7 +36,8 @@
       "loginLink": "登录",
       "disabled": "注册功能已被禁用。请联系管理员获取访问权限。",
       "failed": "注册失败，请重试。"
-    }
+    },
+    "logoutFailed": "退出登录失败，请检查网络后重试。"
   },
   "join": {
     "title": "加入房间",
@@ -62,6 +63,8 @@
     "create": {
       "title": "创建新房间",
       "name": "房间名称",
+      "private": "设为私密房间",
+      "privateHint": "仅自己、受邀成员和级别高于你的账户可访问。房间结束后，普通受邀成员无法再访问。",
       "namePlaceholder": "输入房间名称",
       "language": "编程语言",
       "company": "公司（可选）",
@@ -95,7 +98,15 @@
       "selectedUsers_one": "已选择 {{count}} 个用户",
       "selectedUsers_other": "已选择 {{count}} 个用户"
     },
+    "columns": {
+      "name": "房间",
+      "language": "语言",
+      "status": "状态",
+      "people": "人数",
+      "time": "会话时间"
+    },
     "list": {
+      "private": "私密房间",
       "loading": "加载房间中...",
       "empty": "暂无房间。创建一个开始吧！",
       "owner": "所有者",
@@ -196,6 +207,7 @@
       "selectFont": "选择字体"
     },
     "errors": {
+      "sessionExpired": "登录已过期，请重新登录以恢复连接。尚未确认保存的编辑仍保留在此设备。",
       "accessDenied": "访问被拒绝，请重新打开此房间的分享链接。",
       "accessRevoked": "你对此房间的访问权限已被撤销。",
       "pendingReadOnly": "本标签页有尚未确认的编辑，但当前只有只读权限。请恢复编辑权限后重试，未确认内容仍保留在本机。",
@@ -582,7 +594,7 @@
   },
   "notes": {
     "placeholder": "输入笔记...",
-    "empty": "暂无笔记，在下方添加。",
+    "empty": "暂无笔记。",
     "add": "添加",
     "editPlaceholder": "点击编辑",
     "loading": "加载笔记中...",
@@ -592,7 +604,7 @@
   },
   "audit": {
     "title": "审计日志",
-    "description": "记录登录尝试、访客加入及敏感账号操作。IP 代表网络连接，不一定能识别具体操作者。",
+    "description": "账号及房间操作，按时间倒序排列。第一页每 15 秒检查新事件。",
     "denied": "需要管理员权限。",
     "account": "账号（精确匹配）",
     "filter": "筛选",
@@ -601,14 +613,84 @@
     "action": "操作",
     "result": "结果",
     "ip": "客户端 IP",
-    "browser": "浏览器 / 设备",
-    "target": "目标 / 请求编号",
+    "browser": "浏览器",
+    "target": "目标编号",
     "success": "成功",
     "failure": "失败",
     "empty": "暂无审计记录。",
-    "latest": "最新记录",
-    "older": "更早记录",
-    "peer": "直连地址"
+    "peer": "代理地址",
+    "allActions": "全部操作",
+    "start": "开始时间",
+    "end": "结束时间",
+    "clear": "清除",
+    "localTime": "本地时间 · {{zone}}",
+    "invalidRange": "开始时间不能晚于结束时间。",
+    "previousMonth": "上个月",
+    "nextMonth": "下个月",
+    "device": "设备",
+    "devices": "设备",
+    "newDevice": "新设备",
+    "unknownDevice": "未识别",
+    "fingerprint": "指纹",
+    "details": "详情",
+    "request": "请求编号",
+    "ipSource": "IP 来源",
+    "changes": "变更",
+    "userDevices": "设备 · {{username}}",
+    "deviceHint": "记录成功登录时的浏览器环境。更换浏览器、无痕模式或清除本地数据也可能产生新设备。指纹仅供参考，可能变化或被伪造。",
+    "events": "查看事件",
+    "firstSeen": "首次登录",
+    "lastSeen": "最近登录",
+    "lastIp": "最近 IP",
+    "loginCount": "登录 {{count}} 次",
+    "noDevices": "暂无设备信息，将从下次登录开始记录。",
+    "actions": {
+      "login": "登录",
+      "password": {
+        "changed": "修改密码"
+      },
+      "user": {
+        "registered": "注册账号",
+        "created": "创建用户",
+        "permissions_changed": "修改权限",
+        "updated": "修改用户",
+        "deleted": "删除用户"
+      },
+      "room": {
+        "created": "创建房间",
+        "updated": "修改房间",
+        "pin_changed": "修改置顶",
+        "ended": "结束房间",
+        "deleted": "删除房间"
+      },
+      "share": {
+        "created": "创建分享",
+        "accept": "接受分享",
+        "revoke": "撤销分享"
+      },
+      "guest": {
+        "join": "访客加入"
+      },
+      "note": {
+        "created": "创建备注",
+        "updated": "修改备注",
+        "deleted": "删除备注"
+      },
+      "playback": {
+        "compressed": "压缩回放"
+      },
+      "notification": {
+        "created": "发布公告"
+      },
+      "session.logout": "退出登录"
+    },
+    "reasons": {
+      "missing_credentials": "缺少登录信息",
+      "invalid_credentials": "登录信息无效",
+      "account_disabled": "账号已停用"
+    },
+    "storageUnavailable": "审计存储暂不可用，请稍后重试。",
+    "loadFailed": "无法加载审计或设备信息。"
   },
   "errors": {
     "credentialsRequired": "请输入用户名和密码。",

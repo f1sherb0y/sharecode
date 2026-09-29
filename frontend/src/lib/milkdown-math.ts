@@ -7,7 +7,6 @@ import { Decoration, DecorationSet, type EditorView, type NodeView } from '@milk
 import { $inputRule, $nodeSchema, $prose, $remark, $useKeymap, $view } from '@milkdown/kit/utils'
 import katex from 'katex'
 import remarkMath from 'remark-math'
-import 'katex/dist/katex.min.css'
 
 const remarkMathPlugin = $remark('remarkMath', () => remarkMath)
 
@@ -85,6 +84,7 @@ class MathNodeView implements NodeView {
     // KaTeX output is only a local, non-editable preview.
     katex.render(this.node.textContent, this.preview, {
       displayMode: !this.node.isInline,
+      output: 'mathml',
       throwOnError: false,
       trust: false,
       strict: 'ignore',

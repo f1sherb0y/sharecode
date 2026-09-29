@@ -32,6 +32,7 @@ env DATABASE_URL=postgresql://runner_test:local_runner_test@127.0.0.1:55459/runn
   APP_URL=http://127.0.0.1:55461 TRUSTED_PROXY_CIDRS='' \
   "$project_dir/server-rs/target/debug/sharecode-server" >"$work_dir/api.log" 2>&1 &
 api_pid=$!
+export SHARECODE_TEST_CONTAINER="$container_name"
 cd frontend
 node --input-type=module <<'JS'
 for(let i=0;i<100;i++) {
@@ -42,6 +43,6 @@ throw Error('Local API not ready')
 JS
 case "${1:-tests/runner-permissions.mjs}" in
   tests/canvas-integration.ts) node --experimental-transform-types tests/canvas-integration.ts ;;
-  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
+  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs|tests/selection-blink.mjs|tests/private-rooms.mjs|tests/audit-devices.mjs|tests/session-renewal.mjs|tests/reconnect-recovery.mjs|tests/browser-sessions.mjs|tests/notes-permissions.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
   *) echo 'Unknown local test suite' >&2; exit 2 ;;
 esac

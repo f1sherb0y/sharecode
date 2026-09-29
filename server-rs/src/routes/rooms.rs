@@ -1,3 +1,4 @@
+use crate::core::audit::{self, ClientInfo};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -14,7 +15,8 @@ use crate::{
     error::ApiError,
     models::{RoomParticipantWithUserRow, RoomWithOwnerRow, UserSimpleRow},
     permissions::{
-        can_manage_room_lifecycle, has_global_read, has_global_write, RoomLifecycleAction,
+        can_edit_room, can_manage_room_lifecycle, has_global_read, is_share_read_only,
+        require_room_access, RoomLifecycleAction, ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL,
     },
     state::AppState,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -35,13 +37,10 @@ const SUPPORTED_LANGUAGES: [&str; 11] = [
     "verilog",
 ];
 
-#[derive(Debug, sqlx::FromRow)]
-struct RoomOwnerRow {
-    owner_id: String,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct CreateRoomPayload {
+    #[serde(default, rename = "isPrivate")]
+    pub is_private: bool,
     pub name: Option<String>,
     pub language: Option<String>,
     pub company: Option<String>,
@@ -137,6 +136,7 @@ pub async fn get_all_users_for_room_creation(
 
 pub async fn create_room(
     State(state): State<AppState>,
+    client: ClientInfo,
     auth_user: AuthUser,
     Json(payload): Json<CreateRoomPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -172,8 +172,8 @@ pub async fn create_room(
     let room_id = Uuid::new_v4().to_string();
     let room = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
-        INSERT INTO "Room" (id, name, language, company, position, "ownerId", "scheduledTime", duration, "updatedAt")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        INSERT INTO "Room" (id, name, language, company, position, "ownerId", "scheduledTime", duration, "updatedAt", "isPrivate")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
         RETURNING
             id,
             name,
@@ -181,6 +181,7 @@ pub async fn create_room(
             company,
             position,
             "ownerId" as owner_id,
+            "isPrivate" as is_private,
             "allowEdit" as allow_edit,
             "isPinned" as is_pinned,
             "isDeleted" as is_deleted,
@@ -202,6 +203,7 @@ pub async fn create_room(
     .bind(&auth_user.id)
     .bind(scheduled_time)
     .bind(duration)
+    .bind(payload.is_private)
     .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create room"))?;
@@ -242,6 +244,7 @@ pub async fn create_room(
         }
     }
 
+    audit::record_details(&mut *tx, &client, "room.created", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"isPrivate":payload.is_private,"language":language,"participantCount":participant_count})).await?;
     tx.commit()
         .await
         .map_err(|err| db_error(err, "Failed to commit room transaction"))?;
@@ -285,59 +288,36 @@ pub async fn get_rooms(
         RoomActivenessFilter::Ended => "ended",
     };
 
-    let (total_count, rooms) = if has_global_read(&auth_user) {
-        let total_count = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT COUNT(*)
-            FROM "Room" r
-            WHERE r."isDeleted" = false
-              AND ($1::text IS NULL OR r."ownerId" = $1)
-              AND (
-                $2::text = 'all'
-                OR ($2::text = 'active' AND r."isEnded" = false)
-                OR ($2::text = 'ended' AND r."isEnded" = true)
-              )
-            "#,
-        )
+    let filter = format!(
+        r#"FROM "Room" r JOIN "User" o ON o.id = r."ownerId"
+        WHERE {ROOM_VISIBILITY_SQL}
+        AND ($4::text IS NULL OR r."ownerId" = $4)
+        AND ($5 = 'all' OR ($5 = 'active' AND NOT r."isEnded") OR ($5 = 'ended' AND r."isEnded"))"#
+    );
+    let count_sql = format!("SELECT COUNT(*) {filter}");
+    let total_count = sqlx::query_scalar::<_, i64>(&count_sql)
+        .bind(&auth_user.id)
+        .bind(&auth_user.role)
+        .bind(has_global_read(&auth_user))
         .bind(owner_id.as_deref())
         .bind(activeness_value)
         .fetch_one(&state.db)
         .await
         .map_err(|err| db_error(err, "Failed to count rooms"))?;
-
-        let rooms = sqlx::query_as::<_, RoomWithOwnerRow>(
-            r#"
-            SELECT
-                r.id,
-                r.name,
-                r.language,
-                r.company,
-                r.position,
-                r."ownerId" as owner_id,
-                r."allowEdit" as allow_edit,
-                r."isPinned" as is_pinned,
-                r."isDeleted" as is_deleted,
-                r."scheduledTime" as scheduled_time,
-                r.duration,
-                r."isEnded" as is_ended,
-                r."endedAt" as ended_at,
-                r."createdAt" as created_at,
-                r."updatedAt" as updated_at,
-                o.username as owner_username,
-                o.color as owner_color
-            FROM "Room" r
-            JOIN "User" o ON o.id = r."ownerId"
-            WHERE r."isDeleted" = false
-              AND ($1::text IS NULL OR r."ownerId" = $1)
-              AND (
-                $2::text = 'all'
-                OR ($2::text = 'active' AND r."isEnded" = false)
-                OR ($2::text = 'ended' AND r."isEnded" = true)
-              )
-            ORDER BY r."isPinned" DESC, r."createdAt" DESC, r.id DESC
-            LIMIT $3 OFFSET $4
-            "#,
-        )
+    let sql = format!(
+        r#"SELECT r.id, r.name, r.language, r.company, r.position,
+        r."ownerId" as owner_id, r."isPrivate" as is_private, r."allowEdit" as allow_edit,
+        r."isPinned" as is_pinned, r."isDeleted" as is_deleted,
+        r."scheduledTime" as scheduled_time, r.duration, r."isEnded" as is_ended,
+        r."endedAt" as ended_at, r."createdAt" as created_at, r."updatedAt" as updated_at,
+        o.username as owner_username, o.color as owner_color,
+        {ROOM_PLAYBACK_SQL} as can_view_playback
+        {filter} ORDER BY r."isPinned" DESC, r."createdAt" DESC, r.id DESC LIMIT $6 OFFSET $7"#
+    );
+    let rooms = sqlx::query_as::<_, RoomWithOwnerRow>(&sql)
+        .bind(&auth_user.id)
+        .bind(&auth_user.role)
+        .bind(has_global_read(&auth_user))
         .bind(owner_id.as_deref())
         .bind(activeness_value)
         .bind(page_size as i64)
@@ -345,97 +325,6 @@ pub async fn get_rooms(
         .fetch_all(&state.db)
         .await
         .map_err(|err| db_error(err, "Failed to load rooms"))?;
-
-        (total_count, rooms)
-    } else {
-        let total_count = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT COUNT(*)
-            FROM "Room" r
-            WHERE r."isDeleted" = false
-              AND (
-                r."ownerId" = $1
-                OR (
-                    r."isEnded" = false
-                    AND EXISTS (
-                        SELECT 1
-                        FROM "RoomParticipant" rp
-                        WHERE rp."roomId" = r.id
-                          AND rp."userId" = $1
-                    )
-                )
-              )
-              AND ($2::text IS NULL OR r."ownerId" = $2)
-              AND (
-                $3::text = 'all'
-                OR ($3::text = 'active' AND r."isEnded" = false)
-                OR ($3::text = 'ended' AND r."isEnded" = true)
-              )
-            "#,
-        )
-        .bind(&auth_user.id)
-        .bind(owner_id.as_deref())
-        .bind(activeness_value)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to count rooms"))?;
-
-        let rooms = sqlx::query_as::<_, RoomWithOwnerRow>(
-            r#"
-            SELECT
-                r.id,
-                r.name,
-                r.language,
-                r.company,
-                r.position,
-                r."ownerId" as owner_id,
-                r."allowEdit" as allow_edit,
-                r."isPinned" as is_pinned,
-                r."isDeleted" as is_deleted,
-                r."scheduledTime" as scheduled_time,
-                r.duration,
-                r."isEnded" as is_ended,
-                r."endedAt" as ended_at,
-                r."createdAt" as created_at,
-                r."updatedAt" as updated_at,
-                o.username as owner_username,
-                o.color as owner_color
-            FROM "Room" r
-            JOIN "User" o ON o.id = r."ownerId"
-            WHERE r."isDeleted" = false
-              AND (
-                r."ownerId" = $1
-                OR (
-                    r."isEnded" = false
-                    AND EXISTS (
-                        SELECT 1
-                        FROM "RoomParticipant" rp
-                        WHERE rp."roomId" = r.id
-                          AND rp."userId" = $1
-                    )
-                )
-              )
-              AND ($2::text IS NULL OR r."ownerId" = $2)
-              AND (
-                $3::text = 'all'
-                OR ($3::text = 'active' AND r."isEnded" = false)
-                OR ($3::text = 'ended' AND r."isEnded" = true)
-              )
-            ORDER BY r."isPinned" DESC, r."createdAt" DESC, r.id DESC
-            LIMIT $4 OFFSET $5
-            "#,
-        )
-        .bind(&auth_user.id)
-        .bind(owner_id.as_deref())
-        .bind(activeness_value)
-        .bind(page_size as i64)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to load rooms"))?;
-
-        (total_count, rooms)
-    };
 
     let mut response = Vec::with_capacity(rooms.len());
     let now = Utc::now();
@@ -448,9 +337,7 @@ pub async fn get_rooms(
         let user_participant = participants.iter().find(|p| p.user_id == auth_user.id);
         let is_owner = room.owner_id == auth_user.id;
         let is_member = is_owner || user_participant.is_some();
-        let can_edit = is_owner
-            || has_global_write(&auth_user)
-            || user_participant.map(|p| p.can_edit).unwrap_or(false);
+        let can_edit = can_edit_room(&auth_user, &room, user_participant);
 
         let is_expired = room
             .scheduled_time
@@ -461,14 +348,18 @@ pub async fn get_rooms(
             .map(|end_time| end_time < now)
             .unwrap_or(false);
 
-        response.push(room_to_json_with_flags(
+        let share_read_only = is_share_read_only(&room, user_participant);
+        let mut value = room_to_json_with_flags(
             &room,
             participants,
             is_member,
             is_owner,
             can_edit,
             is_expired,
-        ));
+        );
+        value["canViewPlayback"] = json!(room.can_view_playback);
+        value["shareReadOnly"] = json!(share_read_only);
+        response.push(value);
     }
 
     let total = total_count.max(0) as u64;
@@ -497,6 +388,7 @@ pub async fn get_room(
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let access = require_room_access(&state.db, &auth_user, &room_id).await?;
     let room = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         SELECT
@@ -506,6 +398,7 @@ pub async fn get_room(
             r.company,
             r.position,
             r."ownerId" as owner_id,
+            r."isPrivate" as is_private,
             r."allowEdit" as allow_edit,
             r."isPinned" as is_pinned,
             r."isDeleted" as is_deleted,
@@ -535,26 +428,23 @@ pub async fn get_room(
     let participants = fetch_participants(&state, &room.id).await?;
     let is_owner = room.owner_id == auth_user.id;
     let is_participant = participants.iter().any(|p| p.user_id == auth_user.id);
-    let is_admin = has_global_read(&auth_user);
-
-    if !is_admin && !is_owner && !is_participant {
-        return Err(ApiError::not_found("Room not found"));
-    }
-
-    if room.is_ended && !is_owner && !is_admin {
-        return Err(ApiError::not_found("Room not found"));
-    }
-
     let user_participant = participants.iter().find(|p| p.user_id == auth_user.id);
-    let can_edit = has_global_write(&auth_user)
-        || is_owner
-        || user_participant.map(|p| p.can_edit).unwrap_or(false);
+    let can_edit = can_edit_room(&auth_user, &room, user_participant);
 
     let mut room_value = room_to_json(&room, participants);
     if let Some(obj) = room_value.as_object_mut() {
         obj.insert("isMember".to_string(), json!(is_owner || is_participant));
         obj.insert("isOwner".to_string(), json!(is_owner));
-        obj.insert("canEdit".to_string(), json!(can_edit));
+        obj.insert("canEdit".to_string(), json!(can_edit && !room.is_ended));
+        obj.insert(
+            "canViewPlayback".to_string(),
+            json!(access.can_view_playback),
+        );
+        obj.insert("canReadNotes".to_string(), json!(true));
+        obj.insert("canWriteNotes".to_string(), json!(access.can_edit));
+        // Compatibility for clients from before notes had separate capabilities.
+        obj.insert("canManageNotes".to_string(), json!(access.can_edit));
+        obj.insert("shareReadOnly".to_string(), json!(access.share_read_only));
     }
 
     Ok(Json(json!({ "room": room_value })))
@@ -573,12 +463,19 @@ pub async fn get_room_by_document_id(
 
 pub async fn update_room(
     State(state): State<AppState>,
+    client: ClientInfo,
     auth_user: AuthUser,
     Path(room_id): Path<String>,
     Json(payload): Json<UpdateRoomPayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // Order setting updates with WebSocket authentication/reconnect snapshots.
     let _access = state.ws.access.write().await;
+    if require_room_access(&state.db, &auth_user, &room_id)
+        .await?
+        .share_read_only
+    {
+        return Err(ApiError::not_found("Room not found"));
+    }
     let room = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         SELECT
@@ -588,6 +485,7 @@ pub async fn update_room(
             r.company,
             r.position,
             r."ownerId" as owner_id,
+            r."isPrivate" as is_private,
             r."allowEdit" as allow_edit,
             r."isPinned" as is_pinned,
             r."isDeleted" as is_deleted,
@@ -617,21 +515,14 @@ pub async fn update_room(
     let participants = fetch_participants(&state, &room.id).await?;
     let is_owner = room.owner_id == auth_user.id;
     let is_superuser = auth_user.role == "superuser";
-    let is_participant = participants.iter().any(|p| p.user_id == auth_user.id);
     let can_change_language = is_owner || matches!(auth_user.role.as_str(), "admin" | "superuser");
-    let language_only = payload.language.is_some() && payload.name.is_none()
-        && payload.company.is_none() && payload.position.is_none();
+    let language_only = payload.language.is_some()
+        && payload.name.is_none()
+        && payload.company.is_none()
+        && payload.position.is_none();
     let language_permission = language_only && can_change_language;
-    let is_privileged = is_superuser || has_global_read(&auth_user) || language_permission;
-
-    if !is_owner && !is_participant && !is_privileged {
-        return Err(ApiError::not_found("Room not found"));
-    }
-
     let participant = participants.iter().find(|p| p.user_id == auth_user.id);
-    let can_edit = has_global_write(&auth_user)
-        || is_owner
-        || participant.map(|p| p.can_edit).unwrap_or(false);
+    let can_edit = can_edit_room(&auth_user, &room, participant);
 
     if !can_edit && !language_permission {
         return Err(ApiError::not_found("Room not found"));
@@ -662,6 +553,11 @@ pub async fn update_room(
     let company = normalize_optional_text(payload.company);
     let position = normalize_optional_text(payload.position);
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let updated = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         UPDATE "Room"
@@ -678,6 +574,7 @@ pub async fn update_room(
             company,
             position,
             "ownerId" as owner_id,
+            "isPrivate" as is_private,
             "allowEdit" as allow_edit,
             "isPinned" as is_pinned,
             "isDeleted" as is_deleted,
@@ -696,26 +593,45 @@ pub async fn update_room(
     .bind(language)
     .bind(company)
     .bind(position)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to update room"))?;
 
+    audit::record_details(&mut *tx, &client, "room.updated", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"language":{"before":room.language,"after":updated.language},"nameChanged":rename_requested,"companyChanged":room.company != updated.company,"positionChanged":room.position != updated.position})).await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     if language_requested {
-        state.ws.broadcast_room_language(&room_id, &updated.language).await;
+        state
+            .ws
+            .broadcast_room_language(&room_id, &updated.language)
+            .await;
     }
     Ok(Json(json!({ "room": room_to_json_owner(&updated) })))
 }
 
 pub async fn set_room_pin(
     State(state): State<AppState>,
+    client: ClientInfo,
     AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
     Json(payload): Json<SetRoomPinPayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    if require_room_access(&state.db, &auth_user, &room_id)
+        .await?
+        .share_read_only
+    {
+        return Err(ApiError::not_found("Room not found"));
+    }
     if room_id.is_empty() {
         return Err(ApiError::bad_request("Room ID is required"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let room = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         UPDATE "Room"
@@ -730,6 +646,7 @@ pub async fn set_room_pin(
             company,
             position,
             "ownerId" as owner_id,
+            "isPrivate" as is_private,
             "allowEdit" as allow_edit,
             "isPinned" as is_pinned,
             "isDeleted" as is_deleted,
@@ -745,7 +662,7 @@ pub async fn set_room_pin(
     )
     .bind(&room_id)
     .bind(payload.is_pinned)
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to update room pin status"))?;
 
@@ -754,13 +671,27 @@ pub async fn set_room_pin(
         None => return Err(ApiError::not_found("Room not found")),
     };
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "room.pin_changed",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&room_id),
+        true,
+        None,
+        Some(&room_id),
+        json!({"isPinned":payload.is_pinned}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     let participants = fetch_participants(&state, &room.id).await?;
     let user_participant = participants.iter().find(|p| p.user_id == auth_user.id);
     let is_owner = room.owner_id == auth_user.id;
     let is_member = is_owner || user_participant.is_some();
-    let can_edit = is_owner
-        || has_global_write(&auth_user)
-        || user_participant.map(|p| p.can_edit).unwrap_or(false);
+    let can_edit = can_edit_room(&auth_user, &room, user_participant);
 
     let now = Utc::now();
     let is_expired = room
@@ -786,31 +717,23 @@ pub async fn set_room_pin(
 
 pub async fn delete_room(
     State(state): State<AppState>,
+    client: ClientInfo,
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _access = state.ws.access.write().await;
-    let room = sqlx::query_as::<_, RoomOwnerRow>(
-        r#"
-        SELECT "ownerId" as owner_id
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
-
-    let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
-    };
+    let room_access = require_room_access(&state.db, &auth_user, &room_id).await?;
+    let room = room_access;
 
     if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::Delete) {
         return Err(ApiError::not_found("Room not found"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     sqlx::query(
         r#"
         UPDATE "Room"
@@ -820,10 +743,26 @@ pub async fn delete_room(
         "#,
     )
     .bind(&room_id)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to delete room"))?;
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "room.deleted",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&room_id),
+        true,
+        None,
+        Some(&room_id),
+        json!({}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     tracing::info!(
         actor_id = %auth_user.id,
         actor_role = %auth_user.role,
@@ -841,35 +780,27 @@ pub async fn delete_room(
 
 pub async fn end_room(
     State(state): State<AppState>,
+    client: ClientInfo,
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _access = state.ws.access.write().await;
+    let room_access = require_room_access(&state.db, &auth_user, &room_id).await?;
     if room_id.is_empty() {
         return Err(ApiError::bad_request("Room ID is required"));
     }
 
-    let room = sqlx::query_as::<_, RoomOwnerRow>(
-        r#"
-        SELECT "ownerId" as owner_id
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
-
-    let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
-    };
+    let room = room_access;
 
     if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::End) {
         return Err(ApiError::not_found("Room not found"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let updated = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         UPDATE "Room"
@@ -884,6 +815,7 @@ pub async fn end_room(
             company,
             position,
             "ownerId" as owner_id,
+            "isPrivate" as is_private,
             "allowEdit" as allow_edit,
             "isPinned" as is_pinned,
             "isDeleted" as is_deleted,
@@ -899,10 +831,26 @@ pub async fn end_room(
     )
     .bind(&room_id)
     .bind(Utc::now())
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to end room"))?;
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "room.ended",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&room_id),
+        true,
+        None,
+        Some(&room_id),
+        json!({}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     tracing::info!(
         actor_id = %auth_user.id,
         actor_role = %auth_user.role,
@@ -936,6 +884,8 @@ async fn fetch_participants_batch(
             rp."roomId" as room_id,
             u.id as user_id,
             rp."canEdit" as can_edit,
+            rp."canReplay" as can_replay,
+            rp."shareLinkId" as share_link_id,
             rp."joinedAt" as joined_at,
             u.username as user_username,
             u.color as user_color
@@ -969,6 +919,8 @@ async fn fetch_participants(
             rp."roomId" as room_id,
             u.id as user_id,
             rp."canEdit" as can_edit,
+            rp."canReplay" as can_replay,
+            rp."shareLinkId" as share_link_id,
             rp."joinedAt" as joined_at,
             u.username as user_username,
             u.color as user_color
@@ -992,6 +944,7 @@ fn room_to_json_basic(room: &RoomWithOwnerRow) -> serde_json::Value {
         "position": room.position,
         "ownerId": room.owner_id,
         "allowEdit": room.allow_edit,
+        "isPrivate": room.is_private,
         "isPinned": room.is_pinned,
         "isDeleted": room.is_deleted,
         "scheduledTime": to_iso_string_opt(room.scheduled_time),
@@ -1060,7 +1013,7 @@ fn room_to_json_with_flags(
     if let Some(obj) = value.as_object_mut() {
         obj.insert("isMember".to_string(), json!(is_member));
         obj.insert("isOwner".to_string(), json!(is_owner));
-        obj.insert("canEdit".to_string(), json!(can_edit));
+        obj.insert("canEdit".to_string(), json!(can_edit && !room.is_ended));
         obj.insert("isExpired".to_string(), json!(is_expired));
     }
     value

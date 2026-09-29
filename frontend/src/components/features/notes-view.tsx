@@ -84,7 +84,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
     addNoteMutation.isPending || updateNoteMutation.isPending || removeNoteMutation.isPending
 
   const handleAdd = useCallback(async () => {
-    if (!newText.trim() || isSaving) return
+    if (readOnly || !newText.trim() || isSaving) return
     try {
       await addNoteMutation.mutateAsync(newText.trim())
       setNewText('')
@@ -94,7 +94,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
     } catch {
       // keep text so user can retry
     }
-  }, [newText, addNoteMutation, isSaving])
+  }, [readOnly, newText, addNoteMutation, isSaving])
 
   const handleNewKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Cmd/Ctrl+Enter to submit, plain Enter for newlines
@@ -111,7 +111,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
   }, [readOnly])
 
   const commitEdit = useCallback(async () => {
-    if (editingId && editText.trim()) {
+    if (!readOnly && editingId && editText.trim()) {
       try {
         await updateNoteMutation.mutateAsync({ noteId: editingId, text: editText.trim() })
       } catch {
@@ -120,7 +120,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
     }
     setEditingId(null)
     setEditText('')
-  }, [editingId, editText, updateNoteMutation])
+  }, [readOnly, editingId, editText, updateNoteMutation])
 
   const cancelEdit = useCallback(() => {
     setEditingId(null)
@@ -137,13 +137,13 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
   }, [commitEdit, cancelEdit])
 
   const handleRemove = useCallback(async (noteId: string) => {
-    if (isSaving) return
+    if (readOnly || isSaving) return
     try {
       await removeNoteMutation.mutateAsync(noteId)
     } catch {
       // ignore
     }
-  }, [removeNoteMutation, isSaving])
+  }, [readOnly, removeNoteMutation, isSaving])
 
   const handleCopy = useCallback(async (noteId: string, text: string) => {
     try {
@@ -213,7 +213,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
               key={note.id}
               className="group rounded-md border bg-muted/30 transition-colors hover:bg-muted/50"
             >
-              {editingId === note.id ? (
+              {!readOnly && editingId === note.id ? (
                 <div className="p-1 space-y-0.5">
                   <Textarea
                     ref={editRef}
@@ -314,7 +314,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
             rows={Math.min(5, Math.max(2, newText.split('\n').length))}
           />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">{t('notes.submitHint')}</span>
+            <span className="text-[11px] text-muted-foreground">{t('notes.submitHint')}</span>
             <Button
               variant="secondary"
               size="sm"

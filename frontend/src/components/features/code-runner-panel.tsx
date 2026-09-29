@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Loader2, Clock, HardDrive, AlertCircle, CheckCircle2, Terminal, PanelBottom, PanelRight, StickyNote } from 'lucide-react'
 import { Button, Textarea } from '@/components/ui'
 import { NotesView } from '@/components/features/notes-view'
-import { useAuthStore } from '@/stores'
 import { api } from '@/api'
 import { cn } from '@/lib/utils'
 import type * as Y from 'yjs'
@@ -49,7 +48,6 @@ interface CodeRunnerPanelProps {
   position?: PanelPosition
   onPositionChange?: (position: PanelPosition) => void
   roomId?: string
-  isOwner?: boolean
   expanded?: boolean
   onExpandedChange?: (expanded: boolean) => void
 }
@@ -80,7 +78,6 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
   position = 'bottom',
   onPositionChange,
   roomId,
-  isOwner = false,
   expanded,
   onExpandedChange,
 }, ref) {
@@ -308,10 +305,7 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
     onPositionChange?.(newPosition)
   }
 
-  const { user } = useAuthStore()
-  const isPrivileged = user?.role === 'admin' || user?.role === 'superuser'
-
-  const showTabs = (isOwner || isPrivileged) && !!roomId
+  const showTabs = !!roomId
 
   // Header label for current tab
   const headerLabel = activeTab === 'notes' ? t('codeRunner.tabNotes') : t('codeRunner.title')
@@ -350,19 +344,19 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
     <div
       ref={panelRef}
       className={cn(
-        'bg-background flex',
+        'relative bg-background flex',
         isBottom ? 'flex-col border-t' : 'flex-row border-l',
         className
       )}
     >
-      {/* Resize handle - thin line */}
+      {/* Overlay the resize edge so expanding never offsets the disclosure bar. */}
       {isExpanded && (
         <div
           className={cn(
-            'transition-colors group',
+            'absolute z-10 transition-colors group',
             isBottom
-              ? 'h-1 cursor-ns-resize hover:bg-primary/30'
-              : 'w-1 cursor-ew-resize hover:bg-primary/30'
+              ? 'inset-x-0 top-0 h-1 cursor-ns-resize hover:bg-primary/30'
+              : 'inset-y-0 left-0 w-1 cursor-ew-resize hover:bg-primary/30'
           )}
           onMouseDown={handleDragStart}
           onTouchStart={handleDragStart}
@@ -387,16 +381,16 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
             <StatusIcon size="small" />
           )}
           <span
-            className="font-medium whitespace-nowrap text-[11px]"
+            className="font-medium whitespace-nowrap text-xs"
             style={isRight ? { writingMode: 'vertical-rl' } : undefined}
           >
             {headerLabel}
           </span>
           {activeTab === 'runner' && status === 'running' && isBottom && (
-            <span className="text-[11px] text-muted-foreground">{t('codeRunner.running')}</span>
+            <span className="text-xs text-muted-foreground">{t('codeRunner.running')}</span>
           )}
           {activeTab === 'runner' && !isExpanded && status === 'success' && execTime && isBottom && (
-            <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
+            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
               <Clock className="h-2.5 w-2.5" />
               {execTime}s
             </span>
@@ -507,7 +501,7 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
               </div>
             </div>
           ) : (
-            roomId && <NotesView roomId={roomId} />
+            roomId && <NotesView roomId={roomId} readOnly={!canEdit} />
           )}
         </div>
       )}

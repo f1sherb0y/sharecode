@@ -1,10 +1,11 @@
+import { UserDevicesDialog } from '@/components/features/user-devices-dialog'
 import { translateError } from '@/i18n/errors'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as Tabs from '@radix-ui/react-tabs'
-import { ArrowLeft, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, RefreshCw, Save, Trash2, LockKeyhole } from 'lucide-react'
 import {
   Button,
   Input,
@@ -271,6 +272,7 @@ export function AdminPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [deviceUser, setDeviceUser] = useState<{ id: string; username: string } | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuthStore()
   const section = parseAdminSection(searchParams.get('section'))
@@ -585,6 +587,7 @@ export function AdminPage() {
       />
 
       <PageContainer>
+        {isSuperuser && deviceUser && <UserDevicesDialog key={deviceUser.id} user={deviceUser} onClose={() => setDeviceUser(null)} />}
         {/* Delete User Dialog */}
         <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
           <DialogContent>
@@ -821,6 +824,7 @@ export function AdminPage() {
                                   <span className="hidden sm:inline">{savingUserId === u.id ? t('admin.users.table.updating') : t('admin.users.table.update')}</span>
                                 </Button>
                               )}
+                              {isSuperuser && <Button size="sm" variant="outline" onClick={() => setDeviceUser({ id: u.id, username: u.username })}>{t('audit.devices')}</Button>}
                               {canDelete && (
                                 <Button
                                   size="sm"
@@ -942,7 +946,10 @@ export function AdminPage() {
                           return (
                             <tr key={room.id} className="border-b">
                               <td className="px-1.5 py-1">
-                                <div>{room.name}</div>
+                                <div className="flex items-center gap-1.5">
+                                  {room.isPrivate && <LockKeyhole className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('rooms.list.private')} />}
+                                  {room.name}
+                                </div>
                                 <div className="text-xs text-muted-foreground sm:hidden">{room.owner.username}</div>
                               </td>
                               <td className="px-1.5 py-1 text-muted-foreground hidden sm:table-cell">
@@ -950,7 +957,7 @@ export function AdminPage() {
                               </td>
                               <td className="px-1.5 py-1">
                                 <Select value={room.language}
-                                  disabled={roomLanguageMutation.isPending || room.isDeleted}
+                                  disabled={roomLanguageMutation.isPending || room.isDeleted || room.shareReadOnly}
                                   onValueChange={language => roomLanguageMutation.mutate({ roomId: room.id, language: language as Language })}>
                                   <SelectTrigger className="h-control-sm w-[105px] text-xs" aria-label={`${t('admin.rooms.table.language')}: ${room.name}`}>
                                     <SelectValue />

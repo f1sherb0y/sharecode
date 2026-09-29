@@ -53,7 +53,7 @@ try{
  await ok('/api/auth/login','POST',{username:name,password:nextPassword})
  console.log('PASS deletion permanently revokes tokens, including after account restoration')
  console.log('PASS audit records login success/failure/password change; forged forwarding ignored; ordinary user denied')
- browser=await chromium.launch();const page=await browser.newPage();await page.goto(WEB+'/login');await page.evaluate(token=>{sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}));localStorage.setItem('i18nextLng','en')},admin);await page.goto(WEB+'/admin/audit');await page.getByRole('textbox',{name:'Account (exact match)'}).fill(name);await page.getByRole('button',{name:'Filter',exact:true}).click();await page.waitForFunction(()=>document.querySelector('tbody')?.textContent.includes('password.changed'))
+ browser=await chromium.launch();const page=await browser.newPage();await page.goto(WEB+'/login');await page.evaluate(token=>{sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}));localStorage.setItem('i18nextLng','en')},admin);await page.goto(WEB+'/admin/audit');await page.getByRole('textbox',{name:'Account (exact match)'}).fill(name);await page.getByRole('button',{name:'Filter',exact:true}).click();await page.waitForFunction(()=>document.querySelector('tbody')?.textContent.includes('Password changed'))
  assert.ok((await page.locator('tbody').innerText()).includes('127.0.0.1'));console.log('PASS audit management page displays login IP')
 }finally{for(const {p,doc}of peers){p.destroy();doc.destroy()}await browser?.close()}
 process.exit(0)

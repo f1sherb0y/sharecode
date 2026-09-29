@@ -1,3 +1,6 @@
+import { ensureFreshSession } from '@/lib/session-renewal'
+import { deviceHeaders } from '@/lib/device-identity'
+import type { AuditFilters, AuditResponse, DevicesResponse } from '@/types/audit'
 import type {
   User,
   Room,
@@ -67,11 +70,15 @@ class ApiClient {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    if (endpoint !== '/api/auth/login' && endpoint !== '/api/auth/register') await ensureFreshSession()
     const baseUrl = getApiBaseUrl()
     const response = await fetch(`${baseUrl}${endpoint}`, {
+      credentials: 'include',
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        'X-Sharecode-Client': 'web',
+        ...await deviceHeaders(options.method !== undefined && options.method !== 'GET'),
         ...this.getAuthHeader(),
         ...options.headers,
       },
@@ -100,6 +107,14 @@ class ApiClient {
     })
   }
 
+  async logout(browserSessionId: string | null): Promise<void> {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
+      method: 'POST', credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(10_000),
+      headers: { 'X-Sharecode-Client': 'web', ...(browserSessionId ? { 'X-Session-Id': browserSessionId } : {}) },
+    })
+    if (!response.ok) throw new Error('Could not log out')
+  }
+
   async getProfile(): Promise<{ user: User }> {
     return this.request<{ user: User }>('/api/auth/profile')
   }
@@ -112,11 +127,11 @@ class ApiClient {
     oldPassword: string,
     newPassword: string
   ): Promise<{ message: string }> {
-    const result = await this.request<{ message: string; token: string }>('/api/auth/change-password', {
+    const result = await this.request<{ message: string; token: string; browserSessionId: string }>('/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ oldPassword, newPassword }),
     })
-    useAuthStore.getState().replaceToken(result.token)
+    useAuthStore.getState().replaceToken(result.token, result.browserSessionId)
     return result
   }
 
@@ -145,16 +160,14 @@ class ApiClient {
     })
   }
 
-  async getAuditEvents(before?: number, username?: string): Promise<{
-    events: Array<{ id: number; createdAt: string; action: string; username: string | null;
-      actorId: string | null; targetId: string | null; success: boolean; clientIp: string;
-      peerIp: string; ipSource: string; userAgent: string; requestId: string; reason: string | null }>;
-    nextCursor: number | null
-  }> {
+  async getAuditEvents(filters: AuditFilters): Promise<AuditResponse> {
     const query = new URLSearchParams()
-    if (before) query.set('before', String(before))
-    if (username) query.set('username', username)
+    Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== '') query.set(key, String(value)) })
     return this.request(`/api/admin/audit?${query}`)
+  }
+
+  async getUserDevices(id: string, page = 1): Promise<DevicesResponse> {
+    return this.request(`/api/admin/users/${encodeURIComponent(id)}/devices?page=${page}`)
   }
 
   // Users
@@ -171,11 +184,12 @@ class ApiClient {
     allowedUsers?: Array<{ userId: string; canEdit: boolean }>,
     company?: string,
     position?: string,
-    timezone?: string
+    timezone?: string,
+    isPrivate = false
   ): Promise<{ room: Room }> {
     return this.request<{ room: Room }>('/api/rooms', {
       method: 'POST',
-      body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers, company, position, timezone }),
+      body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers, company, position, timezone, isPrivate }),
     })
   }
 
@@ -380,7 +394,7 @@ export async function joinShare(
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/share/${shareToken}/join`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...await deviceHeaders(true) },
     body: JSON.stringify(payload),
   })
 

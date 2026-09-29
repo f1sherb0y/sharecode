@@ -13,6 +13,7 @@ mod notifications;
 mod playback;
 mod rooms;
 mod share;
+mod sessions;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -20,6 +21,8 @@ pub fn router(state: AppState) -> Router {
         // Auth
         .route("/api/auth/register", post(auth::register))
         .route("/api/auth/login", post(auth::login))
+        .route("/api/auth/refresh", post(sessions::refresh))
+        .route("/api/auth/logout", post(sessions::logout))
         .route("/api/auth/profile", get(auth::get_profile))
         .route("/api/auth/change-password", post(auth::change_password))
         .route("/api/notifications", get(notifications::list_notifications))
@@ -67,6 +70,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/admin/notifications",
             post(notifications::create_notification),
+        )
+        .route(
+            "/api/admin/users/{id}/devices",
+            get(crate::core::audit::list_user_devices),
         )
         .route("/api/admin/users/{id}", patch(admin::update_user))
         .route("/api/admin/users/{id}", delete(admin::delete_user))

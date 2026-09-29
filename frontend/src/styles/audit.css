@@ -1,0 +1,27 @@
+.audit-filters { display: flex; flex-wrap: wrap; align-items: end; gap: .375rem; }
+.audit-filters > label { display: grid; gap: .2rem; font-size: var(--text-sm); min-width: 0; flex: 1 1 10rem; }
+.audit-filters .react-datepicker-wrapper, .audit-filters .react-datepicker__input-container { width: 100%; }
+.audit-filters .react-datepicker__close-icon::after { background: var(--color-muted); color: var(--color-foreground); }
+.audit-filters .react-datepicker__close-icon { padding-right: .375rem; }
+.audit-filters .react-datepicker__input-container input { padding-right: 1.75rem; }
+.audit-datepicker { z-index: 50; }
+.audit-calendar { font-family: inherit; font-size: var(--text-sm); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-popover); color: var(--color-popover-foreground); box-shadow: 0 4px 16px #0002; }
+.audit-calendar .react-datepicker__header { background: var(--color-muted); border-color: var(--color-border); padding: .375rem 0; }
+.audit-calendar .react-datepicker__current-month, .audit-calendar .react-datepicker__day-name, .audit-calendar .react-datepicker__day, .audit-calendar .react-datepicker-time__header { color: var(--color-foreground); }
+.audit-calendar .react-datepicker__day, .audit-calendar .react-datepicker__day-name { width: 1.75rem; line-height: 1.75rem; margin: .0625rem; }
+.audit-calendar .react-datepicker__day--outside-month { color: var(--color-muted-foreground); }
+.audit-calendar .react-datepicker__day:hover, .audit-calendar .react-datepicker__day--keyboard-selected { background: var(--color-accent); color: var(--color-accent-foreground); }
+.audit-calendar .react-datepicker__day--selected { background: var(--color-primary); color: var(--color-primary-foreground); }
+.audit-calendar .react-datepicker__input-time-container { margin: 0; padding: .5rem; border-top: 1px solid var(--color-border); display: flex; align-items: center; gap: .375rem; }
+.audit-calendar .react-datepicker-time__input input { background: var(--color-background); color: var(--color-foreground); border: 1px solid var(--color-border); border-radius: .25rem; padding: .125rem .25rem; font: inherit; }
+.audit-datepicker .react-datepicker__triangle { fill: var(--color-muted); color: var(--color-muted); stroke: var(--color-border); }
+.audit-table { min-width: 48rem; }
+.audit-table td:nth-child(5) { min-width: 9rem; }
+.audit-table th, .audit-table td { padding: .375rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.audit-table th { white-space: nowrap; color: var(--color-muted-foreground); font-weight: 500; }
+.audit-table tbody tr:hover { background: color-mix(in srgb, var(--color-muted) 45%, transparent); }
+.audit-details { width: min(21rem, 70vw); margin-top: .375rem; overflow-wrap: anywhere; }
+.audit-details dt { color: var(--color-muted-foreground); }
+.audit-details dd { margin-bottom: .375rem; }
+.audit-details pre { white-space: pre-wrap; font-size: var(--text-xs); }
+@media (max-width: 480px) { .audit-filters > label { flex-basis: calc(50% - .375rem); } .audit-filters > div:last-child { width: 100%; } }

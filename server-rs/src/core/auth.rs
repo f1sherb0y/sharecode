@@ -14,6 +14,8 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserTokenPayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     #[serde(default)]
     pub token_version: i64,
     pub user_id: String,
@@ -51,6 +53,7 @@ pub enum TokenPayload {
 
 #[derive(Debug, Clone)]
 pub struct AuthUser {
+    pub session_id: Option<String>,
     pub id: String,
     pub token_version: i64,
     pub username: String,
@@ -63,6 +66,48 @@ pub struct AuthUser {
 
 #[derive(Debug, Clone)]
 pub struct AdminUser(pub AuthUser);
+
+// Room content can be read or written by either an account or a share guest.
+// Guest claims still require room-specific database validation before use.
+pub enum AuthActor {
+    User(AuthUser),
+    Guest(GuestTokenPayload),
+}
+
+impl AuthActor {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::User(user) => &user.id,
+            Self::Guest(guest) => &guest.guest_id,
+        }
+    }
+
+    pub fn username(&self) -> &str {
+        match self {
+            Self::User(user) => &user.username,
+            Self::Guest(guest) => &guest.display_name,
+        }
+    }
+}
+
+impl<S> FromRequestParts<S> for AuthActor
+where
+    S: Send + Sync,
+    AppState: axum::extract::FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, ApiError> {
+        let State(app_state) = State::<AppState>::from_request_parts(parts, state)
+            .await
+            .map_err(|_| ApiError::internal("Failed to extract app state"))?;
+        let token = extract_bearer_token(parts)?;
+        match verify_token(&app_state.config, &token)? {
+            TokenPayload::User(_) => Ok(Self::User(AuthUser::from_request_parts(parts, state).await?)),
+            TokenPayload::Guest(guest) => Ok(Self::Guest(guest)),
+        }
+    }
+}
 
 pub fn generate_user_token(config: &Config, payload: UserTokenPayload) -> Result<String, ApiError> {
     let key = EncodingKey::from_secret(config.jwt_secret.as_bytes());
@@ -81,9 +126,10 @@ pub fn generate_guest_token(
 
 pub fn build_user_claims(user: &UserRow, now: chrono::DateTime<Utc>) -> UserTokenPayload {
     let iat = now.timestamp();
-    let exp = (now + Duration::days(7)).timestamp();
+    let exp = (now + Duration::minutes(15)).timestamp();
 
     UserTokenPayload {
+        session_id: None,
         token_version: user.token_version,
         user_id: user.id.clone(),
         email: user.email.clone(),
@@ -126,8 +172,19 @@ pub fn build_guest_claims(
 }
 
 pub fn verify_token(config: &Config, token: &str) -> Result<TokenPayload, ApiError> {
+    decode_token(config, token, true)
+}
+
+// Used only to bind a refresh request to its cookie's actor/session. The cookie
+// and database still authorize the operation; an expired JWT alone never can.
+pub fn verify_refresh_identity(config: &Config, token: &str) -> Result<TokenPayload, ApiError> {
+    decode_token(config, token, false)
+}
+
+fn decode_token(config: &Config, token: &str, validate_exp: bool) -> Result<TokenPayload, ApiError> {
     let key = DecodingKey::from_secret(config.jwt_secret.as_bytes());
-    let validation = Validation::new(Algorithm::HS256);
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = validate_exp;
     let data = decode::<TokenPayload>(token, &key, &validation)
         .map_err(|_| ApiError::unauthorized("Invalid token"))?;
     Ok(data.claims)
@@ -187,10 +244,13 @@ where
                     "createdAt" as created_at,
                     "tokenVersion" as token_version, "lastSeen" as last_seen
                 FROM "User"
-                WHERE id = $1
+                WHERE id = $1 AND ($2::text IS NULL OR EXISTS (
+                    SELECT 1 FROM "BrowserSession" s WHERE s.id=$2 AND s."userId"="User".id
+                    AND s."tokenVersion"="User"."tokenVersion" AND s."expiresAt">NOW()))
                 "#,
             )
             .bind(&user_payload.user_id)
+            .bind(&user_payload.session_id)
             .fetch_optional(&app_state.db)
             .await
             .map_err(|err| db_error(err, "Failed to load user"))?;
@@ -205,6 +265,7 @@ where
             }
 
             Ok(AuthUser {
+                session_id: user_payload.session_id,
                 token_version: user.token_version,
                 id: user.id,
                 username: user.username,

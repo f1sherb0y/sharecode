@@ -2,6 +2,10 @@ import i18n from './index'
 
 // Leave API errors unchanged internally; translate known messages at the UI boundary.
 const errorKeys: Record<string, string> = {
+  "Start must be before end": "audit.invalidRange",
+  "Audit storage unavailable; retry later": "audit.storageUnavailable",
+  "Failed to load audit events": "audit.loadFailed",
+  "Failed to load devices": "audit.loadFailed",
   "Username and password are required": "errors.credentialsRequired",
   "Invalid credentials": "errors.invalidCredentials",
   "Username already taken": "errors.usernameTaken",

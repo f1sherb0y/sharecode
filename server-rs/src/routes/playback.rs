@@ -10,47 +10,20 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::DocumentUpdateRow,
-    permissions::has_global_read,
+    permissions::require_room_access,
     state::AppState,
     utils::time::{to_iso_string, to_iso_string_opt},
 };
-
-#[derive(Debug, sqlx::FromRow)]
-struct RoomAccessRow {
-    id: String,
-    owner_id: String,
-    is_ended: bool,
-}
 
 pub async fn get_playback_updates(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let room = sqlx::query_as::<_, RoomAccessRow>(
-        r#"
-        SELECT id, "ownerId" as owner_id, "isEnded" as is_ended
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
-
-    let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
-    };
-
-    let is_owner = room.owner_id == auth_user.id;
-    let is_privileged = has_global_read(&auth_user);
-
-    if !is_owner && !is_privileged {
+    let room = require_room_access(&state.db, &auth_user, &room_id).await?;
+    if !room.can_view_playback {
         return Err(ApiError::not_found("Room not found"));
     }
-
     if !room.is_ended {
         return Err(ApiError::bad_request("Room has not ended yet"));
     }
@@ -69,7 +42,7 @@ pub async fn get_playback_updates(
         ORDER BY timestamp ASC, seq ASC
         "#,
     )
-    .bind(&room.id)
+    .bind(&room_id)
     .fetch_all(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to load playback updates"))?;

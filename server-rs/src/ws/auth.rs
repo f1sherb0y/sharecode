@@ -3,13 +3,14 @@ use chrono::Utc;
 use crate::{
     auth::{verify_token, TokenPayload},
     db::db_error,
-    permissions::{role_has_global_read, role_has_global_write},
+    permissions::{can_edit_room_content, role_has_global_write},
     state::AppState,
 };
 
 pub(crate) struct AuthOutcome {
     pub(crate) read_only: bool,
     pub(crate) actor_id: Option<String>,
+    pub(crate) login_session_id: Option<String>,
     pub(crate) share_link_id: Option<String>,
     pub(crate) expires_at: i64,
     pub(crate) username: String,
@@ -49,29 +50,35 @@ async fn authenticate_user(
             u.role,
             u.username,
             u."tokenVersion" as token_version,
-            u."canReadAllRooms" as can_read_all_rooms,
             u."canWriteAllRooms" as can_write_all_rooms,
             u."canDeleteAllRooms" as can_delete_all_rooms,
             u."isDeleted" as user_is_deleted,
 
             r."ownerId" as owner_id,
-            r."isDeleted" as room_is_deleted,
             r."isEnded" as is_ended,
+            room_is_visible(u.id, u.role,
+                u.role = 'superuser' OR u."canReadAllRooms" OR u."canWriteAllRooms" OR u."canDeleteAllRooms",
+                r."ownerId", o.role, r."isPrivate", r."isEnded", r."isDeleted", p.id IS NOT NULL, COALESCE(p."canReplay", false) AND p."shareLinkId" IS NOT NULL) as can_view,
+            (NOT r."isPrivate" AND COALESCE(p."canReplay", false) AND p."shareLinkId" IS NOT NULL) as share_controls_edit,
             p."canEdit" as participant_can_edit,
             p."shareLinkId" as participant_share_link_id
         FROM "User" u
         CROSS JOIN "Room" r
+        JOIN "User" o ON o.id = r."ownerId"
         LEFT JOIN "RoomParticipant" p ON p."roomId" = r.id AND p."userId" = u.id
-        WHERE u.id = $1 AND r.id = $2
+        WHERE u.id = $1 AND r.id = $2 AND ($3::text IS NULL OR EXISTS (
+            SELECT 1 FROM "BrowserSession" s WHERE s.id=$3 AND s."userId"=u.id
+            AND s."tokenVersion"=u."tokenVersion" AND s."expiresAt">NOW()))
         "#,
     )
     .bind(&payload.user_id)
     .bind(document_name)
+    .bind(&payload.session_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|err| {
         format!(
-            "Authentication failed: {}",
+            "Authentication temporarily unavailable: {}",
             db_error(err, "Failed to load auth data")
         )
     })?;
@@ -81,36 +88,20 @@ async fn authenticate_user(
         _ => return Err("Authentication failed: User or Room not found".to_string()),
     };
 
-    if row.room_is_deleted {
+    if !row.can_view {
         return Err("Authentication failed: Access denied".to_string());
     }
-
     let is_owner = row.owner_id == row.user_id;
-    let can_read_globally = role_has_global_read(
-        &row.role,
-        row.can_read_all_rooms,
-        row.can_write_all_rooms,
-        row.can_delete_all_rooms,
-    );
     let can_write_globally =
         role_has_global_write(&row.role, row.can_write_all_rooms, row.can_delete_all_rooms);
-    let is_privileged = can_read_globally;
 
-    if row.is_ended && !is_owner && !is_privileged {
-        return Err("Authentication failed: Access denied".to_string());
-    }
-
-    let has_access = can_read_globally || is_owner || row.participant_can_edit.is_some();
-    if !has_access {
-        return Err("Authentication failed: Access denied".to_string());
-    }
-
-    let participant_can_edit = row.participant_can_edit.unwrap_or(false);
-    let can_edit = if row.is_ended {
-        false
-    } else {
-        can_write_globally || is_owner || participant_can_edit
-    };
+    let can_edit = can_edit_room_content(
+        row.is_ended,
+        is_owner,
+        can_write_globally,
+        row.participant_can_edit,
+        row.share_controls_edit,
+    );
 
     let db = state.db.clone();
     let user_id = row.user_id.clone();
@@ -130,6 +121,7 @@ async fn authenticate_user(
     Ok(AuthOutcome {
         read_only: !can_edit,
         actor_id: Some(row.user_id),
+        login_session_id: payload.session_id.clone(),
         share_link_id: row.participant_share_link_id,
         expires_at: payload.exp,
         username: row.username,
@@ -165,7 +157,7 @@ async fn authenticate_guest(
     .await
     .map_err(|err| {
         format!(
-            "Authentication failed: {}",
+            "Authentication temporarily unavailable: {}",
             db_error(err, "Failed to load guest session")
         )
     })?;
@@ -205,7 +197,7 @@ async fn authenticate_guest(
     .await
     .map_err(|err| {
         format!(
-            "Authentication failed: {}",
+            "Authentication temporarily unavailable: {}",
             db_error(err, "Failed to update guest session")
         )
     })?;
@@ -213,6 +205,7 @@ async fn authenticate_guest(
     Ok(AuthOutcome {
         read_only: !effective_can_edit,
         actor_id: Some(guest.id),
+        login_session_id: None,
         share_link_id: Some(payload.share_link_id.clone()),
         expires_at: payload.exp,
         username: guest.display_name,
@@ -225,13 +218,13 @@ struct WsAuthCombinedRow {
     username: String,
     user_id: String,
     role: String,
-    can_read_all_rooms: bool,
     can_write_all_rooms: bool,
     can_delete_all_rooms: bool,
     user_is_deleted: bool,
     owner_id: String,
-    room_is_deleted: bool,
+    can_view: bool,
     is_ended: bool,
+    share_controls_edit: bool,
     participant_can_edit: Option<bool>,
     participant_share_link_id: Option<String>,
 }

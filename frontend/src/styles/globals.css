@@ -6,8 +6,8 @@
   --color-foreground: #202124;
   --color-card: #ffffff;
   --color-card-foreground: #202124;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #202124;
+  --color-popover: var(--color-background);
+  --color-popover-foreground: var(--color-foreground);
   --color-primary: #34363b;
   --color-primary-foreground: #ffffff;
   --color-secondary: #f4f4f5;
@@ -35,15 +35,15 @@
   --spacing-control-sm: 1.5rem;
   --spacing-control-lg: 2rem;
 
-  /* Dense workspace type scale. */
-  --text-xs: 0.6875rem;
-  --text-sm: 0.75rem;
-  --text-base: 0.8125rem;
-  --text-lg: 0.9375rem;
-  --text-xl: 1.125rem;
-  --text-2xl: 1.25rem;
-  --text-3xl: 1.5rem;
-  --text-4xl: 1.75rem;
+  /* Readable type in the compact workspace geometry. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.1875rem;
+  --text-2xl: 1.3125rem;
+  --text-3xl: 1.5625rem;
+  --text-4xl: 1.8125rem;
   --text-xs--line-height: 1.35;
   --text-sm--line-height: 1.4;
   --text-base--line-height: 1.4;
@@ -54,8 +54,8 @@
   --text-4xl--line-height: 1.2;
 
   /* Font families */
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", "Liberation Mono", ui-monospace, monospace;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Sarasa Mono", monospace;
 }
 
 :root { color-scheme: light; }
@@ -67,8 +67,8 @@
   --color-foreground: #ededee;
   --color-card: #252629;
   --color-card-foreground: #ededee;
-  --color-popover: #252629;
-  --color-popover-foreground: #ededee;
+  --color-popover: var(--color-background);
+  --color-popover-foreground: var(--color-foreground);
   --color-primary: #ededee;
   --color-primary-foreground: #202124;
   --color-secondary: #303135;
@@ -104,7 +104,7 @@
 
   body {
     font-family: var(--font-sans);
-    font-size: 12px;
+    font-size: var(--text-sm);
     line-height: 1.4;
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -124,6 +124,16 @@
     width: 100%;
     max-width: 100%;
     overflow-x: clip;
+  }
+}
+
+/* Radix scroll locks use overflow:hidden on body, which creates a new scroll
+   container and pulls sticky navbars offscreen on an already-scrolled page.
+   Clip preserves the viewport as their scroll container; RemoveScroll still
+   handles wheel/touch locking. Override its injected, unlayered !important rule. */
+@supports (overflow: clip) {
+  html body[data-scroll-locked] {
+    overflow: clip !important;
   }
 }
 
@@ -175,31 +185,6 @@
 
 }
 
-/* Font loading. Prefer the locally-installed font when available, then fall
-   back to the bundled web font. Without the url() fallbacks, users without
-   the font installed silently fell back to the generic monospace stack. */
-
-/* JetBrains Mono is pulled in via @fontsource/jetbrains-mono in main.tsx,
-   which emits its own @font-face rules. We override here with a local()
-   preference that drops in ahead of the fontsource url() on users who
-   already have the OS font. */
-@font-face {
-  font-family: "JetBrains Mono";
-  src: local("JetBrains Mono"), local("JetBrainsMono-Regular");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JuliaMono";
-  src: local("JuliaMono"), local("JuliaMono-Regular"),
-       url("/fonts/JuliaMono-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 @layer components {
   .editor-statusbar {
     display: flex;
@@ -211,25 +196,89 @@
     padding-right: max(0.5rem, env(safe-area-inset-right));
   }
 
-  .room-row-link {
-    min-height: 2rem;
-    grid-template-columns: minmax(0, 1fr) minmax(6rem, 0.3fr) auto;
+  /* Keep a dense list within a comfortable horizontal reading distance. */
+  .rooms-page .app-container { max-width: 1200px; }
+  .rooms-list-toolbar { margin-block: 0.375rem 0.75rem; }
+  .room-list { --room-columns: minmax(10rem, 1fr) 6rem minmax(7rem, 0.6fr) 4rem 3rem 10rem 4rem; }
+  .room-list-columns {
+    display: grid;
+    grid-template-columns: var(--room-columns);
+    align-items: center;
+    column-gap: 1rem;
+    min-width: 0;
+    flex: 1;
   }
-
-  .room-row:hover {
-    background: color-mix(in srgb, var(--color-muted) 55%, transparent);
+  .room-list-heading, .room-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-inline: 0.625rem 0.25rem;
   }
+  .room-list-heading {
+    min-height: 1.75rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
+    margin-bottom: 0.25rem;
+  }
+  .room-row { border-radius: var(--radius-sm); }
+  .room-row:nth-child(odd) { background: color-mix(in srgb, var(--color-muted) 22%, transparent); }
+  .room-row:hover, .room-row:focus-within { background: var(--color-accent); }
+  .room-row-pinned + .room-row:not(.room-row-pinned) {
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .room-row-link { min-height: 2rem; padding-block: 0.25rem; border-radius: var(--radius-sm); }
+  .room-row-name { font-size: var(--text-base); color: var(--color-foreground); }
+  .room-row-language, .room-row-owner, .room-row-status, .room-row-people, .room-row-time, .room-row-duration {
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+  }
+  .room-row-language { overflow: hidden; text-overflow: ellipsis; }
+  .room-row-owned { font-size: var(--text-xs); }
+  .room-row-status { display: flex; align-items: center; gap: 0.375rem; font-size: var(--text-xs); }
+  .room-row-status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+  .room-row-status-active .room-row-status-dot { background: var(--color-success); opacity: 1; }
+  .room-row-people { display: flex; align-items: center; justify-content: end; gap: 0.25rem; }
+  .room-row-time, .room-row-duration, .room-row-people { font-variant-numeric: tabular-nums; }
+  .room-row-duration { text-align: right; }
+  .room-row-actions { width: var(--spacing-control-sm); flex-shrink: 0; }
 
+  @media (min-width: 1440px) {
+    .rooms-page main > .app-container { padding-top: 1rem; }
+  }
+  @media (min-width: 901px) and (max-width: 1100px) {
+    .room-list { --room-columns: minmax(8rem, 1fr) 5.5rem minmax(6rem, 0.6fr) 4rem 2.5rem 10rem; }
+    .room-list-columns { column-gap: 0.75rem; }
+    .room-row-duration, .room-list-heading .room-list-columns > :last-child { display: none; }
+  }
   @media (max-width: 900px) {
-    .room-row-link { grid-template-columns: minmax(0, 1fr) auto; }
-    .room-row-name { grid-column: 1 / -1; }
-    .room-row-owner { padding-left: 0.625rem; }
+    .room-list-heading { display: none; }
+    .room-row-link {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-areas: "name language status" "owner people time";
+      gap: 0.125rem 0.625rem;
+      padding-block: 0.375rem;
+    }
+    .room-row-name { grid-area: name; }
+    .room-row-language { grid-area: language; font-size: var(--text-xs); }
+    .room-row-owner { grid-area: owner; font-size: var(--text-xs); }
+    .room-row-status { grid-area: status; justify-self: end; }
+    .room-row-people { grid-area: people; font-size: var(--text-xs); }
+    .room-row-time { grid-area: time; font-size: var(--text-xs); }
+    .room-row-duration { display: none; }
   }
 
   @media (max-width: 640px) {
     .editor-statusbar { flex-wrap: wrap; }
-    .editor-statusbar > [role='status'] { min-height: 1.375rem; }
-    .editor-statusbar-controls { width: 100%; border-top: 1px solid var(--color-border); }
+    .editor-statusbar > [role='status'] {
+      order: 1;
+      width: 100%;
+      min-height: 1.375rem;
+      border-top: 1px solid var(--color-border);
+    }
+    .editor-statusbar-controls { width: 100%; }
     .editor-statusbar-controls > :first-child { margin-right: auto; }
 
   }
@@ -252,6 +301,54 @@
   padding-right: max(0.5rem, env(safe-area-inset-right));
 }
 .md-editor-body { overscroll-behavior-y: contain; }
+/* Shared remote caret: a thin stem and compact dot in both text editors. */
+.collaboration-caret {
+  border-left: 2px solid var(--collaborator-color);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.collaboration-caret::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--collaborator-color);
+  left: -4px;
+  top: -5px;
+}
+/* Pulse the existing selection fill. No outline and no whole-line overlay. */
+.md-editor .selection-blink-0,
+.monaco-editor .selection-blink-0,
+.monaco-editor.selection-blink-local-0 .selected-text { animation: selection-blink-a 500ms cubic-bezier(0.8, 0, 0.2, 1) 4; }
+.md-editor .selection-blink-1,
+.monaco-editor .selection-blink-1,
+.monaco-editor.selection-blink-local-1 .selected-text { animation: selection-blink-b 500ms cubic-bezier(0.8, 0, 0.2, 1) 4; }
+@keyframes selection-blink-a {
+  0%, 100% { background-color: color-mix(in srgb, var(--selection-blink-color) 65%, transparent); }
+  50% { background-color: transparent; }
+}
+@keyframes selection-blink-b {
+  0%, 100% { background-color: color-mix(in srgb, var(--selection-blink-color) 65%, transparent); }
+  50% { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-editor .ProseMirror :is(.selection-blink-0, .selection-blink-1),
+  .monaco-editor :is(.selection-blink-0, .selection-blink-1),
+  .monaco-editor:is(.selection-blink-local-0, .selection-blink-local-1) .selected-text {
+    animation: none;
+    background-color: color-mix(in srgb, var(--selection-blink-color) 65%, transparent);
+  }
+}
+/* Keep all primary actions reachable on the narrowest touch screens. */
+@media (max-width: 359px) {
+  .editor-shell > header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: auto;
+  }
+  .editor-toolbar-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
 @media (pointer: coarse) {
   :root {
     --spacing-control: 2.75rem;

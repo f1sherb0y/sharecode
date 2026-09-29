@@ -2,9 +2,9 @@ import { translateError } from '@/i18n/errors'
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Settings, Code2 } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
-import { ThemeToggle, LanguageSwitcher } from '@/components/layout'
+import { AuthBrand, ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { useAuthStore } from '@/stores'
 import { isTauriApp } from '@/lib/tauri'
 import { parseShareToken } from '@/lib/share'
@@ -76,11 +76,7 @@ export function LoginPage() {
       {/* Right side - Login form */}
       <div className="flex-1 flex items-center justify-center p-2">
         <Card className="w-full max-w-sm border-0 bg-transparent shadow-none">
-          {/* Mobile branding */}
-          <div className="flex items-center gap-1 px-2 pb-3">
-            <Code2 className="h-5 w-5 text-foreground" />
-            <span className="text-base font-semibold">ShareCode</span>
-          </div>
+          <AuthBrand />
 
           <CardHeader>
             <div className="flex items-center justify-between">

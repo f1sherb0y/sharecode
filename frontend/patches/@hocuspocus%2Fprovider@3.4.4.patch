@@ -1,0 +1,42 @@
+diff --git a/dist/hocuspocus-provider.cjs b/dist/hocuspocus-provider.cjs
+index 7edc0919df5cf1d43fdb7e704623981163582c3c..47b2eac96c42998ee537b8f2308f9ae3917fa3e7 100644
+--- a/dist/hocuspocus-provider.cjs
++++ b/dist/hocuspocus-provider.cjs
+@@ -1547,7 +1547,8 @@ class HocuspocusProviderWebsocket extends EventEmitter {
+         // trigger connect if no retry is running and we want to have a connection
+         if (!this.cancelWebsocketRetry && this.shouldConnect) {
+             setTimeout(() => {
+-                this.connect();
++                // disconnect()/destroy() may have run since this retry was queued.
++                if (this.shouldConnect) this.connect();
+             }, this.configuration.delay);
+         }
+     }
+diff --git a/dist/hocuspocus-provider.esm.js b/dist/hocuspocus-provider.esm.js
+index 144f2f182f055b0eee2ca638f716f9e200429265..708d136b8f228c5724e870464290fe52f41d6dd0 100644
+--- a/dist/hocuspocus-provider.esm.js
++++ b/dist/hocuspocus-provider.esm.js
+@@ -1526,7 +1526,8 @@ class HocuspocusProviderWebsocket extends EventEmitter {
+         // trigger connect if no retry is running and we want to have a connection
+         if (!this.cancelWebsocketRetry && this.shouldConnect) {
+             setTimeout(() => {
+-                this.connect();
++                // disconnect()/destroy() may have run since this retry was queued.
++                if (this.shouldConnect) this.connect();
+             }, this.configuration.delay);
+         }
+     }
+diff --git a/src/HocuspocusProviderWebsocket.ts b/src/HocuspocusProviderWebsocket.ts
+index ebd1b8c4e62b84deb52bdf7ab374c01da4186542..bc1d15f2027a1e2564d9f2dec6c1896e3778f96d 100644
+--- a/src/HocuspocusProviderWebsocket.ts
++++ b/src/HocuspocusProviderWebsocket.ts
+@@ -499,7 +499,8 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 		// trigger connect if no retry is running and we want to have a connection
+ 		if (!this.cancelWebsocketRetry && this.shouldConnect) {
+ 			setTimeout(() => {
+-				this.connect();
++				// disconnect()/destroy() may have run since this retry was queued.
++				if (this.shouldConnect) this.connect();
+ 			}, this.configuration.delay);
+ 		}
+ 	}

@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Sarasa font integration</title></head><body>
+<div id="sample" style="font:20px 'Sarasa Mono',monospace">Mi中文日本語한글</div>
+<script type="module">
+import { loadEditorFont } from '/src/lib/editor-font.ts'
+import { exportToSvg, convertToExcalidrawElements } from '@excalidraw/excalidraw'
+window.fontReady = loadEditorFont('Mi中文日本語한글').catch(() => [])
+window.exportFontSvg = async () => {
+  await window.fontReady
+  const elements = convertToExcalidrawElements([{ type: 'text', x: 0, y: 0, text: 'Mi中文日本語한글', fontFamily: 3, fontSize: 20 }])
+  const svg = await exportToSvg({ elements, appState: { exportBackground: false }, files: {} })
+  document.body.append(svg)
+  return new XMLSerializer().serializeToString(svg)
+}
+</script></body></html>

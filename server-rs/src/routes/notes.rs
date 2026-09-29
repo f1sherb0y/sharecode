@@ -1,3 +1,4 @@
+use crate::core::audit::{self, ClientInfo};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -7,14 +8,9 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    auth::AuthUser, db::db_error, error::ApiError, models::RoomNoteRow,
-    permissions::has_global_read, state::AppState, utils::time::to_iso_string,
+    auth::AuthActor, db::db_error, error::ApiError, models::RoomNoteRow,
+    permissions::require_content_access, state::AppState, utils::time::to_iso_string,
 };
-
-#[derive(Debug, sqlx::FromRow)]
-struct RoomOwnerRow {
-    owner_id: String,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct CreateNotePayload {
@@ -28,29 +24,11 @@ pub struct UpdateNotePayload {
 
 pub async fn list_notes(
     State(state): State<AppState>,
-    auth_user: AuthUser,
+    auth_actor: AuthActor,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let room = sqlx::query_as::<_, RoomOwnerRow>(
-        r#"
-        SELECT "ownerId" as owner_id
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
-
-    let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
-    };
-
-    if !can_manage_notes(&auth_user, &room.owner_id) {
-        return Err(ApiError::not_found("Room not found"));
-    }
+    let _access = state.ws.access.read().await;
+    require_content_access(&state.db, &auth_actor, &room_id).await?;
 
     let notes = sqlx::query_as::<_, RoomNoteRow>(
         r#"
@@ -77,28 +55,15 @@ pub async fn list_notes(
 
 pub async fn create_note(
     State(state): State<AppState>,
-    auth_user: AuthUser,
+    client: ClientInfo,
+    auth_actor: AuthActor,
     Path(room_id): Path<String>,
     Json(payload): Json<CreateNotePayload>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let room = sqlx::query_as::<_, RoomOwnerRow>(
-        r#"
-        SELECT "ownerId" as owner_id
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
+    let _access = state.ws.access.read().await;
+    let can_write = require_content_access(&state.db, &auth_actor, &room_id).await?;
 
-    let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
-    };
-
-    if !can_manage_notes(&auth_user, &room.owner_id) {
+    if !can_write {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -108,6 +73,11 @@ pub async fn create_note(
     }
 
     let note_id = Uuid::new_v4().to_string();
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let note = sqlx::query_as::<_, RoomNoteRow>(
         r#"
         INSERT INTO "RoomNote" (id, "roomId", text)
@@ -123,10 +93,26 @@ pub async fn create_note(
     .bind(&note_id)
     .bind(&room_id)
     .bind(&text)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create note"))?;
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "note.created",
+        Some(auth_actor.id()),
+        Some(auth_actor.username()),
+        Some(&note_id),
+        true,
+        None,
+        Some(&room_id),
+        json!({}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     Ok((
         StatusCode::CREATED,
         Json(json!({ "note": note_to_json(&note) })),
@@ -135,28 +121,15 @@ pub async fn create_note(
 
 pub async fn update_note(
     State(state): State<AppState>,
-    auth_user: AuthUser,
+    client: ClientInfo,
+    auth_actor: AuthActor,
     Path((room_id, note_id)): Path<(String, String)>,
     Json(payload): Json<UpdateNotePayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let room = sqlx::query_as::<_, RoomOwnerRow>(
-        r#"
-        SELECT "ownerId" as owner_id
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
+    let _access = state.ws.access.read().await;
+    let can_write = require_content_access(&state.db, &auth_actor, &room_id).await?;
 
-    let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
-    };
-
-    if !can_manage_notes(&auth_user, &room.owner_id) {
+    if !can_write {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -165,6 +138,11 @@ pub async fn update_note(
         return Err(ApiError::bad_request("Note text is required"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let note = sqlx::query_as::<_, RoomNoteRow>(
         r#"
         UPDATE "RoomNote"
@@ -181,7 +159,7 @@ pub async fn update_note(
     .bind(&room_id)
     .bind(&note_id)
     .bind(&text)
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to update note"))?;
 
@@ -190,39 +168,47 @@ pub async fn update_note(
         None => return Err(ApiError::not_found("Note not found")),
     };
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "note.updated",
+        Some(auth_actor.id()),
+        Some(auth_actor.username()),
+        Some(&note_id),
+        true,
+        None,
+        Some(&room_id),
+        json!({}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     Ok(Json(json!({ "note": note_to_json(&note) })))
 }
 
 pub async fn delete_note(
     State(state): State<AppState>,
-    auth_user: AuthUser,
+    client: ClientInfo,
+    auth_actor: AuthActor,
     Path((room_id, note_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let room = sqlx::query_as::<_, RoomOwnerRow>(
-        r#"
-        SELECT "ownerId" as owner_id
-        FROM "Room"
-        WHERE id = $1
-        "#,
-    )
-    .bind(&room_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load room"))?;
+    let _access = state.ws.access.read().await;
+    let can_write = require_content_access(&state.db, &auth_actor, &room_id).await?;
 
-    let room = match room {
-        Some(room) => room,
-        None => return Err(ApiError::not_found("Room not found")),
-    };
-
-    if !can_manage_notes(&auth_user, &room.owner_id) {
+    if !can_write {
         return Err(ApiError::not_found("Room not found"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let result = sqlx::query(r#"DELETE FROM "RoomNote" WHERE id = $1 AND "roomId" = $2"#)
         .bind(&note_id)
         .bind(&room_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await
         .map_err(|err| db_error(err, "Failed to delete note"))?;
 
@@ -230,14 +216,23 @@ pub async fn delete_note(
         return Err(ApiError::not_found("Note not found"));
     }
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "note.deleted",
+        Some(auth_actor.id()),
+        Some(auth_actor.username()),
+        Some(&note_id),
+        true,
+        None,
+        Some(&room_id),
+        json!({}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     Ok(Json(json!({ "message": "Note deleted" })))
-}
-
-fn can_manage_notes(auth_user: &AuthUser, owner_id: &str) -> bool {
-    auth_user.id == owner_id
-        || auth_user.role == "admin"
-        || auth_user.role == "superuser"
-        || has_global_read(auth_user)
 }
 
 fn note_to_json(note: &RoomNoteRow) -> serde_json::Value {

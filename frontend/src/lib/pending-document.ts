@@ -4,7 +4,7 @@ const MAX_BYTES = 8 * 1024 * 1024
 const MAX_UPDATES = 4096
 interface PendingRecord { key: string; update: Uint8Array }
 
-/** Immutable outbox entries scoped by server, room and credential fingerprint.
+/** Immutable outbox entries scoped by server, room and session fingerprint.
  * Duplicated tabs may replay the same entries (Yjs is idempotent), but can never
  * overwrite or acknowledge one another's newer edits. Tokens are never stored. */
 export class PendingDocument {
@@ -14,8 +14,8 @@ export class PendingDocument {
   private writes: Promise<void> = Promise.resolve()
   private constructor(private db: IDBDatabase, private prefix: string) {}
 
-  static async open(server: string, room: string, token: string): Promise<PendingDocument> {
-    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
+  static async open(server: string, room: string, sessionScope: string): Promise<PendingDocument> {
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sessionScope))
     const fingerprint = Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('')
     const prefix = `${server}:${room}:${fingerprint}:`
     const db = await new Promise<IDBDatabase>((resolve, reject) => {

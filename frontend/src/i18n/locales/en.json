@@ -36,7 +36,8 @@
       "loginLink": "Login",
       "disabled": "Registration is currently disabled. Please contact an administrator for access.",
       "failed": "Registration failed. Please try again."
-    }
+    },
+    "logoutFailed": "Could not sign out. Check your connection and try again."
   },
   "join": {
     "title": "Join a Room",
@@ -62,6 +63,8 @@
     "create": {
       "title": "Create New Room",
       "name": "Room Name",
+      "private": "Make room private",
+      "privateHint": "Only you, invited members, and accounts ranked above you can access. Invited regular members lose access when the room ends.",
       "namePlaceholder": "Enter room name",
       "language": "Language",
       "company": "Company (optional)",
@@ -95,7 +98,15 @@
       "selectedUsers_one": "{{count}} user selected",
       "selectedUsers_other": "{{count}} users selected"
     },
+    "columns": {
+      "name": "Room",
+      "language": "Language",
+      "status": "Status",
+      "people": "People",
+      "time": "Session time"
+    },
     "list": {
+      "private": "Private room",
       "loading": "Loading rooms...",
       "empty": "No rooms yet. Create one to get started!",
       "owner": "Owner",
@@ -196,6 +207,7 @@
       "selectFont": "Select editor font"
     },
     "errors": {
+      "sessionExpired": "Your session has expired. Sign in again to reconnect. Unconfirmed edits remain stored on this device.",
       "accessDenied": "Access denied. Open the invitation for this room again.",
       "accessRevoked": "Your access to this room was revoked.",
       "pendingReadOnly": "This tab has unconfirmed edits but currently has read-only access. Restore write access to recover them.",
@@ -582,7 +594,7 @@
   },
   "notes": {
     "placeholder": "Type a note...",
-    "empty": "No notes yet. Add one below.",
+    "empty": "No notes yet.",
     "add": "Add",
     "editPlaceholder": "Click to edit",
     "loading": "Loading notes...",
@@ -592,7 +604,7 @@
   },
   "audit": {
     "title": "Audit log",
-    "description": "Login attempts, guest joins and sensitive account actions. IPs identify network connections, not necessarily individual people.",
+    "description": "Account and room activity, newest first. The first page checks for new events every 15 seconds.",
     "denied": "Administrator access required.",
     "account": "Account (exact match)",
     "filter": "Filter",
@@ -601,14 +613,84 @@
     "action": "Action",
     "result": "Result",
     "ip": "Client IP",
-    "browser": "Browser / device",
-    "target": "Target / request ID",
+    "browser": "Browser",
+    "target": "Target ID",
     "success": "Success",
     "failure": "Failed",
     "empty": "No audit events yet.",
-    "latest": "Latest",
-    "older": "Older",
-    "peer": "peer"
+    "peer": "Peer IP",
+    "allActions": "All actions",
+    "start": "From",
+    "end": "To",
+    "clear": "Clear",
+    "localTime": "Local time · {{zone}}",
+    "invalidRange": "Start must be before end.",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "device": "Device",
+    "devices": "Devices",
+    "newDevice": "New device",
+    "unknownDevice": "Unidentified",
+    "fingerprint": "Fingerprint",
+    "details": "Details",
+    "request": "Request ID",
+    "ipSource": "IP source",
+    "changes": "Changes",
+    "userDevices": "Devices · {{username}}",
+    "deviceHint": "Browser environments reported at successful sign-in. New devices may also mean another browser, private browsing or cleared storage. Fingerprints are advisory and can change or be spoofed.",
+    "events": "Events",
+    "firstSeen": "First login",
+    "lastSeen": "Latest login",
+    "lastIp": "Latest IP",
+    "loginCount": "{{count}} logins",
+    "noDevices": "No device information yet. Devices appear after the next sign-in.",
+    "actions": {
+      "login": "Sign in",
+      "password": {
+        "changed": "Password changed"
+      },
+      "user": {
+        "registered": "Registered",
+        "created": "User created",
+        "permissions_changed": "Permissions changed",
+        "updated": "User updated",
+        "deleted": "User deleted"
+      },
+      "room": {
+        "created": "Room created",
+        "updated": "Room updated",
+        "pin_changed": "Pin changed",
+        "ended": "Room ended",
+        "deleted": "Room deleted"
+      },
+      "share": {
+        "created": "Share created",
+        "accept": "Share accepted",
+        "revoke": "Share revoked"
+      },
+      "guest": {
+        "join": "Guest joined"
+      },
+      "note": {
+        "created": "Note created",
+        "updated": "Note updated",
+        "deleted": "Note deleted"
+      },
+      "playback": {
+        "compressed": "Playback compressed"
+      },
+      "notification": {
+        "created": "Announcement created"
+      },
+      "session.logout": "Signed out"
+    },
+    "reasons": {
+      "missing_credentials": "Missing credentials",
+      "invalid_credentials": "Invalid credentials",
+      "account_disabled": "Account disabled"
+    },
+    "storageUnavailable": "Audit storage is unavailable. Please try again later.",
+    "loadFailed": "Unable to load audit or device information."
   },
   "errors": {
     "credentialsRequired": "Username and password are required.",

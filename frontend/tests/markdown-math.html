@@ -59,7 +59,7 @@
             return editors.map((peer, index) => ({
               markdown: peer.action((ctx) => ctx.get(serializerCtx)(ctx.get(editorViewCtx).state.doc)),
               preview: roots[index].querySelector('.md-math-inline annotation').textContent,
-              blocks: roots[index].querySelectorAll('.md-math-block .katex-display').length,
+              blocks: roots[index].querySelectorAll('.md-math-block math[display="block"]').length,
             }))
           } finally {
             for (const peer of editors) await peer.destroy()

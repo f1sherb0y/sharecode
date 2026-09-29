@@ -15,7 +15,7 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::{ShareLinkSummaryRow, ShareLinkWithRoomRow},
-    permissions::{has_global_delete, has_global_read},
+    permissions::{has_global_delete, has_global_read, require_room_access},
     state::AppState,
     utils::colors::random_user_color,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -61,10 +61,17 @@ pub struct JoinSharePayload {
 
 pub async fn create_share_link(
     State(state): State<AppState>,
+    client: ClientInfo,
     auth_user: AuthUser,
     Path(room_id): Path<String>,
     Json(payload): Json<CreateShareLinkPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
+    if require_room_access(&state.db, &auth_user, &room_id)
+        .await?
+        .share_read_only
+    {
+        return Err(ApiError::not_found("Room not found"));
+    }
     let room = sqlx::query_as::<_, RoomOwnerRow>(
         r#"
         SELECT id, "ownerId" as owner_id, "isDeleted" as is_deleted,
@@ -96,6 +103,11 @@ pub async fn create_share_link(
     let token = random_slug(16);
     let can_edit = payload.can_edit.unwrap_or(false) && room.allow_edit;
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let share_link = sqlx::query_as::<_, ShareLinkSummaryRow>(
         r#"
         INSERT INTO "RoomShareLink" (id, "roomId", token, "canEdit", "createdBy")
@@ -116,10 +128,26 @@ pub async fn create_share_link(
     .bind(&token)
     .bind(can_edit)
     .bind(&auth_user.id)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create share link"))?;
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "share.created",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&share_link.id),
+        true,
+        None,
+        Some(&room_id),
+        json!({"canEdit":can_edit}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     tracing::info!(
         actor_id = %auth_user.id,
         actor_role = %auth_user.role,
@@ -144,6 +172,12 @@ pub async fn list_share_links(
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    if require_room_access(&state.db, &auth_user, &room_id)
+        .await?
+        .share_read_only
+    {
+        return Err(ApiError::not_found("Room not found"));
+    }
     let room = sqlx::query_as::<_, RoomOwnerOnlyRow>(
         r#"
         SELECT id, "ownerId" as owner_id
@@ -201,6 +235,12 @@ pub async fn delete_share_link(
     Path((room_id, share_link_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _access = state.ws.access.write().await;
+    if require_room_access(&state.db, &auth_user, &room_id)
+        .await?
+        .share_read_only
+    {
+        return Err(ApiError::not_found("Room not found"));
+    }
     let share_link = sqlx::query_as::<_, ShareLinkOwnerRow>(
         r#"
         SELECT l."roomId" as room_id, r."ownerId" as owner_id
@@ -243,7 +283,7 @@ pub async fn delete_share_link(
         "share link deleted"
     );
 
-    audit::record(
+    audit::record_details(
         &mut *tx,
         &client,
         "share.revoke",
@@ -252,6 +292,8 @@ pub async fn delete_share_link(
         Some(&share_link_id),
         true,
         None,
+        Some(&room_id),
+        json!({}),
     )
     .await?;
     tx.commit()
@@ -404,7 +446,7 @@ pub async fn join_share_link(
 
     let jwt_token = crate::auth::generate_guest_token(&state.config, claims)?;
 
-    audit::record(
+    audit::record_details(
         &mut *tx,
         &client,
         "guest.join",
@@ -413,6 +455,8 @@ pub async fn join_share_link(
         Some(&share_link.room_id),
         true,
         None,
+        Some(&share_link.room_id),
+        json!({"canEdit":can_edit}),
     )
     .await?;
     tx.commit()
@@ -454,16 +498,16 @@ pub async fn join_share_link(
     ))
 }
 
-/// A logged-in account follows the invitation to its exact room. Existing
-/// members do not consume the invitation intended for a guest. New members
-/// claim it atomically, with the invitation's maximum edit permission.
+/// Claim an invitation atomically. A higher-role standard-room invitation also
+/// persists replay access and replaces the participant's edit grant with the
+/// share permission. Reopening the same claimed invitation is idempotent.
 pub async fn accept_share_link(
     State(state): State<AppState>,
     auth_user: AuthUser,
     client: ClientInfo,
     Path(token): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _access = state.ws.access.read().await;
+    let _access = state.ws.access.write().await;
     let mut tx = state
         .db
         .begin()
@@ -471,33 +515,42 @@ pub async fn accept_share_link(
         .map_err(|e| db_error(e, "Failed to begin invitation"))?;
     let row = sqlx::query_as::<_, AccountInvitation>(r#"
         SELECT l.id, l."roomId" as room_id, l."canEdit" AND r."allowEdit" as can_edit,
-            r."ownerId" as owner_id, l."consumedAt" IS NOT NULL as consumed,
-            l."expiresAt" <= NOW() as expired,
-            EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId"=r.id AND p."userId"=$2) as member
+            l."consumedAt" IS NOT NULL as consumed,
+            (NOT r."isPrivate" AND room_role_rank(o.role) > room_role_rank($3)) as grants_replay,
+            EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2 AND p."shareLinkId" = l.id) as already_claimed,
+            room_is_visible($2, $3, $4, r."ownerId", o.role, r."isPrivate", r."isEnded", r."isDeleted",
+                EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2),
+                EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2 AND p."canReplay" AND p."shareLinkId" IS NOT NULL)) as can_view,
+            l."expiresAt" <= NOW() as expired
         FROM "RoomShareLink" l JOIN "Room" r ON r.id=l."roomId"
+        JOIN "User" o ON o.id = r."ownerId"
         WHERE l.token=$1 AND NOT r."isDeleted" AND NOT r."isEnded"
         FOR UPDATE OF l
-    "#).bind(&token).bind(&auth_user.id).fetch_optional(&mut *tx).await
+    "#).bind(&token).bind(&auth_user.id).bind(&auth_user.role).bind(has_global_read(&auth_user)).fetch_optional(&mut *tx).await
       .map_err(|e| db_error(e, "Failed to load invitation"))?
       .ok_or_else(|| ApiError::not_found("Share link or active room not found"))?;
-    if !(row.member || row.owner_id == auth_user.id || has_global_read(&auth_user)) {
+    let claimed = !row.already_claimed && (!row.can_view || row.grants_replay);
+    if claimed {
         if row.consumed {
             return Err(ApiError::gone("This share link has already been used"));
         }
         if row.expired {
             return Err(ApiError::gone("This share link has expired"));
         }
-        // Keep a link association so revoking the invitation can also revoke
-        // membership granted through it, without changing pre-existing members.
+        // A higher-role standard-room invitation explicitly replaces the
+        // member grant with the share permissions and retains replay access.
+        // Revocation removes that grant, including its replay permission.
         sqlx::query(
-            r#"INSERT INTO "RoomParticipant" (id,"roomId","userId","canEdit","shareLinkId")
-            VALUES ($1,$2,$3,$4,$5) ON CONFLICT ("roomId","userId") DO NOTHING"#,
+            r#"INSERT INTO "RoomParticipant" (id,"roomId","userId","canEdit","shareLinkId","canReplay")
+            VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT ("roomId","userId") DO UPDATE
+            SET "canEdit" = EXCLUDED."canEdit", "shareLinkId" = EXCLUDED."shareLinkId", "canReplay" = EXCLUDED."canReplay""#,
         )
         .bind(Uuid::new_v4().to_string())
         .bind(&row.room_id)
         .bind(&auth_user.id)
         .bind(row.can_edit)
         .bind(&row.id)
+        .bind(row.grants_replay)
         .execute(&mut *tx)
         .await
         .map_err(|e| db_error(e, "Failed to join room"))?;
@@ -507,7 +560,7 @@ pub async fn accept_share_link(
             .await
             .map_err(|e| db_error(e, "Failed to claim invitation"))?;
     }
-    audit::record(
+    audit::record_details(
         &mut *tx,
         &client,
         "share.accept",
@@ -516,11 +569,19 @@ pub async fn accept_share_link(
         Some(&row.room_id),
         true,
         None,
+        Some(&row.room_id),
+        json!({"canEdit":row.can_edit,"canReplay":row.grants_replay,"claimed":claimed}),
     )
     .await?;
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to accept invitation"))?;
+    if claimed {
+        state
+            .ws
+            .revoke_room_actor(&row.room_id, &auth_user.id)
+            .await;
+    }
     Ok(Json(json!({"roomId": row.room_id})))
 }
 
@@ -528,9 +589,10 @@ pub async fn accept_share_link(
 struct AccountInvitation {
     id: String,
     room_id: String,
-    owner_id: String,
     can_edit: bool,
-    member: bool,
+    can_view: bool,
+    grants_replay: bool,
+    already_claimed: bool,
     consumed: bool,
     expired: bool,
 }

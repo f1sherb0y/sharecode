@@ -1,20 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui'
-import {
-  LoginPage,
-  RegisterPage,
-  RoomsPage,
-  EditorPage,
-  AdminPage,
-  PlaybackPage,
-  SettingsPage,
-  SharePage,
-  JoinPage,
-  NotificationsPage,
-  AuditPage,
-} from '@/pages'
+
 import { useAuthStore, useThemeStore } from '@/stores'
 import {
   isTauriApp,
@@ -24,7 +12,20 @@ import {
 import { queryClient } from '@/lib/query-client'
 import { Spinner } from '@/components/ui'
 import { Toaster } from 'sonner'
+import { useSessionRenewal } from '@/hooks/use-session-renewal'
 import { NotificationPopup } from '@/components/features/notification-popup'
+
+const LoginPage = lazy(() => import('@/pages/login').then(module => ({ default: module.LoginPage })))
+const RegisterPage = lazy(() => import('@/pages/register').then(module => ({ default: module.RegisterPage })))
+const RoomsPage = lazy(() => import('@/pages/rooms').then(module => ({ default: module.RoomsPage })))
+const EditorPage = lazy(() => import('@/pages/editor').then(module => ({ default: module.EditorPage })))
+const AdminPage = lazy(() => import('@/pages/admin').then(module => ({ default: module.AdminPage })))
+const PlaybackPage = lazy(() => import('@/pages/playback').then(module => ({ default: module.PlaybackPage })))
+const SettingsPage = lazy(() => import('@/pages/settings').then(module => ({ default: module.SettingsPage })))
+const SharePage = lazy(() => import('@/pages/share').then(module => ({ default: module.SharePage })))
+const JoinPage = lazy(() => import('@/pages/join').then(module => ({ default: module.JoinPage })))
+const NotificationsPage = lazy(() => import('@/pages/notifications').then(module => ({ default: module.NotificationsPage })))
+const AuditPage = lazy(() => import('@/pages/audit').then(module => ({ default: module.AuditPage })))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
@@ -89,9 +90,9 @@ function RoomRoute({ children }: { children: React.ReactNode }) {
 
 function RoomEditor() {
   const { roomId } = useParams()
-  const token = useAuthStore((state) => state.token)
+  const sessionId = useAuthStore((state) => state.sessionId)
   // Identity changes must tear down editor bindings and pending requests.
-  return <EditorPage key={`${roomId}:${token}`} />
+  return <EditorPage key={`${roomId}:${sessionId}`} />
 }
 
 function ShareRoute() {
@@ -123,7 +124,7 @@ function AppRoutes() {
       <Route path="/s/:shareToken" element={<ShareRoute />} />
       <Route path="/join" element={<JoinPage />} />
 
-      <Route path="/admin/audit" element={<PrivateRoute><AuditPage /></PrivateRoute>} />
+      <Route path="/admin/audit" element={<PrivateRoute><Suspense fallback={<Spinner />}><AuditPage /></Suspense></PrivateRoute>} />
 
       {/* Protected routes */}
       <Route
@@ -177,6 +178,7 @@ function AppRoutes() {
 }
 
 function AppContent() {
+  useSessionRenewal()
   const initialize = useAuthStore((state) => state.initialize)
   const theme = useThemeStore((state) => state.theme)
 
@@ -209,7 +211,7 @@ function AppContent() {
   return (
     <Router>
       <TooltipProvider>
-        <AppRoutes />
+        <Suspense fallback={<div className="flex min-h-dvh items-center justify-center"><Spinner /></div>}><AppRoutes /></Suspense>
         <NotificationPopup />
         <Toaster />
       </TooltipProvider>

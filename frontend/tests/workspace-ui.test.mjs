@@ -34,11 +34,11 @@ export function useYjsProvider(name) {
 }`
 before(async () => {
   await mkdir(screenshots, { recursive: true })
-  server = await createServer({ cacheDir: 'node_modules/.vite-ui-tests', server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false }, optimizeDeps: { include: ['yjs', 'y-protocols/awareness', '@milkdown/kit/core', '@milkdown/react', '@milkdown/plugin-collab'] }, logLevel: 'error', plugins: [{ name: 'isolated-ui-provider', enforce: 'pre', load(id) { if (id.endsWith('/src/hooks/use-yjs-provider.ts')) return mockProvider } }] })
+  server = await createServer({ cacheDir: `node_modules/.vite-ui-tests-${engine}`, server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false }, optimizeDeps: { include: ['yjs', 'y-protocols/awareness', '@milkdown/kit/core', '@milkdown/react', '@milkdown/plugin-collab'] }, logLevel: 'error', plugins: [{ name: 'isolated-ui-provider', enforce: 'pre', load(id) { if (id.endsWith('/src/hooks/use-yjs-provider.ts')) return mockProvider } }] })
   await server.listen(); base = server.resolvedUrls.local[0]; browser = await ({ chromium, firefox, webkit })[engine].launch()
 })
 after(async () => { await browser?.close(); await server?.close() })
-async function open(path, { mobile = false, authenticated = true, deviceScaleFactor = 1, viewport, locale = 'zh' } = {}) {
+async function open(path, { mobile = false, authenticated = true, deviceScaleFactor = 1, viewport, locale = 'zh', rooms = sampleRooms } = {}) {
   const context = await browser.newContext({ viewport: viewport ?? (mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }), deviceScaleFactor, isMobile: engine !== 'firefox' && mobile, hasTouch: mobile })
   await context.addInitScript(({ authenticated, locale }) => {
     if (!localStorage.getItem('i18nextLng')) localStorage.setItem('i18nextLng', locale)
@@ -48,19 +48,21 @@ async function open(path, { mobile = false, authenticated = true, deviceScaleFac
   await context.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
     if (!path.startsWith('/api/')) return route.continue()
+    if (path === '/api/auth/refresh') return route.fulfill({ status: 401, json: { error: 'No browser session' } })
     let data = {}
     if (path === '/api/auth/profile') data = { actorType: 'user', user: owner }
     else if (path === '/api/admin/rooms') data = { rooms: sampleRooms, pagination: { page: 1, pageSize: 25, total: sampleRooms.length, totalPages: 1, hasNext: false, hasPrev: false } }
     else if (path === '/api/admin/users') data = { users: [owner], pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1, hasNext: false, hasPrev: false } }
-    else if (path === '/api/admin/audit') data = { events: [], nextCursor: null }
+    else if (path === '/api/admin/audit') data = { events: [], snapshot: 0, pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1, hasNext: false, hasPrev: false } }
     else if (path === '/api/admin/storage/db-size') data = { bytes: 1024, pretty: '1 kB' }
     else if (path === '/api/admin/storage/playback') data = { rooms: [] }
     else if (path.endsWith('/playback/updates')) data = { updates: [0, 1].map(id => ({ id, timestamp: `2026-09-16T02:00:0${id}Z`, update: playbackUpdate, userId: owner.id })) }
     else if (path.endsWith('/notes')) data = { notes: [] }
+    else if (path.endsWith('/share-links')) data = { shareLinks: [] }
     else if (path === '/api/rooms') {
       const query = new URL(route.request().url()).searchParams
       const current = Number(query.get('page') || 1)
-      data = { rooms: sampleRooms, pagination: { page: current, pageSize: Number(query.get('pageSize') || 50), total: 120, totalPages: 3, hasNext: current < 3, hasPrev: current > 1 } }
+      data = { rooms, pagination: { page: current, pageSize: Number(query.get('pageSize') || 50), total: 120, totalPages: 3, hasNext: current < 3, hasPrev: current > 1 } }
     }
     else if (path.startsWith('/api/rooms/')) data = { room: sampleRooms.find(r => path.endsWith('/' + r.id)) }
     else if (path.includes('users')) data = { users: [owner] }
@@ -73,13 +75,149 @@ async function open(path, { mobile = false, authenticated = true, deviceScaleFac
   return { page, context, errors }
 }
 const style = (page, property) => page.locator('.ProseMirror').evaluate((el, p) => getComputedStyle(el)[p], property)
+for (const room of ['code', 'markdown']) test(`fullscreen keeps menus, selects and dialogs visible and interactive in ${room}`, async () => {
+  const { page, context, errors } = await open(`room/${room}`, { locale: 'en' })
+  const editorSelector = room === 'code' ? '.monaco-editor' : '.ProseMirror'
+  const fullscreen = () => page.evaluate(() => !!(document.fullscreenElement || document.webkitFullscreenElement))
+  const assertInFullscreen = async locator => {
+    await locator.waitFor()
+    assert.equal(await locator.evaluate(el => {
+      const root = document.fullscreenElement || document.webkitFullscreenElement
+      const box = el.getBoundingClientRect()
+      return !!root?.contains(el) && el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))
+    }), true, 'Popup must be inside fullscreen and receive pointer input')
+  }
+  try {
+    await page.locator(editorSelector).waitFor()
+    await page.evaluate(selector => { window.uiOriginalEditor = document.querySelector(selector) }, editorSelector)
+    const more = page.getByRole('button', { name: 'More actions', exact: true })
+    await more.click()
+    await page.getByRole('menuitem', { name: 'Enter fullscreen', exact: true }).click()
+    await page.waitForFunction(() => !!(document.fullscreenElement || document.webkitFullscreenElement))
+    for (const theme of ['light', 'dark']) {
+      if (theme === 'dark') await page.getByRole('button', { name: 'Toggle theme', exact: true }).click()
+      await more.click()
+      await assertInFullscreen(page.getByRole('menu'))
+      await page.getByRole('menuitem', { name: 'End Room', exact: true }).click()
+      await assertInFullscreen(page.getByRole('dialog'))
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await page.getByRole('dialog').waitFor({ state: 'hidden' })
+      assert.equal(await fullscreen(), true)
+      await page.getByRole('combobox', { name: 'Language', exact: true }).click()
+      await assertInFullscreen(page.getByRole('listbox'))
+      await page.getByRole('option', { name: room === 'code' ? 'typescript' : 'markdown', exact: true }).click()
+      await page.getByRole('listbox').waitFor({ state: 'hidden' })
+      assert.equal(await fullscreen(), true)
+      await page.getByRole('button', { name: 'Users', exact: true }).click()
+      await assertInFullscreen(page.getByRole('menu'))
+      await page.screenshot({ path: `${screenshots}/fullscreen-${room}-${theme}.png` })
+      // Safari reserves Escape for leaving native fullscreen; dismiss by pointer.
+      await page.mouse.click(10, 100)
+      await page.getByRole('menu').waitFor({ state: 'hidden' })
+      assert.equal(await fullscreen(), true)
+      await page.getByRole('button', { name: 'Share', exact: true }).click()
+      await assertInFullscreen(page.getByRole('dialog'))
+      await page.getByRole('button', { name: 'Close', exact: true }).click()
+      await page.getByRole('dialog').waitFor({ state: 'hidden' })
+    }
+    await more.click()
+    await page.getByRole('menuitem', { name: 'Exit fullscreen', exact: true }).click()
+    await page.waitForFunction(() => !(document.fullscreenElement || document.webkitFullscreenElement))
+    await more.click()
+    await page.getByRole('menuitem', { name: 'Enter fullscreen', exact: true }).waitFor()
+    await page.keyboard.press('Escape')
+    assert.equal(await page.evaluate(selector => document.querySelector(selector) === window.uiOriginalEditor, editorSelector), true)
+    await page.locator(room === 'code' ? '.monaco-editor .view-lines' : editorSelector).click()
+    await page.keyboard.press('Control+End')
+    await page.keyboard.insertText('// fullscreen restored')
+    assert.ok(await page.evaluate(room => (room === 'code' ? window.uiDoc.getText('codemirror') : window.uiDoc.getXmlFragment('prosemirror')).toString().includes('// fullscreen restored'), room))
+    await more.click()
+    await page.getByRole('menuitem', { name: 'Enter fullscreen', exact: true }).click()
+    await page.waitForFunction(() => !!(document.fullscreenElement || document.webkitFullscreenElement))
+    await page.getByRole('button', { name: 'Back', exact: true }).click()
+    await page.locator('.room-row').first().waitFor()
+    await page.waitForFunction(() => !(document.fullscreenElement || document.webkitFullscreenElement))
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('scrolled rooms keep the navbar and account menu visible in both themes', async () => {
+  const rooms = Array.from({ length: 50 }, (_, i) => ({ ...sampleRooms[1], id: `scroll-${i}`, name: `Room ${i}` }))
+  for (const mobile of [false, true]) {
+    const { page, context, errors } = await open('rooms', { mobile, locale: 'en', rooms })
+    try {
+      await page.locator('.room-row').first().waitFor()
+      for (const theme of ['light', 'dark']) {
+        if (theme === 'dark') await page.getByRole('button', { name: 'Toggle theme', exact: true }).click()
+        await page.evaluate(() => window.scrollTo(0, 600))
+        await page.waitForFunction(() => window.scrollY >= 600)
+        const headerBefore = await page.locator('header').boundingBox()
+        assert.equal(headerBefore.y, 0)
+        const trigger = page.getByRole('button', { name: 'Account menu', exact: true })
+        const triggerBox = await trigger.boundingBox()
+        await trigger.click()
+        const menu = page.getByRole('menu')
+        await menu.waitFor()
+        const headerAfter = await page.locator('header').boundingBox()
+        assert.equal(headerAfter.y, headerBefore.y, 'Opening a menu must not dislodge the sticky navbar')
+        const box = await menu.boundingBox()
+        assert.ok(box.y >= triggerBox.y + triggerBox.height && box.y + box.height <= page.viewportSize().height, JSON.stringify(box))
+        assert.ok(box.x >= 0 && box.x + box.width <= page.viewportSize().width, JSON.stringify(box))
+        assert.equal(await menu.evaluate(el => getComputedStyle(el).backgroundColor), await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor))
+        // Wheel input belongs to the desktop cases (mobile WebKit does not support it).
+        if (!mobile) {
+          await page.mouse.move(10, 500)
+          await page.mouse.wheel(0, 200)
+          await page.waitForTimeout(100)
+          assert.equal(await page.evaluate(() => window.scrollY), 600, 'The background must remain scroll-locked')
+        }
+        await page.screenshot({ path: `${screenshots}/rooms-account-${theme}-${mobile ? 'mobile' : 'desktop'}.png` })
+        await page.keyboard.press('Escape')
+        await menu.waitFor({ state: 'hidden' })
+        // Radix restores focus in a deferred unmount callback, after hiding the menu.
+        await page.waitForFunction(() => document.activeElement === document.querySelector('button[aria-label="Account menu"]'))
+        assert.equal(await trigger.evaluate(el => document.activeElement === el), true)
+        assert.equal(await page.evaluate(() => window.scrollY), 600)
+        if (!mobile) {
+          await page.mouse.wheel(0, 200)
+          await page.waitForFunction(() => window.scrollY > 600)
+          await page.evaluate(() => window.scrollTo(0, 600))
+          await page.waitForFunction(() => window.scrollY === 600)
+        }
+        // Dialogs and nested selects share the same body scroll lock.
+        await page.getByRole('button', { name: 'Create New Room', exact: true }).click()
+        const dialog = page.getByRole('dialog')
+        await dialog.waitFor()
+        assert.equal((await page.locator('header').boundingBox()).y, 0)
+        await dialog.getByRole('combobox').first().click()
+        const options = page.getByRole('listbox')
+        await options.waitFor()
+        assert.equal(await options.evaluate(el => getComputedStyle(el).backgroundColor), await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor))
+        await page.keyboard.press('Escape')
+        await options.waitFor({ state: 'hidden' })
+        await page.keyboard.press('Escape')
+        await dialog.waitFor({ state: 'hidden' })
+        assert.equal(await page.evaluate(() => window.scrollY), 600)
+        // Reopening and following an item must still work after scrolling.
+        await trigger.click()
+        await page.getByRole('menuitem', { name: 'Settings', exact: true }).click()
+        await page.waitForURL('**/settings')
+        await page.locator('#currentPassword').waitFor()
+        await page.goto(base + 'rooms')
+        await page.locator('.room-row').first().waitFor()
+      }
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  }
+})
+
 test('compact secondary pages keep forms and navigation inside desktop and phone viewports', async () => {
   for (const mobile of [false, true]) {
     for (const path of ['settings', 'admin', 'admin?section=rooms', 'admin/audit', 'notifications', 'playback/ended', 'register', 'join', 's/ui-fixture']) {
       const authenticated = !['register', 'join', 's/ui-fixture'].includes(path)
       const { page, context, errors } = await open(path, { mobile, authenticated, viewport: mobile ? { width: 320, height: 700 } : { width: 1440, height: 900 } })
       try {
-        await page.locator(path.startsWith('playback') ? '.monaco-editor' : path.startsWith('admin') && !path.includes('/audit') ? 'table' : 'input').first().waitFor().catch(async error => { console.error('PAGE DIAGNOSTIC', path, mobile, await page.locator('body').innerText()); throw error })
+        await page.locator(path.startsWith('playback') ? '.monaco-editor' : path.startsWith('admin') && !path.includes('/audit') ? 'table' : 'input:not([type=hidden])').first().waitFor().catch(async error => { console.error('PAGE DIAGNOSTIC', path, mobile, await page.locator('body').innerText()); throw error })
         for (const control of await page.locator('header button, input:not([type=checkbox]), textarea').all()) {
           if (!await control.isVisible()) continue
           const box = await control.boundingBox()
@@ -174,14 +312,14 @@ test('language switching covers app controls, errors, document language, and Chi
 })
 test('Markdown fonts resize live, preserve content/editor/selection, and persist after reload', async () => {
   const { page, context, errors } = await open('room/markdown')
-  await page.locator('.ProseMirror h1').waitFor()
+  await page.locator('.ProseMirror h1').waitFor().catch(async error => { console.error('Markdown load state:', await page.locator('body').innerText()); throw error })
   await page.locator('.ProseMirror').click(); await page.keyboard.press('Control+End'); await page.keyboard.insertText(' 字体调节不应丢失这段输入。')
   const documentText = () => page.evaluate(() => window.uiDoc.getXmlFragment('prosemirror').toString())
   let before = await documentText()
   await page.evaluate(() => { window.uiOriginalEditor = document.querySelector('.ProseMirror') })
-  assert.equal(await style(page, 'fontSize'), '12px')
+  assert.equal(await style(page, 'fontSize'), '13px')
   await page.getByRole('button', { name: '增大字号', exact: true }).click()
-  assert.equal(await style(page, 'fontSize'), '14px')
+  assert.equal(await style(page, 'fontSize'), '15px')
   assert.equal(await documentText(), before)
   assert.equal(await page.evaluate(() => document.querySelector('.ProseMirror') === window.uiOriginalEditor), true)
   // Test the logical cursor by continuing to type, not DOM text-node offsets
@@ -190,16 +328,16 @@ test('Markdown fonts resize live, preserve content/editor/selection, and persist
   await page.keyboard.insertText(' [字号后]')
   before = before.replace('字体调节不应丢失这段输入。', '字体调节不应丢失这段输入。 [字号后]')
   assert.equal(await documentText(), before)
-  await page.getByRole('button', { name: '字体', exact: true }).click(); await page.getByRole('menuitem', { name: 'JetBrains Mono' }).click()
-  assert.match(await style(page, 'fontFamily'), /JetBrains Mono/)
+  assert.equal(await page.getByRole('button', { name: '字体', exact: true }).count(), 0)
+  assert.match(await style(page, 'fontFamily'), /Sarasa Mono/)
   assert.equal(await documentText(), before)
-  assert.ok(Math.abs(await page.locator('.ProseMirror h1').evaluate(el => parseFloat(getComputedStyle(el).fontSize)) - 25.2) < 0.01)
+  assert.ok(Math.abs(await page.locator('.ProseMirror h1').evaluate(el => parseFloat(getComputedStyle(el).fontSize)) - 27) < 0.01)
   assert.equal(await page.locator('.editor-shell > [role=status], header [role=status]').count(), 0)
   assert.equal(await page.locator('footer [role=status]').count(), 1)
   await page.screenshot({ animations: 'disabled', path: screenshots + '/editor-light.png' })
-  await page.getByRole('button', { name: '更多操作', exact: true }).click(); await page.getByRole('menuitem', { name: '切换主题' }).click(); await page.screenshot({ animations: 'disabled', path: screenshots + '/editor-dark.png' })
+  await page.getByRole('button', { name: '切换主题', exact: true }).click(); await page.screenshot({ animations: 'disabled', path: screenshots + '/editor-dark.png' })
   await page.reload(); await page.locator('.ProseMirror h1').waitFor()
-  assert.equal(await style(page, 'fontSize'), '14px'); assert.match(await style(page, 'fontFamily'), /JetBrains Mono/)
+  assert.equal(await style(page, 'fontSize'), '15px'); assert.match(await style(page, 'fontFamily'), /Sarasa Mono/)
   for (let i = 0; i < 8; i++) { const plus = page.getByRole('button', { name: '增大字号', exact: true }); if (await plus.isEnabled()) await plus.click() }
   assert.equal(await style(page, 'fontSize'), '24px'); assert.equal(await page.getByRole('button', { name: '增大字号', exact: true }).isDisabled(), true)
   for (let i = 0; i < 7; i++) await page.getByRole('button', { name: '减小字号', exact: true }).click()
@@ -210,7 +348,7 @@ test('Markdown fonts resize live, preserve content/editor/selection, and persist
 test('mobile keeps bottom status and touch font controls, including save errors and landscape', async () => {
   const { page, context, errors } = await open('room/markdown', { mobile: true })
   await page.locator('.ProseMirror h1').waitFor(); await page.getByRole('button', { name: '增大字号', exact: true }).click()
-  assert.equal(await style(page, 'fontSize'), '14px')
+  assert.equal(await style(page, 'fontSize'), '15px')
   const bottom = await page.locator('footer').boundingBox(); assert.ok(bottom.y + bottom.height <= 844)
   const touch = await page.getByRole('button', { name: '增大字号', exact: true }).boundingBox(); assert.ok(touch.width >= 44 && touch.height >= 44)
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
@@ -236,7 +374,7 @@ test('workspace list, code and authentication render at desktop and phone sizes'
     await page.screenshot({ animations: 'disabled', path: screenshots + '/rooms-' + (mobile ? 'mobile' : 'desktop') + '.png' })
     await page.getByRole('link', { name: '实时协作 / TypeScript', exact: true }).click(); await page.locator('.monaco-editor').waitFor()
     await page.getByRole('button', { name: '增大字号', exact: true }).click()
-    await page.waitForFunction(() => document.querySelector('.monaco-editor .view-lines')?.style.fontSize === '14px')
+    await page.waitForFunction(() => document.querySelector('.monaco-editor .view-lines')?.style.fontSize === '15px')
     await page.screenshot({ animations: 'disabled', path: screenshots + '/code-' + (mobile ? 'mobile' : 'desktop') + '.png' })
     assert.deepEqual(errors, []); await context.close()
     const guest = await open('login', { mobile, authenticated: false })
@@ -250,7 +388,7 @@ test('DPI matrix: responsive controls fit at 1x through 3x density', async () =>
     const { page, context, errors } = await open('room/markdown', { mobile: width < 1024, deviceScaleFactor, viewport: { width, height }, locale: 'en' })
     await page.locator('.ProseMirror h1').waitFor()
     await page.getByRole('button', { name: 'Increase font size', exact: true }).click()
-    assert.equal(await style(page, 'fontSize'), '14px')
+    assert.equal(await style(page, 'fontSize'), '15px')
     for (const control of await page.locator('footer button, .editor-shell > header button').all()) {
       if (!await control.isVisible()) continue
       const box = await control.boundingBox()
@@ -289,7 +427,7 @@ test('viewport resize keeps editor and footer visible when the keyboard reduces 
   const editor = await page.locator('.md-editor-body').boundingBox()
   assert.ok(editor.height > 100)
   await page.getByRole('button', { name: '增大字号', exact: true }).click()
-  assert.equal(await style(page, 'fontSize'), '14px')
+  assert.equal(await style(page, 'fontSize'), '15px')
   assert.deepEqual(errors, []); await context.close()
 })
 

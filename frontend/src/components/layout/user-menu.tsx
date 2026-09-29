@@ -11,15 +11,16 @@ import {
   Button,
 } from '@/components/ui'
 import { useAuthStore } from '@/stores'
+import { toast } from 'sonner'
 
 export function UserMenu() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
+  const handleLogout = async () => {
+    try { await logout(); navigate('/login') }
+    catch { toast.error(t('auth.logoutFailed')) }
   }
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superuser'

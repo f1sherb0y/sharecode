@@ -106,28 +106,16 @@ const ensureStyleElement = (
   const existing = styleMap.get(clientId)
   const css = `
     .yRemoteSelection-${clientId} {
-      background-color: ${highlight} !important;
-      outline: 1px solid ${color} !important;
-      outline-offset: -1px !important;
+      --selection-blink-color: ${color};
+      background-color: ${highlight};
       position: absolute !important;
       height: 100% !important;
       z-index: 5 !important;
     }
     .yRemoteSelectionHead-${clientId} {
-      border-left: 2px solid ${color};
-      border-top: 2px solid ${color};
-      border-bottom: 2px solid ${color};
+      --collaborator-color: ${color};
       position: absolute;
       height: 100%;
-      box-sizing: border-box;
-    }
-    .yRemoteSelectionHead-${clientId}::after {
-      content: '';
-      position: absolute;
-      border: 3px solid ${color};
-      border-radius: 3px;
-      left: -4px;
-      top: -5px;
     }
   `
 
@@ -178,6 +166,13 @@ export class MonacoBinding {
 
   private savedSelections = new Map<EditorInstance, RelativeSelection>()
   private decorations = new Map<EditorInstance, string[]>()
+  private blinkingClients = new Map<number, number>()
+
+  setSelectionBlink(clientId: number, variant: number | null) {
+    if (variant == null) this.blinkingClients.delete(clientId)
+    else this.blinkingClients.set(clientId, variant)
+    this.scheduleRerenderDecorations()
+  }
 
   private readonly beforeTransaction = () => {
     this.mux(() => {
@@ -245,7 +240,7 @@ export class MonacoBinding {
     const knownPeers = new Set<number>()
     if (this.awareness) {
       this.awareness.getStates().forEach((_state, clientId) => {
-        if (clientId !== this.doc.clientID) knownPeers.add(clientId)
+        if (clientId !== this.awareness?.clientID) knownPeers.add(clientId)
       })
     }
 
@@ -265,7 +260,7 @@ export class MonacoBinding {
       let nextSignature = ''
 
       this.awareness.getStates().forEach((state: any, clientId: number) => {
-        if (clientId === this.doc.clientID) return
+        if (clientId === this.awareness?.clientID) return
 
         const cursorState = state.cursor as CursorState | undefined
         if (!cursorState?.anchor || !cursorState?.head) {
@@ -284,7 +279,8 @@ export class MonacoBinding {
           return
         }
 
-        nextSignature += `${clientId}:${anchorAbs.index}:${headAbs.index}|`
+        const blink = this.blinkingClients.get(clientId)
+        nextSignature += `${clientId}:${anchorAbs.index}:${headAbs.index}:${blink ?? ''}|`
 
         const userColor = state.user?.color ?? '#3b82f6'
         const userHighlight = state.user?.colorLight ?? 'rgba(59, 130, 246, 0.3)'
@@ -297,9 +293,9 @@ export class MonacoBinding {
 
         if (startIndex > endIndex) {
           ;[startIndex, endIndex] = [endIndex, startIndex]
-          beforeContentClassName = `yRemoteSelectionHead yRemoteSelectionHead-${clientId}`
+          beforeContentClassName = `yRemoteSelectionHead collaboration-caret yRemoteSelectionHead-${clientId}`
         } else {
-          afterContentClassName = `yRemoteSelectionHead yRemoteSelectionHead-${clientId}`
+          afterContentClassName = `yRemoteSelectionHead collaboration-caret yRemoteSelectionHead-${clientId}`
         }
 
         const selectionLen = endIndex - startIndex
@@ -317,7 +313,7 @@ export class MonacoBinding {
           ),
           options: {
             className: hasSelection
-              ? `yRemoteSelection yRemoteSelection-${clientId}`
+              ? `yRemoteSelection yRemoteSelection-${clientId}${blink == null ? '' : ` selection-blink-${blink}`}`
               : undefined,
             afterContentClassName,
             beforeContentClassName,
@@ -458,5 +454,6 @@ export class MonacoBinding {
 
     this.styleElements.forEach((style) => style.remove())
     this.styleElements.clear()
+    this.blinkingClients.clear()
   }
 }

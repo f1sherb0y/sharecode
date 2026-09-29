@@ -1,7 +1,6 @@
 import i18n from '@/i18n'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 
-import 'monaco-editor/min/vs/editor/editor.main.css'
 
 import type * as Monaco from 'monaco-editor'
 
@@ -37,6 +36,7 @@ export const loadMonaco = () => {
       if (i18n.resolvedLanguage === 'zh') {
         await import('monaco-editor/esm/nls.messages.zh-cn.js')
       }
+      await import('monaco-editor/min/vs/editor/editor.main.css')
       const monaco = await import('monaco-editor/esm/vs/editor/editor.api.js')
       await Promise.all([
         import('monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution'),
@@ -52,7 +52,7 @@ export const loadMonaco = () => {
         import('monaco-editor/esm/vs/editor/contrib/find/browser/findController'),
       ])
       return monaco as unknown as typeof Monaco
-    })()
+    })().catch(error => { monacoPromise = null; throw error })
   }
 
   return monacoPromise

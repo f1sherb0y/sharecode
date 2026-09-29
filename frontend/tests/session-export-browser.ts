@@ -65,6 +65,7 @@ try {
       const html = await readFile(filename, 'utf8')
       const player = JSON.parse(gunzipSync(Buffer.from(html.match(/id="player-code"[^>]*>([^<]+)</)![1]!, 'base64')).toString())
       assert(!player.js.includes('jsxDEV'), 'Export must use production JSX even inside the dev server')
+      assert(!player.js.includes('unicodeRange'), 'Font subset declarations must remain on the CDN, outside the HTML')
       assert(!player.js.includes('/home/') && !player.js.includes('/Users/'), 'Export must not contain development source paths')
       for (const privateValue of [room.id, room.name, user.username, user.email, 'PRIVATE-AUTH-TOKEN', secret, 'collabcode.cc']) assert(!html.includes(privateValue), privateValue)
       const data = unpackSession(html.match(/id="session-data"[^>]*>([^<]+)</)![1]!)
@@ -93,6 +94,13 @@ try {
       await replay.addInitScript(() => {
         (window as unknown as { violations: unknown[] }).violations = []
         document.addEventListener('securitypolicyviolation', e => (window as unknown as { violations: unknown[] }).violations.push({ directive: e.violatedDirective, uri: e.blockedURI }))
+        const fonts: string[] = []
+        ;(window as unknown as { canvasTextFonts: string[] }).canvasTextFonts = fonts
+        const fillText = CanvasRenderingContext2D.prototype.fillText
+        CanvasRenderingContext2D.prototype.fillText = function (...args: Parameters<typeof fillText>) {
+          if (args[0].includes('Canvas')) fonts.push(this.font)
+          return fillText.apply(this, args)
+        }
       })
       console.log(engine, 'opening local HTML')
       await replay.goto(pathToFileURL(filename).href)
@@ -133,6 +141,21 @@ try {
         assert(redPixels >= 100, `Canvas image did not render; artifacts: ${temp}`)
       }
       await assertCanvasImage()
+      await replay.waitForFunction(() => (window as unknown as { canvasTextFonts: string[] }).canvasTextFonts.some(font => font.includes('Sarasa Mono') && font.includes('monospace')))
+      console.log(engine, 'Canvas font family verified; loading CJK glyphs')
+      await replay.evaluate(async () => {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          // Keep FontFace host objects in the browser. Returning them to the
+          // Playwright driver can stall Firefox's serialization indefinitely.
+          const faces = await Promise.race([
+            document.fonts.load('20px "Sarasa Mono"', '中文 日本語 한글'),
+            new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`CJK font loading timed out (FontFaceSet: ${document.fonts.status})`)), 30_000) }),
+          ])
+          if (!faces.length || faces.some(face => face.status !== 'loaded')) throw new Error('CJK font faces did not load')
+        } finally { clearTimeout(timer) }
+      })
+      console.log(engine, 'Canvas CJK glyphs loaded')
       await replay.getByRole('button', { name: 'Editor', exact: true }).click()
       await seek(replay, 3000)
       await replay.getByRole('button', { name: 'Canvas', exact: true }).click()
@@ -159,6 +182,7 @@ try {
       await replay.getByText('会话回放', { exact: true }).waitFor()
       violations.push(...await replay.evaluate(() => (window as unknown as { violations: unknown[] }).violations))
       assert(network.length > 0); assert(network.every(url => new URL(url).hostname === 'cdn.jsdelivr.net' || (new URL(url).hostname === 'esm.sh' && url.endsWith('.woff2'))), 'Player requested a non-CDN URL')
+      assert(!network.some(url => /\/fonts\/(Cascadia|Xiaolai|Excalifont|Nunito|Virgil)\//.test(url)), 'Replay must not download vendor drawing fonts')
       assert.deepEqual(violations, [], 'CDN player violated CSP')
       assert.deepEqual(replayErrors, [], 'CDN player errors')
       assert.deepEqual(fileOriginErrors, [], 'Local file origin errors')

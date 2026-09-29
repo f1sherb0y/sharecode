@@ -9,6 +9,7 @@ import { CanvasSync, canvasFiles, orderedCanvasElements } from '@/lib/canvas-syn
 import { useCanvasFollow, type CanvasPresence } from '@/hooks/use-canvas-follow'
 import '@excalidraw/excalidraw/index.css'
 import '@/styles/canvas.css'
+import { CANVAS_FONT, monoCanvasElements } from '@/lib/canvas-font'
 
 interface CanvasViewProps {
   doc: Y.Doc
@@ -33,7 +34,7 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
   const onPendingRef = useRef(onPending)
   onPendingRef.current = onPending
   const presence = useRef<CanvasPresence>({})
-  const initialData = useMemo(() => ({ elements: orderedCanvasElements(doc), files: canvasFiles(doc), appState: { viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' }, scrollToContent: true }), [doc])
+  const initialData = useMemo(() => ({ elements: monoCanvasElements(orderedCanvasElements(doc)), files: canvasFiles(doc), appState: { currentItemFontFamily: CANVAS_FONT, viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' }, scrollToContent: true }), [doc])
 
   useEffect(() => {
     if (!api) return
@@ -43,7 +44,7 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
     const addedFiles = new Map<string, BinaryFiles[string]>()
     const renderRemote = () => {
       frame = 0
-      const remote = orderedCanvasElements(doc)
+      const remote = monoCanvasElements(orderedCanvasElements(doc))
       const pendingIds = sync.pendingIds()
       const local = api.getSceneElementsIncludingDeleted()
       const active = pointerDown.current ? api.getAppState().newElement?.id : null
@@ -54,7 +55,7 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
       applying.current = true
       const changedFiles = Object.values(canvasFiles(doc)).filter(file => addedFiles.get(file.id) !== file)
       if (changedFiles.length) { api.addFiles(changedFiles); changedFiles.forEach(file => addedFiles.set(file.id, file)) }
-      api.updateScene({ elements: merged, appState: { viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' }, captureUpdate: CaptureUpdateAction.NEVER })
+      api.updateScene({ elements: merged, appState: { currentItemFontFamily: CANVAS_FONT, viewBackgroundColor: doc.getMap<string>('canvas-settings').get('background') ?? '#ffffff' }, captureUpdate: CaptureUpdateAction.NEVER })
       if (replay && merged.some(e => !e.isDeleted)) api.scrollToContent(merged.filter(e => !e.isDeleted), { fitToContent: true, animate: false })
       applying.current = false
     }
@@ -98,7 +99,11 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
   const onChange = useCallback((elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
     if (applying.current || !canEditRef.current) return
     try {
-      syncRef.current?.stage(elements, files, appState.newElement?.type === 'freedraw' ? appState.newElement.id : null, appState.viewBackgroundColor)
+      const normalized = monoCanvasElements(elements)
+      if (appState.currentItemFontFamily !== CANVAS_FONT || normalized.some((e, i) => e !== elements[i])) {
+        api?.updateScene({ elements: normalized, appState: { currentItemFontFamily: CANVAS_FONT }, captureUpdate: CaptureUpdateAction.NEVER })
+      }
+      syncRef.current?.stage(normalized, files, appState.newElement?.type === 'freedraw' ? appState.newElement.id : null, appState.viewBackgroundColor)
       rejected.current = false
       onPendingRef.current?.(syncRef.current?.hasPending ?? false)
       setError('')
@@ -107,7 +112,7 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
       onPendingRef.current?.(true)
       setError('fileTooLarge')
     }
-  }, [])
+  }, [api])
 
   return (
     <div className="sharecode-canvas h-full w-full relative" aria-label={t('canvas.title')}>

@@ -149,6 +149,8 @@ just test-i18n            # Translation keys, parameters, and untranslated label
 just test-server          # Rust unit tests
 just check               # TypeScript and Rust checks
 just build               # Production frontend build
+just predeploy           # Required release checks; failure blocks deployment
+just postdeploy          # Public read-only smoke checks after deployment
 just db-stop             # Stop PostgreSQL and keep its data
 ```
 
@@ -220,6 +222,10 @@ FRONTEND_URL="http://localhost:5173"
 
 # App URL (optional, for absolute links)
 APP_URL="http://localhost:5173"
+
+# Extra origins serving the same app (other domains, public IP), comma separated.
+# Login and session renewal are rejected from any origin not listed here.
+# ALLOWED_ORIGINS="https://kode666.com,https://64.186.229.171"
 
 # WebSocket router mode for desktop apps (HashRouter)
 FRONTEND_HASH_ROUTER=false

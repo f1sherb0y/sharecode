@@ -4,9 +4,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Users, Trash2, Play, Share2, Pencil, Pin, PinOff, MoreHorizontal, Download } from 'lucide-react'
+import { Plus, Users, Trash2, Play, Share2, Pencil, Pin, PinOff, MoreHorizontal, Download, LockKeyhole } from 'lucide-react'
 import {
   Button,
+  Checkbox,
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -25,12 +26,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  Badge,
   Spinner,
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
-import { canDeleteRoom, canManageRoomShares } from '@/lib/room-permissions'
+import { canDeleteRoom, canManageRoomShares, canViewRoomPlayback } from '@/lib/room-permissions'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import { cn, formatDateMinutes } from '@/lib/utils'
@@ -135,6 +135,7 @@ export function RoomsPage() {
   // Create room form state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
+  const [newRoomPrivate, setNewRoomPrivate] = useState(false)
   const [newRoomLanguage, setNewRoomLanguage] = useState<Language>('javascript')
   const [newRoomCompany, setNewRoomCompany] = useState('')
   const [newRoomPosition, setNewRoomPosition] = useState('')
@@ -215,7 +216,8 @@ export function RoomsPage() {
         selectedUsers.length > 0 ? selectedUsers : undefined,
         newRoomCompany || undefined,
         newRoomPosition || undefined,
-        timezone
+        timezone,
+        newRoomPrivate
       ),
     onSuccess: async ({ room }) => {
       await queryClient.invalidateQueries({ queryKey: ['rooms'] })
@@ -308,6 +310,7 @@ export function RoomsPage() {
 
   const resetForm = () => {
     setNewRoomName('')
+    setNewRoomPrivate(false)
     setNewRoomLanguage('javascript')
     setNewRoomCompany('')
     setNewRoomPosition('')
@@ -396,7 +399,7 @@ export function RoomsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="rooms-page flex flex-col min-h-screen">
       <Navbar
         title="ShareCode"
         rightContent={
@@ -485,6 +488,13 @@ export function RoomsPage() {
                       value={scheduledTime}
                       onChange={(e) => setScheduledTime(e.target.value)}
                     />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-describedby="privateRoomHint" />
+                      <Label htmlFor="privateRoom" className="text-xs">{t('rooms.create.private')}</Label>
+                    </div>
+                    <p id="privateRoomHint" className="text-xs text-muted-foreground">{t('rooms.create.privateHint')}</p>
                   </div>
                   {availableUsers.length > 0 && (
                     <div className="space-y-1">
@@ -612,7 +622,7 @@ export function RoomsPage() {
       </Dialog>
 
       <PageContainer>
-        <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="rooms-list-toolbar flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="text-base font-semibold tracking-tight">{t('rooms.workspaceTitle')}</h1>
           <span className="text-xs text-muted-foreground">{t('rooms.pagination.total', { count: pagination.total })}</span>
           <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1 sm:ml-auto sm:w-auto sm:grid-cols-[10rem_8rem_6rem]">
@@ -698,7 +708,19 @@ export function RoomsPage() {
             <p className="text-muted-foreground">{t('rooms.list.empty')}</p>
           </div>
         ) : (
-          <div className="room-list divide-y border-y">
+          <div className="room-list">
+            <div className="room-list-heading" aria-hidden="true">
+              <div className="room-list-columns">
+                <span>{t('rooms.columns.name')}</span>
+                <span>{t('rooms.columns.language')}</span>
+                <span>{t('rooms.list.owner')}</span>
+                <span>{t('rooms.columns.status')}</span>
+                <span className="text-right">{t('rooms.columns.people')}</span>
+                <span>{t('rooms.columns.time')}</span>
+                <span className="text-right">{t('rooms.list.duration')}</span>
+              </div>
+              <span className="room-row-actions" />
+            </div>
             {rooms.map((room) => (
               <RoomRow
                 key={room.id}
@@ -788,41 +810,45 @@ function RoomRow({
   const { t } = useTranslation()
 
   const isOwner = room.ownerId === currentUser?.id
-  const isPrivileged = currentUser?.role === 'admin' || currentUser?.role === 'superuser' ||
-    currentUser?.canReadAllRooms || currentUser?.canWriteAllRooms || currentUser?.canDeleteAllRooms
-  const canShareRoom = canManageRoomShares(currentUser, room.ownerId)
+  const canShareRoom = !room.shareReadOnly && canManageRoomShares(currentUser, room.ownerId)
   const canDeleteCurrentRoom = canDeleteRoom(currentUser, room.ownerId)
   const canRenameRoom = isOwner || currentUser?.role === 'superuser'
-  const canPinRoom = currentUser?.role === 'admin' || currentUser?.role === 'superuser'
+  const canPinRoom = !room.shareReadOnly && (currentUser?.role === 'admin' || currentUser?.role === 'superuser')
   const participantCount = (room.participants?.length ?? 0) + 1
-  const canViewPlayback = room.isEnded && (isOwner || isPrivileged)
+  const canViewPlayback = room.isEnded && canViewRoomPlayback(currentUser, room)
 
   return (
-    <article className={cn('room-row group flex items-center gap-1', room.isEnded && 'text-muted-foreground')}>
+    <article className={cn('room-row group', room.isPinned && 'room-row-pinned')}>
       <Link
         to={canViewPlayback ? `/playback/${room.id}` : `/room/${room.id}`}
         aria-label={room.name}
-        className="room-row-link grid min-w-0 flex-1 items-center gap-x-3 gap-y-0.5 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="room-row-link room-list-columns focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
-        <div className="room-row-name flex min-w-0 items-center gap-1">
-          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', room.isEnded ? 'bg-muted-foreground/40' : 'bg-success')} />
-          <span title={room.name} className="min-w-0 truncate text-sm font-medium group-hover:underline underline-offset-4">{room.name}</span>
+        <div className="room-row-name flex min-w-0 items-center gap-1.5">
+          {room.isPrivate && <LockKeyhole className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('rooms.list.private')} />}
+          <span title={room.name} className="min-w-0 truncate font-medium">{room.name}</span>
           {room.isPinned && <Pin className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('rooms.list.pinned')} />}
-          <Badge variant="secondary" className="shrink-0">{room.language}</Badge>
-          {room.isEnded && <span className="shrink-0 text-xs">{t('rooms.list.ended')}</span>}
         </div>
-        <div className="room-row-owner flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+        <span className="room-row-language">{room.language}</span>
+        <div className="room-row-owner flex min-w-0 items-center gap-1">
           <span className="truncate" title={room.owner.username}>{room.owner.username}</span>
-          {isOwner && <span className="shrink-0">· {t('rooms.list.owned')}</span>}
+          {isOwner && <span className="room-row-owned shrink-0">{t('rooms.list.owned')}</span>}
           {(room.company || room.position) && <span className="truncate" title={[room.company, room.position].filter(Boolean).join(' / ')}>· {[room.company, room.position].filter(Boolean).join(' / ')}</span>}
         </div>
-        <div className="room-row-meta flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex shrink-0 items-center gap-1"><Users className="h-3 w-3" />{participantCount}</span>
-          <time className="truncate" dateTime={room.scheduledTime || room.createdAt} title={formatDateMinutes(room.scheduledTime || room.createdAt)}>
-            {formatDateMinutes(room.scheduledTime || room.createdAt)}
-          </time>
-          {room.scheduledTime && room.duration && <span className="hidden shrink-0 lg:inline">· {room.duration} {t('rooms.list.durationUnit')}</span>}
-        </div>
+        <span className={cn('room-row-status', !room.isEnded && 'room-row-status-active')}>
+          <span className="room-row-status-dot" aria-hidden="true" />
+          {room.isEnded ? t('rooms.list.ended') : t('rooms.filters.active')}
+        </span>
+        <span className="room-row-people" title={t('rooms.list.participants')}>
+          <Users className="h-3 w-3" aria-hidden="true" /><span>{participantCount}</span>
+          <span className="sr-only">{t('rooms.list.participants')}</span>
+        </span>
+        <time className="room-row-time" dateTime={room.scheduledTime || room.createdAt} title={formatDateMinutes(room.scheduledTime || room.createdAt)}>
+          {formatDateMinutes(room.scheduledTime || room.createdAt)}
+        </time>
+        <span className="room-row-duration">
+          {room.scheduledTime && room.duration ? `${room.duration} ${t('rooms.list.durationUnit')}` : '—'}
+        </span>
       </Link>
       <div className="room-row-actions flex items-center justify-end">
         {(canShareRoom || canRenameRoom || canPinRoom || canViewPlayback || canDeleteCurrentRoom) && (

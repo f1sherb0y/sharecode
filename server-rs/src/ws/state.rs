@@ -61,6 +61,7 @@ impl WsState {
         sender: Outbound,
         actor_id: Option<String>,
         share_link_id: Option<String>,
+        login_session_id: Option<String>,
         username: String,
     ) -> Result<(Arc<DocumentState>, SessionColor), WsError> {
         let slot = {
@@ -91,7 +92,7 @@ impl WsState {
         }
         let doc = guard.as_ref().unwrap().clone();
         let color = doc
-            .add_connection(id, sender, actor_id, share_link_id, username)
+            .add_connection(id, sender, actor_id, share_link_id, login_session_id, username)
             .await;
         Ok((doc, color))
     }
@@ -110,8 +111,10 @@ impl WsState {
 
     pub async fn broadcast_room_language(&self, room: &str, language: &str) {
         if let Some(doc) = self.get_document(room).await {
-            let message = super::protocol::encode_stateless_message(room,
-                &serde_json::json!({"type":"room-language", "language":language}).to_string());
+            let message = super::protocol::encode_stateless_message(
+                room,
+                &serde_json::json!({"type":"room-language", "language":language}).to_string(),
+            );
             doc.broadcast(message, None).await;
         }
     }
@@ -176,10 +179,71 @@ impl WsState {
         }
     }
 
+    pub async fn revoke_session(&self, session: &str) {
+        let slots: Vec<_> = self.documents.read().await.iter().map(|(n,s)| (n.clone(),s.clone())).collect();
+        for (name, slot) in slots {
+            if let Some(doc) = slot.lock().await.as_ref() {
+                doc.revoke(&name, |c| c.login_session_id.as_deref() == Some(session)).await;
+            }
+        }
+    }
+
+    pub async fn revoke_room_actor(&self, room: &str, actor: &str) {
+        if let Some(doc) = self.get_document(room).await {
+            doc.revoke(room, |connection| {
+                connection.actor_id.as_deref() == Some(actor)
+            })
+            .await;
+        }
+    }
+
     pub async fn revoke_room(&self, room: &str) {
         if let Some(doc) = self.get_document(room).await {
             doc.mark_ended();
             doc.revoke(room, |_| true).await;
+        }
+    }
+
+    // Recheck existing connections when room lifecycle/owner rank changes.
+    // Explicit guest invitations remain valid until the room ends or is deleted.
+    pub async fn revoke_inaccessible_room(&self, db: &PgPool, room: &str) {
+        if let Some(doc) = self.get_document(room).await {
+            let actors: Vec<String> = doc
+                .connections
+                .read()
+                .await
+                .values()
+                .filter_map(|connection| connection.actor_id.clone())
+                .collect();
+            let allowed = sqlx::query_scalar::<_, String>(r#"
+                SELECT u.id FROM "User" u CROSS JOIN "Room" r
+                JOIN "User" o ON o.id = r."ownerId"
+                WHERE r.id = $1 AND u.id = ANY($2) AND NOT u."isDeleted"
+                  AND room_is_visible(u.id, u.role,
+                    u.role = 'superuser' OR u."canReadAllRooms" OR u."canWriteAllRooms" OR u."canDeleteAllRooms",
+                    r."ownerId", o.role, r."isPrivate", r."isEnded", r."isDeleted",
+                    EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = u.id),
+                    EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = u.id AND p."canReplay" AND p."shareLinkId" IS NOT NULL))
+                UNION ALL
+                SELECT g.id FROM "GuestSession" g JOIN "Room" r ON r.id = g."roomId"
+                JOIN "RoomShareLink" l ON l.id = g."shareLinkId"
+                WHERE r.id = $1 AND g.id = ANY($2) AND NOT r."isDeleted" AND NOT r."isEnded"
+            "#).bind(room).bind(&actors).fetch_all(db).await;
+            match allowed {
+                Ok(allowed) => {
+                    doc.revoke(room, |connection| {
+                        !connection
+                            .actor_id
+                            .as_ref()
+                            .is_some_and(|id| allowed.contains(id))
+                    })
+                    .await
+                }
+                Err(error) => {
+                    tracing::error!(%error, room, "Failed to revalidate room connections; closing access");
+                    doc.revoke(room, |_| true).await;
+                }
+            }
         }
     }
 }
@@ -288,6 +352,7 @@ impl DocumentState {
         sender: Outbound,
         actor_id: Option<String>,
         share_link_id: Option<String>,
+        login_session_id: Option<String>,
         username: String,
     ) -> SessionColor {
         let mut connections = self.connections.write().await;
@@ -304,6 +369,7 @@ impl DocumentState {
                 color: color.clone(),
                 actor_id,
                 share_link_id,
+                login_session_id,
                 username,
                 client_id: None,
             },
@@ -399,6 +465,12 @@ impl DocumentState {
         self.connections.read().await.contains_key(&id)
     }
 
+    pub(crate) async fn renew_connection_session(&self, id: ConnectionId, session_id: Option<String>) {
+        if let Some(connection) = self.connections.write().await.get_mut(&id) {
+            connection.login_session_id = session_id;
+        }
+    }
+
     async fn revoke(&self, name: &str, matches: impl Fn(&DocumentConnection) -> bool) {
         let mut connections = self.connections.write().await;
         connections.retain(|_, connection| {
@@ -435,6 +507,7 @@ struct DocumentConnection {
     color: SessionColor,
     actor_id: Option<String>,
     share_link_id: Option<String>,
+    login_session_id: Option<String>,
     username: String,
     client_id: Option<u64>,
 }

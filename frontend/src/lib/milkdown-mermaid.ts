@@ -82,6 +82,7 @@ class MermaidNodeView implements NodeView {
       const mermaid = (await import('mermaid')).default
       mermaid.initialize({
         startOnLoad: false,
+        fontFamily: '"Sarasa Mono", monospace',
         securityLevel: 'loose',
         theme: this.theme(),
       })

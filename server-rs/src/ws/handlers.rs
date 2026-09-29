@@ -132,6 +132,7 @@ pub async fn broadcast_room_ended(state: &AppState, room_id: &str, ended_at: Dat
 
     let message = encode_stateless_message(room_id, &payload);
     doc_state.broadcast(message, None).await;
+    state.ws.revoke_inaccessible_room(&state.db, room_id).await;
 }
 
 async fn handle_binary_message(
@@ -169,7 +170,12 @@ async fn handle_binary_message(
             }
         {
             session.authenticated = false;
-            send_auth_denied(outgoing, &document_name, "Access revoked or expired");
+            let reason = if session.expires_at <= Utc::now().timestamp() {
+                "Session expired"
+            } else {
+                "Access revoked"
+            };
+            send_auth_denied(outgoing, &document_name, reason);
             let _ = outgoing.send(Message::Close(None));
             return Ok(());
         }
@@ -226,15 +232,7 @@ async fn handle_auth(
     payload: &[u8],
 ) -> Result<(), WsError> {
     let (auth_type, token) = decode_auth(payload)?;
-    // One authentication per document/connection. Rejected reauthentication
-    // must not keep a connection registered under a different identity.
-    if session.document.is_some() {
-        session.authenticated = false;
-        send_auth_denied(outgoing, document_name, "Reconnect to authenticate again");
-        let _ = outgoing.send(Message::Close(None));
-        return Ok(());
-    }
-    session.authenticated = false;
+    // Same-identity renewal is allowed; changing actors requires a new socket.
     if auth_type != AUTH_TOKEN {
         return Ok(());
     }
@@ -253,6 +251,33 @@ async fn handle_auth(
 
     match authenticate(state, document_name, &token).await {
         Ok(outcome) => {
+            if session.document.is_some() {
+                // Refresh credentials in place without detaching the document,
+                // dropping awareness, or creating a gap in pending writes.
+                let attached = match &session.document {
+                    Some(doc) => doc.has_connection(connection_id).await,
+                    None => false,
+                };
+                if !session.authenticated || !attached || session.actor_id != outcome.actor_id {
+                    session.authenticated = false;
+                    send_auth_denied(outgoing, document_name, "Access revoked");
+                    let _ = outgoing.send(Message::Close(None));
+                    return Ok(());
+                }
+                session.expires_at = outcome.expires_at;
+                session.read_only = outcome.read_only;
+                if let Some(doc) = &session.document {
+                    doc.renew_connection_session(connection_id, outcome.login_session_id).await;
+                }
+                let scope = if outcome.read_only {
+                    "readonly"
+                } else {
+                    "read-write"
+                };
+                let reply = encode_auth_message(document_name, AUTH_AUTHENTICATED, Some(scope));
+                let _ = outgoing.send(Message::Binary(reply.into()));
+                return Ok(());
+            }
             session.authenticated = true;
             session.read_only = outcome.read_only;
             session.actor_id = outcome.actor_id.clone();
@@ -267,6 +292,7 @@ async fn handle_auth(
                     outgoing.clone(),
                     outcome.actor_id,
                     outcome.share_link_id,
+                    outcome.login_session_id,
                     outcome.username,
                 )
                 .await?;
@@ -294,16 +320,26 @@ async fn handle_auth(
                 .await;
             doc_state.broadcast_presence(document_name).await;
             // Refresh the setting after reconnect, even for read-only clients.
-            let language: Option<String> = sqlx::query_scalar(r#"SELECT language FROM "Room" WHERE id = $1"#)
-                .bind(document_name).fetch_optional(&state.db).await?;
+            let language: Option<String> =
+                sqlx::query_scalar(r#"SELECT language FROM "Room" WHERE id = $1"#)
+                    .bind(document_name)
+                    .fetch_optional(&state.db)
+                    .await?;
             if let Some(language) = language {
-                let message = super::protocol::encode_stateless_message(document_name,
-                    &serde_json::json!({"type":"room-language", "language":language}).to_string());
+                let message = super::protocol::encode_stateless_message(
+                    document_name,
+                    &serde_json::json!({"type":"room-language", "language":language}).to_string(),
+                );
                 let _ = outgoing.send(Message::Binary(message.into()));
             }
         }
         Err(reason) => {
-            send_auth_denied(outgoing, document_name, &reason);
+            session.authenticated = false;
+            // Database/network failures are retryable, not an access revocation.
+            // A normal close lets the provider back off and reconnect.
+            if !reason.starts_with("Authentication temporarily unavailable:") {
+                send_auth_denied(outgoing, document_name, &reason);
+            }
             let _ = outgoing.send(Message::Close(None));
         }
     }

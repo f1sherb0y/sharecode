@@ -1,0 +1,16 @@
+diff --git a/esm/vs/platform/clipboard/browser/clipboardService.js b/esm/vs/platform/clipboard/browser/clipboardService.js
+index 63add80ad8f0d082d345698e7eeffe900a8dee4c..ff4e7263ef4833cb1f3d25cfe25f2ac7c5a303a5 100644
+--- a/esm/vs/platform/clipboard/browser/clipboardService.js
++++ b/esm/vs/platform/clipboard/browser/clipboardService.js
+@@ -69,6 +69,11 @@ let BrowserClipboardService = class BrowserClipboardService extends Disposable {
+     installWebKitWriteTextWorkaround() {
+         const handler = () => {
+             const currentWritePromise = new DeferredPromise();
++            // Fullscreen can consume user activation before WebKit accepts the
++            // ClipboardItem. If write() rejects without observing its data promise,
++            // the next gesture's cancellation would become an unhandled rejection.
++            // Keep the original promise (and its rejection) for ClipboardItem.
++            currentWritePromise.p.catch(() => { });
+             // Cancel the previous promise since we just created a new one in response to this new event
+             if (this.webKitPendingClipboardWritePromise && !this.webKitPendingClipboardWritePromise.isSettled) {
+                 this.webKitPendingClipboardWritePromise.cancel();

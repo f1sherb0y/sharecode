@@ -1,21 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_STACK } from '@/lib/editor-font'
 
-export const SELECTABLE_FONTS = ['JetBrains Mono', 'JuliaMono'] as const
-export type SelectableFont = (typeof SELECTABLE_FONTS)[number]
+export type SelectableFont = 'Sarasa Mono'
 
-const FONT_FALLBACK_STACK =
-  "'Fira Code', 'DejaVu Sans Mono', 'Liberation Mono', 'ui-monospace', 'monospace'"
-
-/** CSS `font-family` value combining the selected font and fallbacks.
- *  Defensively whitelists `font` — a legacy persisted value that slipped past
- *  migration would otherwise produce invalid CSS and cause the whole
- *  declaration to be dropped, inheriting the page's sans-serif font. */
-export function fontFamilyStack(font: SelectableFont): string {
-  const safe = (SELECTABLE_FONTS as readonly string[]).includes(font)
-    ? font
-    : 'JuliaMono'
-  return `'${safe}', ${FONT_FALLBACK_STACK}`
+// Also handles old persisted values without ever emitting another font family.
+export function fontFamilyStack(_font?: SelectableFont): string {
+  return EDITOR_FONT_STACK
 }
 
 interface FontState {
@@ -23,7 +14,6 @@ interface FontState {
    *  to get the value to hand to Monaco or CSS. */
   font: SelectableFont
   fontSize: number
-  setFont: (font: SelectableFont) => void
   setFontSize: (size: number) => void
   increaseFontSize: () => void
   decreaseFontSize: () => void
@@ -33,26 +23,11 @@ const MIN_FONT_SIZE = 10
 const MAX_FONT_SIZE = 24
 const FONT_SIZE_STEP = 2
 
-function normalizeFont(value: unknown): SelectableFont {
-  if (typeof value === 'string') {
-    // Legacy persisted value was a full CSS stack, e.g.
-    // `'JetBrains Mono', 'Fira Code', ...`. Recover the first known font.
-    for (const candidate of SELECTABLE_FONTS) {
-      if (value.includes(candidate)) return candidate
-    }
-  }
-  return 'JuliaMono'
-}
-
 export const useFontStore = create<FontState>()(
   persist(
     (set, get) => ({
-      font: 'JuliaMono',
-      fontSize: 12,
-
-      setFont: (font: SelectableFont) => {
-        set({ font })
-      },
+      font: 'Sarasa Mono',
+      fontSize: DEFAULT_EDITOR_FONT_SIZE,
 
       setFontSize: (size: number) => {
         const clampedSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size))
@@ -76,17 +51,17 @@ export const useFontStore = create<FontState>()(
       // Bump whenever the shape of persisted state changes. Without a version
       // bump, zustand's persist treats stored and current version both as 0
       // and skips migrate — so pre-refactor entries stay in localStorage.
-      version: 2,
-      // Version 2 lowers the previous default (14px) to 12px.
+      version: 5,
+      // Upgrade the former 12px default; keep other customized sizes.
       migrate: (state: unknown) => {
         const s = (state ?? {}) as Partial<FontState> & { font?: unknown }
         return {
           ...s,
-          font: normalizeFont(s.font),
+          font: 'Sarasa Mono',
           fontSize:
-            typeof s.fontSize === 'number'
-              ? Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, s.fontSize === 14 ? 12 : s.fontSize))
-              : 12,
+            typeof s.fontSize === 'number' && s.fontSize !== 12
+              ? Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, s.fontSize))
+              : DEFAULT_EDITOR_FONT_SIZE,
         } as FontState
       },
     }

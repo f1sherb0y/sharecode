@@ -126,3 +126,8 @@
     margin-top: calc(var(--spacing-control) + 12px);
   }
 }
+
+/* A single drawing font; do not offer choices that have been removed. */
+.sharecode-canvas .excalidraw .FontPicker__container { display: none; }
+.sharecode-canvas .excalidraw fieldset:has([data-testid="font-family-code"]) { display: none; }
+.sharecode-canvas .excalidraw { --ui-font: var(--font-mono); }

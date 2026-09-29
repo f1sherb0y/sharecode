@@ -1,4 +1,11 @@
-import type { Role, User } from '@/types'
+import type { Role, Room, User } from '@/types'
+
+export function canViewRoomPlayback(user: User | null | undefined, room: Room | null | undefined): boolean {
+  if (!user || !room) return false
+  // The server accounts for privacy, membership and relative owner rank.
+  return room.canViewPlayback ?? (room.ownerId === user.id || user.role === 'superuser' ||
+    user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms)
+}
 
 export type RoomLifecycleAction = 'delete' | 'end'
 

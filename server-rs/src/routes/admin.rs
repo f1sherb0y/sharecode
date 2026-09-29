@@ -15,7 +15,10 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::{RoomAdminRow, UserPublicRow, UserRow},
-    permissions::{can_manage_room_lifecycle, RoomLifecycleAction},
+    permissions::{
+        can_manage_room_lifecycle, has_global_read, require_room_access, RoomLifecycleAction,
+        ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL, SHARE_READ_ONLY_SQL,
+    },
     state::AppState,
     utils::colors::random_user_color,
     utils::passwords::validate_password,
@@ -224,6 +227,20 @@ fn default_permissions_for_role(role: &str, requested: PermissionFlagsUpdate) ->
     normalize_permissions_for_role(role, merged)
 }
 
+fn validate_delegation(
+    actor: &crate::auth::AuthUser,
+    permissions: PermissionFlags,
+) -> Result<(), ApiError> {
+    if actor.role != "superuser"
+        && ((permissions.can_read_all_rooms && !crate::permissions::has_global_read(actor))
+            || (permissions.can_write_all_rooms && !crate::permissions::has_global_write(actor))
+            || (permissions.can_delete_all_rooms && !crate::permissions::has_global_delete(actor)))
+    {
+        return Err(ApiError::not_found("Not found"));
+    }
+    Ok(())
+}
+
 fn has_permission_changes(update: &PermissionFlagsUpdate) -> bool {
     update.can_read_all_rooms.is_some()
         || update.can_write_all_rooms.is_some()
@@ -232,6 +249,7 @@ fn has_permission_changes(update: &PermissionFlagsUpdate) -> bool {
 
 pub async fn create_user(
     State(state): State<AppState>,
+    client: ClientInfo,
     AdminUser(auth_user): AdminUser,
     Json(payload): Json<Value>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -313,7 +331,13 @@ pub async fn create_user(
 
     let requested_permissions = extract_permission_input(&payload);
     let permissions = default_permissions_for_role(requested_role, requested_permissions);
+    validate_delegation(&auth_user, permissions)?;
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let user = sqlx::query_as::<_, UserPublicRow>(
         r#"
         INSERT INTO "User" (id, email, username, password, color, role,
@@ -341,10 +365,14 @@ pub async fn create_user(
     .bind(permissions.can_read_all_rooms)
     .bind(permissions.can_write_all_rooms)
     .bind(permissions.can_delete_all_rooms)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| crate::db::user_creation_error(err))?;
 
+    audit::record_details(&mut *tx, &client, "user.created", Some(&auth_user.id), Some(&auth_user.username), Some(&user.id), true, None, None, json!({"role":user.role,"canReadAllRooms":user.can_read_all_rooms,"canWriteAllRooms":user.can_write_all_rooms,"canDeleteAllRooms":user.can_delete_all_rooms})).await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     tracing::info!(
         actor_id = %auth_user.id,
         actor_role = %auth_user.role,
@@ -517,6 +545,19 @@ pub async fn update_user(
 
     let final_role = requested_role.unwrap_or(&target_user.role);
     permissions = normalize_permissions_for_role(final_role, permissions);
+    validate_delegation(&auth_user, permissions)?;
+
+    let affected_private_rooms = if final_role != target_user.role {
+        sqlx::query_scalar::<_, String>(
+            r#"SELECT id FROM "Room" WHERE "ownerId" = $1 AND "isPrivate" AND NOT "isDeleted""#,
+        )
+        .bind(&user_id)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|err| db_error(err, "Failed to load rooms affected by role change"))?
+    } else {
+        Vec::new()
+    };
 
     let mut tx = state
         .db
@@ -553,21 +594,15 @@ pub async fn update_user(
     .await
     .map_err(|err| db_error(err, "Failed to update user"))?;
 
-    audit::record(
-        &mut *tx,
-        &client,
-        "user.updated",
-        Some(&auth_user.id),
-        Some(&auth_user.username),
-        Some(&user_id),
-        true,
-        None,
-    )
-    .await?;
+    audit::record_details(&mut *tx, &client, "user.permissions_changed", Some(&auth_user.id), Some(&auth_user.username), Some(&user_id), true, None, None, json!({"before":{"role":target_user.role,"canReadAllRooms":target_user.can_read_all_rooms,"canWriteAllRooms":target_user.can_write_all_rooms,"canDeleteAllRooms":target_user.can_delete_all_rooms},"after":{"role":updated.role,"canReadAllRooms":updated.can_read_all_rooms,"canWriteAllRooms":updated.can_write_all_rooms,"canDeleteAllRooms":updated.can_delete_all_rooms}})).await?;
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to commit user update"))?;
     state.ws.revoke_actor(&user_id).await;
+
+    for room_id in affected_private_rooms {
+        state.ws.revoke_inaccessible_room(&state.db, &room_id).await;
+    }
 
     Ok(Json(json!({ "user": user_to_json(&updated) })))
 }
@@ -685,7 +720,7 @@ pub async fn delete_user(
 
 pub async fn get_all_rooms(
     State(state): State<AppState>,
-    AdminUser(_auth_user): AdminUser,
+    AdminUser(auth_user): AdminUser,
     Query(query): Query<AdminListQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pattern = search_pattern(query.q.as_deref());
@@ -697,57 +732,47 @@ pub async fn get_all_rooms(
         Some("ended") => Some(true),
         _ => return Err(ApiError::bad_request("Invalid room status")),
     };
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "Room" r
-        JOIN "User" o ON o.id = r."ownerId"
-        WHERE r."isDeleted" = false AND r.name ILIKE $1 AND o.username ILIKE $2
-        AND ($3::text IS NULL OR r.language = $3) AND ($4::boolean IS NULL OR r."isEnded" = $4)"#,
-    )
-    .bind(&pattern)
-    .bind(&owner)
-    .bind(language)
-    .bind(ended)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to count rooms"))?;
+    let filter = format!(
+        r#"FROM "Room" r JOIN "User" o ON o.id = r."ownerId"
+        WHERE {ROOM_VISIBILITY_SQL} AND r.name ILIKE $4 AND o.username ILIKE $5
+        AND ($6::text IS NULL OR r.language = $6) AND ($7::boolean IS NULL OR r."isEnded" = $7)"#
+    );
+    let count_sql = format!("SELECT COUNT(*) {filter}");
+    let total = sqlx::query_scalar::<_, i64>(&count_sql)
+        .bind(&auth_user.id)
+        .bind(&auth_user.role)
+        .bind(has_global_read(&auth_user))
+        .bind(&pattern)
+        .bind(&owner)
+        .bind(language)
+        .bind(ended)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|err| db_error(err, "Failed to count rooms"))?;
     let (limit, offset, pagination) = query.pagination(total);
-    let rooms = sqlx::query_as::<_, RoomAdminRow>(
-        r#"
-        SELECT
-            r.id,
-            r.name,
-            r.language,
-            r.company,
-            r.position,
-            r."ownerId" as owner_id,
-            r."allowEdit" as allow_edit,
-            r."isPinned" as is_pinned,
-            r."isDeleted" as is_deleted,
-            r."scheduledTime" as scheduled_time,
-            r.duration,
-            r."isEnded" as is_ended,
-            r."endedAt" as ended_at,
-            r."createdAt" as created_at,
-            r."updatedAt" as updated_at,
-            o.username as owner_username,
-            o.email as owner_email
-        FROM "Room" r
-        JOIN "User" o ON o.id = r."ownerId"
-        WHERE r."isDeleted" = false
-        AND r.name ILIKE $1 AND o.username ILIKE $2
-        AND ($3::text IS NULL OR r.language = $3) AND ($4::boolean IS NULL OR r."isEnded" = $4)
-        ORDER BY r."createdAt" DESC, r.id DESC LIMIT $5 OFFSET $6
-        "#,
-    )
-    .bind(&pattern)
-    .bind(&owner)
-    .bind(language)
-    .bind(ended)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load rooms"))?;
+    let sql = format!(
+        r#"SELECT r.id, r.name, r.language, r.company, r.position,
+        r."ownerId" as owner_id, r."isPrivate" as is_private, r."allowEdit" as allow_edit,
+        r."isPinned" as is_pinned, r."isDeleted" as is_deleted,
+        r."scheduledTime" as scheduled_time, r.duration, r."isEnded" as is_ended,
+        r."endedAt" as ended_at, r."createdAt" as created_at, r."updatedAt" as updated_at,
+        o.username as owner_username, o.email as owner_email,
+        {ROOM_PLAYBACK_SQL} as can_view_playback, {SHARE_READ_ONLY_SQL} as share_read_only
+        {filter} ORDER BY r."createdAt" DESC, r.id DESC LIMIT $8 OFFSET $9"#
+    );
+    let rooms = sqlx::query_as::<_, RoomAdminRow>(&sql)
+        .bind(&auth_user.id)
+        .bind(&auth_user.role)
+        .bind(has_global_read(&auth_user))
+        .bind(&pattern)
+        .bind(&owner)
+        .bind(language)
+        .bind(ended)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|err| db_error(err, "Failed to load rooms"))?;
 
     let mut response = Vec::with_capacity(rooms.len());
     for room in rooms {
@@ -759,6 +784,9 @@ pub async fn get_all_rooms(
             "position": room.position,
             "ownerId": room.owner_id,
             "allowEdit": room.allow_edit,
+            "isPrivate": room.is_private,
+            "canViewPlayback": room.can_view_playback,
+            "shareReadOnly": room.share_read_only,
             "isPinned": room.is_pinned,
             "isDeleted": room.is_deleted,
             "scheduledTime": crate::utils::time::to_iso_string_opt(room.scheduled_time),
@@ -825,7 +853,7 @@ pub async fn get_room_playback_sizes(
     if ids.is_empty() {
         return Ok(Json(json!({"rooms": []})));
     }
-    let rows = sqlx::query_as::<_, PlaybackSizeRow>(
+    let sql = format!(
         r#"
         SELECT
             r.id,
@@ -835,16 +863,21 @@ pub async fn get_room_playback_sizes(
             COUNT(du.id) as update_count,
             COALESCE(SUM(octet_length(du.update)), 0) as bytes
         FROM "Room" r
+        JOIN "User" o ON o.id = r."ownerId"
         LEFT JOIN "DocumentUpdate" du ON du."documentId" = r.id
-        WHERE r."isDeleted" = false AND r.id = ANY($1)
+        WHERE {ROOM_VISIBILITY_SQL} AND r.id = ANY($4)
         GROUP BY r.id, r.name, r."isEnded", r."endedAt"
         ORDER BY bytes DESC
-        "#,
-    )
-    .bind(&ids)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to load playback storage sizes"))?;
+        "#
+    );
+    let rows = sqlx::query_as::<_, PlaybackSizeRow>(&sql)
+        .bind(&auth_user.id)
+        .bind(&auth_user.role)
+        .bind(has_global_read(&auth_user))
+        .bind(&ids)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|err| db_error(err, "Failed to load playback storage sizes"))?;
 
     let response = rows
         .into_iter()
@@ -865,9 +898,11 @@ pub async fn get_room_playback_sizes(
 
 pub async fn compress_room_playback(
     State(state): State<AppState>,
+    client: ClientInfo,
     AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    require_room_access(&state.db, &auth_user, &room_id).await?;
     if auth_user.role != "superuser" {
         return Err(ApiError::not_found("Not found"));
     }
@@ -994,6 +1029,7 @@ pub async fn compress_room_playback(
             .map_err(|err| db_error(err, "Failed to insert compressed updates"))?;
     }
 
+    audit::record_details(&mut *tx, &client, "playback.compressed", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"originalUpdates":original_count,"compressedUpdates":compressed_count,"originalBytes":original_bytes,"compressedBytes":compressed_bytes})).await?;
     tx.commit()
         .await
         .map_err(|err| db_error(err, "Failed to commit compression transaction"))?;
@@ -1010,10 +1046,12 @@ pub async fn compress_room_playback(
 
 pub async fn delete_room(
     State(state): State<AppState>,
+    client: ClientInfo,
     AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let _access = state.ws.access.write().await;
+    require_room_access(&state.db, &auth_user, &room_id).await?;
     let room = sqlx::query_as::<_, RoomOwnerRow>(
         r#"
         SELECT "ownerId" as owner_id
@@ -1036,6 +1074,11 @@ pub async fn delete_room(
         return Err(ApiError::not_found("Room not found"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     sqlx::query(
         r#"
         UPDATE "Room"
@@ -1046,10 +1089,26 @@ pub async fn delete_room(
         "#,
     )
     .bind(&room_id)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to delete room"))?;
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "room.deleted",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&room_id),
+        true,
+        None,
+        Some(&room_id),
+        json!({}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     tracing::info!(
         actor_id = %auth_user.id,
         actor_role = %auth_user.role,

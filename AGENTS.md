@@ -373,6 +373,31 @@ monacoModelRef.current?.setValue(ytext.toString())
 
 ## Deployment
 
+### Mandatory release checks
+
+- Before every deployment, run `just predeploy` against the exact source being
+  released. A failing check blocks deployment; fix the cause and rerun affected
+  checks. Do not silently skip a browser or replace assertions with weaker ones.
+- The gate is maintained in `scripts/predeploy.sh`: Rust tests, production
+  frontend build, real Chromium/Firefox/WebKit process-restart login tests,
+  session renewal while editing, three-browser reconnect/durability recovery,
+  all three workspace UI suites (including mobile
+  and DPI layouts), notes read/write permissions and reader/manager exports,
+  Sarasa font/CDN fallback checks, and standalone replay export.
+- Prerequisites: `just install`, `just browsers`, Docker running, and the
+  `postgres:17-alpine` image available. Font/export checks require network access
+  to the pinned CDN dependencies. Session tests use disposable databases only;
+  never substitute the development or production database.
+- Logs are retained under the printed `/tmp/sharecode-predeploy.*` directory;
+  `SHARECODE_PREDEPLOY_LOG_DIR` can select a durable artifact directory. Keep the
+  result with the deployment's source manifest. Source changes after validation
+  require rerunning the checks they affect before releasing those changes.
+- After switching the services, run `just postdeploy` (or supply the target URL),
+  verify service health and migrations, and compare public assets to the built
+  image. The public smoke suite uses no account and makes no data changes.
+- These commands test only; they do not grant permission to deploy. Continue to
+  respect the user's current deployment authorization.
+
 ### Development
 ```bash
 # Terminal 1: Start PostgreSQL

@@ -8,3 +8,4 @@ pub mod share_links;
 pub mod state;
 
 pub mod audit;
+pub mod sessions;

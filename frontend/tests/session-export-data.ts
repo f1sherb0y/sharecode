@@ -44,6 +44,7 @@ export function fixture(markdownImage?: string) {
     doc.getMap('canvas-settings').set('private', secret)
     doc.getMap('canvas-files').set(secret + '-file', { id: secret + '-file', created: base, lastRetrieved: base + 1, dataURL: pixel, mimeType: 'image/png', secret })
     doc.getMap('canvas-elements').set(secret + '-image', { element: { ...shape, id: secret + '-image', type: 'image', x: 220, width: 100, height: 100, fileId: secret + '-file', scale: [1, 1], status: 'saved', index: 'a1' } })
+    doc.getMap('canvas-elements').set(secret + '-text', { element: { ...shape, id: secret + '-text', type: 'text', x: 20, y: 160, width: 300, height: 25, index: 'a3', fontFamily: 3, fontSize: 20, text: 'Canvas 中文 日本語 한글', originalText: 'Canvas 中文 日本語 한글', textAlign: 'left', verticalAlign: 'top', containerId: null, autoResize: true, lineHeight: 1.25 } })
   })
   at = 4000
   doc.transact(() => {
@@ -76,7 +77,7 @@ export async function checkSanitizer() {
   assert(replay.seek(1000).getText('codemirror').toString().includes('second step'))
   assert(replay.seek(2000).getXmlFragment('prosemirror').toString().includes(pixel))
   let elements = orderedCanvasElements(replay.seek(6000))
-  assert.equal(elements.length, 3)
+  assert.equal(elements.length, 4)
   for (const element of elements) { assert.equal(element.updated, 0); assert.equal(element.customData, undefined); assert.match(element.id, /^item\d+$/) }
   const files = [...replay.doc.getMap<Record<string, unknown>>('canvas-files').values()]
   assert.equal(files[0]!.created, 0); assert.equal(files[0]!.lastRetrieved, undefined)

@@ -13,8 +13,8 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "^0.18.1",
-    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@excalidraw/excalidraw": "0.18.1",
+    "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@hocuspocus/provider": "^3.4.4",
     "@milkdown/kit": "^7.22.1",
     "@milkdown/plugin-collab": "^7.22.1",
@@ -32,6 +32,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "i18next": "^26.0.3",
     "i18next-browser-languagedetector": "^8.2.1",
     "katex": "^0.16.47",
@@ -41,6 +42,7 @@
     "pako": "^2.1.0",
     "plugin-react": "^0.0.1-security",
     "react": "^19.2.4",
+    "react-datepicker": "^9.1.0",
     "react-dom": "^19.2.4",
     "react-i18next": "^17.0.2",
     "react-router-dom": "^7.13.2",
@@ -83,6 +85,8 @@
     "prosemirror-view": "1.42.2"
   },
   "patchedDependencies": {
-    "tldraw@4.5.6": "patches/tldraw@4.5.6.patch"
+    "tldraw@4.5.6": "patches/tldraw@4.5.6.patch",
+    "monaco-editor@0.55.1": "patches/monaco-editor@0.55.1.patch",
+    "@hocuspocus/provider@3.4.4": "patches/@hocuspocus%2Fprovider@3.4.4.patch"
   }
 }

@@ -8,6 +8,7 @@ import { gzipSync } from 'node:zlib'
 // jsDelivr's ESM bundles can reference different peer versions. Keep React, Yjs
 // and ProseMirror singletons aligned with the app (see audit-session-cdn.ts).
 import cdnImports from './session-cdn-imports.json'
+import { canvasFontPlugin } from './canvas-font'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cdn = 'https://cdn.jsdelivr.net/npm/'
 export const sessionCdnDependencies: Record<string, string> = {
@@ -28,7 +29,7 @@ export const sessionCdnDependencies: Record<string, string> = {
   '@radix-ui/react-slot': `${cdn}@radix-ui/react-slot@1.2.4/+esm`,
   'tailwind-merge': `${cdn}tailwind-merge@3.5.0/+esm`,
 }
-const styles = [`${cdn}@excalidraw/excalidraw@0.18.1/dist/prod/index.css`, `${cdn}katex@0.16.47/dist/katex.min.css`]
+const styles: string[] = []
 
 
 export async function buildSessionPlayer(): Promise<string> {
@@ -41,6 +42,7 @@ export async function buildSessionPlayer(): Promise<string> {
     resolve: { alias: [
       { find: /^@\/i18n$/, replacement: resolve(root, 'src/export/i18n.ts') },
       { find: /^@\/lib\/monaco-loader$/, replacement: resolve(root, 'src/export/monaco-loader.ts') },
+      { find: /^@\/lib\/sarasa-font$/, replacement: resolve(root, 'src/export/sarasa-font.ts') },
       { find: /^@\/lib\/utils$/, replacement: resolve(root, 'src/export/utils.ts') },
       { find: '@', replacement: resolve(root, 'src') },
     ] },
@@ -50,7 +52,7 @@ export async function buildSessionPlayer(): Promise<string> {
         resolveId(id) {
           if (id.startsWith('@milkdown/kit/') && !id.endsWith('.css')) return { id: `${cdn}@milkdown/kit@7.22.1/${id.slice('@milkdown/kit/'.length)}/+esm`, external: true }
           if (sessionCdnDependencies[id]) return { id: sessionCdnDependencies[id], external: true }
-          if (id === '@excalidraw/excalidraw/index.css' || id === 'katex/dist/katex.min.css') return '\0cdn-style'
+          if (id === 'katex/dist/katex.min.css') return '\0cdn-style'
           if (id === 'virtual:replay-translations') return '\0replay-translations'
         },
         load(id) {
@@ -68,9 +70,9 @@ export async function buildSessionPlayer(): Promise<string> {
         },
         transform(code, id) {
           if (id.includes('/src/lib/milkdown-mermaid.ts')) return code.replace("securityLevel: 'loose'", "securityLevel: 'strict'")
-          if (id.includes('/src/styles/globals.css')) return code.replace('@import "tailwindcss";', '@import "tailwindcss" source(none);\n@source "../export/runtime.tsx";\n@source "../components/ui/button.tsx";\n@source "../components/ui/select.tsx";\n@source "../components/features/playback-controls.tsx";\n@source "../components/features/room-view-switch.tsx";').replace('/fonts/JuliaMono-Regular.woff2', 'https://cdn.jsdelivr.net/gh/cormullion/juliamono@v0.062/webfonts/JuliaMono-Regular.woff2')
+          if (id.includes('/src/styles/globals.css')) return code.replace('@import "tailwindcss";', '@import "tailwindcss" source(none);\n@source "../export/runtime.tsx";\n@source "../components/ui/button.tsx";\n@source "../components/ui/select.tsx";\n@source "../components/features/playback-controls.tsx";\n@source "../components/features/room-view-switch.tsx";')
         },
-      }, react(), tailwindcss(),
+      }, canvasFontPlugin(), react(), tailwindcss(),
     ],
     build: {
       write: false, emptyOutDir: false, sourcemap: false, minify: 'oxc', target: 'es2022', cssCodeSplit: false,

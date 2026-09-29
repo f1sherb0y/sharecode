@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 type FullscreenDocument = Document & {
   webkitExitFullscreen?: () => Promise<void> | void
@@ -21,6 +21,7 @@ function canFullscreenElement(el: FullscreenElement | null) {
 export function useFullscreen() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isSupported, setIsSupported] = useState(false)
+  const requestedElement = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (typeof document === 'undefined') return
@@ -29,7 +30,9 @@ export function useFullscreen() {
     const root = document.documentElement as FullscreenElement
 
     const handleChange = () => {
-      setIsFullscreen(!!getFullscreenElement(doc))
+      const activeElement = getFullscreenElement(doc)
+      setIsFullscreen(!!activeElement)
+      if (activeElement !== requestedElement.current) requestedElement.current = null
     }
 
     setIsSupported(
@@ -53,11 +56,13 @@ export function useFullscreen() {
 
     if (typeof target.requestFullscreen === 'function') {
       await target.requestFullscreen()
+      requestedElement.current = element
       return
     }
 
     if (typeof target.webkitRequestFullscreen === 'function') {
       await target.webkitRequestFullscreen()
+      requestedElement.current = element
     }
   }, [])
 
@@ -75,6 +80,14 @@ export function useFullscreen() {
       await doc.webkitExitFullscreen()
     }
   }, [])
+
+  // Fullscreen now includes the document and its portals. Leaving the editor
+  // must still exit the fullscreen session that this hook started.
+  useEffect(() => () => {
+    if (requestedElement.current && getFullscreenElement(document as FullscreenDocument) === requestedElement.current) {
+      void exitFullscreen().catch(() => {})
+    }
+  }, [exitFullscreen])
 
   const toggleFullscreen = useCallback(async (element: HTMLElement | null) => {
     const doc = document as FullscreenDocument

@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { sessionPlayerPlugin } from './tooling/session-player'
 import { analyzer } from 'vite-bundle-analyzer'
-import { resolve, join } from 'path'
-import { readdirSync, readFileSync, createReadStream } from 'node:fs'
+import { resolve } from 'path'
+import { canvasFontPlugin } from './tooling/canvas-font'
 
 const host = process.env.TAURI_DEV_HOST
 
@@ -16,30 +16,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       sessionPlayerPlugin(),
-      {
-        name: 'canvas-font-assets',
-        generateBundle() {
-          const root = resolve(__dirname, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts')
-          const emit = (dir: string, relative = '') => {
-            for (const entry of readdirSync(dir, { withFileTypes: true })) {
-              const name = join(relative, entry.name)
-              if (entry.isDirectory()) emit(join(dir, entry.name), name)
-              else this.emitFile({ type: 'asset', fileName: `excalidraw/fonts/${name}`, source: readFileSync(join(dir, entry.name)) })
-            }
-          }
-          emit(root)
-        },
-        configureServer(server) {
-          server.middlewares.use('/excalidraw/fonts', (req, res, next) => {
-            const path = (req.url ?? '').split('?')[0]
-            if (!/^\/[a-zA-Z0-9_./-]+\.woff2$/.test(path) || path.includes('..')) return next()
-            const stream = createReadStream(resolve(__dirname, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts') + path)
-            stream.on('error', () => { res.statusCode = 404; res.end() })
-            res.setHeader('Content-Type', 'font/woff2')
-            stream.pipe(res)
-          })
-        },
-      },
+      canvasFontPlugin(),
       react(),
       tailwindcss(),
       analyzer({
@@ -56,6 +33,18 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': resolve(__dirname, './src'),
       },
+    },
+
+    // Keep the font adapter active in development as well as production.
+    optimizeDeps: {
+      exclude: ['@excalidraw/excalidraw'],
+      // Excluded ESM still imports CommonJS helpers; prebundle those explicitly
+      // so a fresh dev cache can open Canvas without missing-default errors.
+      include: [
+        '@braintree/sanitize-url', 'es6-promise-pool', 'fuzzy',
+        'lodash.debounce', 'lodash.throttle', 'png-chunk-text',
+        'png-chunks-encode', 'png-chunks-extract', 'image-blob-reduce', 'pica',
+      ].map(dependency => `@excalidraw/excalidraw > ${dependency}`),
     },
 
     clearScreen: false,

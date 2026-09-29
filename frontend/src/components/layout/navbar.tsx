@@ -31,9 +31,9 @@ export function Navbar({
         {/* Left section */}
         <div className="flex items-center gap-2">
           {leftContent ?? (
-            <Link to="/rooms" className="flex items-center gap-1 font-semibold">
-              <Code2 className="h-5 w-5 text-foreground" />
-              {title !== null && <span className="hidden sm:inline">{title ?? 'ShareCode'}</span>}
+            <Link to="/rooms" aria-label={title ?? 'ShareCode'} className="flex shrink-0 items-center gap-1.5 font-semibold leading-none">
+              <Code2 className="h-7 w-7 shrink-0 text-foreground" aria-hidden="true" />
+              {title !== null && <span className="hidden text-[1.125rem] sm:inline">{title ?? 'ShareCode'}</span>}
             </Link>
           )}
         </div>

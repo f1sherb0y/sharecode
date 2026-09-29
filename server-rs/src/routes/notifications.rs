@@ -1,3 +1,4 @@
+use crate::core::audit::{self, ClientInfo};
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -35,6 +36,7 @@ struct NotificationWithReadRow {
 
 pub async fn create_notification(
     State(state): State<AppState>,
+    client: ClientInfo,
     AdminUser(auth_user): AdminUser,
     Json(payload): Json<CreateNotificationPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -57,6 +59,11 @@ pub async fn create_notification(
         return Err(ApiError::bad_request("Invalid notification severity"));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let row = sqlx::query_as::<_, NotificationWithReadRow>(
         r#"
         INSERT INTO "Notification" (id, title, content, severity, "createdBy")
@@ -77,10 +84,26 @@ pub async fn create_notification(
     .bind(&content)
     .bind(&severity)
     .bind(&auth_user.id)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create notification"))?;
 
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "notification.created",
+        Some(&auth_user.id),
+        Some(&auth_user.username),
+        Some(&row.id),
+        true,
+        None,
+        None,
+        json!({"severity":severity}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     tracing::info!(
         actor_id = %auth_user.id,
         actor_role = %auth_user.role,

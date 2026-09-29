@@ -120,3 +120,15 @@ test-canvas-integration:
 # Verify code/Markdown switching, delayed responses, and recovery from a blank editor.
 test-markdown-switch:
     bash scripts/test-runner-local.sh tests/markdown-switch.mjs
+
+# Required before each deployment: build, auth, browser restarts, UI, fonts and export.
+predeploy:
+    bash scripts/predeploy.sh
+
+# Check notes read/write permissions and real reader/manager session exports.
+test-notes:
+    bash scripts/test-runner-local.sh tests/notes-permissions.mjs
+
+# Read-only public smoke checks after deployment; never signs in or edits data.
+postdeploy url="https://collabcode.cc":
+    cd frontend && node tests/deployment-smoke.mjs "$1"
