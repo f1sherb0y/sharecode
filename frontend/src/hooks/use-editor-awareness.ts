@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type MutableRefObject } from 'react'
 import type { RemoteUser } from '@/types'
 import * as Y from 'yjs'
 import { toModelOffset } from '@/lib/monaco-binding'
+import { isFollowable } from '@/lib/follow'
 import type * as Monaco from 'monaco-editor'
 import type { HocuspocusProvider } from '@hocuspocus/provider'
 
@@ -117,7 +118,7 @@ export function useEditorAwareness({
       const state = provider.awareness.getStates().get(targetClientId) as
         | { cursor?: { head?: unknown } }
         | undefined
-      if (provider.awareness.getStates().get(targetClientId)?.view === 'canvas' || !state?.cursor?.head) return
+      if (provider.awareness.getStates().get(targetClientId)?.view === 'canvas' || !isFollowable(state) || !state?.cursor?.head) return
 
       try {
         const headRelative = Y.createRelativePositionFromJSON(state.cursor.head as object)

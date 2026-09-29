@@ -3,6 +3,7 @@ import type { HocuspocusProvider } from '@hocuspocus/provider'
 import { CaptureUpdateAction } from '@excalidraw/excalidraw'
 import type { AppState, Collaborator, ExcalidrawImperativeAPI, SocketId } from '@excalidraw/excalidraw/types'
 import { CANVAS_INTERVAL, containViewport, type CanvasViewport } from '@/lib/canvas-sync'
+import { isFollowable } from '@/lib/follow'
 
 export interface CanvasPresence {
   viewport?: CanvasViewport
@@ -34,7 +35,7 @@ export function useCanvasFollow({ api, provider, followClientId, onFollowChange,
     const targetViewport = () => {
       const id = targetClientId()
       const target = id == null ? undefined : awareness.getStates().get(id)
-      return target?.view === 'canvas' ? (target.canvas as CanvasPresence | undefined)?.viewport : undefined
+      return target?.view === 'canvas' && isFollowable(target) ? (target.canvas as CanvasPresence | undefined)?.viewport : undefined
     }
     const applyFollow = () => {
       const app = api.getAppState()

@@ -43,6 +43,6 @@ throw Error('Local API not ready')
 JS
 case "${1:-tests/runner-permissions.mjs}" in
   tests/canvas-integration.ts) node --experimental-transform-types tests/canvas-integration.ts ;;
-  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs|tests/selection-blink.mjs|tests/private-rooms.mjs|tests/audit-devices.mjs|tests/session-renewal.mjs|tests/reconnect-recovery.mjs|tests/browser-sessions.mjs|tests/notes-permissions.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
+  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs|tests/selection-blink.mjs|tests/private-rooms.mjs|tests/audit-devices.mjs|tests/session-renewal.mjs|tests/reconnect-recovery.mjs|tests/browser-sessions.mjs|tests/notes-permissions.mjs|tests/follow-permission.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
   *) echo 'Unknown local test suite' >&2; exit 2 ;;
 esac

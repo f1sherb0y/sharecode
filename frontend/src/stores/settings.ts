@@ -4,6 +4,9 @@ import { persist } from 'zustand/middleware'
 interface SettingsState {
   timezone: string
   setTimezone: (tz: string) => void
+  /** Whether other participants may follow this browser's cursor and view. */
+  allowFollow: boolean
+  setAllowFollow: (allow: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -13,6 +16,12 @@ export const useSettingsStore = create<SettingsState>()(
 
       setTimezone: (timezone: string) => {
         set({ timezone })
+      },
+
+      allowFollow: true,
+
+      setAllowFollow: (allowFollow: boolean) => {
+        set({ allowFollow })
       },
     }),
     {

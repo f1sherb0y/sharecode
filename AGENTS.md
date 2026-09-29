@@ -382,7 +382,8 @@ monacoModelRef.current?.setValue(ytext.toString())
   frontend build, real Chromium/Firefox/WebKit process-restart login tests,
   session renewal while editing, three-browser reconnect/durability recovery,
   all three workspace UI suites (including mobile
-  and DPI layouts), notes read/write permissions and reader/manager exports,
+  and DPI layouts), notes read/write permissions and reader/manager exports, three-browser
+  follow opt-out across code/Markdown/Canvas rooms,
   Sarasa font/CDN fallback checks, and standalone replay export.
 - Prerequisites: `just install`, `just browsers`, Docker running, and the
   `postgres:17-alpine` image available. Font/export checks require network access

@@ -67,7 +67,8 @@ try {
     const page=await context.newPage(),errors:string[]=[],remoteFonts:string[]=[]
     page.on('pageerror',e=>{ errors.push(e.message); console.error(engine, 'PAGE ERROR', e.message) })
     page.on('console',m=>{if(m.type()==='error') console.error(engine,'CONSOLE',m.text())})
-    page.on('request',r=>{if(r.url().includes('.woff')&&!r.url().startsWith('http://127.0.0.1'))remoteFonts.push(r.url())})
+    // Excalidraw fonts are self-hosted; only the pinned Sarasa editor subsets use the CDN (SARASA_CDN_BASE).
+    page.on('request',r=>{if(r.url().includes('.woff')&&!r.url().startsWith('http://127.0.0.1')&&!r.url().startsWith('https://cdn.jsdelivr.net/npm/sarasa-mono-web@0.1.0/fonts/SarasaMonoCL-Regular/'))remoteFonts.push(r.url())})
     await page.goto('http://127.0.0.1:55461/room/'+room.id)
     await page.locator('.monaco-editor').waitFor()
     assert.equal(await page.locator('.excalidraw').count(),0)

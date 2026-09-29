@@ -34,6 +34,7 @@ run_check browser-sessions env -u ENGINE bash scripts/test-runner-local.sh tests
 run_check session-renewal bash scripts/test-runner-local.sh tests/session-renewal.mjs
 run_check reconnect-recovery env -u ENGINE bash scripts/test-runner-local.sh tests/reconnect-recovery.mjs
 run_check notes-permissions bash scripts/test-runner-local.sh tests/notes-permissions.mjs
+run_check follow-permission env -u ENGINE bash scripts/test-runner-local.sh tests/follow-permission.mjs
 for engine in chromium firefox webkit; do
   run_check "workspace-$engine" env UI_BROWSER="$engine" bash -c 'cd frontend && node --test tests/workspace-ui.test.mjs'
 done

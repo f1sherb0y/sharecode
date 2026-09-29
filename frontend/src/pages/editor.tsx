@@ -27,6 +27,7 @@ import {
 import {
   Button,
   Badge,
+  Checkbox,
   Select,
   SelectContent,
   SelectItem,
@@ -46,7 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
-import { useAuthStore, useThemeStore } from '@/stores'
+import { useAuthStore, useThemeStore, useSettingsStore } from '@/stores'
 import {
   useEditorRoom,
   useMonacoEditor,
@@ -61,6 +62,7 @@ import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/
 import { RoomViewSwitch } from '@/components/features/room-view-switch'
 import { FontControls } from '@/components/features/font-controls'
 import { generateUserColor, cn, formatDateTime } from '@/lib/utils'
+import { isFollowable } from '@/lib/follow'
 import type { Language } from '@/types'
 import type { MarkdownEditorHandle } from '@/components/features/markdown-editor'
 
@@ -260,11 +262,34 @@ export function EditorPage() {
   }, [setSearchParams])
 
   useEffect(() => { provider?.awareness?.setLocalStateField('view', view) }, [provider, view])
+
+  // Opting out is enforced by followers: they stop following and keep control.
+  const { allowFollow, setAllowFollow } = useSettingsStore()
+  useEffect(() => { provider?.awareness?.setLocalStateField('followable', allowFollow) }, [provider, allowFollow])
+  const [followBlocked, setFollowBlocked] = useState<ReadonlySet<number>>(() => new Set())
+  useEffect(() => {
+    const awareness = provider?.awareness
+    if (!awareness) return
+    const update = () => {
+      const blocked = [...awareness.getStates()].filter(([, state]) => !isFollowable(state)).map(([id]) => id)
+      setFollowBlocked(prev => prev.size === blocked.length && blocked.every(id => prev.has(id)) ? prev : new Set(blocked))
+    }
+    update()
+    awareness.on('change', update)
+    return () => awareness.off('change', update)
+  }, [provider])
+  useEffect(() => {
+    if (followingClientId == null || !followBlocked.has(followingClientId)) return
+    setFollowingClientId(null)
+    setFollowingUserId(null)
+  }, [followBlocked, followingClientId, setFollowingClientId, setFollowingUserId])
   useEffect(() => {
     const awareness = provider?.awareness
     if (!awareness || followingClientId == null) return
     const followView = () => {
-      const next = awareness.getStates().get(followingClientId)?.view
+      const target = awareness.getStates().get(followingClientId)
+      if (!isFollowable(target)) return
+      const next = target?.view
       if ((next === 'canvas' || next === 'editor') && next !== view) changeView(next)
     }
     followView()
@@ -726,8 +751,9 @@ export function EditorPage() {
 
                 {connectedUsers.map((u) => {
                   const isFollowing = !u.isLocal && followingClientId === u.clientId
+                  const isBlocked = !u.isLocal && followBlocked.has(u.clientId)
                   const toggleFollow = () => {
-                    if (u.isLocal) return
+                    if (u.isLocal || isBlocked) return
                     setFollowingUserId(isFollowing ? null : u.id ?? null)
                     setFollowingClientId(isFollowing ? null : u.clientId)
                   }
@@ -735,6 +761,7 @@ export function EditorPage() {
                     <DropdownMenuItem
                       key={u.clientId}
                       className="gap-1 cursor-pointer"
+                      disabled={isBlocked}
                       onClick={toggleFollow}
                     >
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
@@ -744,7 +771,7 @@ export function EditorPage() {
                       </span>
                       {!u.isLocal && (
                         <span className="ml-auto text-xs text-muted-foreground">
-                          {isFollowing ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
+                          {isBlocked ? t('editor.toolbar.followOff') : isFollowing ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
                         </span>
                       )}
                     </DropdownMenuItem>
@@ -755,6 +782,18 @@ export function EditorPage() {
 
             <span className="mx-1 hidden h-3 border-l min-[401px]:block" />
             {!isCanvas && <FontControls />}
+            {!isCanvas && <span className="mx-1 hidden h-3 border-l min-[401px]:block" />}
+            <label
+              className="flex h-control-sm shrink-0 cursor-pointer items-center gap-1.5 px-1.5 select-none"
+              title={t('editor.toolbar.allowFollowHint')}
+            >
+              <Checkbox
+                checked={allowFollow}
+                onCheckedChange={checked => setAllowFollow(checked === true)}
+                aria-label={t('editor.toolbar.allowFollow')}
+              />
+              <span className="hidden min-[401px]:inline">{t('editor.toolbar.allowFollow')}</span>
+            </label>
           </div>
         </footer>
       </div>

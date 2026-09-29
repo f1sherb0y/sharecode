@@ -94,7 +94,16 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
   // Flush already accepted edits before a disconnect/permission transition.
   useEffect(() => { if (!canEdit) syncRef.current?.flush() }, [canEdit])
 
-  useCanvasFollow({ api, provider, followClientId, onFollowChange, presence, anonymous: t('canvas.anonymous') })
+  // Excalidraw exposes its API before initializeScene restores appState. That
+  // restore resets collaborators, which natively cancels any follow applied earlier.
+  const [sceneReady, setSceneReady] = useState(false)
+  useEffect(() => {
+    if (!api) return
+    if (!api.getAppState().isLoading) { setSceneReady(true); return }
+    return api.onChange(() => { if (!api.getAppState().isLoading) setSceneReady(true) })
+  }, [api])
+
+  useCanvasFollow({ api: sceneReady ? api : null, provider, followClientId, onFollowChange, presence, anonymous: t('canvas.anonymous') })
 
   const onChange = useCallback((elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
     if (applying.current || !canEditRef.current) return

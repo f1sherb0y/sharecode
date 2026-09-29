@@ -1,6 +1,7 @@
 import { type CSSProperties, type Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { loadEditorFont } from '@/lib/editor-font'
+import { isFollowable } from '@/lib/follow'
 import * as Y from 'yjs'
 import type { HocuspocusProvider } from '@hocuspocus/provider'
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react'
@@ -323,7 +324,7 @@ function MarkdownEditorInner({
       const state = awareness.getStates().get(targetClientId) as
         | { cursor?: { head?: unknown } }
         | undefined
-      if (!state?.cursor?.head) return
+      if (!isFollowable(state) || !state?.cursor?.head) return
 
       try {
         const pos = relativePositionToAbsolutePosition(
