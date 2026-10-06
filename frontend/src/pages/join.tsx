@@ -60,7 +60,7 @@ export function JoinPage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-2">
               <div className="space-y-1">
-                <Label htmlFor="shareInput" className="block pb-1.5">{t('join.label')}</Label>
+                <Label htmlFor="shareInput">{t('join.label')}</Label>
                 <div className="relative">
                   <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   <Input

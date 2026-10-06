@@ -416,23 +416,22 @@ export function RoomsPage() {
                   <DialogTitle>{t('rooms.create.title')}</DialogTitle>
                   <DialogDescription>{t('rooms.create.allowedUsersHint')}</DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-1.5 py-2">
+                <div className="grid gap-2 py-2">
                   <div className="space-y-1">
-                    <Label htmlFor="roomName" className="text-xs">{t('rooms.create.name')}</Label>
+                    <Label htmlFor="roomName">{t('rooms.create.name')}</Label>
                     <Input
                       id="roomName"
-                      className="text-xs"
                       value={newRoomName}
                       onChange={(e) => setNewRoomName(e.target.value)}
                       placeholder={t('rooms.create.namePlaceholder')}
                       required
                     />
                   </div>
-                  <div className="grid gap-1.5 sm:grid-cols-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <Label className="text-xs">{t('rooms.create.language')}</Label>
+                      <Label>{t('rooms.create.language')}</Label>
                       <Select value={newRoomLanguage} onValueChange={(v) => setNewRoomLanguage(v as Language)}>
-                        <SelectTrigger className="text-xs">
+                        <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -445,32 +444,29 @@ export function RoomsPage() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="roomCompany" className="text-xs">{t('rooms.create.company')}</Label>
+                      <Label htmlFor="roomCompany">{t('rooms.create.company')}</Label>
                       <Input
                         id="roomCompany"
-                        className="text-xs"
                         value={newRoomCompany}
                         onChange={(e) => setNewRoomCompany(e.target.value)}
                         placeholder={t('rooms.create.companyPlaceholder')}
                       />
                     </div>
                   </div>
-                  <div className="grid gap-1.5 sm:grid-cols-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <Label htmlFor="roomPosition" className="text-xs">{t('rooms.create.position')}</Label>
+                      <Label htmlFor="roomPosition">{t('rooms.create.position')}</Label>
                       <Input
                         id="roomPosition"
-                        className="text-xs"
                         value={newRoomPosition}
                         onChange={(e) => setNewRoomPosition(e.target.value)}
                         placeholder={t('rooms.create.positionPlaceholder')}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="duration" className="text-xs">{t('rooms.create.duration')}</Label>
+                      <Label htmlFor="duration">{t('rooms.create.duration')}</Label>
                       <Input
                         id="duration"
-                        className="text-xs"
                         type="number"
                         value={duration}
                         onChange={(e) => setDuration(e.target.value)}
@@ -480,25 +476,24 @@ export function RoomsPage() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="scheduledTime" className="text-xs">{t('rooms.create.scheduledTime')}</Label>
+                    <Label htmlFor="scheduledTime">{t('rooms.create.scheduledTime')}</Label>
                     <Input
                       id="scheduledTime"
-                      className="text-xs"
                       type="datetime-local"
                       value={scheduledTime}
                       onChange={(e) => setScheduledTime(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-describedby="privateRoomHint" />
-                      <Label htmlFor="privateRoom" className="text-xs">{t('rooms.create.private')}</Label>
-                    </div>
-                    <p id="privateRoomHint" className="text-xs text-muted-foreground">{t('rooms.create.privateHint')}</p>
-                  </div>
+                  <label className="ui-check-row flex cursor-pointer items-start gap-1.5">
+                    <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-labelledby="privateRoomLabel" aria-describedby="privateRoomHint" />
+                    <span className="grid gap-1">
+                      <span id="privateRoomLabel" className="text-sm font-medium leading-none">{t('rooms.create.private')}</span>
+                      <span id="privateRoomHint" className="text-xs text-muted-foreground">{t('rooms.create.privateHint')}</span>
+                    </span>
+                  </label>
                   {availableUsers.length > 0 && (
                     <div className="space-y-1">
-                      <Label className="text-xs">{t('rooms.create.allowedUsers')}</Label>
+                      <Label>{t('rooms.create.allowedUsers')}</Label>
                       <div className="border rounded-md max-h-32 overflow-y-auto">
                         {availableUsers.map((u) => {
                           const selected = selectedUsers.find((s) => s.userId === u.id)
@@ -506,12 +501,12 @@ export function RoomsPage() {
                             <div
                               key={u.id}
                               className={cn(
-                                'flex items-center justify-between px-1.5 py-1 hover:bg-accent cursor-pointer',
+                                'room-create-user flex items-center justify-between px-1.5 py-1 text-sm hover:bg-accent cursor-pointer',
                                 selected && 'bg-accent/50'
                               )}
                               onClick={() => toggleUserSelection(u.id)}
                             >
-                              <span className="text-xs">{u.username}</span>
+                              <span>{u.username}</span>
                               {selected && (
                                 <Button
                                   type="button"

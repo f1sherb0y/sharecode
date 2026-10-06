@@ -355,12 +355,27 @@
     --spacing-control-sm: 2.75rem;
     --spacing-control-lg: 2.75rem;
   }
-  /* Keep native text fields from triggering iOS page zoom. */
-  input.ui-field, textarea.ui-field, select.ui-field { font-size: 16px; }
+  /* Touch type scale. Text fields need 16px so iOS does not zoom on focus;
+     everything else is ranked around them, overriding compact page sizes:
+       dialog title 19 > card title, field value 16 > label, button, body 13 > hint 12.
+     Full-size select triggers read as fields; compact toolbar/table selects keep their size. */
+  :is(input, textarea, select).ui-field, .ui-field:not(.h-control-sm) { font-size: 16px; }
+  .ui-dialog-title { font-size: var(--text-xl); }
+  /* The larger title needs more room than the 8px between field groups. */
+  .ui-dialog-header { padding-bottom: 0.25rem; }
+  .ui-card-title { font-size: var(--text-lg); }
+  /* Every control shares one touch height, so labels and buttons share one size. */
+  .ui-label, .ui-button { font-size: var(--text-sm); }
   .ui-checkbox { width: var(--spacing-control); height: var(--spacing-control); }
+  /* A check row (box + title + hint) is one tap target, so the box keeps its
+     visual size and stays aligned with the fields and its title. */
+  .ui-check-row { min-height: var(--spacing-control); }
+  .ui-check-row .ui-checkbox { width: 1rem; height: 1rem; }
   .app-navbar { min-height: 44px; }
   .editor-shell > header, .playback-shell > header { min-height: calc(44px + env(safe-area-inset-top)); }
   .room-row-link { min-height: var(--spacing-control); }
+  /* Selectable users are values inside a field-like box. */
+  .room-create-user { min-height: var(--spacing-control); font-size: 16px; }
   .md-toolbar { gap: 0.25rem; }
 }
 

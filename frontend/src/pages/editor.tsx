@@ -700,7 +700,7 @@ export function EditorPage() {
               <Select disabled={!isConnected} value={effectiveRoom.language} onValueChange={(v) => onLanguageChange(v as Language)}>
                 <SelectTrigger
                   aria-label={t('rooms.create.language')}
-                  className="h-control-sm w-[84px] min-[401px]:w-[105px] shrink-0 border-transparent bg-transparent px-1.5 text-xs"
+                  className="h-control-sm w-auto shrink-0 border-transparent bg-transparent px-1.5 text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
