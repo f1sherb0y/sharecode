@@ -162,6 +162,50 @@ try {
       await allowFollow(presenter).click()
       console.log('PASS', engine, 'canvas: native follow, opt-out cancels and blocks avatar follow, free navigation')
 
+      // Guests get no opt-out and stay followable, even when an account in the
+      // same browser stored "Allow follow" off.
+      const { shareLink } = await request(`/api/rooms/${codeRoom.id}/share-links`, 'POST', { canEdit: true }, admin)
+      const guestContext = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+      try {
+        await guestContext.addInitScript(() => {
+          localStorage.setItem('i18nextLng', 'en')
+          localStorage.setItem('settings-storage', JSON.stringify({ state: { timezone: 'Asia/Shanghai', allowFollow: false }, version: 0 }))
+        })
+        const guest = await guestContext.newPage(), guestName = 'follow_guest_' + engine
+        guest.setDefaultTimeout(20000)
+        guest.on('pageerror', e => { errors.push(e.message); console.error(engine, 'GUEST PAGE ERROR', e.stack) })
+        await guest.goto('http://127.0.0.1:55461/s/' + shareLink.token)
+        await guest.getByLabel('Display name', { exact: true }).fill(guestName)
+        await guest.getByRole('button', { name: 'Join room', exact: true }).click()
+        await guest.waitForURL('**/room/' + codeRoom.id + '*')
+        await guest.waitForFunction(() => window.__followTest?.provider.synced && window.__followTest.editor.getModel().getLineCount() > 500)
+        await guest.getByRole('button', { name: 'Users', exact: true }).waitFor()
+        assert.equal(await allowFollow(guest).count(), 0, 'guests get no follow opt-out')
+        await openCode(presenter)
+        // The users list sits to the right of the font controls.
+        const [fontBox, usersBox] = await Promise.all([
+          presenter.getByRole('button', { name: 'Increase font size', exact: true }).boundingBox(),
+          presenter.getByRole('button', { name: 'Users', exact: true }).boundingBox(),
+        ])
+        assert.ok(usersBox.x >= fontBox.x + fontBox.width, `users list must follow font controls: ${JSON.stringify({ fontBox, usersBox })}`)
+        const guestItem = presenter.getByRole('menuitem').filter({ hasText: guestName })
+        for (let i = 0; ; i++) {
+          await presenter.getByRole('button', { name: 'Users', exact: true }).click()
+          const listed = await guestItem.count() > 0
+          const followable = listed && await guestItem.getAttribute('aria-disabled') !== 'true' && /Follow$/.test((await guestItem.innerText()).trim())
+          if (followable) break
+          await presenter.keyboard.press('Escape')
+          if (i === 40) throw Error('Guest never listed as followable')
+          await sleep(100)
+        }
+        await guestItem.click()
+        await guest.evaluate(() => window.__followTest.editor.focus())
+        await docKey(guest, true)
+        await presenter.waitForFunction(() => window.__followTest.editor.getScrollTop() > 2000)
+        assert.equal(await guest.evaluate(() => JSON.parse(localStorage.getItem('settings-storage')).state.allowFollow), false, 'stored opt-out is ignored for guests')
+        console.log('PASS', engine, 'guest: no opt-out toggle, followable despite a stored opt-out; users list right of font controls')
+      } finally { await guestContext.close() }
+
       assert.deepEqual(errors, [])
     } finally { await browser.close() }
   }

@@ -264,8 +264,11 @@ export function EditorPage() {
   useEffect(() => { provider?.awareness?.setLocalStateField('view', view) }, [provider, view])
 
   // Opting out is enforced by followers: they stop following and keep control.
+  // Guests cannot opt out (the toggle is hidden), so a preference stored by an
+  // account in this browser never applies to them.
   const { allowFollow, setAllowFollow } = useSettingsStore()
-  useEffect(() => { provider?.awareness?.setLocalStateField('followable', allowFollow) }, [provider, allowFollow])
+  const followable = isGuestMode || allowFollow
+  useEffect(() => { provider?.awareness?.setLocalStateField('followable', followable) }, [provider, followable])
   const [followBlocked, setFollowBlocked] = useState<ReadonlySet<number>>(() => new Set())
   useEffect(() => {
     const awareness = provider?.awareness
@@ -724,6 +727,10 @@ export function EditorPage() {
               </Badge>
             )}
 
+            <span className="mx-1 hidden h-3 border-l min-[401px]:block" />
+            {!isCanvas && <FontControls />}
+            {!isCanvas && <span className="mx-1 hidden h-3 border-l min-[401px]:block" />}
+
             {/* Users Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -780,20 +787,19 @@ export function EditorPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <span className="mx-1 hidden h-3 border-l min-[401px]:block" />
-            {!isCanvas && <FontControls />}
-            {!isCanvas && <span className="mx-1 hidden h-3 border-l min-[401px]:block" />}
-            <label
-              className="flex h-control-sm shrink-0 cursor-pointer items-center gap-1.5 px-1.5 select-none"
-              title={t('editor.toolbar.allowFollowHint')}
-            >
-              <Checkbox
-                checked={allowFollow}
-                onCheckedChange={checked => setAllowFollow(checked === true)}
-                aria-label={t('editor.toolbar.allowFollow')}
-              />
-              <span className="hidden min-[401px]:inline">{t('editor.toolbar.allowFollow')}</span>
-            </label>
+            {!isGuestMode && (
+              <label
+                className="flex h-control-sm shrink-0 cursor-pointer items-center gap-1.5 px-1.5 select-none"
+                title={t('editor.toolbar.allowFollowHint')}
+              >
+                <Checkbox
+                  checked={allowFollow}
+                  onCheckedChange={checked => setAllowFollow(checked === true)}
+                  aria-label={t('editor.toolbar.allowFollow')}
+                />
+                <span className="hidden min-[401px]:inline">{t('editor.toolbar.allowFollow')}</span>
+              </label>
+            )}
           </div>
         </footer>
       </div>
