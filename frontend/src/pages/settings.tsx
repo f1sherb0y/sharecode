@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
-import { ArrowLeft, Check, X, Keyboard, Sun, Moon } from 'lucide-react'
+import { Check, X, Keyboard, Sun, Moon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Button,
@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui'
-import { Navbar, PageContainer } from '@/components/layout'
+import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { useAuthStore, useThemeStore, useSettingsStore } from '@/stores'
 import { validatePasswordPolicy } from '@/lib/password-policy'
@@ -199,10 +199,7 @@ export function SettingsPage() {
     <div className="flex flex-col min-h-screen">
       <Navbar
         leftContent={
-          <Button variant="ghost" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4 mr-1.5" />
-            {t('common.back')}
-          </Button>
+          <NavbarBack label={t('common.back')} onClick={() => navigate(-1)} />
         }
         title={null}
         centerContent={<span className="font-semibold">{t('settings.title')}</span>}

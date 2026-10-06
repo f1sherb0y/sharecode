@@ -20,6 +20,15 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <script>
+      // Touch fields use 15px text, and iOS zooms into any field under 16px on focus
+      // unless maximum-scale is set. iOS ignores maximum-scale for pinch-zoom (WebKit,
+      // iOS 10+), so apply it there only; other browsers would lose page zoom.
+      if (CSS.supports('-webkit-touch-callout', 'none')) {
+        const viewport = document.querySelector('meta[name="viewport"]');
+        viewport.content += ', maximum-scale=1';
+      }
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ShareCode" />

@@ -11,7 +11,7 @@ import 'react-datepicker/dist/react-datepicker.css'
 import '@/styles/audit.css'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores'
-import { Navbar, PageContainer } from '@/components/layout'
+import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { Button, Input, Spinner, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui'
 import { PageNavigation } from '@/components/ui/page-navigation'
 import { AuditDevice } from '@/components/features/audit-device'
@@ -38,7 +38,7 @@ export function AuditPage() {
   if (!allowed) return <p role="alert">{t('audit.denied')}</p>
   return <div>
     <Navbar title={null} centerContent={<strong>{t('audit.title')}</strong>}
-      leftContent={<Button variant="ghost" onClick={() => navigate('/admin')}>{t('common.back')}</Button>} />
+      leftContent={<NavbarBack label={t('common.back')} onClick={() => navigate('/admin')} />} />
     <PageContainer>
       <p className="text-xs text-muted-foreground mb-2">{t('audit.description')}</p>
       <form className="audit-filters mb-2" onSubmit={event => { event.preventDefault(); if (!invalidRange) setFilters({ ...filters, page: 1, snapshot: undefined, username: username.trim(), action: action === 'all' ? undefined : action, start: start?.toISOString(), end: end?.toISOString() }) }}>

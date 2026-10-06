@@ -618,7 +618,7 @@ export function RoomsPage() {
 
       <PageContainer>
         <div className="rooms-list-toolbar flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="text-base font-semibold tracking-tight">{t('rooms.workspaceTitle')}</h1>
+          <h1 className="ui-page-title text-base font-semibold tracking-tight">{t('rooms.workspaceTitle')}</h1>
           <span className="text-xs text-muted-foreground">{t('rooms.pagination.total', { count: pagination.total })}</span>
           <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1 sm:ml-auto sm:w-auto sm:grid-cols-[10rem_8rem_6rem]">
             <div className="space-y-1">

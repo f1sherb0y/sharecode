@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, BellRing } from 'lucide-react'
+import { BellRing } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge,
@@ -23,7 +23,7 @@ import {
   Spinner,
   Textarea,
 } from '@/components/ui'
-import { Navbar, PageContainer } from '@/components/layout'
+import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { queryKeys } from '@/lib/query-keys'
 import { cn, formatDateTime } from '@/lib/utils'
@@ -108,10 +108,7 @@ export function NotificationsPage() {
     <div className="flex flex-col min-h-screen">
       <Navbar
         leftContent={
-          <Button variant="ghost" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4 mr-1.5" />
-            {t('common.back')}
-          </Button>
+          <NavbarBack label={t('common.back')} onClick={() => navigate(-1)} />
         }
         title={null}
         centerContent={<span className="font-semibold">{t('notifications.title')}</span>}

@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as Tabs from '@radix-ui/react-tabs'
-import { ArrowLeft, Plus, RefreshCw, Save, Trash2, LockKeyhole } from 'lucide-react'
+import { Plus, RefreshCw, Save, Trash2, LockKeyhole } from 'lucide-react'
 import {
   Button,
   Input,
@@ -29,7 +29,7 @@ import {
   DialogTitle,
   Checkbox,
 } from '@/components/ui'
-import { Navbar, PageContainer } from '@/components/layout'
+import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { canDeleteRoom } from '@/lib/room-permissions'
 import { validatePasswordPolicy } from '@/lib/password-policy'
@@ -577,10 +577,7 @@ export function AdminPage() {
     <div className="flex flex-col min-h-screen">
       <Navbar
         leftContent={
-          <Button variant="ghost" onClick={() => navigate('/rooms')}>
-            <ArrowLeft className="h-4 w-4 mr-1.5" />
-            {t('admin.backToRooms')}
-          </Button>
+          <NavbarBack label={t('admin.backToRooms')} onClick={() => navigate('/rooms')} />
         }
         title={null}
         centerContent={<span className="font-semibold">{t('admin.title')}</span>}

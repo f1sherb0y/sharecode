@@ -1,6 +1,6 @@
 export { ThemeToggle } from './theme-toggle'
 export { LanguageSwitcher } from './language-switcher'
 export { UserMenu } from './user-menu'
-export { Navbar } from './navbar'
+export { Navbar, NavbarBack } from './navbar'
 export { PageContainer } from './page-container'
 export { AuthBrand } from './auth-brand'

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
-import { Code2 } from 'lucide-react'
+import { ArrowLeft, Code2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './theme-toggle'
 import { LanguageSwitcher } from './language-switcher'
 import { UserMenu } from './user-menu'
@@ -39,7 +40,7 @@ export function Navbar({
         </div>
 
         {/* Center section */}
-        {centerContent && <div className="flex-1 flex justify-center">{centerContent}</div>}
+        {centerContent && <div className="ui-page-title flex min-w-0 flex-1 justify-center [&>*]:truncate">{centerContent}</div>}
 
         {/* Spacer when no center content */}
         {!centerContent && <div className="flex-1" />}
@@ -53,5 +54,16 @@ export function Navbar({
         </div>
       </div>
     </header>
+  )
+}
+
+/** Back action for `leftContent`. On phones the label would crowd the page title,
+ *  so it collapses to the arrow (as in the editor header) and stays the accessible name. */
+export function NavbarBack({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button variant="ghost" className="max-sm:size-control max-sm:p-0" onClick={onClick}>
+      <ArrowLeft className="h-4 w-4 sm:mr-1.5" />
+      <span className="max-sm:sr-only">{label}</span>
+    </Button>
   )
 }
