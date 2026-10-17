@@ -51,7 +51,6 @@ services:
       # Other domains / the public IP serving the same app, e.g. https://kode666.com,https://64.186.229.171
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sharecode.local}
@@ -67,7 +66,6 @@ services:
       args:
         VITE_API_URL: ""
         VITE_WS_URL: ""
-        VITE_ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
     restart: unless-stopped
     depends_on:
       - server

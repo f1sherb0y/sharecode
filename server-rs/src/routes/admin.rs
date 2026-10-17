@@ -11,12 +11,12 @@ use yrs::merge_updates_v1;
 use crate::core::audit::{self, ClientInfo};
 
 use crate::{
-    auth::{AuthUser, StaffUser},
+    auth::AdminUser,
     db::db_error,
     error::ApiError,
     models::{RoomAdminRow, UserPublicRow, UserRow},
     permissions::{
-        can_delete_room, has_global_read, is_admin, require_room_access, ROLE_ADMIN, ROLE_TECH,
+        can_delete_room, has_global_read, require_room_access, ROLE_ADMIN, ROLE_TECH,
         ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL, VALID_ROLES,
     },
     state::AppState,
@@ -110,15 +110,10 @@ struct CompressedBucket {
     user_id: Option<String>,
 }
 
-/// Admins manage every account; agents only create and remove tech accounts.
-fn can_manage_account(actor: &AuthUser, role: &str) -> bool {
-    is_admin(&actor.role) || role == ROLE_TECH
-}
-
 pub async fn create_user(
     State(state): State<AppState>,
     client: ClientInfo,
-    StaffUser(auth_user): StaffUser,
+    AdminUser(auth_user): AdminUser,
     Json(payload): Json<Value>,
 ) -> Result<impl IntoResponse, ApiError> {
     let username = payload
@@ -146,10 +141,6 @@ pub async fn create_user(
 
     if !VALID_ROLES.contains(&requested_role) {
         return Err(ApiError::bad_request("Invalid role"));
-    }
-
-    if !can_manage_account(&auth_user, requested_role) {
-        return Err(ApiError::not_found("Not found"));
     }
 
     let existing_user = sqlx::query_scalar::<_, bool>(
@@ -239,7 +230,7 @@ pub async fn create_user(
 
 pub async fn get_all_users(
     State(state): State<AppState>,
-    _admin: StaffUser,
+    _admin: AdminUser,
     Query(query): Query<AdminListQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pattern = search_pattern(query.q.as_deref());
@@ -291,16 +282,13 @@ pub async fn get_all_users(
 
 pub async fn update_user(
     State(state): State<AppState>,
-    StaffUser(auth_user): StaffUser,
+    AdminUser(auth_user): AdminUser,
     client: ClientInfo,
     Path(user_id): Path<String>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let _access = state.ws.access.write().await;
-    // The role is the only account permission; only admins change it.
-    if !is_admin(&auth_user.role) {
-        return Err(ApiError::not_found("Not found"));
-    }
+    // The role is the only account permission.
     let requested_role = payload
         .get("role")
         .and_then(|v| v.as_str())
@@ -406,7 +394,7 @@ pub async fn update_user(
 
 pub async fn delete_user(
     State(state): State<AppState>,
-    StaffUser(auth_user): StaffUser,
+    AdminUser(auth_user): AdminUser,
     client: ClientInfo,
     Path(user_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
@@ -438,10 +426,6 @@ pub async fn delete_user(
     };
 
     if user.id == auth_user.id {
-        return Err(ApiError::not_found("Not found"));
-    }
-
-    if !can_manage_account(&auth_user, &user.role) {
         return Err(ApiError::not_found("Not found"));
     }
 
@@ -506,7 +490,7 @@ pub async fn delete_user(
 
 pub async fn get_all_rooms(
     State(state): State<AppState>,
-    StaffUser(auth_user): StaffUser,
+    AdminUser(auth_user): AdminUser,
     Query(query): Query<AdminListQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pattern = search_pattern(query.q.as_deref());
@@ -593,12 +577,8 @@ pub async fn get_all_rooms(
 
 pub async fn get_db_storage_size(
     State(state): State<AppState>,
-    StaffUser(auth_user): StaffUser,
+    _admin: AdminUser,
 ) -> Result<Json<Value>, ApiError> {
-    if !is_admin(&auth_user.role) {
-        return Err(ApiError::not_found("Not found"));
-    }
-
     let size = sqlx::query_as::<_, DbSizeRow>(
         r#"
         SELECT
@@ -618,13 +598,9 @@ pub async fn get_db_storage_size(
 
 pub async fn get_room_playback_sizes(
     State(state): State<AppState>,
-    StaffUser(auth_user): StaffUser,
+    AdminUser(auth_user): AdminUser,
     Query(query): Query<PlaybackSizesQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    if !is_admin(&auth_user.role) {
-        return Err(ApiError::not_found("Not found"));
-    }
-
     let ids: Vec<String> = query
         .room_ids
         .unwrap_or_default()
@@ -684,14 +660,10 @@ pub async fn get_room_playback_sizes(
 pub async fn compress_room_playback(
     State(state): State<AppState>,
     client: ClientInfo,
-    StaffUser(auth_user): StaffUser,
+    AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     require_room_access(&state.db, &auth_user, &room_id).await?;
-    if !is_admin(&auth_user.role) {
-        return Err(ApiError::not_found("Not found"));
-    }
-
     let room = sqlx::query_as::<_, RoomStatusRow>(
         r#"
         SELECT "isEnded" as is_ended, "isDeleted" as is_deleted
@@ -832,7 +804,7 @@ pub async fn compress_room_playback(
 pub async fn delete_room(
     State(state): State<AppState>,
     client: ClientInfo,
-    StaffUser(auth_user): StaffUser,
+    AdminUser(auth_user): AdminUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let _access = state.ws.access.write().await;

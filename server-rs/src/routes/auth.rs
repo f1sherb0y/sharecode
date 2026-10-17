@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+use super::invites;
 use crate::core::audit::{self, ClientInfo};
 use crate::core::sessions;
 
@@ -18,6 +19,7 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::{UserPublicRow, UserRow},
+    permissions::ROLE_TECH,
     state::AppState,
     utils::colors::random_user_color,
     utils::passwords::validate_password,
@@ -29,6 +31,8 @@ pub struct RegisterPayload {
     pub username: Option<String>,
     pub password: Option<String>,
     pub email: Option<String>,
+    #[serde(rename = "inviteCode")]
+    pub invite_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +48,7 @@ pub struct ChangePasswordPayload {
     pub new_password: Option<String>,
 }
 
+/// Registration needs an invite code from an agent or admin and always creates a tech.
 pub async fn register(
     State(state): State<AppState>,
     mut client: ClientInfo,
@@ -51,19 +56,33 @@ pub async fn register(
     Json(payload): Json<RegisterPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
     sessions::check_origin(&state.config, &headers)?;
-    if !state.config.allow_registration {
-        return Err(ApiError::not_found("Not found"));
-    }
-
     let username = payload.username.unwrap_or_default();
     let password = payload.password.unwrap_or_default();
     let email = payload.email;
+    let invite_code = invites::normalize_code(payload.invite_code.as_deref().unwrap_or_default());
 
     if username.is_empty() || password.is_empty() {
         return Err(ApiError::bad_request("Username and password are required"));
     }
 
     validate_password(&password).map_err(ApiError::bad_request)?;
+    let invite_id = match invites::find_usable(&state.db, &invite_code).await? {
+        Ok(invite_id) => invite_id,
+        Err(rejection) => {
+            audit::record(
+                &state.db,
+                &client,
+                "user.registered",
+                None,
+                Some(&username),
+                None,
+                false,
+                Some(rejection.reason()),
+            )
+            .await?;
+            return Err(rejection.into());
+        }
+    };
 
     let existing_user = sqlx::query_scalar::<_, bool>(
         r#"SELECT "isDeleted" FROM "User" WHERE username = $1 LIMIT 1"#,
@@ -102,8 +121,8 @@ pub async fn register(
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let user = sqlx::query_as::<_, UserRow>(
         r#"
-        INSERT INTO "User" (id, email, username, password, color)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO "User" (id, email, username, password, color, role)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING
             id,
             email,
@@ -121,9 +140,11 @@ pub async fn register(
     .bind(&username)
     .bind(&hashed_password)
     .bind(&color)
+    .bind(ROLE_TECH)
     .fetch_one(&mut *tx)
     .await
     .map_err(|err| crate::db::user_creation_error(err))?;
+    let invited_by = invites::claim(&mut tx, &invite_id, &user.id).await?;
 
     audit::identify_login_device(&mut tx, &mut client, &user.id).await?;
     audit::record_details(
@@ -136,7 +157,7 @@ pub async fn register(
         true,
         None,
         None,
-        json!({}),
+        json!({"inviteId": invite_id, "invitedBy": invited_by}),
     )
     .await?;
     let (session_id, secret) = sessions::create(&mut tx, &user, client.device_id).await?;
@@ -553,12 +574,10 @@ pub async fn get_profile(
     }
 }
 
-pub async fn get_registration_status(
-    State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    Ok(Json(json!({
-        "allowRegistration": state.config.allow_registration,
-    })))
+// Open registration was replaced by invite codes. Clients from before then
+// read false and hide their code-less form.
+pub async fn get_registration_status() -> Json<serde_json::Value> {
+    Json(json!({ "allowRegistration": false }))
 }
 
 #[derive(sqlx::FromRow)]

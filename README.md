@@ -4,7 +4,7 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 
 ## Features
 
-- 🔐 User authentication (register/login)
+- 🔐 User authentication with invite-only registration for techs
 - 🏠 Room management (create, join, list rooms)
 - 👥 Multi-user real-time collaboration
 - 🎨 Syntax highlighting for multiple languages
@@ -233,9 +233,6 @@ FRONTEND_HASH_ROUTER=false
 # Logging - Options: debug, info, warn, error (default: info)
 LOG_LEVEL="info"
 
-# Allow self-registration as a tech account (default false)
-ALLOW_REGISTRATION=false
-
 # Code execution (Piston)
 PISTON_URL="http://localhost:2000"
 
@@ -264,7 +261,7 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register new user
+- `POST /api/auth/register` - Register a tech account with an invite code (`{ username, password, email?, inviteCode }`)
 - `POST /api/auth/login` - Login
 - `GET /api/auth/profile` - Get user profile (authenticated)
 
@@ -287,15 +284,23 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `GET /api/share/session` - Refresh guest session details using the guest token
 
 ### Agents and Admins
-- `GET /api/admin/users` - List all active users
-- `POST /api/admin/users` - Create a user with a role (agents create tech accounts only)
-- `PATCH /api/admin/users/:id` - Change a user's role (admins only)
-- `DELETE /api/admin/users/:id` - Soft delete a user (agents can only remove tech accounts; the last admin cannot be removed)
-- `GET /api/admin/rooms` - List every room the caller can see
 - `GET /api/users` - Account list for the owner filter
+- `PUT /api/rooms/:roomId/pin` - Pin or unpin a room
+- `POST /api/invites` - Create a single-use registration code for a tech (valid 7 days, optional note)
+- `GET /api/invites` - List invites (agents see their own; admins see all)
+- `DELETE /api/invites/:id` - Withdraw an unused invite (its issuer or an admin)
 
 ### Admins Only
+Every `/api/admin/*` endpoint answers 404 to agents and techs.
+- `GET /api/admin/users` - List all active users
+- `POST /api/admin/users` - Create a user with any role
+- `PATCH /api/admin/users/:id` - Change a user's role
+- `DELETE /api/admin/users/:id` - Soft delete a user (the last admin cannot be removed)
+- `GET /api/admin/rooms` - List every room the admin can see
 - `DELETE /api/admin/rooms/:id` - Delete a room
+- `GET /api/admin/audit` - Audit log
+- `GET /api/admin/users/:id/devices` - Device history for an account
+- `POST /api/admin/notifications` - Publish a site-wide announcement
 - `GET /api/admin/storage/db-size` - Database size summary
 - `GET /api/admin/storage/playback` - Playback storage per room
 - `POST /api/admin/rooms/:id/playback/compress` - Compress playback to 1s resolution
@@ -317,9 +322,8 @@ a guest can edit. Rules are enforced identically on the REST and WebSocket paths
 | Pin rooms | No | Yes | Yes |
 | Delete rooms | No | No | Yes |
 | Create private rooms | No | No | Yes |
-| Manage accounts | No | Create/remove techs | All, including roles |
-| Audit log | No | Yes (device data hidden) | Yes |
-| Storage, devices, notifications | No | No | Yes |
+| Invite techs (registration codes) | No | Yes | Yes |
+| Admin dashboard: accounts, audit log, storage, devices, announcements | No | No | Yes |
 
 Notes:
 
@@ -334,8 +338,11 @@ Notes:
 - Only admins create private rooms. A private room is hidden from everyone except
   its owner, its members and roles ranked above the owner (this covers rooms made
   private before the role change).
-- Self-registration is off by default (`ALLOW_REGISTRATION=false`); admins and
-  agents create accounts.
+- Registration is invite-only. Agents and admins create single-use codes from
+  the account menu (**Invite techs**); a code is valid for 7 days, and an unused
+  code stops working once its issuer is removed or is no longer an agent or admin.
+  Registering with a code always creates a tech. Admins can also create accounts
+  of any role in the admin dashboard.
 
 ## Supported Languages
 
@@ -398,7 +405,7 @@ sharecode/
 - Members who joined through a share link edit only if the link they last used allows it
 - Three account roles ship out-of-the-box:
   - **Admin (管理员)** — manages every account and room, including deletion and private rooms
-  - **Agent (中介)** — sees, edits, shares, pins and ends every standard room; manages tech accounts
+  - **Agent (中介)** — sees, edits, shares, pins and ends every standard room; invites techs
   - **Tech (技术)** — controls personal rooms, sees pinned rooms read-only, and joins others' rooms by link
 - Users must be authenticated to access rooms and their current role is validated on every REST/WebSocket request
 - The WebSocket server verifies access on every connection and disconnects sessions whose access is revoked (role change, unpinned room, ended room or revoked link)

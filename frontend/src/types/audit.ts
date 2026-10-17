@@ -15,4 +15,4 @@ export interface UserDevice {
   firstSeen: string; lastSeen: string; loginCount: number
 }
 export interface DevicesResponse { devices: UserDevice[]; pagination: PaginationMeta }
-export const AUDIT_ACTIONS = ['login','password.changed', 'session.logout','user.registered','user.created','user.permissions_changed','user.updated','user.deleted','room.created','room.updated','room.pin_changed','room.ended','room.deleted','share.created','share.accept','share.revoke','guest.join','note.created','note.updated','note.deleted','playback.compressed','notification.created'] as const
+export const AUDIT_ACTIONS = ['login','password.changed', 'session.logout','user.registered','user.created','user.permissions_changed','user.updated','user.deleted','room.created','room.updated','room.pin_changed','room.ended','room.deleted','share.created','share.accept','share.revoke','invite.created','invite.revoked','guest.join','note.created','note.updated','note.deleted','playback.compressed','notification.created'] as const

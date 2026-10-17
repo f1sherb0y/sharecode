@@ -8,7 +8,7 @@
       "passwordPlaceholder": "输入您的密码",
       "button": "登录",
       "loggingIn": "登录中...",
-      "noAccount": "没有账号？",
+      "noAccount": "有邀请码？",
       "registerLink": "注册",
       "joinLink": {
         "title": "或加入共享房间",
@@ -24,6 +24,9 @@
     },
     "register": {
       "title": "注册",
+      "inviteCode": "邀请码",
+      "inviteCodePlaceholder": "XXXX-XXXX-XXXX",
+      "inviteHint": "请向中介或管理员索取邀请码，注册后为技术账号。",
       "username": "用户名",
       "usernamePlaceholder": "选择用户名",
       "email": "邮箱（可选）",
@@ -34,7 +37,6 @@
       "registering": "正在创建账户...",
       "hasAccount": "已有账户？",
       "loginLink": "登录",
-      "disabled": "注册功能已被禁用。请联系管理员获取访问权限。",
       "failed": "注册失败，请重试。"
     },
     "logoutFailed": "退出登录失败，请检查网络后重试。"
@@ -494,6 +496,38 @@
       "following": "正在跟随"
     }
   },
+  "invites": {
+    "menu": "邀请技术",
+    "title": "邀请技术",
+    "description": "每个邀请码只能注册一个技术账号，7 天内有效。把链接或邀请码发给技术即可。",
+    "noteLabel": "备注（可选）",
+    "notePlaceholder": "例如：发给谁",
+    "create": "生成邀请码",
+    "creating": "生成中...",
+    "created": "邀请码已生成",
+    "createdAndCopied": "邀请码已生成，链接已复制",
+    "createFailed": "生成邀请码失败",
+    "loadFailed": "加载邀请失败",
+    "copyCode": "复制邀请码",
+    "copyLink": "复制链接",
+    "codeCopied": "邀请码已复制",
+    "linkCopied": "邀请链接已复制",
+    "copyFailed": "复制失败",
+    "delete": "撤回邀请",
+    "deleted": "邀请已撤回",
+    "deleteFailed": "撤回邀请失败",
+    "deleteTitle": "撤回这个邀请？",
+    "deleteConfirm": "邀请码 {{code}} 将无法再使用。",
+    "empty": "还没有邀请。",
+    "status": {
+      "active": "未使用",
+      "used": "已使用",
+      "expired": "已过期"
+    },
+    "usedBy": "已注册为 {{username}} · {{time}}",
+    "expiresAt": "{{time}} 过期",
+    "createdBy": "由 {{username}} 生成"
+  },
   "notifications": {
     "title": "通知",
     "severity": {
@@ -677,7 +711,11 @@
       "notification": {
         "created": "发布公告"
       },
-      "session.logout": "退出登录"
+      "session.logout": "退出登录",
+      "invite": {
+        "created": "生成邀请码",
+        "revoked": "撤回邀请"
+      }
     },
     "reasons": {
       "missing_credentials": "缺少登录信息",
@@ -713,7 +751,13 @@
     "createUser": "创建用户失败。",
     "updateUser": "更新用户失败。",
     "deleteUser": "删除用户失败。",
-    "compressPlayback": "压缩回放数据失败。"
+    "compressPlayback": "压缩回放数据失败。",
+    "inviteRequired": "请输入你收到的邀请码。",
+    "inviteInvalid": "邀请码无效，请检查后重试或重新索取。",
+    "inviteUsed": "此邀请码已被使用，请重新索取。",
+    "inviteExpired": "此邀请码已过期，请重新索取。",
+    "inviteNoteTooLong": "备注最多 100 个字符。",
+    "inviteNotFound": "此邀请已不存在。"
   },
   "canvas": {
     "title": "画布",

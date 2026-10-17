@@ -7,6 +7,7 @@ import type {
   AuthResponse,
   Role,
   ShareLink,
+  RegistrationInvite,
   ShareGuest,
   ShareRoomDetails,
   PlaybackData,
@@ -93,10 +94,10 @@ class ApiClient {
   }
 
   // Auth
-  async register(username: string, password: string, email?: string): Promise<AuthResponse> {
+  async register(username: string, password: string, email: string | undefined, inviteCode: string): Promise<AuthResponse> {
     return this.request<AuthResponse>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password, email }),
+      body: JSON.stringify({ username, password, email, inviteCode }),
     })
   }
 
@@ -117,10 +118,6 @@ class ApiClient {
 
   async getProfile(): Promise<{ user: User }> {
     return this.request<{ user: User }>('/api/auth/profile')
-  }
-
-  async getRegistrationStatus(): Promise<{ allowRegistration: boolean }> {
-    return this.request<{ allowRegistration: boolean }>('/api/config/registration')
   }
 
   async changePassword(
@@ -252,6 +249,22 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ canEdit }),
     })
+  }
+
+  // Registration invites (agents and admins)
+  async listInvites(): Promise<{ invites: RegistrationInvite[] }> {
+    return this.request<{ invites: RegistrationInvite[] }>('/api/invites')
+  }
+
+  async createInvite(note?: string): Promise<{ invite: RegistrationInvite }> {
+    return this.request<{ invite: RegistrationInvite }>('/api/invites', {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    })
+  }
+
+  async deleteInvite(inviteId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/invites/${inviteId}`, { method: 'DELETE' })
   }
 
   async listShareLinks(roomId: string): Promise<{ shareLinks: ShareLink[] }> {

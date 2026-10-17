@@ -29,7 +29,7 @@ run_check() {
 
 run_check diff git diff --check
 run_check rust cargo test --manifest-path server-rs/Cargo.toml --offline
-run_check build bash -c 'cd frontend && VITE_API_URL="" VITE_WS_URL="" VITE_ALLOW_REGISTRATION=false bun run build'
+run_check build bash -c 'cd frontend && VITE_API_URL="" VITE_WS_URL="" bun run build'
 run_check browser-sessions env -u ENGINE bash scripts/test-runner-local.sh tests/browser-sessions.mjs
 run_check session-renewal bash scripts/test-runner-local.sh tests/session-renewal.mjs
 run_check reconnect-recovery env -u ENGINE bash scripts/test-runner-local.sh tests/reconnect-recovery.mjs

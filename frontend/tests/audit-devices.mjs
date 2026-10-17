@@ -14,7 +14,8 @@ async function request(path,method='GET',body,token,status=200,extra={}) {
 const login=(name,id,pass=password,status=200)=>request('/api/auth/login','POST',{username:name,password:pass},undefined,status,id?headers(id):{})
 const root=await login('audit_admin',deviceA)
 const token=root.token
-const registered=await request('/api/auth/register','POST',{username:'registered_device',password},undefined,201,headers(deviceB))
+const deviceInvite=(await request('/api/invites','POST',{},token,201)).invite
+const registered=await request('/api/auth/register','POST',{username:'registered_device',password,inviteCode:deviceInvite.code},undefined,201,headers(deviceB))
 assert.equal((await request(`/api/admin/users/${registered.user.id}/devices`,'GET',undefined,token)).devices.length,1)
 await request(`/api/admin/users/${registered.user.id}`,'DELETE',undefined,token,200,headers(deviceA))
 const created=(await request('/api/admin/users','POST',{username:'device_user',password},token,201,headers(deviceA))).user
@@ -32,18 +33,16 @@ assert.equal(events.filter(e=>e.success&&e.action==='login').length,3)
 assert.equal(events.filter(e=>!e.success).length,1)
 await request(`/api/admin/users/${created.id}/devices`,'GET',undefined,member.token,404)
 await request('/api/admin/audit','GET',undefined,member.token,404)
-// Agents use the admin pages but never see device history; admins do.
-const administrator=(await request('/api/admin/users','POST',{username:'device_admin',password,role:'agent'},token,201)).user
-const adminAuth=await login(administrator.username,randomUUID())
-for(const id of [administrator.id,created.id,root.user.id,randomUUID()]) {
- await request(`/api/admin/users/${id}/devices`,'GET',undefined,adminAuth.token,404)
+// Agents have no admin side: device history and the audit log are admin-only.
+const agent=(await request('/api/admin/users','POST',{username:'device_agent',password,role:'agent'},token,201)).user
+const agentAuth=await login(agent.username,randomUUID())
+for(const id of [agent.id,created.id,root.user.id,randomUUID()]) {
+ await request(`/api/admin/users/${id}/devices`,'GET',undefined,agentAuth.token,404)
 }
 await request(`/api/admin/users/${created.id}/devices`,'GET',undefined,undefined,401)
-const adminAudit=await request('/api/admin/audit?username=device_user','GET',undefined,adminAuth.token)
-assert(adminAudit.events.length>0)
-assert(adminAudit.events.every(e=>e.deviceId===null&&e.fingerprint===null&&e.newDevice===false))
-await request(`/api/admin/audit?deviceId=${deviceA}`,'GET',undefined,adminAuth.token,404)
-console.log('PASS admin-only device history; agent self/other access and audit device-filter bypass denied; agent audit device fields redacted')
+await request('/api/admin/audit?username=device_user','GET',undefined,agentAuth.token,404)
+await request(`/api/admin/audit?deviceId=${deviceA}`,'GET',undefined,agentAuth.token,404)
+console.log('PASS admin-only device history and audit log; agent self/other device and audit access denied')
 // Duplicate fingerprint is a hint, not a reason to merge different browser IDs.
 await Promise.all([login('device_user',deviceB),login('device_user',deviceB)])
 devices=await request(`/api/admin/users/${created.id}/devices`,'GET',undefined,token)
@@ -72,10 +71,10 @@ const peerAuth=await login(peer.username,randomUUID())
 const peerAudit=await request('/api/admin/audit?pageSize=100','GET',undefined,peerAuth.token)
 assert(!peerAudit.events.some(e=>e.targetId===room.id||e.targetId===note.id||e.targetId===link.id))
 const audit=await request('/api/admin/audit?pageSize=100','GET',undefined,token)
-for(const action of ['login','user.registered','user.created','user.deleted','user.permissions_changed','password.changed','share.created','share.accept','share.revoke','room.created','room.updated','room.pin_changed','room.ended','room.deleted','note.created','note.updated','note.deleted','notification.created']) assert(audit.events.some(e=>e.action===action),action)
+for(const action of ['login','invite.created','user.registered','user.created','user.deleted','user.permissions_changed','password.changed','share.created','share.accept','share.revoke','room.created','room.updated','room.pin_changed','room.ended','room.deleted','note.created','note.updated','note.deleted','notification.created']) assert(audit.events.some(e=>e.action===action),action)
 const change=audit.events.find(e=>e.action==='user.permissions_changed')
 assert.equal(change.details.before.role,'tech');assert.equal(change.details.after.role,'agent')
-for(const secret of [password,'ChangedAudit#2026',link.token,'Private secret note','Never put this private content in audit','Title not captured','Content not captured']) assert(!JSON.stringify(audit).includes(secret),secret)
+for(const secret of [password,'ChangedAudit#2026',link.token,deviceInvite.code,'Private secret note','Never put this private content in audit','Title not captured','Content not captured']) assert(!JSON.stringify(audit).includes(secret),secret)
 console.log('PASS mutation audit coverage, role before/after, no secrets/content, private-room audit isolation')
 const sql=statement=>execFileSync('docker',['exec','-i',process.env.SHARECODE_TEST_CONTAINER,'psql','-U','runner_test','-d','runner_test','-v','ON_ERROR_STOP=1','-Atc',statement],{encoding:'utf8'})
 // Make timestamp order differ from ID order, including ties and exact time boundaries.
@@ -102,7 +101,7 @@ assert.equal((await request(`/api/rooms/${rollbackRoom.id}/share-links`,'GET',un
 sql('DROP TRIGGER reject_test_audit ON "AuditEvent"; DROP FUNCTION reject_test_audit()')
 console.log('PASS timestamp/ID ordering, page boundaries, snapshot stability, timezone/range/device filters, audit transaction rollback')
 await request('/api/notifications/read-all','POST',{},token)
-await request('/api/notifications/read-all','POST',{},adminAuth.token)
+await request('/api/notifications/read-all','POST',{},agentAuth.token)
 const web=await createServer({server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
 await web.listen()
 try {
@@ -156,24 +155,21 @@ try {
       assert(new URL(page.url()).searchParams.has('deviceId'))
     }
     await page.waitForLoadState('networkidle')
-    await page.evaluate(token=>sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0})),adminAuth.token)
-    const adminDeviceRequests=[]
-    page.on('request',r=>{if(r.url().includes('/devices'))adminDeviceRequests.push(r.url())})
+    // Agents are sent away from the admin pages without loading any admin data.
+    await page.evaluate(token=>sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0})),agentAuth.token)
+    const agentAdminRequests=[]
+    page.on('request',r=>{if(r.url().includes('/api/admin/'))agentAdminRequests.push(r.url())})
     await page.goto(WEB+'/admin?section=users&userSearch=device_user')
-    await page.locator('tbody tr').first().waitFor()
-    assert.equal(await page.getByRole('button',{name:mobile?'设备':'Devices',exact:true}).count(),0)
-    assert.deepEqual(adminDeviceRequests,[])
+    await page.waitForURL('**/rooms')
+    await page.getByRole('button',{name:mobile?'创建新房间':'Create New Room',exact:true}).waitFor()
     await page.goto(WEB+`/admin/audit?username=device_user&deviceId=${deviceA}`)
-    await page.locator('tbody tr').first().waitFor()
-    assert.equal(await page.getByRole('columnheader',{name:mobile?'设备':'Device',exact:true}).count(),0)
-    assert.equal(await page.getByText(mobile?'新设备':'New device',{exact:true}).count(),0)
-    await page.locator('tbody details summary').first().click()
-    assert.equal(await page.getByText(mobile?'指纹':'Fingerprint',{exact:true}).count(),0)
-    assert(!(await page.locator('tbody').innerText()).includes(deviceA))
+    await page.getByRole('alert').getByText(mobile?'需要管理员权限。':'Administrator access required.',{exact:true}).waitFor()
+    assert.equal(await page.locator('tbody tr').count(),0)
+    assert.deepEqual(agentAdminRequests,[])
     assert.deepEqual(errors,[])
     await context.close()
    }
-   console.log('PASS',engine,'admin device controls present; agent device controls/fields absent; audit datetime/pagination, desktop and mobile 3x DPI')
+   console.log('PASS',engine,'admin device controls present; agents kept off the admin pages; audit datetime/pagination, desktop and mobile 3x DPI')
   } finally { await browser.close() }
  }
 } finally { await web.close() }

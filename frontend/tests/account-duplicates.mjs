@@ -12,7 +12,8 @@ assert.equal((await request('/api/admin/users/'+first.body.user.id,'DELETE',unde
 const deletedName=await create({});assert.equal(deletedName.status,400);assert.match(deletedName.body.error,/deleted account/)
 const deletedEmail=await create({username:name+'_other'});assert.equal(deletedEmail.status,400);assert.match(deletedEmail.body.error,/deleted account/)
 assert.equal((await request('/api/auth/login','POST',{username:name,password})).status,401)
-const publicDuplicate=await request('/api/auth/register','POST',{username:name,password});assert.equal(publicDuplicate.status,400)
-const publicEmail=await request('/api/auth/register','POST',{username:name+'_public',email,password});assert.equal(publicEmail.status,400)
+const invite=(await request('/api/invites','POST',{},token)).body.invite
+const publicDuplicate=await request('/api/auth/register','POST',{username:name,password,inviteCode:invite.code});assert.equal(publicDuplicate.status,400)
+const publicEmail=await request('/api/auth/register','POST',{username:name+'_public',email,password,inviteCode:invite.code});assert.equal(publicEmail.status,400)
 const race=await Promise.all([create({username:name+'_race',email:null}),create({username:name+'_race',email:null})]);assert.deepEqual(race.map(r=>r.status).sort(),[201,400])
 console.log('PASS active/deleted duplicate username/email, registration and concurrent creation return 400; deleted identity stays revoked')

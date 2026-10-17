@@ -18,7 +18,6 @@ const update = gzipSync(Y.encodeStateAsUpdate(doc)).toString('base64'); doc.dest
 const updates = [0, 1].map(i => ({ id: String(i), timestamp: `2026-09-17T00:00:0${i}Z`, update, userId: user.id }))
 const room = language => ({ id: language, language, ownerId: user.id, owner: user, isOwner: true, isEnded: true, canManageNotes: false })
 const endpoints = {
-  '/api/config/registration': { allowRegistration: false },
   '/api/auth/profile': { actorType: 'user', user },
   '/api/notifications/unread': { notifications: [] },
   ...Object.fromEntries(['python', 'markdown'].flatMap(lang => [

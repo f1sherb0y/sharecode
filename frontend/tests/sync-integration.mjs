@@ -30,7 +30,7 @@ try{
  await request(`/api/rooms/${a.id}/share-links/${al.id}`,'DELETE',undefined,admin);await wait(()=>gp.closed,'immediate revoke',2000)
  const previous=text(aa).toString();text(gp).insert(0,'REVOKED');await new Promise(r=>setTimeout(r,150));assert.equal(text(aa).toString(),previous)
  console.log('PASS invitation revocation closes established guest socket')
- const member=await request('/api/auth/register','POST',{username:`audit_member_${Date.now()}`,password:'LocalMember#2026Strong'});const bl=await link(b)
+ const {invite}=await request('/api/invites','POST',{},admin);const member=await request('/api/auth/register','POST',{username:`audit_member_${Date.now()}`,password:'LocalMember#2026Strong',inviteCode:invite.code});const bl=await link(b)
  const accepted=await request(`/api/share/${bl.token}/accept`,'POST',{},member.token);assert.equal(accepted.roomId,b.id)
  const mp=peer(b,member.token);await wait(()=>mp.p.synced,'member accepted');await request(`/api/rooms/${b.id}/share-links/${bl.id}`,'DELETE',undefined,admin);await wait(()=>mp.closed,'member revoke',2000)
  console.log('PASS signed-in invitation grants scoped membership and revokes it')

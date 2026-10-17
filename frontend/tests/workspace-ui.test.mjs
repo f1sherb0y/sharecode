@@ -67,7 +67,6 @@ async function open(path, { mobile = false, authenticated = true, deviceScaleFac
     else if (path.startsWith('/api/rooms/')) data = { room: sampleRooms.find(r => path.endsWith('/' + r.id)) }
     else if (path.includes('users')) data = { users: [owner] }
     else if (path.includes('notifications')) data = { notifications: [] }
-    else if (path.includes('registration')) data = { allowRegistration: true }
     await route.fulfill({ json: data })
   })
   const page = await context.newPage(), errors = []

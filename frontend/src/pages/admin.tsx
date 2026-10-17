@@ -30,7 +30,7 @@ import {
 } from '@/components/ui'
 import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { api } from '@/api'
-import { canDeleteRoom, canManageAccount, isAdmin, isStaff } from '@/lib/room-permissions'
+import { canDeleteRoom, isAdmin } from '@/lib/room-permissions'
 import { validatePasswordPolicy } from '@/lib/password-policy'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores'
@@ -90,12 +90,9 @@ function formatBytes(bytes: number): string {
 function CreateUserDialog({
   open,
   onOpenChange,
-  roles,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Admins create every role; agents create tech accounts only. */
-  roles: Role[]
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -202,7 +199,7 @@ function CreateUserDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {roles.map((r) => (
+                  {ROLES.map((r) => (
                     <SelectItem key={r} value={r}>
                       {t(`roles.${r}`)}
                     </SelectItem>
@@ -266,11 +263,10 @@ export function AdminPage() {
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [compressingRoomId, setCompressingRoomId] = useState<string | null>(null)
 
-  // Agents and admins use this page; storage, devices and role changes are admin-only.
-  const viewerIsAdmin = isAdmin(user)
+  // Admins only; agents and techs are sent back to their rooms.
+  const canAccessAdmin = isAdmin(user)
   const showUsersSection = section === 'users'
   const showRoomsSection = section === 'rooms'
-  const canAccessAdmin = isStaff(user)
 
   const usersParams = { page: userPage, pageSize, role: userRoleFilter, q: searchParams.get('userSearch') ?? '' }
   const roomsParams = { page: roomPage, pageSize, status: roomStatusFilter, language: roomLanguage, owner: ownerSearch, q: searchParams.get('roomSearch') ?? '' }
@@ -299,7 +295,7 @@ export function AdminPage() {
   const dbSizeQuery = useQuery({
     queryKey: queryKeys.adminDbSize,
     queryFn: () => api.getDbStorageSize(),
-    enabled: viewerIsAdmin && showRoomsSection,
+    enabled: canAccessAdmin && showRoomsSection,
   })
 
   const playbackSizesQuery = useQuery({
@@ -308,7 +304,7 @@ export function AdminPage() {
       const { rooms } = await api.getRoomPlaybackSizes(visibleRoomIds, signal)
       return rooms
     },
-    enabled: viewerIsAdmin && showRoomsSection && visibleRoomIds.length > 0,
+    enabled: canAccessAdmin && showRoomsSection && visibleRoomIds.length > 0,
   })
 
   const clearPendingEditFor = useCallback((userId: string) => {
@@ -359,8 +355,8 @@ export function AdminPage() {
   const playbackSizes = useMemo(() => playbackSizesQuery.data ?? [], [playbackSizesQuery.data])
   const isLoadingUsers = usersQuery.isLoading
   const isLoadingRooms = roomsQuery.isLoading
-  const isLoadingStorage = viewerIsAdmin ? dbSizeQuery.isLoading : false
-  const isLoadingPlaybackSizes = viewerIsAdmin ? playbackSizesQuery.isLoading : false
+  const isLoadingStorage = dbSizeQuery.isLoading
+  const isLoadingPlaybackSizes = playbackSizesQuery.isLoading
 
   const updateAdminParams = useCallback((updates: Record<string, string | number>) => {
     setSearchParams(prev => {
@@ -401,14 +397,11 @@ export function AdminPage() {
 
   const refreshStorage = async () => {
     setStorageNotice('')
-    const tasks = [
+    await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.adminRooms }),
-    ]
-    if (viewerIsAdmin) {
-      tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.adminDbSize }))
-      tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.adminPlaybackSizes }))
-    }
-    await Promise.all(tasks)
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminDbSize }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminPlaybackSizes }),
+    ])
   }
 
   const handleUpdateUser = async (userId: string) => {
@@ -522,7 +515,7 @@ export function AdminPage() {
       />
 
       <PageContainer>
-        {viewerIsAdmin && deviceUser && <UserDevicesDialog key={deviceUser.id} user={deviceUser} onClose={() => setDeviceUser(null)} />}
+        {deviceUser && <UserDevicesDialog key={deviceUser.id} user={deviceUser} onClose={() => setDeviceUser(null)} />}
         {/* Delete User Dialog */}
         <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
           <DialogContent>
@@ -656,11 +649,7 @@ export function AdminPage() {
                 <Plus className="h-4 w-4 mr-1" />
                 {t('admin.users.createButton')}
               </Button>
-              <CreateUserDialog
-                open={isCreateOpen}
-                onOpenChange={setIsCreateOpen}
-                roles={ROLES.filter(role => canManageAccount(user, role))}
-              />
+              <CreateUserDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
             </div>
           </CardHeader>
           <CardContent className="pt-0 px-1.5 sm:px-3">
@@ -684,7 +673,7 @@ export function AdminPage() {
                     {users.map((u) => {
                       const edits = pendingEdits.get(u.id)
                       // The server also keeps the last admin; the UI never offers removing admins.
-                      const canDelete = u.id !== user?.id && u.role !== 'admin' && canManageAccount(user, u.role)
+                      const canDelete = u.id !== user?.id && u.role !== 'admin'
 
                       return (
                         <tr key={u.id} className="border-b">
@@ -694,7 +683,7 @@ export function AdminPage() {
                           </td>
                           <td className="px-1.5 py-1 text-muted-foreground hidden sm:table-cell">{u.email ?? '-'}</td>
                           <td className="px-1.5 py-1">
-                            {viewerIsAdmin && u.id !== user?.id ? (
+                            {u.id !== user?.id ? (
                               <Select
                                 value={edits?.role ?? u.role}
                                 onValueChange={(v) => updateEditedUser(u.id, { role: v as Role })}
@@ -728,7 +717,7 @@ export function AdminPage() {
                                   <span className="hidden sm:inline">{savingUserId === u.id ? t('admin.users.table.updating') : t('admin.users.table.update')}</span>
                                 </Button>
                               )}
-                              {viewerIsAdmin && <Button size="sm" variant="outline" onClick={() => setDeviceUser({ id: u.id, username: u.username })}>{t('audit.devices')}</Button>}
+                              <Button size="sm" variant="outline" onClick={() => setDeviceUser({ id: u.id, username: u.username })}>{t('audit.devices')}</Button>
                               {canDelete && (
                                 <Button
                                   size="sm"
@@ -782,7 +771,6 @@ export function AdminPage() {
                 </div>
               ) : (
                 <>
-                  {viewerIsAdmin && (
                   <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 mb-2">
                     <div className="rounded-md border p-2">
                       <div className="text-xs text-muted-foreground">{t('admin.storage.dbSize')}</div>
@@ -812,7 +800,6 @@ export function AdminPage() {
                       </div>
                     </div>
                   </div>
-                  )}
 
                   {storageNotice && (
                     <div className="mb-2 text-xs text-muted-foreground">{storageNotice}</div>

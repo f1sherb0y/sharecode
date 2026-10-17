@@ -62,6 +62,11 @@ pub struct AuthUser {
 #[derive(Debug, Clone)]
 pub struct StaffUser(pub AuthUser);
 
+/// An admin (管理员): the admin dashboard, audit log and account management.
+/// Everyone else, agents included, gets 404.
+#[derive(Debug, Clone)]
+pub struct AdminUser(pub AuthUser);
+
 // Room content can be read or written by either an account or a share guest.
 // Guest claims still require room-specific database validation before use.
 pub enum AuthActor {
@@ -282,6 +287,27 @@ where
                 return Err(ApiError::not_found("Not found"));
             }
             Ok(StaffUser(user))
+        }
+    }
+}
+
+impl<S> FromRequestParts<S> for AdminUser
+where
+    S: Send + Sync,
+    AppState: axum::extract::FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    fn from_request_parts(
+        parts: &mut Parts,
+        state: &S,
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        async move {
+            let user = AuthUser::from_request_parts(parts, state).await?;
+            if !crate::permissions::is_admin(&user.role) {
+                return Err(ApiError::not_found("Not found"));
+            }
+            Ok(AdminUser(user))
         }
     }
 }

@@ -9,8 +9,6 @@ import { useAuthStore } from '@/stores'
 import { isTauriApp } from '@/lib/tauri'
 import { parseShareToken } from '@/lib/share'
 
-const ALLOW_REGISTRATION = import.meta.env.VITE_ALLOW_REGISTRATION === 'true'
-
 export function LoginPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -130,14 +128,13 @@ export function LoginPage() {
               </Button>
             </form>
 
-            {ALLOW_REGISTRATION && (
-              <p className="text-center text-sm text-muted-foreground mt-2">
-                {t('auth.login.noAccount')}{' '}
-                <Link to="/register" className="text-primary hover:underline">
-                  {t('auth.login.registerLink')}
-                </Link>
-              </p>
-            )}
+            {/* Registration is invite-only: techs get a code from an agent or admin. */}
+            <p className="text-center text-sm text-muted-foreground mt-2">
+              {t('auth.login.noAccount')}{' '}
+              <Link to="/register" className="text-primary hover:underline">
+                {t('auth.login.registerLink')}
+              </Link>
+            </p>
 
             <p className="text-center text-sm text-muted-foreground mt-2">
               {t('auth.login.joinPrompt')}{' '}

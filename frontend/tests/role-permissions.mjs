@@ -86,7 +86,8 @@ for (const [name, actor] of Object.entries(actors)) {
   const list = await request('/api/rooms?pageSize=100', 'GET', undefined, actor.token)
   assert.deepEqual(list.rooms.map(r => r.id).sort(), expected, name)
   assert.equal(list.pagination.total, expected.length)
-  if (staff(actor)) {
+  // The admin dashboard is admin-only; agents see every room on the rooms page instead.
+  if (actor.user.role === 'admin') {
     const adminList = await request('/api/admin/rooms?pageSize=100', 'GET', undefined, actor.token)
     assert.deepEqual(adminList.rooms.map(r => r.id).sort(), expected, `admin list ${name}`)
     assert.equal(adminList.pagination.total, expected.length)
@@ -259,22 +260,97 @@ const openLinks = (await request('/api/rooms/' + decide.id + '/share-links', 'GE
 assert(openLinks.includes(unusedByAgent.id) && openLinks.includes(ownLink.id))
 console.log('PASS the latest link decides a tech\'s permission both ways; link members never manage the room; staff and owners keep access')
 
-// Agents manage tech accounts only; role changes and other accounts are admin-only.
-const madeByAgent = (await request('/api/admin/users', 'POST', { username: 'made_by_agent', password }, as('agent_owner'), 201)).user
-assert.equal(madeByAgent.role, 'tech')
-for (const role of ['agent', 'admin']) await request('/api/admin/users', 'POST', { username: 'escalated_' + role, password, role }, as('agent_owner'), 404)
+// The admin side (accounts, rooms, audit, devices, storage, announcements) is
+// admin-only: agents get the same 404 as techs.
+const someone = actors.tech_peer.user.id
+for (const [path, method, body] of [
+  ['/api/admin/users', 'GET'], ['/api/admin/users', 'POST', { username: 'made_by_agent', password }],
+  ['/api/admin/users/' + someone, 'PATCH', { role: 'agent' }], ['/api/admin/users/' + someone, 'DELETE'],
+  ['/api/admin/users/' + someone + '/devices', 'GET'], ['/api/admin/rooms', 'GET'], ['/api/admin/audit', 'GET'],
+  ['/api/admin/storage/db-size', 'GET'], ['/api/admin/notifications', 'POST', { title: 'Not allowed', content: 'Not allowed' }],
+]) {
+  for (const actor of ['agent_owner', 'tech_owner']) await request(path, method, body, as(actor), 404)
+}
+const madeByAdmin = (await request('/api/admin/users', 'POST', { username: 'made_by_admin', password, role: 'agent' }, root, 201)).user
+assert.equal(madeByAdmin.role, 'agent')
 for (const role of ['superuser', 'user']) await request('/api/admin/users', 'POST', { username: 'retired_' + role, password, role }, root, 400)
-await request('/api/admin/users/' + madeByAgent.id, 'PATCH', { role: 'agent' }, as('agent_owner'), 404)
-await request('/api/admin/users/' + actors.agent_peer.user.id, 'DELETE', undefined, as('agent_owner'), 404)
-await request('/api/admin/users/' + actors.root.user.id, 'DELETE', undefined, as('agent_owner'), 404)
-await request('/api/admin/users/' + madeByAgent.id, 'DELETE', undefined, as('agent_owner'))
+await request('/api/admin/users/' + madeByAdmin.id, 'DELETE', undefined, root)
 await request('/api/admin/users/' + actors.root.user.id, 'PATCH', { role: 'agent' }, root, 404)
 await request('/api/admin/users/' + actors.agent_peer.user.id, 'PATCH', { role: 'superuser' }, root, 400)
 await request('/api/admin/users/' + actors.agent_peer.user.id, 'PATCH', {}, root, 400)
-// Techs have no admin pages and cannot list other accounts.
-for (const path of ['/api/admin/users', '/api/admin/audit', '/api/users']) await request(path, 'GET', undefined, as('tech_owner'), 404)
+// Agents still filter the rooms page by owner; techs cannot list other accounts.
+await request('/api/users', 'GET', undefined, as('tech_owner'), 404)
 assert((await request('/api/users', 'GET', undefined, as('agent_owner'))).users.some(u => u.id === actors.tech_owner.user.id))
-console.log('PASS account management: agents create/remove techs only, admins change roles, retired role names rejected, techs have no admin access')
+console.log('PASS admin side is admin-only: agents and techs get 404 on accounts, rooms, audit, devices, storage and announcements')
+
+// Registration is invite-only: agents and admins issue single-use codes, and an
+// account registered with one is always a tech.
+const register = (body, expected = 201) => request('/api/auth/register', 'POST', { password, ...body }, undefined, expected)
+const invite = async (actor, body = {}) => (await request('/api/invites', 'POST', body, as(actor), 201)).invite
+const listInvites = async actor => (await request('/api/invites', 'GET', undefined, as(actor))).invites
+await request('/api/invites', 'GET', undefined, as('tech_owner'), 404)
+await request('/api/invites', 'POST', {}, as('tech_owner'), 404)
+await request('/api/invites', 'GET', undefined, undefined, 401)
+await request('/api/invites', 'POST', { note: 'x'.repeat(101) }, as('agent_owner'), 400)
+const agentInvite = await invite('agent_owner', { note: '  For the new tech  ' })
+assert.match(agentInvite.code, /^[2-9A-HJ-NP-Z]{12}$/)
+assert.equal(agentInvite.note, 'For the new tech')
+assert.equal(agentInvite.createdBy.username, 'agent_owner')
+assert.equal(agentInvite.isUsed || agentInvite.isExpired, false)
+assert.equal(agentInvite.inviteUrl, 'http://127.0.0.1:55461/register?invite=' + agentInvite.code)
+assert(Math.abs(Date.parse(agentInvite.expiresAt) - Date.now() - 7 * 864e5) < 60e3, 'invites last 7 days')
+const peerInvite = await invite('agent_peer'), adminInvite = (await request('/api/invites', 'POST', {}, root, 201)).invite
+// Agents see the invites they issued; admins see everyone's.
+assert.deepEqual((await listInvites('agent_owner')).map(i => i.id), [agentInvite.id])
+const allIds = (await listInvites('root')).map(i => i.id)
+assert([agentInvite.id, peerInvite.id, adminInvite.id].every(id => allIds.includes(id)))
+// No code, a wrong code or a taken username creates nothing and leaves the code usable.
+await register({ username: 'walk_in' }, 400)
+await register({ username: 'walk_in', inviteCode: 'ABCD-EFGH-JKLM' }, 400)
+await register({ username: 'agent_owner', inviteCode: agentInvite.code }, 400)
+// The displayed form works in any case; a requested role is ignored.
+const displayed = agentInvite.code.toLowerCase().match(/.{4}/g).join('-')
+const invited = await register({ username: 'invited_tech', inviteCode: ' ' + displayed + ' ', role: 'admin' })
+assert.equal(invited.user.role, 'tech')
+assert.equal((await request('/api/auth/profile', 'GET', undefined, invited.token)).user.role, 'tech')
+await register({ username: 'second_use', inviteCode: agentInvite.code }, 410)
+const used = (await listInvites('agent_owner')).find(i => i.id === agentInvite.id)
+assert.equal(used.isUsed, true); assert.equal(used.isExpired, false); assert.equal(used.usedBy.username, 'invited_tech')
+// Used invites stay as the record; unused ones are withdrawn by the issuer or an admin.
+await request('/api/invites/' + agentInvite.id, 'DELETE', undefined, as('agent_owner'), 404)
+await request('/api/invites/' + peerInvite.id, 'DELETE', undefined, as('agent_owner'), 404)
+await request('/api/invites/' + peerInvite.id, 'DELETE', undefined, root)
+await register({ username: 'withdrawn', inviteCode: peerInvite.code }, 400)
+const ownWithdrawal = await invite('agent_owner')
+await request('/api/invites/' + ownWithdrawal.id, 'DELETE', undefined, as('agent_owner'))
+// Expired codes, and codes whose issuer is no longer staff, stop working.
+sql(`UPDATE "RegistrationInvite" SET "expiresAt" = NOW() - INTERVAL '1 second' WHERE id = ${literal(adminInvite.id)}`)
+await register({ username: 'too_late', inviteCode: adminInvite.code }, 410)
+assert.equal((await listInvites('root')).find(i => i.id === adminInvite.id).isExpired, true)
+const formerAgent = (await request('/api/admin/users', 'POST', { username: 'former_agent', password, role: 'agent' }, root, 201)).user
+const formerAgentToken = (await login('former_agent')).token
+const orphaned = (await request('/api/invites', 'POST', {}, formerAgentToken, 201)).invite
+await request('/api/admin/users/' + formerAgent.id, 'PATCH', { role: 'tech' }, root)
+await register({ username: 'orphaned', inviteCode: orphaned.code }, 410)
+await request('/api/invites', 'GET', undefined, formerAgentToken, 404)
+// Two registrations racing for one code: exactly one account is created.
+const raced = (await request('/api/invites', 'POST', {}, root, 201)).invite
+const statuses = await Promise.all(['race_a', 'race_b'].map(username => fetch(API + '/api/auth/register', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, inviteCode: raced.code }),
+}).then(r => r.status)))
+assert.deepEqual(statuses.sort(), [201, 410])
+assert.equal(sql(`SELECT count(*) FROM "User" WHERE username IN ('race_a','race_b','walk_in','second_use','withdrawn','too_late','orphaned')`), '1')
+// The audit trail links each account to its inviter but never records a code.
+const inviteAudit = await request('/api/admin/audit?pageSize=100', 'GET', undefined, root)
+const registration = inviteAudit.events.find(e => e.action === 'user.registered' && e.username === 'invited_tech')
+assert.equal(registration.details.invitedBy, actors.agent_owner.user.id); assert.equal(registration.details.inviteId, agentInvite.id)
+for (const action of ['invite.created', 'invite.revoked']) assert(inviteAudit.events.some(e => e.action === action), action)
+// Refused codes are audited like failed sign-ins.
+const refusals = inviteAudit.events.filter(e => e.action === 'user.registered' && !e.success).map(e => e.reason)
+for (const reason of ['missing_invite', 'invalid_invite', 'invite_used', 'invite_expired']) assert(refusals.includes(reason), reason)
+for (const code of [agentInvite.code, peerInvite.code, adminInvite.code, raced.code]) assert(!JSON.stringify(inviteAudit).includes(code))
+assert(!JSON.stringify(inviteAudit).includes('For the new tech'))
+console.log('PASS invite-only registration: staff-issued single-use 7-day codes, techs only, own/all listing, withdrawal, expiry, issuer demotion, races, audit')
 
 // An owner's role change rechecks open sockets to their private rooms.
 const promoted = await legacyPrivate('tech_owner', 'Role revalidation')
@@ -328,10 +404,12 @@ try {
         assert(await page.getByLabel(mobile ? '私密房间' : 'Private room', { exact: true }).count() > 0)
         await page.getByRole('button', { name: mobile ? '账号菜单' : 'Account menu', exact: true }).click()
         await page.getByText(mobile ? '管理员' : 'Admin', { exact: true }).waitFor()
+        assert.equal(await page.getByRole('menuitem', { name: mobile ? '邀请技术' : 'Invite techs', exact: true }).count(), 1)
         assert.deepEqual(errors, [])
         await context.close()
       }
-      // Agents and techs never see the private option; only agents filter rooms by owner.
+      // Agents and techs never see the private option or the admin side; only agents
+      // filter rooms by owner and invite techs.
       for (const [actor, ownerFilter, roleLabel] of [['agent_owner', 1, 'Agent'], ['tech_peer', 0, 'Tech']]) {
         const { context, page, errors } = await openPage(browser, as(actor))
         await page.goto('http://127.0.0.1:55461/rooms')
@@ -343,11 +421,68 @@ try {
         await page.keyboard.press('Escape')
         await page.getByRole('button', { name: 'Account menu', exact: true }).click()
         await page.getByText(roleLabel, { exact: true }).waitFor()
-        assert.equal(await page.getByRole('menuitem', { name: 'Admin Dashboard', exact: true }).count(), actor === 'agent_owner' ? 1 : 0)
+        for (const item of ['Admin Dashboard', 'Audit log']) assert.equal(await page.getByRole('menuitem', { name: item, exact: true }).count(), 0, `${actor} ${item}`)
+        assert.equal(await page.getByRole('menuitem', { name: 'Invite techs', exact: true }).count(), actor === 'agent_owner' ? 1 : 0)
+        await page.keyboard.press('Escape')
+        // Typing the admin URLs does not open them either.
+        await page.goto('http://127.0.0.1:55461/admin')
+        await page.waitForURL('**/rooms')
+        await page.getByRole('combobox', { name: 'Activeness', exact: true }).waitFor()
+        await page.goto('http://127.0.0.1:55461/admin/audit')
+        await page.getByRole('alert').getByText('Administrator access required.', { exact: true }).waitFor()
         assert.deepEqual(errors, [])
         await context.close()
       }
-      console.log('PASS', engine, 'admin-only private rooms, agent/tech create dialogs, owner filter, role in the user menu; desktop/mobile 3x DPI, EN/ZH')
+      // An agent creates an invite; the tech opens its link and registers.
+      {
+        const { context, page, errors } = await openPage(browser, as('agent_owner'))
+        await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
+        await page.goto('http://127.0.0.1:55461/rooms')
+        await page.getByRole('button', { name: 'Account menu', exact: true }).click()
+        await page.getByRole('menuitem', { name: 'Invite techs', exact: true }).click()
+        const dialog = page.getByRole('dialog', { name: 'Invite techs' })
+        await dialog.getByLabel('Note (optional)').fill('UI ' + engine)
+        const created = page.waitForResponse(r => r.url().endsWith('/api/invites') && r.request().method() === 'POST')
+        await dialog.getByRole('button', { name: 'Create invite', exact: true }).click()
+        const { invite: uiInvite } = await (await created).json()
+        const displayedCode = uiInvite.code.match(/.{4}/g).join('-')
+        const row = dialog.getByRole('listitem').filter({ hasText: displayedCode })
+        await row.getByText('Unused', { exact: true }).waitFor()
+        await row.getByText('UI ' + engine, { exact: true }).waitFor()
+        assert(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1))
+        await page.screenshot({ path: `/tmp/sharecode-invites-${engine}.png` })
+        assert.deepEqual(errors, [])
+        await context.close()
+
+        const guest = await browser.newContext()
+        await guest.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+        const tab = await guest.newPage(), tabErrors = []
+        tab.on('pageerror', e => tabErrors.push(e.message))
+        await tab.goto('http://127.0.0.1:55461/login')
+        await tab.getByRole('link', { name: 'Register', exact: true }).waitFor()
+        await tab.goto('http://127.0.0.1:55461/register?invite=' + uiInvite.code)
+        assert.equal(await tab.locator('#inviteCode').inputValue(), displayedCode)
+        await tab.locator('#username').fill('ui_tech_' + engine)
+        await tab.locator('#password').fill(password)
+        await tab.locator('#register-form button[type=submit]').click()
+        await tab.waitForURL('**/rooms')
+        await tab.getByRole('button', { name: 'Account menu', exact: true }).click()
+        await tab.getByText('Tech', { exact: true }).waitFor()
+        assert.equal(await tab.getByRole('menuitem', { name: 'Invite techs', exact: true }).count(), 0)
+        // Reusing the link shows why it no longer works.
+        const again = await browser.newContext()
+        await again.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+        const retry = await again.newPage()
+        await retry.goto('http://127.0.0.1:55461/register?invite=' + uiInvite.code)
+        await retry.locator('#username').fill('ui_retry_' + engine)
+        await retry.locator('#password').fill(password)
+        await retry.locator('#register-form button[type=submit]').click()
+        await retry.getByText('This invite code has already been used. Ask for a new one.', { exact: true }).waitFor()
+        assert.deepEqual(tabErrors, [])
+        await again.close()
+        await guest.close()
+      }
+      console.log('PASS', engine, 'admin-only private rooms and admin side, agent invites and invite-link registration, owner filter, role in the user menu; desktop/mobile 3x DPI, EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }

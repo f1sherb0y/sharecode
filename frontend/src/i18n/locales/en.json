@@ -8,7 +8,7 @@
       "passwordPlaceholder": "Enter your password",
       "button": "Login",
       "loggingIn": "Logging in...",
-      "noAccount": "Don't have an account?",
+      "noAccount": "Have an invite code?",
       "registerLink": "Register",
       "joinLink": {
         "title": "Or join a shared room",
@@ -24,6 +24,9 @@
     },
     "register": {
       "title": "Register",
+      "inviteCode": "Invite code",
+      "inviteCodePlaceholder": "XXXX-XXXX-XXXX",
+      "inviteHint": "Ask an agent or admin for a code. Accounts created here are tech accounts.",
       "username": "Username",
       "usernamePlaceholder": "Choose a username",
       "email": "Email (optional)",
@@ -34,7 +37,6 @@
       "registering": "Creating account...",
       "hasAccount": "Already have an account?",
       "loginLink": "Login",
-      "disabled": "Registration is currently disabled. Please contact an administrator for access.",
       "failed": "Registration failed. Please try again."
     },
     "logoutFailed": "Could not sign out. Check your connection and try again."
@@ -494,6 +496,38 @@
       "following": "Following"
     }
   },
+  "invites": {
+    "menu": "Invite techs",
+    "title": "Invite techs",
+    "description": "Each code registers one tech account and expires after 7 days. Send the link or the code to the tech.",
+    "noteLabel": "Note (optional)",
+    "notePlaceholder": "e.g. who it is for",
+    "create": "Create invite",
+    "creating": "Creating...",
+    "created": "Invite created",
+    "createdAndCopied": "Invite created and link copied",
+    "createFailed": "Failed to create invite",
+    "loadFailed": "Failed to load invites",
+    "copyCode": "Copy code",
+    "copyLink": "Copy link",
+    "codeCopied": "Invite code copied",
+    "linkCopied": "Invite link copied",
+    "copyFailed": "Could not copy",
+    "delete": "Withdraw invite",
+    "deleted": "Invite withdrawn",
+    "deleteFailed": "Failed to withdraw invite",
+    "deleteTitle": "Withdraw this invite?",
+    "deleteConfirm": "The code {{code}} will stop working.",
+    "empty": "No invites yet.",
+    "status": {
+      "active": "Unused",
+      "used": "Used",
+      "expired": "Expired"
+    },
+    "usedBy": "Registered as {{username}} · {{time}}",
+    "expiresAt": "Expires {{time}}",
+    "createdBy": "Created by {{username}}"
+  },
   "notifications": {
     "title": "Notifications",
     "severity": {
@@ -677,7 +711,11 @@
       "notification": {
         "created": "Announcement created"
       },
-      "session.logout": "Signed out"
+      "session.logout": "Signed out",
+      "invite": {
+        "created": "Invite created",
+        "revoked": "Invite withdrawn"
+      }
     },
     "reasons": {
       "missing_credentials": "Missing credentials",
@@ -713,7 +751,13 @@
     "createUser": "Failed to create user",
     "updateUser": "Failed to update user",
     "deleteUser": "Failed to delete user",
-    "compressPlayback": "Failed to compress playback data"
+    "compressPlayback": "Failed to compress playback data",
+    "inviteRequired": "Enter the invite code you were given.",
+    "inviteInvalid": "This invite code is not valid. Check it or ask for a new one.",
+    "inviteUsed": "This invite code has already been used. Ask for a new one.",
+    "inviteExpired": "This invite code has expired. Ask for a new one.",
+    "inviteNoteTooLong": "Notes can be at most 100 characters.",
+    "inviteNotFound": "This invite no longer exists."
   },
   "canvas": {
     "title": "Canvas",

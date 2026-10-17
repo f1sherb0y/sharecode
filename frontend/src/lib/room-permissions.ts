@@ -1,16 +1,16 @@
-import type { Role, Room, User } from '@/types'
+import type { Room, User } from '@/types'
 
 // Mirrors server-rs/src/core/permissions.rs: the role alone decides room access.
 // The server stays authoritative; these only decide which controls to show.
 
 type Actor = Pick<User, 'id' | 'role'> | null | undefined
 
-/** Admins only: deleting rooms, private rooms, storage, devices, notifications. */
+/** Admins only: the admin dashboard and audit log, accounts, deleting rooms, private rooms. */
 export function isAdmin(user: Pick<User, 'role'> | null | undefined): boolean {
   return user?.role === 'admin'
 }
 
-/** Agents and admins see, edit, share, pin and end every room and manage tech accounts. */
+/** Agents and admins see, edit, share, pin and end every room and invite techs. */
 export function isStaff(user: Pick<User, 'role'> | null | undefined): boolean {
   return user?.role === 'admin' || user?.role === 'agent'
 }
@@ -32,9 +32,4 @@ export const canEndRoom = canManageRoom
 
 export function canDeleteRoom(user: Actor): boolean {
   return isAdmin(user)
-}
-
-/** Admins manage every account; agents create and remove tech accounts only. */
-export function canManageAccount(actor: Pick<User, 'role'> | null | undefined, role: Role): boolean {
-  return isAdmin(actor) || (isStaff(actor) && role === 'tech')
 }

@@ -40,7 +40,7 @@
 - **Username-based authentication**: Login with username (email optional)
 - **Role-based access control**: Three account roles: admin (管理员), agent (中介) and tech (技术). Customers (客户) join through share links without an account
 - **Role-only permissions**: No per-account flags; rules live in `server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`
-- **Staff-created accounts**: Self-registration is off by default (`ALLOW_REGISTRATION`); admins create any account, agents create tech accounts
+- **Invite-only registration**: Agents and admins issue single-use codes (valid 7 days) from the account menu; registering with one always creates a tech. Admins also create accounts of any role directly
 - **JWT tokens**: Secure authentication with 7-day expiration
 - **User profiles**: Color-coded users for easy identification
 
@@ -64,7 +64,7 @@
 ### 5. Admin Dashboard
 - **User management**: View all users, edit roles/permissions, soft delete accounts
 - **Room management**: View all rooms with details, delete rooms when permitted
-- **Protected routes**: Agent/admin access verified by server extractors; storage, devices and notifications are admin-only
+- **Admin-only**: The dashboard, audit log, storage, devices and announcements (`AdminUser` extractor); agents and techs get 404
 
 ### 6. Internationalization (i18n)
 - **Multi-language support**: English and Chinese translations
@@ -124,6 +124,10 @@ Room
 RoomParticipant (share-link memberships)
 ├── roomId, userId
 └── canEdit, shareLinkId (last link joined through), canReplay
+
+RegistrationInvite (single-use tech registration codes)
+├── id, code, note?, createdBy, createdAt, expiresAt
+└── usedAt?, usedBy? (kept as the record of who invited whom)
 
 DocumentUpdate (playback data)
 ├── id, documentId (references Room.id)
@@ -351,7 +355,7 @@ monacoModelRef.current?.setValue(ytext.toString())
 - **Strict Session Locking**: Ended rooms are read-only for everyone. Private-room and pinned-only access ends with the session; link members of standard rooms keep replay.
 - JWT-based authentication with secure secret
 - Password hashing with bcrypt (10 rounds)
-- Role extractors (`StaffUser`, admin checks) for protected routes; access changes revoke live WebSocket sessions
+- Role extractors (`StaffUser`, `AdminUser`) for protected routes; access changes revoke live WebSocket sessions
 - CORS configuration for multiple origins
 - Soft deletes for data retention
 
@@ -387,7 +391,8 @@ monacoModelRef.current?.setValue(ytext.toString())
   frontend build, real Chromium/Firefox/WebKit process-restart login tests,
   session renewal while editing, three-browser reconnect/durability recovery,
   all three workspace UI suites (including mobile
-  and DPI layouts), admin/agent/tech role permissions and share-link membership rules,
+  and DPI layouts), admin/agent/tech role permissions, invite-only registration and
+  share-link membership rules,
   notes read/write permissions and reader/manager exports, three-browser
   follow opt-out pause/resume and reload persistence across code/Markdown/Canvas rooms,
   Sarasa font/CDN fallback checks, and standalone replay export.

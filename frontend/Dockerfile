@@ -23,7 +23,6 @@ COPY . .
 # Build args for environment variables
 ARG VITE_API_URL
 ARG VITE_WS_URL
-ARG VITE_ALLOW_REGISTRATION
 
 # Build the app
 RUN --mount=type=cache,target=/root/.bun/install/cache \

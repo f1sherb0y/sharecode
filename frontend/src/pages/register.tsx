@@ -1,36 +1,23 @@
 import { translateError } from '@/i18n/errors'
-import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { AuthBrand, ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { useAuthStore } from '@/stores'
-import { api } from '@/api'
+import { formatInviteCode } from '@/lib/invites'
 import { validatePasswordPolicy } from '@/lib/password-policy'
 
 export function RegisterPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { register } = useAuthStore()
 
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [registrationAllowed, setRegistrationAllowed] = useState(true)
-  const [isCheckingStatus, setIsCheckingStatus] = useState(true)
-
-  useEffect(() => {
-    const checkRegistrationStatus = async () => {
-      try {
-        const { allowRegistration } = await api.getRegistrationStatus()
-        setRegistrationAllowed(allowRegistration)
-      } catch {
-        setRegistrationAllowed(true)
-      } finally {
-        setIsCheckingStatus(false)
-      }
-    }
-    checkRegistrationStatus()
-  }, [])
+  // Registration is invite-only; invite links carry the code as ?invite=.
+  const invitedCode = formatInviteCode(searchParams.get('invite') ?? '')
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -39,6 +26,7 @@ export function RegisterPage() {
     const username = String(fields.get('username') ?? '')
     const password = String(fields.get('password') ?? '')
     const email = String(fields.get('email') ?? '')
+    const inviteCode = String(fields.get('inviteCode') ?? '').trim()
     setError('')
 
     if (!validatePasswordPolicy(password)) {
@@ -49,21 +37,13 @@ export function RegisterPage() {
     setIsLoading(true)
 
     try {
-      await register(username, password, email || undefined)
+      await register(username, password, email || undefined, inviteCode)
       navigate('/rooms')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
       setIsLoading(false)
     }
-  }
-
-  if (isCheckingStatus) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">{t('common.loading')}</p>
-      </div>
-    )
   }
 
   return (
@@ -83,71 +63,77 @@ export function RegisterPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {!registrationAllowed ? (
-              <div className="text-center">
-                <p className="text-muted-foreground mb-2">{t('auth.register.disabled')}</p>
-                <Link to="/login">
-                  <Button variant="outline">{t('auth.register.loginLink')}</Button>
-                </Link>
+            <form id="register-form" method="post" autoComplete="on" onSubmit={handleSubmit} className="space-y-2">
+              <div className="space-y-1">
+                <Label htmlFor="inviteCode">{t('auth.register.inviteCode')}</Label>
+                <Input
+                  id="inviteCode"
+                  name="inviteCode"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  type="text"
+                  className="font-mono"
+                  defaultValue={invitedCode}
+                  placeholder={t('auth.register.inviteCodePlaceholder')}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">{t('auth.register.inviteHint')}</p>
               </div>
-            ) : (
-              <>
-                <form id="register-form" method="post" autoComplete="on" onSubmit={handleSubmit} className="space-y-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="username">{t('auth.register.username')}</Label>
-                    <Input
-                      id="username"
-                      name="username"
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      type="text"
-                      placeholder={t('auth.register.usernamePlaceholder')}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="email">{t('auth.register.email')}</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      autoComplete="email"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      type="email"
-                      placeholder={t('auth.register.emailPlaceholder')}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="password">{t('auth.register.password')}</Label>
-                    <Input
-                      id="password"
-                      name="password"
-                      autoComplete="new-password"
-                      type="password"
-                      placeholder={t('auth.register.passwordPlaceholder')}
-                      minLength={10}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t('common.passwordPolicyHint')}
-                    </p>
-                  </div>
-                  {error && <p className="text-sm text-destructive">{translateError(error)}</p>}
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? t('auth.register.registering') : t('auth.register.button')}
-                  </Button>
-                </form>
-                <p className="text-center text-sm text-muted-foreground mt-2">
-                  {t('auth.register.hasAccount')}{' '}
-                  <Link to="/login" className="text-primary hover:underline">
-                    {t('auth.register.loginLink')}
-                  </Link>
+              <div className="space-y-1">
+                <Label htmlFor="username">{t('auth.register.username')}</Label>
+                <Input
+                  id="username"
+                  name="username"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  type="text"
+                  placeholder={t('auth.register.usernamePlaceholder')}
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="email">{t('auth.register.email')}</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  type="email"
+                  placeholder={t('auth.register.emailPlaceholder')}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="password">{t('auth.register.password')}</Label>
+                <Input
+                  id="password"
+                  name="password"
+                  autoComplete="new-password"
+                  type="password"
+                  placeholder={t('auth.register.passwordPlaceholder')}
+                  minLength={10}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('common.passwordPolicyHint')}
                 </p>
-              </>
-            )}
+              </div>
+              {error && <p className="text-sm text-destructive">{translateError(error)}</p>}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? t('auth.register.registering') : t('auth.register.button')}
+              </Button>
+            </form>
+            <p className="text-center text-sm text-muted-foreground mt-2">
+              {t('auth.register.hasAccount')}{' '}
+              <Link to="/login" className="text-primary hover:underline">
+                {t('auth.register.loginLink')}
+              </Link>
+            </p>
           </CardContent>
         </Card>
       </div>

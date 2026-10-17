@@ -27,7 +27,8 @@ assert.equal((await list()).length, 3)
 
 const guest = await request(`/api/share/${guestLink.token}/join`, 'POST', { username: 'invited_guest' }, undefined, 201)
 assert.deepEqual(new Set((await list()).map(link => link.id)), new Set([unused.id, memberLink.id]))
-const member = await request('/api/auth/register', 'POST', { username: 'invited_member', password }, undefined, 201)
+const { invite } = await request('/api/invites', 'POST', {}, admin, 201)
+const member = await request('/api/auth/register', 'POST', { username: 'invited_member', password, inviteCode: invite.code }, undefined, 201)
 await request(`/api/share/${memberLink.token}/accept`, 'POST', {}, member.token)
 assert.deepEqual((await list()).map(link => link.id), [unused.id])
 

@@ -5,6 +5,7 @@ export const queryKeys = {
   rooms: (params: { page: number; pageSize: number; ownerId?: string; activeness: RoomActiveness }) =>
     ['rooms', params] as const,
   shareLinks: (roomId: string) => ['share-links', roomId] as const,
+  invites: ['invites'] as const,
   notes: (roomId: string) => ['notes', roomId] as const,
   notifications: ['notifications'] as const,
   unreadNotifications: ['unread-notifications'] as const,

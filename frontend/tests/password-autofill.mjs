@@ -26,8 +26,7 @@ async function open(browser, path, authenticated = false) {
       return route.fulfill({ json: { user, token: 'fixture-token', message: 'Password updated' } })
     }
     let data = {}
-    if (path.includes('registration')) data = { allowRegistration: true }
-    else if (path === '/api/auth/profile') data = { actorType: 'user', user }
+    if (path === '/api/auth/profile') data = { actorType: 'user', user }
     else if (path === '/api/admin/users') data = { users: [user], pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 } }
     else if (path === '/api/rooms') data = { rooms: [], pagination: { page: 1, pageSize: 50, total: 0, totalPages: 0 } }
     else if (path.includes('notifications')) data = { notifications: [] }
@@ -75,14 +74,15 @@ try {
         await context.close()
       }
       {
-        const { context, page, submissions, errors } = await open(browser, 'register')
+        // Invite links pre-fill the code; password managers fill the rest.
+        const { context, page, submissions, errors } = await open(browser, 'register?invite=abcdefghjklm')
         const form = page.locator('#register-form')
-        await semantics(form, { username: 'username', email: 'email', password: 'new-password' })
+        await semantics(form, { inviteCode: 'off', username: 'username', email: 'email', password: 'new-password' })
         const fields = { username: user.username, password, email: 'autofill@example.invalid' }
         await autofill(form, fields)
         await submit(page, form, '/api/auth/register')
         await page.waitForURL('**/rooms')
-        assert.deepEqual(submissions[0].body, fields)
+        assert.deepEqual(submissions[0].body, { ...fields, inviteCode: 'ABCD-EFGH-JKLM' })
         assert.deepEqual(errors, [])
         await context.close()
       }

@@ -8,6 +8,7 @@ mod admin;
 mod auth;
 mod code;
 mod health;
+mod invites;
 mod notes;
 mod notifications;
 mod playback;
@@ -38,6 +39,10 @@ pub fn router(state: AppState) -> Router {
             "/api/config/registration",
             get(auth::get_registration_status),
         )
+        // Registration invites (agents and admins)
+        .route("/api/invites", post(invites::create_invite))
+        .route("/api/invites", get(invites::list_invites))
+        .route("/api/invites/{id}", delete(invites::delete_invite))
         // Rooms
         .route("/api/users", get(rooms::get_all_users_for_room_creation))
         .route("/api/rooms", post(rooms::create_room))

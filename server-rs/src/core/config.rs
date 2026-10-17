@@ -12,7 +12,6 @@ pub struct Config {
     /// Extra exact origins (other domains, the public IP) that serve the same app.
     pub allowed_origins: Vec<String>,
     pub frontend_hash_router: bool,
-    pub allow_registration: bool,
     pub log_level: String,
     pub piston_url: String,
     pub admin_username: String,
@@ -45,8 +44,6 @@ impl Config {
             .map(str::to_string)
             .collect();
         let frontend_hash_router = env_bool("FRONTEND_HASH_ROUTER", false);
-        // Accounts are created by admins and agents; self-registration is opt-in.
-        let allow_registration = env_bool("ALLOW_REGISTRATION", false);
 
         let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
 
@@ -79,7 +76,6 @@ impl Config {
             app_url,
             allowed_origins,
             frontend_hash_router,
-            allow_registration,
             log_level,
             piston_url,
             admin_username,

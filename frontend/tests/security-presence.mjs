@@ -10,7 +10,8 @@ async function request(path,method='GET',body,token,extra={}){const r=await fetc
 const ok=async(...args)=>{const r=await request(...args);assert.ok(r.status<300,JSON.stringify(r));return r.body}
 const admin=(await ok('/api/auth/login','POST',{username:'audit_admin',password:'LocalAudit#2026Strong'})).token
 const name=`audit_security_${Date.now()}`,password='UniqueAudit#2026Pass'
-const account=await ok('/api/auth/register','POST',{username:name,password})
+const {invite}=await ok('/api/invites','POST',{},admin)
+const account=await ok('/api/auth/register','POST',{username:name,password,inviteCode:invite.code})
 const token1=(await ok('/api/auth/login','POST',{username:name,password},undefined,{'User-Agent':'ShareCode local security test','X-Forwarded-For':'198.51.100.123'})).token
 const token2=(await ok('/api/auth/login','POST',{username:name,password})).token
 const room=(await ok('/api/rooms','POST',{name:'audit-idle-presence',language:'python'},token1)).room

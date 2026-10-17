@@ -97,6 +97,21 @@ export interface ShareLink {
   isExpired: boolean
 }
 
+/** A single-use registration code an agent or admin gives to a tech. */
+export interface RegistrationInvite {
+  id: string
+  code: string
+  note: string | null
+  createdAt: string
+  expiresAt: string
+  usedAt: string | null
+  createdBy: { id: string; username: string }
+  usedBy: { id: string; username: string } | null
+  isUsed: boolean
+  isExpired: boolean
+  inviteUrl: string | null
+}
+
 export interface ShareGuest {
   id: string
   displayName: string
