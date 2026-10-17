@@ -91,6 +91,14 @@
 - **Native performance**: Rust-based Tauri backend for optimal performance
 - **Auto-updates ready**: Infrastructure for seamless app updates
 
+### 9. Scheduling (排班)
+- **Calendar page** (`/schedule`): week (default), day with one column per tech, month, and a two-week list (default on phones); entry on the room list plus a "Today's sessions" card above it
+- **Agents plan every tech's sessions**: click or drag free time, drag to move or reassign (day view), stretch the lower edge, drop from the unassigned list; overlaps per tech need "Save anyway", and saves per tech are serialized with advisory locks
+- **Techs**: their own sessions only, read-only; personal notices when a session still to come is assigned, changed, reassigned away or cancelled; no confirmation or availability
+- **Session rooms**: created on first "Open room"/"Customer link", owned by the tech, synced with the session while live (time, company/position, owner on reassignment); customer links carry the name and last until the session ends; ending the room completes the session
+- **Customers**: one shared list for agents and admins (contact and notes never reach techs); removal waits for upcoming sessions
+- **Privacy**: audit events for `customer.*`/`appointment.*` hold IDs, times and changed field names only
+
 ## Architecture Highlights
 
 ### Unified Server Architecture
@@ -100,6 +108,7 @@ Single HTTP Server (Port 3001)
 │   ├── /api/auth/* - Authentication
 │   ├── /api/rooms/* - Room CRUD
 │   ├── /api/admin/* - Admin operations
+│   ├── /api/customers/*, /api/appointments/* - Scheduling
 │   └── /api/rooms/:id/playback/* - Playback data
 └── WebSocket Server (Yjs sync at /api/ws)
     ├── Document sync
@@ -139,6 +148,21 @@ Document (Y.js persistence)
 ├── id, name (references Room.id)
 ├── data (Bytes)
 └── Stores compiled Y.Doc state
+
+Customer (shared by agents and admins)
+├── id, name, contact?, notes?, createdBy
+└── isDeleted (soft delete; sessions keep the name)
+
+Appointment (a scheduled session)
+├── id, customerId, techId? (null = unassigned), agentId?
+├── startsAt, durationMinutes (5-1440), company?, position?, notes?
+├── status (scheduled | completed | cancelled; reads completed once its room ends)
+├── roomId? (unique; the session's room), createdBy
+└── Index: (techId, startsAt), (customerId, startsAt), startsAt
+
+Notification
+├── recipientId? (null = site-wide announcement), kind?, data? (JSONB)
+└── Schedule notices are personal: kind = schedule.assigned/updated/unassigned/cancelled
 ```
 
 **Architecture Note**: As of November 2025, `Room.id` is unified with `documentId`. Previously, these were separate fields, which caused routing confusion and API errors. Now `room.id` serves as both the database primary key and the Yjs document identifier, simplifying the architecture.
@@ -393,7 +417,9 @@ monacoModelRef.current?.setValue(ytext.toString())
   all three workspace UI suites (including mobile
   and DPI layouts), admin/agent/tech role permissions, invite-only registration and
   share-link membership rules,
-  notes read/write permissions and reader/manager exports, three-browser
+  notes read/write permissions and reader/manager exports, scheduling (customer
+  and session API rules, notices, session rooms, and the three-browser calendar
+  on desktop and phone), three-browser
   follow opt-out pause/resume and reload persistence across code/Markdown/Canvas rooms,
   Sarasa font/CDN fallback checks, and standalone replay export.
 - Prerequisites: `just install`, `just browsers`, Docker running, and the

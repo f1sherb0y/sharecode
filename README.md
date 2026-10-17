@@ -14,6 +14,7 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 - 🔒 Room-based access control (including strict session locking for ended rooms)
 - 🔑 Role-based access: admin (管理员), agent (中介) and tech (技术) accounts; customers join through share links
 - 🔗 Guest share links with configurable view/edit permissions
+- 📅 Scheduling (排班): a shared customer list and a calendar where agents plan every tech's sessions; techs are notified and open the session's room from it
 
 ## Tech Stack
 
@@ -290,6 +291,19 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `GET /api/invites` - List invites (agents see their own; admins see all)
 - `DELETE /api/invites/:id` - Withdraw an unused invite (its issuer or an admin)
 
+### Scheduling
+Techs get their own sessions only and every other scheduling endpoint answers
+them 404; agents and admins plan everyone's.
+- `GET /api/appointments?from=&to=` - Sessions overlapping a range of at most 100 days (RFC 3339 times; optional `techId`, `customerId`, `unassigned=true`)
+- `GET /api/appointments/:id` - One session
+- `POST /api/appointments` - Plan a session (`{ customerId, techId?, agentId?, startsAt, durationMinutes?, company?, position?, notes?, status?, allowConflicts? }`); an overlap with the tech's other sessions answers 409 with the `conflicts` unless `allowConflicts` is set
+- `PUT /api/appointments/:id` - Move, reassign, edit, cancel or restore a session (any subset of the fields above)
+- `DELETE /api/appointments/:id` - Delete a session planned by mistake
+- `POST /api/appointments/:id/room` - Open the session's room, creating it on first use (`{ language?, replace? }`; the assigned tech, agents and admins)
+- `GET /api/customers?q=&page=&pageSize=` - The shared customer list, searched by name or contact
+- `POST /api/customers`, `GET/PUT/DELETE /api/customers/:id` - Add, view (with the customer's sessions), edit or remove a customer
+- `POST /api/notifications/read` - Mark the given notifications read (`{ ids }`, 1-100)
+
 ### Admins Only
 Every `/api/admin/*` endpoint answers 404 to agents and techs.
 - `GET /api/admin/users` - List all active users
@@ -323,6 +337,9 @@ a guest can edit. Rules are enforced identically on the REST and WebSocket paths
 | Delete rooms | No | No | Yes |
 | Create private rooms | No | No | Yes |
 | Invite techs (registration codes) | No | Yes | Yes |
+| Schedule: see sessions | Own, read-only | All | All |
+| Schedule: plan, move, reassign, cancel | No | Yes | Yes |
+| Customer list (contacts, notes) | No | Yes | Yes |
 | Admin dashboard: accounts, audit log, storage, devices, announcements | No | No | Yes |
 
 Notes:
@@ -343,6 +360,39 @@ Notes:
   code stops working once its issuer is removed or is no longer an agent or admin.
   Registering with a code always creates a tech. Admins can also create accounts
   of any role in the admin dashboard.
+
+### Scheduling (排班)
+
+The **Schedule** page (button on the room list, and the account menu) shows a
+week, day, month or two-week list calendar; phones open the list. Above the room
+list, **Today's sessions** shows the day's sessions with their room buttons.
+
+- A session has a customer, a tech (or none yet), the agent in charge, a start,
+  a duration (5 minutes to 24 hours), the company and position, notes for the
+  tech and a status. Agents and admins plan any tech's sessions: click or drag
+  on free time, drag a session to move it or onto another tech's column in the
+  day view, drag its lower edge to change its length, or drop one from the
+  **Unassigned** list. Techs do not confirm sessions or give availability.
+- Overlapping a tech's other session (cancelled ones aside) needs a second
+  click, **Save anyway**; back-to-back sessions are fine. Saves for the same tech
+  are serialized, so two planners cannot double-book them unnoticed.
+- Techs get a notice (a toast and the notifications page) when a session still
+  to come is assigned to them, changed, given to someone else or cancelled.
+  These notices are personal; announcements stay site-wide.
+- The first **Open room** or **Customer link** creates the session's room,
+  owned by its tech (or by the agent opening it while it is unassigned) and
+  carrying its time, company and position. While the room is live it follows the
+  session: new times sync, and reassigning the session hands the room to the new
+  tech and removes the previous one. Customer links fill in the customer's name
+  and stay valid until the session ends (at least 6 hours), and the room is not
+  ended for inactivity before the session is over. Once the room ends, the
+  session reads as completed with replay and download; **New room** starts over.
+- Customers are one list shared by agents and admins. Techs see a session's
+  customer name, never the contact or profile notes. A customer with sessions
+  still to come cannot be removed; past sessions keep the name. Removing a tech's
+  account returns their upcoming sessions to the unassigned list.
+- The audit log records `customer.*` and `appointment.*` actions with IDs,
+  times and changed field names only, never names, contacts or notes.
 
 ## Supported Languages
 
