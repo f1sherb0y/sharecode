@@ -26,6 +26,7 @@ const SharePage = lazy(() => import('@/pages/share').then(module => ({ default: 
 const JoinPage = lazy(() => import('@/pages/join').then(module => ({ default: module.JoinPage })))
 const NotificationsPage = lazy(() => import('@/pages/notifications').then(module => ({ default: module.NotificationsPage })))
 const AuditPage = lazy(() => import('@/pages/audit').then(module => ({ default: module.AuditPage })))
+const SchedulePage = lazy(() => import('@/pages/schedule').then(module => ({ default: module.SchedulePage })))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
@@ -148,6 +149,14 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <AdminPage />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/schedule"
+        element={
+          <PrivateRoute>
+            <SchedulePage />
           </PrivateRoute>
         }
       />

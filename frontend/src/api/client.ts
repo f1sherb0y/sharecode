@@ -20,6 +20,9 @@ import type {
   CodeExecutionResult,
   Note,
   NotificationItem,
+  Customer,
+  Appointment,
+  AppointmentInput,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
 import { useAuthStore } from '@/stores'
@@ -87,7 +90,8 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }))
-      throw new Error(error.error || 'Request failed')
+      // Callers that need more than the message (e.g. schedule conflicts) read status and data.
+      throw Object.assign(new Error(error.error || 'Request failed'), { status: response.status, data: error })
     }
 
     return response.json()
@@ -143,6 +147,13 @@ class ApiClient {
   async markAllNotificationsRead(): Promise<{ markedCount: number }> {
     return this.request<{ markedCount: number }>('/api/notifications/read-all', {
       method: 'POST',
+    })
+  }
+
+  async markNotificationsRead(ids: string[]): Promise<{ markedCount: number }> {
+    return this.request<{ markedCount: number }>('/api/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
     })
   }
 
@@ -252,6 +263,63 @@ class ApiClient {
   }
 
   // Registration invites (agents and admins)
+  // Scheduling (排班)
+  async listCustomers(params: { q?: string; page?: number; pageSize?: number }, signal?: AbortSignal): Promise<{ customers: Customer[]; pagination: PaginationMeta }> {
+    const search = new URLSearchParams()
+    if (params.q) search.set('q', params.q)
+    if (params.page) search.set('page', String(params.page))
+    if (params.pageSize) search.set('pageSize', String(params.pageSize))
+    return this.request<{ customers: Customer[]; pagination: PaginationMeta }>(`/api/customers?${search}`, { signal })
+  }
+
+  async getCustomer(customerId: string): Promise<{ customer: Customer; appointments: Appointment[] }> {
+    return this.request<{ customer: Customer; appointments: Appointment[] }>(`/api/customers/${customerId}`)
+  }
+
+  async createCustomer(data: { name: string; contact?: string | null; notes?: string | null }): Promise<{ customer: Customer }> {
+    return this.request<{ customer: Customer }>('/api/customers', { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async updateCustomer(customerId: string, data: { name?: string; contact?: string | null; notes?: string | null }): Promise<{ customer: Customer }> {
+    return this.request<{ customer: Customer }>(`/api/customers/${customerId}`, { method: 'PUT', body: JSON.stringify(data) })
+  }
+
+  async deleteCustomer(customerId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/customers/${customerId}`, { method: 'DELETE' })
+  }
+
+  async listAppointments(params: { from: string; to: string; techId?: string; customerId?: string; unassigned?: boolean }, signal?: AbortSignal): Promise<{ appointments: Appointment[] }> {
+    const search = new URLSearchParams({ from: params.from, to: params.to })
+    if (params.techId) search.set('techId', params.techId)
+    if (params.customerId) search.set('customerId', params.customerId)
+    if (params.unassigned) search.set('unassigned', 'true')
+    return this.request<{ appointments: Appointment[] }>(`/api/appointments?${search}`, { signal })
+  }
+
+  async getAppointment(appointmentId: string): Promise<{ appointment: Appointment }> {
+    return this.request<{ appointment: Appointment }>(`/api/appointments/${appointmentId}`)
+  }
+
+  async createAppointment(data: AppointmentInput): Promise<{ appointment: Appointment }> {
+    return this.request<{ appointment: Appointment }>('/api/appointments', { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async updateAppointment(appointmentId: string, data: AppointmentInput): Promise<{ appointment: Appointment }> {
+    return this.request<{ appointment: Appointment }>(`/api/appointments/${appointmentId}`, { method: 'PUT', body: JSON.stringify(data) })
+  }
+
+  async deleteAppointment(appointmentId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/appointments/${appointmentId}`, { method: 'DELETE' })
+  }
+
+  /** Opens the session's room, creating it for the tech on first use. */
+  async openAppointmentRoom(appointmentId: string, options: { language?: Language; replace?: boolean } = {}): Promise<{ room: Pick<Room, 'id'> & Partial<Room>; appointment: Appointment; created: boolean }> {
+    return this.request<{ room: Pick<Room, 'id'> & Partial<Room>; appointment: Appointment; created: boolean }>(`/api/appointments/${appointmentId}/room`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    })
+  }
+
   async listInvites(): Promise<{ invites: RegistrationInvite[] }> {
     return this.request<{ invites: RegistrationInvite[] }>('/api/invites')
   }

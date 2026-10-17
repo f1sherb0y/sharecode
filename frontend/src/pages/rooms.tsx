@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Users, Trash2, Play, Share2, Pencil, Pin, PinOff, MoreHorizontal, Download, LockKeyhole } from 'lucide-react'
+import { Plus, Users, Trash2, Play, Share2, Pencil, Pin, PinOff, MoreHorizontal, Download, LockKeyhole, CalendarDays } from 'lucide-react'
 import {
   Button,
   Checkbox,
@@ -35,6 +35,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import { cn, formatDateMinutes } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
+import { TodaySessions } from '@/components/schedule/today-sessions'
 import type { Room, Language, User, PaginationMeta, RoomActiveness } from '@/types'
 
 
@@ -383,106 +384,114 @@ export function RoomsPage() {
       <Navbar
         title="ShareCode"
         rightContent={
-          <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
-            <DialogTrigger asChild>
-              <Button aria-label={t('rooms.createButton')}>
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('rooms.createButton')}</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-              <form onSubmit={handleCreateRoom}>
-                <DialogHeader>
-                  <DialogTitle>{t('rooms.create.title')}</DialogTitle>
-                  <DialogDescription>{t('rooms.create.hint')}</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-2 py-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="roomName">{t('rooms.create.name')}</Label>
-                    <Input
-                      id="roomName"
-                      value={newRoomName}
-                      onChange={(e) => setNewRoomName(e.target.value)}
-                      placeholder={t('rooms.create.namePlaceholder')}
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
+          <>
+            <Button variant="outline" asChild>
+              <Link to="/schedule" aria-label={t('schedule.entry')}>
+                <CalendarDays className="h-4 w-4" />
+                <span className="hidden sm:inline">{t('schedule.entry')}</span>
+              </Link>
+            </Button>
+            <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
+              <DialogTrigger asChild>
+                <Button aria-label={t('rooms.createButton')}>
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('rooms.createButton')}</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <form onSubmit={handleCreateRoom}>
+                  <DialogHeader>
+                    <DialogTitle>{t('rooms.create.title')}</DialogTitle>
+                    <DialogDescription>{t('rooms.create.hint')}</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-2 py-2">
                     <div className="space-y-1">
-                      <Label>{t('rooms.create.language')}</Label>
-                      <Select value={newRoomLanguage} onValueChange={(v) => setNewRoomLanguage(v as Language)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LANGUAGES.map((lang) => (
-                            <SelectItem key={lang} value={lang}>
-                              {lang}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="roomCompany">{t('rooms.create.company')}</Label>
+                      <Label htmlFor="roomName">{t('rooms.create.name')}</Label>
                       <Input
-                        id="roomCompany"
-                        value={newRoomCompany}
-                        onChange={(e) => setNewRoomCompany(e.target.value)}
-                        placeholder={t('rooms.create.companyPlaceholder')}
+                        id="roomName"
+                        value={newRoomName}
+                        onChange={(e) => setNewRoomName(e.target.value)}
+                        placeholder={t('rooms.create.namePlaceholder')}
+                        required
                       />
                     </div>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="roomPosition">{t('rooms.create.position')}</Label>
-                      <Input
-                        id="roomPosition"
-                        value={newRoomPosition}
-                        onChange={(e) => setNewRoomPosition(e.target.value)}
-                        placeholder={t('rooms.create.positionPlaceholder')}
-                      />
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label>{t('rooms.create.language')}</Label>
+                        <Select value={newRoomLanguage} onValueChange={(v) => setNewRoomLanguage(v as Language)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LANGUAGES.map((lang) => (
+                              <SelectItem key={lang} value={lang}>
+                                {lang}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="roomCompany">{t('rooms.create.company')}</Label>
+                        <Input
+                          id="roomCompany"
+                          value={newRoomCompany}
+                          onChange={(e) => setNewRoomCompany(e.target.value)}
+                          placeholder={t('rooms.create.companyPlaceholder')}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="roomPosition">{t('rooms.create.position')}</Label>
+                        <Input
+                          id="roomPosition"
+                          value={newRoomPosition}
+                          onChange={(e) => setNewRoomPosition(e.target.value)}
+                          placeholder={t('rooms.create.positionPlaceholder')}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="duration">{t('rooms.create.duration')}</Label>
+                        <Input
+                          id="duration"
+                          type="number"
+                          value={duration}
+                          onChange={(e) => setDuration(e.target.value)}
+                          placeholder={t('rooms.create.durationPlaceholder')}
+                          min="1"
+                        />
+                      </div>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="duration">{t('rooms.create.duration')}</Label>
+                      <Label htmlFor="scheduledTime">{t('rooms.create.scheduledTime')}</Label>
                       <Input
-                        id="duration"
-                        type="number"
-                        value={duration}
-                        onChange={(e) => setDuration(e.target.value)}
-                        placeholder={t('rooms.create.durationPlaceholder')}
-                        min="1"
+                        id="scheduledTime"
+                        type="datetime-local"
+                        value={scheduledTime}
+                        onChange={(e) => setScheduledTime(e.target.value)}
                       />
                     </div>
+                    {isAdmin(user) && <label className="ui-check-row flex cursor-pointer items-start gap-1.5">
+                      <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-labelledby="privateRoomLabel" aria-describedby="privateRoomHint" />
+                      <span className="grid gap-1">
+                        <span id="privateRoomLabel" className="text-sm font-medium leading-none">{t('rooms.create.private')}</span>
+                        <span id="privateRoomHint" className="text-xs text-muted-foreground">{t('rooms.create.privateHint')}</span>
+                      </span>
+                    </label>}
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="scheduledTime">{t('rooms.create.scheduledTime')}</Label>
-                    <Input
-                      id="scheduledTime"
-                      type="datetime-local"
-                      value={scheduledTime}
-                      onChange={(e) => setScheduledTime(e.target.value)}
-                    />
-                  </div>
-                  {isAdmin(user) && <label className="ui-check-row flex cursor-pointer items-start gap-1.5">
-                    <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-labelledby="privateRoomLabel" aria-describedby="privateRoomHint" />
-                    <span className="grid gap-1">
-                      <span id="privateRoomLabel" className="text-sm font-medium leading-none">{t('rooms.create.private')}</span>
-                      <span id="privateRoomHint" className="text-xs text-muted-foreground">{t('rooms.create.privateHint')}</span>
-                    </span>
-                  </label>}
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
-                    {t('rooms.cancel')}
-                  </Button>
-                  <Button type="submit" disabled={createRoomMutation.isPending}>
-                    {createRoomMutation.isPending ? t('rooms.create.creating') : t('rooms.create.button')}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+                      {t('rooms.cancel')}
+                    </Button>
+                    <Button type="submit" disabled={createRoomMutation.isPending}>
+                      {createRoomMutation.isPending ? t('rooms.create.creating') : t('rooms.create.button')}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </>
         }
       />
 
@@ -557,6 +566,7 @@ export function RoomsPage() {
       </Dialog>
 
       <PageContainer>
+        <TodaySessions />
         <div className="rooms-list-toolbar flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="ui-page-title text-base font-semibold tracking-tight">{t('rooms.workspaceTitle')}</h1>
           <span className="text-xs text-muted-foreground">{t('rooms.pagination.total', { count: pagination.total })}</span>

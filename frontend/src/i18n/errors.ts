@@ -64,7 +64,24 @@ const errorKeys: Record<string, string> = {
   "Failed to create user": "errors.createUser",
   "Failed to update user": "errors.updateUser",
   "Failed to delete user": "errors.deleteUser",
-  "Failed to compress playback data": "errors.compressPlayback"
+  "Failed to compress playback data": "errors.compressPlayback",
+  "Schedule conflict": "errors.scheduleConflict",
+  "Customer has upcoming sessions": "errors.customerHasSessions",
+  "Customer not found": "errors.customerNotFound",
+  "Appointment not found": "errors.appointmentNotFound",
+  "Customer name is required": "errors.customerNameRequired",
+  "Customer name is too long": "errors.customerNameTooLong",
+  "Contact is too long": "errors.contactTooLong",
+  "Notes are too long": "errors.notesTooLong",
+  "Company is too long": "errors.companyTooLong",
+  "Position is too long": "errors.positionTooLong",
+  "Invalid tech": "errors.invalidTech",
+  "Invalid agent": "errors.invalidAgent",
+  "Duration must be between 5 minutes and 24 hours": "errors.invalidDuration",
+  "A valid start time is required": "errors.startRequired",
+  "Customer is required": "errors.customerRequired",
+  "Cancelled sessions have no room": "errors.cancelledNoRoom",
+  "Invalid session status": "errors.invalidStatus"
 }
 
 export function translateError(message: string): string {

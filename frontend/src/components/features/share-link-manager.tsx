@@ -24,9 +24,13 @@ import type { ShareLink } from '@/types'
 
 interface ShareLinkManagerProps {
   roomId: string
+  /** Fills in the guest's name on the join page, e.g. a scheduled session's customer. */
+  guestName?: string
+  /** Hide the generic explanation when the surrounding dialog gives its own. */
+  showDescription?: boolean
 }
 
-export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
+export function ShareLinkManager({ roomId, guestName, showDescription = true }: ShareLinkManagerProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
@@ -55,7 +59,7 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
 
       // Auto-copy the newly created link to the clipboard.
       try {
-        const url = resolveShareUrl(shareLink)
+        const url = resolveShareUrl(shareLink, guestName)
         if (!url) throw new Error("Missing public sharing URL")
         await copyTextToClipboard(url)
         toast.success(t('share.manager.createdAndCopied'))
@@ -111,7 +115,7 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
   }
 
   const copyLink = async (shareLink: ShareLink) => {
-    const shareUrl = resolveShareUrl(shareLink)
+    const shareUrl = resolveShareUrl(shareLink, guestName)
     try {
       if (!shareUrl) throw new Error("Configure a public APP_URL on the server")
       await copyTextToClipboard(shareUrl)
@@ -125,14 +129,14 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
     () =>
       links.map((link) => ({
         ...link,
-        shareUrl: resolveShareUrl(link),
+        shareUrl: resolveShareUrl(link, guestName),
       })),
-    [links]
+    [links, guestName]
   )
 
   return (
     <div className="w-full">
-      <p className="text-sm text-muted-foreground mb-2">{t('share.manager.description')}</p>
+      {showDescription && <p className="text-sm text-muted-foreground mb-2">{t('share.manager.description')}</p>}
 
       <div className="flex gap-1 mb-2">
         <Button size="sm" variant="outline" onClick={() => createLink(false)} disabled={createLinkMutation.isPending}>
@@ -220,10 +224,11 @@ export function ShareLinkManager({ roomId }: ShareLinkManagerProps) {
   )
 }
 
-function resolveShareUrl(link: ShareLink) {
-  if (!isTauriApp()) return `${window.location.origin}/s/${link.token}`
-  if (link.shareUrl && /^https?:\/\//.test(link.shareUrl)) return link.shareUrl
-  return ''
+function resolveShareUrl(link: ShareLink, guestName?: string) {
+  const base = !isTauriApp()
+    ? `${window.location.origin}/s/${link.token}`
+    : link.shareUrl && /^https?:\/\//.test(link.shareUrl) ? link.shareUrl : ''
+  return base && guestName ? `${base}?${new URLSearchParams({ name: guestName })}` : base
 }
 
 function formatLocalDateTime(value?: string | null) {

@@ -715,6 +715,16 @@
       "invite": {
         "created": "Invite created",
         "revoked": "Invite withdrawn"
+      },
+      "customer": {
+        "created": "Customer created",
+        "updated": "Customer updated",
+        "deleted": "Customer deleted"
+      },
+      "appointment": {
+        "created": "Session created",
+        "updated": "Session updated",
+        "deleted": "Session deleted"
       }
     },
     "reasons": {
@@ -757,7 +767,24 @@
     "inviteUsed": "This invite code has already been used. Ask for a new one.",
     "inviteExpired": "This invite code has expired. Ask for a new one.",
     "inviteNoteTooLong": "Notes can be at most 100 characters.",
-    "inviteNotFound": "This invite no longer exists."
+    "inviteNotFound": "This invite no longer exists.",
+    "scheduleConflict": "This tech already has a session at that time.",
+    "customerHasSessions": "This customer still has upcoming sessions. Move or cancel them first.",
+    "customerNotFound": "This customer no longer exists.",
+    "appointmentNotFound": "This session no longer exists or is not yours.",
+    "customerNameRequired": "Enter the customer's name.",
+    "customerNameTooLong": "The customer's name can be at most 100 characters.",
+    "contactTooLong": "The contact can be at most 200 characters.",
+    "notesTooLong": "Notes can be at most 2000 characters.",
+    "companyTooLong": "The company can be at most 100 characters.",
+    "positionTooLong": "The position can be at most 100 characters.",
+    "invalidTech": "That account can no longer take sessions.",
+    "invalidAgent": "Choose an active agent or admin.",
+    "invalidDuration": "A session lasts between 5 minutes and 24 hours.",
+    "startRequired": "Enter a valid start time.",
+    "customerRequired": "Choose a customer.",
+    "cancelledNoRoom": "A cancelled session has no room.",
+    "invalidStatus": "Unknown session status."
   },
   "canvas": {
     "title": "Canvas",
@@ -767,5 +794,172 @@
     "anonymous": "Anonymous",
     "fileTooLarge": "Image sync limit: 350 KB per image, 1 MB total (including encoding). Remove the large image or undo the import to continue saving.",
     "waitForSave": "Changes are not yet saved. Reconnect and wait for Saved before ending the room."
+  },
+  "schedule": {
+    "title": "Schedule",
+    "entry": "Schedule",
+    "newSession": "New session",
+    "unassigned": "Unassigned",
+    "today": "Today",
+    "previous": "Previous",
+    "next": "Next",
+    "conflictBadge": "Overlaps another session of this tech",
+    "more": "+{{count}} more",
+    "noSessions": "No sessions in this period.",
+    "noSessionsTech": "No sessions for you in this period.",
+    "noSessionsDay": "No sessions this day.",
+    "loadFailed": "Could not load the schedule.",
+    "techHint": "Agents plan your sessions. You get a notice when one is assigned to you or changes.",
+    "hoursUnit": "h",
+    "minutesUnit": "min",
+    "tabs": {
+      "label": "Schedule sections",
+      "calendar": "Calendar",
+      "customers": "Customers"
+    },
+    "views": {
+      "label": "Calendar view",
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "list": "List"
+    },
+    "status": {
+      "scheduled": "Scheduled",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "legend": {
+      "label": "People shown",
+      "showAll": "Show all",
+      "showCancelled": "Show cancelled"
+    },
+    "unassignedPanel": {
+      "title": "Unassigned",
+      "hint": "Open a session to choose its tech, or drag it onto a tech's column in the day view.",
+      "hintDay": "Drag a session onto a tech's column to assign it.",
+      "empty": "Every upcoming session has a tech."
+    },
+    "drag": {
+      "moved": "Session moved.",
+      "assigned": "Assigned to {{tech}}.",
+      "unassigned": "Session unassigned.",
+      "failed": "Could not move the session."
+    },
+    "dialog": {
+      "createTitle": "New session",
+      "editTitle": "Edit session",
+      "description": "The tech is notified of new sessions and of changes to their sessions.",
+      "customer": "Customer",
+      "customerPlaceholder": "Search by name or contact",
+      "newCustomer": "New customer “{{name}}”",
+      "newCustomerTitle": "New customer",
+      "customerName": "Name",
+      "customerContact": "Contact",
+      "customerContactPlaceholder": "Phone, WeChat or email",
+      "addCustomer": "Add customer",
+      "changeCustomer": "Change",
+      "noCustomers": "No matching customers.",
+      "tech": "Tech",
+      "techsGroup": "Techs",
+      "staffGroup": "Agents and admins",
+      "deletedAccount": "{{username}} (removed)",
+      "agent": "Agent in charge",
+      "noAgent": "None",
+      "date": "Date",
+      "start": "Start",
+      "duration": "Duration",
+      "company": "Company",
+      "companyPlaceholder": "Company",
+      "position": "Position",
+      "positionPlaceholder": "Role or position",
+      "role": "Company and position",
+      "notes": "Notes for the tech",
+      "notesPlaceholder": "What the tech should know before the session",
+      "status": "Status",
+      "contact": "Contact",
+      "customerNotes": "Customer notes",
+      "save": "Save",
+      "saving": "Saving...",
+      "create": "Create session",
+      "delete": "Delete session",
+      "deleteTitle": "Delete this session?",
+      "deleteConfirm": "Delete the session with {{customer}}? Its tech is notified. To keep it on the calendar, set its status to cancelled instead.",
+      "deleted": "Session deleted.",
+      "saved": "Session saved.",
+      "created": "Session created.",
+      "conflictTitle": "This tech is already booked",
+      "conflictDescription": "{{tech}} has another session at that time:",
+      "saveAnyway": "Save anyway",
+      "customerRequired": "Choose a customer.",
+      "timeRequired": "Enter a date and a start time.",
+      "createdBy": "Planned by {{username}}"
+    },
+    "room": {
+      "title": "Room",
+      "none": "The room belongs to the session's tech; the customer joins through a share link.",
+      "create": "Create room",
+      "opening": "Opening...",
+      "open": "Open room",
+      "replay": "Replay",
+      "download": "Download",
+      "replace": "New room",
+      "customerLink": "Customer link",
+      "customerLinkTitle": "Customer link for {{customer}}",
+      "customerLinkHint": "The link fills in the customer's name and lets them join without an account. Each link works once; an unused link stays valid until the session ends, and for at least 6 hours.",
+      "failed": "Could not open the room."
+    },
+    "customers": {
+      "title": "Customers",
+      "description": "One customer list, shared by all agents and admins.",
+      "search": "Search customers",
+      "searchPlaceholder": "Name or contact",
+      "new": "New customer",
+      "empty": "No customers yet.",
+      "noMatches": "No customers match.",
+      "columns": {
+        "name": "Name",
+        "contact": "Contact",
+        "upcoming": "Upcoming",
+        "next": "Next session",
+        "last": "Last session"
+      },
+      "createTitle": "New customer",
+      "name": "Name",
+      "contact": "Contact",
+      "contactPlaceholder": "Phone, WeChat or email",
+      "notes": "Notes",
+      "notesPlaceholder": "Only agents and admins see these notes",
+      "save": "Save",
+      "saving": "Saving...",
+      "saved": "Customer saved.",
+      "created": "Customer added.",
+      "delete": "Delete customer",
+      "deleteTitle": "Delete {{name}}?",
+      "deleteConfirm": "The customer leaves the list. Past sessions keep their name.",
+      "deleted": "Customer deleted.",
+      "history": "Sessions",
+      "historyEmpty": "No sessions yet.",
+      "planSession": "Plan a session"
+    },
+    "todayCard": {
+      "title": "Today's sessions",
+      "open": "Open schedule",
+      "more": "{{count}} more today"
+    },
+    "notice": {
+      "assigned": "New session: {{customer}}",
+      "updated": "Session changed: {{customer}}",
+      "unassigned": "Session reassigned: {{customer}}",
+      "cancelled": "Session cancelled: {{customer}}",
+      "movedFrom": "moved from {{time}}",
+      "by": "by {{username}}",
+      "view": "View",
+      "open": "Open in schedule",
+      "many": "{{count}} schedule updates",
+      "many_one": "{{count}} schedule update",
+      "many_other": "{{count}} schedule updates",
+      "manyDescription": "Your sessions changed. Open the notifications to see what changed."
+    }
   }
 }

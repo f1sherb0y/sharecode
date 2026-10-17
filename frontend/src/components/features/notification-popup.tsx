@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BellRing } from 'lucide-react'
+import { toast } from 'sonner'
 import { Badge, Button } from '@/components/ui'
 import { api } from '@/api'
 import { queryKeys } from '@/lib/query-keys'
+import { describeScheduleNotice, isScheduleNotice } from '@/lib/schedule-notices'
 import { cn, formatDateTime } from '@/lib/utils'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useSettingsStore } from '@/stores'
+import type { NotificationItem } from '@/types'
 import { useTranslation } from 'react-i18next'
 
 export function NotificationPopup() {
@@ -44,7 +47,10 @@ export function NotificationPopup() {
     setDismissed(false)
   }, [actorType])
 
-  const unreadNotifications = unreadQuery.data ?? []
+  // Announcements take over the screen; a tech's schedule notices are toasts.
+  const unread = unreadQuery.data ?? []
+  const unreadNotifications = unread.filter(notification => !notification.kind)
+  useScheduleToasts(unread.filter(isScheduleNotice), actorType === 'user' && location.pathname !== '/notifications')
   const shouldSuppressPopup = location.pathname === '/notifications'
   const isVisible =
     actorType === 'user' &&
@@ -139,4 +145,49 @@ export function NotificationPopup() {
       </div>
     </div>
   )
+}
+
+const toasted = new Set<string>()
+
+/** Shows each unread schedule notice once per tab; acknowledging it marks it read. */
+function useScheduleToasts(notices: NotificationItem[], enabled: boolean) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const timezone = useSettingsStore(state => state.timezone)
+  const latest = useRef({ t, navigate })
+  latest.current = { t, navigate }
+  const ids = notices.map(notice => notice.id).join(',')
+
+  useEffect(() => {
+    if (!enabled) return
+    const fresh = notices.filter(notice => !toasted.has(notice.id))
+    if (fresh.length === 0) return
+    for (const notice of fresh) toasted.add(notice.id)
+    const { t, navigate } = latest.current
+    const acknowledge = () => {
+      void api.markNotificationsRead(fresh.map(notice => notice.id))
+        .then(() => Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.notifications }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.unreadNotifications }),
+        ]))
+        .catch(() => {})
+    }
+    const single = fresh.length === 1 ? describeScheduleNotice(fresh[0]!, t, timezone) : null
+    toast(single ? single.title : t('schedule.notice.many', { count: fresh.length }), {
+      id: `schedule-${fresh.map(notice => notice.id).join('-')}`,
+      description: single ? single.description : t('schedule.notice.manyDescription'),
+      duration: Infinity,
+      closeButton: true,
+      action: {
+        label: t('schedule.notice.view'),
+        onClick: () => {
+          acknowledge()
+          navigate(single ? single.href : '/notifications')
+        },
+      },
+      onDismiss: acknowledge,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids, enabled, timezone, queryClient])
 }

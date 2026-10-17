@@ -1,6 +1,6 @@
 import { translateError } from '@/i18n/errors'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { BellRing } from 'lucide-react'
@@ -27,8 +27,9 @@ import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { queryKeys } from '@/lib/query-keys'
 import { cn, formatDateTime } from '@/lib/utils'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useSettingsStore } from '@/stores'
 import { isAdmin } from '@/lib/room-permissions'
+import { describeScheduleNotice, isScheduleNotice } from '@/lib/schedule-notices'
 import type { NotificationSeverity } from '@/types'
 
 const SEVERITIES: NotificationSeverity[] = ['normal', 'emergency']
@@ -45,6 +46,7 @@ export function NotificationsPage() {
   const autoMarkedRef = useRef(false)
 
   const canPublish = isAdmin(user)
+  const timezone = useSettingsStore((state) => state.timezone)
 
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications,
@@ -192,6 +194,24 @@ export function NotificationsPage() {
               <p className="text-sm text-muted-foreground">{t('notifications.history.empty')}</p>
             ) : (
               notifications.map((notification) => {
+                if (isScheduleNotice(notification)) {
+                  const notice = describeScheduleNotice(notification, t, timezone)
+                  return (
+                    <div key={notification.id} className="rounded-lg border p-2 space-y-1">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <h3 className="font-medium">{notice.title}</h3>
+                        <Badge variant={notification.isRead ? 'outline' : 'secondary'}>
+                          {notification.isRead ? t('notifications.status.read') : t('notifications.status.unread')}
+                        </Badge>
+                      </div>
+                      <p className="text-sm">{notice.description}</p>
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {formatDateTime(notification.createdAt)}
+                        <Link to={notice.href} className="underline-offset-4 hover:underline">{t('schedule.notice.open')}</Link>
+                      </p>
+                    </div>
+                  )
+                }
                 const isEmergency = notification.severity === 'emergency'
                 return (
                 <div

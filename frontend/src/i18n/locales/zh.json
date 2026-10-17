@@ -715,6 +715,16 @@
       "invite": {
         "created": "生成邀请码",
         "revoked": "撤回邀请"
+      },
+      "customer": {
+        "created": "创建客户",
+        "updated": "修改客户",
+        "deleted": "删除客户"
+      },
+      "appointment": {
+        "created": "创建场次",
+        "updated": "修改场次",
+        "deleted": "删除场次"
       }
     },
     "reasons": {
@@ -757,7 +767,24 @@
     "inviteUsed": "此邀请码已被使用，请重新索取。",
     "inviteExpired": "此邀请码已过期，请重新索取。",
     "inviteNoteTooLong": "备注最多 100 个字符。",
-    "inviteNotFound": "此邀请已不存在。"
+    "inviteNotFound": "此邀请已不存在。",
+    "scheduleConflict": "这位技术在这个时间已有场次。",
+    "customerHasSessions": "这位客户还有待进行的场次，请先调整或取消这些场次。",
+    "customerNotFound": "这位客户已不存在。",
+    "appointmentNotFound": "这个场次已不存在，或不是你的场次。",
+    "customerNameRequired": "请填写客户姓名。",
+    "customerNameTooLong": "客户姓名最多 100 个字符。",
+    "contactTooLong": "联系方式最多 200 个字符。",
+    "notesTooLong": "备注最多 2000 个字符。",
+    "companyTooLong": "公司名称最多 100 个字符。",
+    "positionTooLong": "岗位最多 100 个字符。",
+    "invalidTech": "这个账号已无法分配场次。",
+    "invalidAgent": "请选择在职的中介或管理员。",
+    "invalidDuration": "场次时长需在 5 分钟到 24 小时之间。",
+    "startRequired": "请填写有效的开始时间。",
+    "customerRequired": "请选择客户。",
+    "cancelledNoRoom": "已取消的场次没有房间。",
+    "invalidStatus": "未知的场次状态。"
   },
   "canvas": {
     "title": "画布",
@@ -767,5 +794,172 @@
     "anonymous": "匿名用户",
     "fileTooLarge": "图片同步上限：每张 350 KB、合计 1 MB（含编码）。请删除大图片或撤销导入以继续保存。",
     "waitForSave": "更改尚未保存。请重新连接，等到显示“已保存”后再结束房间。"
+  },
+  "schedule": {
+    "title": "排班",
+    "entry": "排班",
+    "newSession": "新建场次",
+    "unassigned": "未分配",
+    "today": "今天",
+    "previous": "上一段",
+    "next": "下一段",
+    "conflictBadge": "与该技术的其他场次时间重叠",
+    "more": "还有 {{count}} 场",
+    "noSessions": "这段时间没有场次。",
+    "noSessionsTech": "这段时间没有你的场次。",
+    "noSessionsDay": "这一天没有场次。",
+    "loadFailed": "排班加载失败。",
+    "techHint": "你的场次由中介安排。有新场次分配给你或场次有变动时，你会收到通知。",
+    "hoursUnit": "小时",
+    "minutesUnit": "分钟",
+    "tabs": {
+      "label": "排班分区",
+      "calendar": "日历",
+      "customers": "客户"
+    },
+    "views": {
+      "label": "日历视图",
+      "day": "日",
+      "week": "周",
+      "month": "月",
+      "list": "列表"
+    },
+    "status": {
+      "scheduled": "已安排",
+      "completed": "已完成",
+      "cancelled": "已取消"
+    },
+    "legend": {
+      "label": "显示的人员",
+      "showAll": "全部显示",
+      "showCancelled": "显示已取消"
+    },
+    "unassignedPanel": {
+      "title": "未分配",
+      "hint": "打开场次选择技术，或在日视图中把场次拖到技术那一列。",
+      "hintDay": "把场次拖到技术那一列即可分配。",
+      "empty": "接下来的场次都已分配技术。"
+    },
+    "drag": {
+      "moved": "场次已调整。",
+      "assigned": "已分配给 {{tech}}。",
+      "unassigned": "已取消分配。",
+      "failed": "场次调整失败。"
+    },
+    "dialog": {
+      "createTitle": "新建场次",
+      "editTitle": "编辑场次",
+      "description": "新场次和场次变动都会通知对应的技术。",
+      "customer": "客户",
+      "customerPlaceholder": "按姓名或联系方式搜索",
+      "newCustomer": "新建客户“{{name}}”",
+      "newCustomerTitle": "新建客户",
+      "customerName": "姓名",
+      "customerContact": "联系方式",
+      "customerContactPlaceholder": "电话、微信或邮箱",
+      "addCustomer": "添加客户",
+      "changeCustomer": "更换",
+      "noCustomers": "没有匹配的客户。",
+      "tech": "技术",
+      "techsGroup": "技术",
+      "staffGroup": "中介和管理员",
+      "deletedAccount": "{{username}}（已删除）",
+      "agent": "负责中介",
+      "noAgent": "无",
+      "date": "日期",
+      "start": "开始时间",
+      "duration": "时长",
+      "company": "公司",
+      "companyPlaceholder": "公司名称",
+      "position": "岗位",
+      "positionPlaceholder": "岗位或职位",
+      "role": "公司和岗位",
+      "notes": "给技术的备注",
+      "notesPlaceholder": "技术在场次前需要知道的事",
+      "status": "状态",
+      "contact": "联系方式",
+      "customerNotes": "客户备注",
+      "save": "保存",
+      "saving": "保存中...",
+      "create": "创建场次",
+      "delete": "删除场次",
+      "deleteTitle": "删除这个场次？",
+      "deleteConfirm": "删除与 {{customer}} 的场次？对应的技术会收到通知。如果想在日历上保留记录，请改为把状态设为已取消。",
+      "deleted": "场次已删除。",
+      "saved": "场次已保存。",
+      "created": "场次已创建。",
+      "conflictTitle": "这位技术在这个时间已有安排",
+      "conflictDescription": "{{tech}} 在这个时间还有其他场次：",
+      "saveAnyway": "仍然保存",
+      "customerRequired": "请选择客户。",
+      "timeRequired": "请填写日期和开始时间。",
+      "createdBy": "由 {{username}} 安排"
+    },
+    "room": {
+      "title": "房间",
+      "none": "房间归场次的技术所有，客户通过分享链接进入。",
+      "create": "创建房间",
+      "opening": "打开中...",
+      "open": "进入房间",
+      "replay": "回放",
+      "download": "下载存档",
+      "replace": "新建房间",
+      "customerLink": "客户链接",
+      "customerLinkTitle": "{{customer}} 的客户链接",
+      "customerLinkHint": "链接会自动填好客户姓名，客户无需账号即可加入。每个链接只能使用一次；未使用的链接在场次结束前一直有效，且至少有效 6 小时。",
+      "failed": "房间打开失败。"
+    },
+    "customers": {
+      "title": "客户",
+      "description": "所有中介和管理员共用一份客户列表。",
+      "search": "搜索客户",
+      "searchPlaceholder": "姓名或联系方式",
+      "new": "新建客户",
+      "empty": "还没有客户。",
+      "noMatches": "没有匹配的客户。",
+      "columns": {
+        "name": "姓名",
+        "contact": "联系方式",
+        "upcoming": "待进行",
+        "next": "下一场",
+        "last": "上一场"
+      },
+      "createTitle": "新建客户",
+      "name": "姓名",
+      "contact": "联系方式",
+      "contactPlaceholder": "电话、微信或邮箱",
+      "notes": "备注",
+      "notesPlaceholder": "只有中介和管理员能看到这些备注",
+      "save": "保存",
+      "saving": "保存中...",
+      "saved": "客户已保存。",
+      "created": "客户已添加。",
+      "delete": "删除客户",
+      "deleteTitle": "删除 {{name}}？",
+      "deleteConfirm": "客户会从列表中移除，过去的场次仍保留客户姓名。",
+      "deleted": "客户已删除。",
+      "history": "场次",
+      "historyEmpty": "还没有场次。",
+      "planSession": "安排场次"
+    },
+    "todayCard": {
+      "title": "今天的场次",
+      "open": "打开排班",
+      "more": "今天还有 {{count}} 场"
+    },
+    "notice": {
+      "assigned": "新场次：{{customer}}",
+      "updated": "场次变动：{{customer}}",
+      "unassigned": "场次已改派：{{customer}}",
+      "cancelled": "场次已取消：{{customer}}",
+      "movedFrom": "原定 {{time}}",
+      "by": "操作人 {{username}}",
+      "view": "查看",
+      "open": "在排班中查看",
+      "many": "{{count}} 条排班变动",
+      "many_one": "{{count}} 条排班变动",
+      "many_other": "{{count}} 条排班变动",
+      "manyDescription": "你的场次有变动，打开通知查看详情。"
+    }
   }
 }

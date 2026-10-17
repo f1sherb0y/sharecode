@@ -1,6 +1,6 @@
 import { translateError } from '@/i18n/errors'
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, joinShare } from '@/api'
 import { useAuthStore } from '@/stores'
@@ -24,7 +24,9 @@ export function SharePage() {
   const isSameGuestShareLink =
     actorType === 'guest' && !!guestProfile && guestProfile.shareToken === shareToken
 
-  const [name, setName] = useState('')
+  // Links made for a scheduled session carry the customer's name.
+  const [searchParams] = useSearchParams()
+  const [name, setName] = useState(() => (searchParams.get('name') ?? '').slice(0, 100))
   const [email, setEmail] = useState('')
   const [isJoining, setIsJoining] = useState(false)
   const [joinError, setJoinError] = useState('')

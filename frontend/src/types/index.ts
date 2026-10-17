@@ -209,6 +209,9 @@ export interface NotificationItem {
   title: string
   content: string
   severity: NotificationSeverity
+  /** Set on personal notices (e.g. 'schedule.assigned'); announcements have none. */
+  kind?: string | null
+  data?: Record<string, unknown> | null
   createdAt: string
   isRead: boolean
   readAt?: string | null
@@ -216,4 +219,66 @@ export interface NotificationItem {
     id: string
     username: string
   }
+}
+
+export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled'
+export const APPOINTMENT_STATUSES: AppointmentStatus[] = ['scheduled', 'completed', 'cancelled']
+
+/** A 排班 customer profile, shared by every agent and admin. */
+export interface Customer {
+  id: string
+  name: string
+  contact: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  createdBy: { id: string; username: string }
+  sessionCount: number
+  upcomingCount: number
+  nextSessionAt: string | null
+  lastSessionAt: string | null
+}
+
+/** A session (场次) an agent planned for a tech. */
+export interface Appointment {
+  id: string
+  startsAt: string
+  endsAt: string
+  durationMinutes: number
+  company: string | null
+  position: string | null
+  notes: string | null
+  /** Scheduled sessions read as completed once their room has ended. */
+  status: AppointmentStatus
+  /** Techs get the name only; contact and notes are for agents and admins. */
+  customer: { id: string; name: string; contact?: string | null; notes?: string | null; isDeleted: boolean }
+  tech: { id: string; username: string; color: string; role: Role; isDeleted: boolean } | null
+  agent: { id: string; username: string; color: string } | null
+  room: { id: string; name: string; language: Language; isEnded: boolean; endedAt: string | null } | null
+  hasConflict: boolean
+  createdBy: { id: string; username: string }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AppointmentInput {
+  customerId?: string
+  techId?: string | null
+  agentId?: string | null
+  startsAt?: string
+  durationMinutes?: number
+  company?: string | null
+  position?: string | null
+  notes?: string | null
+  status?: AppointmentStatus
+  allowConflicts?: boolean
+}
+
+/** Another session of the same tech at an overlapping time. */
+export interface ScheduleConflict {
+  id: string
+  startsAt: string
+  endsAt: string
+  durationMinutes: number
+  customer: { name: string }
 }

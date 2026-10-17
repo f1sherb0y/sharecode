@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, Link } from 'react-router-dom'
-import { Bell, LogOut, Settings, Shield, User, UserPlus } from 'lucide-react'
+import { Bell, CalendarDays, LogOut, Settings, Shield, User, UserPlus } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +52,12 @@ export function UserMenu() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link to="/schedule" className="cursor-pointer">
+              <CalendarDays className="mr-1.5 h-4 w-4" />
+              {t('schedule.title')}
+            </Link>
+          </DropdownMenuItem>
           {canInvite && (
             <DropdownMenuItem onClick={() => setInvitesOpen(true)} className="cursor-pointer">
               <UserPlus className="mr-1.5 h-4 w-4" />
