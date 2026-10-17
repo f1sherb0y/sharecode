@@ -17,6 +17,8 @@ async function open(browser, path, authenticated = false) {
   await context.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname
     if (!path.startsWith('/api/')) return route.continue()
+    // No persistent browser session: only the forms under test sign in.
+    if (path === '/api/auth/refresh') return route.fulfill({ status: 401, json: { error: 'No browser session' } })
     if (request.method() === 'POST') {
       submissions.push({ path, body: request.postDataJSON() })
       if (path === '/api/auth/login' && rejectLogin) {
