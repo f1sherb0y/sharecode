@@ -17,11 +17,11 @@ interface CanvasViewProps {
   theme: 'light' | 'dark'
   provider?: HocuspocusProvider | null
   followClientId?: number | null
-  onFollowChange?: (clientId: number | null) => void
+  onFollowToggle?: (clientId: number) => void
   onPending?: (pending: boolean) => void
   replay?: boolean
 }
-export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFollowChange, onPending, replay = false }: CanvasViewProps) {
+export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFollowToggle, onPending, replay = false }: CanvasViewProps) {
   const { t, i18n } = useTranslation()
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null)
   const [error, setError] = useState('')
@@ -94,8 +94,8 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
   // Flush already accepted edits before a disconnect/permission transition.
   useEffect(() => { if (!canEdit) syncRef.current?.flush() }, [canEdit])
 
-  // Excalidraw exposes its API before initializeScene restores appState. That
-  // restore resets collaborators, which natively cancels any follow applied earlier.
+  // Excalidraw exposes its API before initializeScene restores appState and
+  // scrolls to content, which would overwrite a follow camera applied earlier.
   const [sceneReady, setSceneReady] = useState(false)
   useEffect(() => {
     if (!api) return
@@ -103,7 +103,7 @@ export function CanvasView({ doc, canEdit, theme, provider, followClientId, onFo
     return api.onChange(() => { if (!api.getAppState().isLoading) setSceneReady(true) })
   }, [api])
 
-  useCanvasFollow({ api: sceneReady ? api : null, provider, followClientId, onFollowChange, presence, anonymous: t('canvas.anonymous') })
+  useCanvasFollow({ api: sceneReady ? api : null, provider, followClientId, onFollowToggle, presence, anonymous: t('canvas.anonymous') })
 
   const onChange = useCallback((elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
     if (applying.current || !canEditRef.current) return

@@ -72,7 +72,7 @@ interface MarkdownEditorProps {
   provider: HocuspocusProvider | null
   ydoc: Y.Doc | null
   isSynced: boolean
-  followingUserId: string | null
+  /** Null while the editor is hidden: a hidden view cannot scroll. */
   followingClientId: number | null
   sourceRef?: Ref<MarkdownEditorHandle>
   onSelectionChange?: (hasSelection: boolean) => void
@@ -141,7 +141,6 @@ function MarkdownEditorInner({
   provider,
   ydoc,
   isSynced,
-  followingUserId,
   followingClientId,
   sourceRef,
   onSelectionChange,
@@ -292,36 +291,15 @@ function MarkdownEditorInner({
     const editor = get()
     if (!editor) return
     const awareness = provider?.awareness
-    if (!awareness) return
-
-    if (followingUserId == null && followingClientId == null) {
-      lastFollowPosRef.current = null
-      return
-    }
+    lastFollowPosRef.current = null
+    if (!awareness || followingClientId == null) return
 
     const scrollToUser = () => {
       const view = editor.action((ctx) => ctx.get(editorViewCtx))
       const ystate = ySyncPluginKey.getState(view.state)
       if (!ystate) return
 
-      const localClientId = awareness.clientID
-      let targetClientId: number | null = null
-
-      if (followingClientId != null) {
-        targetClientId = followingClientId
-      } else if (followingUserId != null) {
-        awareness.getStates().forEach((state, clientId) => {
-          if (targetClientId != null || clientId === localClientId) return
-          const user = (state as { user?: { id?: string } }).user
-          if (user?.id === followingUserId) targetClientId = clientId
-        })
-      } else if (followingClientId != null) {
-        targetClientId = followingClientId
-      }
-
-      if (targetClientId == null) return
-
-      const state = awareness.getStates().get(targetClientId) as
+      const state = awareness.getStates().get(followingClientId) as
         | { cursor?: { head?: unknown } }
         | undefined
       if (!isFollowable(state) || !state?.cursor?.head) return
@@ -360,7 +338,7 @@ function MarkdownEditorInner({
       awareness.off('change', scrollToUser)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, ydoc, provider, followingUserId, followingClientId])
+  }, [loading, ydoc, provider, followingClientId])
 
   const handleImageFile = useCallback(
     async (file: File | undefined | null) => {

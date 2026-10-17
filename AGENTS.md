@@ -33,7 +33,7 @@
 - **Multi-user editing**: Multiple users can edit the same document simultaneously
 - **CRDT-based sync**: Uses Yjs for conflict-free replicated data types
 - **Cursor tracking**: See other users' selections and cursors in real-time
-- **Follow mode**: Click on a user to follow their cursor position
+- **Follow mode**: Click on a user (users menu or Canvas avatar) to follow their cursor, view and Canvas camera. One follow state spans code, Markdown and Canvas; only the follower ends it (stop button, menu, or switching views by hand). It pauses while the presenter opts out or is offline, resumes by itself, and survives the follower reloading the tab
 - **Live language switching**: Change syntax highlighting without page reload
 
 ### 2. User Management
@@ -383,7 +383,7 @@ monacoModelRef.current?.setValue(ytext.toString())
   session renewal while editing, three-browser reconnect/durability recovery,
   all three workspace UI suites (including mobile
   and DPI layouts), notes read/write permissions and reader/manager exports, three-browser
-  follow opt-out across code/Markdown/Canvas rooms,
+  follow opt-out pause/resume and reload persistence across code/Markdown/Canvas rooms,
   Sarasa font/CDN fallback checks, and standalone replay export.
 - Prerequisites: `just install`, `just browsers`, Docker running, and the
   `postgres:17-alpine` image available. Font/export checks require network access

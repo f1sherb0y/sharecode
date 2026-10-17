@@ -163,6 +163,7 @@
       "follow": "Follow",
       "following": "Following",
       "followOff": "Follow off",
+      "followPaused": "Paused",
       "allowFollow": "Allow follow",
       "allowFollowHint": "When off, others cannot follow your cursor or view",
       "endRoom": "End Room",
@@ -184,6 +185,14 @@
       "image": "Insert image",
       "linkPrompt": "Link URL:",
       "renderingDiagram": "Rendering diagram…"
+    },
+    "follow": {
+      "active": "Following {{name}}",
+      "blocked": "{{name}} turned off follow · resumes automatically",
+      "away": "{{name}} is away · resumes automatically",
+      "stop": "Stop following",
+      "stopped": "Stopped following {{name}}",
+      "resume": "Follow again"
     },
     "status": {
       "pending": "Changes kept on this device",

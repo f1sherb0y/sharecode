@@ -60,6 +60,7 @@ try {
  await web.listen()
  try {
   for(const [engine,type] of Object.entries({chromium,firefox,webkit})) {
+   if(process.env.ENGINE&&process.env.ENGINE!==engine) continue
    const browser=await type.launch()
    try {
     const context=await browser.newContext({viewport:engine==='webkit'?{width:390,height:844}:{width:1280,height:800},hasTouch:engine==='webkit',isMobile:engine==='webkit',deviceScaleFactor:engine==='webkit'?3:1.25})
@@ -90,60 +91,81 @@ try {
     await page.getByRole('button',{name:'Toggle theme',exact:true}).click()
     await page.locator('.excalidraw.theme--dark').waitFor()
     await page.screenshot({path:`/tmp/sharecode-canvas-dark-${engine}.png`})
-    // Both website and native avatar controls must operate the same Follow state.
+    // Website menu, native avatars and the shared follow bar operate one Follow state.
     // Camera/navigation checks only; no drawing gestures are simulated.
     if(engine==='webkit') await page.setViewportSize({width:1280,height:800})
+    const viewerUser={id:'viewer',name:'canvas_viewer',username:'canvas_viewer'}
     b.p.sendStateless(JSON.stringify({type:'presence',clientId:b.doc.clientID}))
-    b.p.awareness?.setLocalState({user:{id:'viewer',name:'canvas_viewer',username:'canvas_viewer'}})
+    b.p.awareness?.setLocalState({user:viewerUser})
     b.p.awareness?.setLocalStateField('view','canvas')
     b.p.awareness?.setLocalStateField('canvas',{viewport:{x:-100,y:-200,width:1280,height:720}})
+    const followBar=(status='active')=>page.locator(`.follow-indicator[data-follow-status="${status}"]`)
+    const menuFollowing=async()=>{
+      await page.getByRole('button',{name:'Users',exact:true}).click()
+      const text=await page.getByRole('menuitem').filter({hasText:'canvas_viewer'}).innerText()
+      await page.keyboard.press('Escape')
+      return text.includes('Following')
+    }
+    const followPublished=()=>[...b.p.awareness!.getStates()].some(([id,state])=>id!==b.doc.clientID&&state.canvas?.following===b.doc.clientID)
+    const zoom=()=>page.evaluate(()=>(window as any).__testCanvasApi.getAppState().zoom.value as number)
     await page.getByRole('button',{name:'Users',exact:true}).click()
     await page.getByRole('menuitem').filter({hasText:'canvas_viewer'}).click()
-    await page.locator('.follow-mode__badge').filter({hasText:'canvas_viewer'}).waitFor()
-    await page.locator('.UserList__collaborator.is-followed').waitFor()
-    const assertContainment=async () => page.waitForFunction(() => {
+    await followBar().filter({hasText:'canvas_viewer'}).waitFor()
+    assert.equal(await page.locator('.follow-mode').count(),0,'native Excalidraw follow mode stays off')
+    const assertContainment=async (x=-100,y=-200,w=1280,h=720) => page.waitForFunction(([x,y,w,h]) => {
       const app=(window as any).__testCanvasApi?.getAppState()
       if(!app) return false
-      const z=Math.min(app.width/1280,app.height/720)
-      return Math.abs(app.zoom.value-z)<0.00001 && Math.abs(app.scrollX-(app.width/(2*z)+100-640))<0.01 && Math.abs(app.scrollY-(app.height/(2*z)+200-360))<0.01
-    })
+      const z=Math.min(app.width/w,app.height/h)
+      return Math.abs(app.zoom.value-z)<0.00001 && Math.abs(app.scrollX-(app.width/(2*z)-x-w/2))<0.01 && Math.abs(app.scrollY-(app.height/(2*z)-y-h/2))<0.01
+    },[x,y,w,h])
     await assertContainment()
     await page.setViewportSize({width:950,height:600})
     await assertContainment()
     await page.setViewportSize({width:1280,height:800})
     await assertContainment()
-    await wait(()=>[...b.p.awareness!.getStates()].some(([id,state])=>id!==b.doc.clientID&&state.canvas?.following===b.doc.clientID),'native follow published')
-    await page.locator('.follow-mode__disconnect-btn').click()
-    await page.locator('.follow-mode').waitFor({state:'hidden'})
-    await page.getByRole('button',{name:'Users',exact:true}).click()
-    assert.ok(!(await page.getByRole('menuitem').filter({hasText:'canvas_viewer'}).innerText()).includes('Following'))
-    await page.keyboard.press('Escape')
+    await wait(followPublished,'follow published')
+    // Looking around is not unfollowing: the follower keeps its own camera until
+    // the presenter moves again, exactly as in the editors.
+    const fitted=await zoom()
+    await page.getByRole('button',{name:'Zoom in',exact:true}).click()
+    await new Promise(r=>setTimeout(r,400))
+    assert.ok(await zoom()>fitted+0.01,'manual zoom is kept while following')
+    assert.equal(await followBar().count(),1,'manual zoom keeps following')
+    b.p.awareness?.setLocalStateField('canvas',{viewport:{x:200,y:100,width:640,height:480}})
+    await assertContainment(200,100,640,480)
+    // The follow bar, the menu and avatars all end or start the same follow.
+    await followBar().getByRole('button',{name:'Stop following',exact:true}).click()
+    await page.locator('.follow-indicator').waitFor({state:'hidden'})
+    assert.equal(await menuFollowing(),false)
+    await wait(()=>!followPublished(),'unfollow published')
     const avatar=page.locator('.UserList .Avatar').filter({hasText:/^C$/})
     await avatar.click()
-    await page.locator('.follow-mode').waitFor()
-    await page.getByRole('button',{name:'Users',exact:true}).click()
-    assert.ok((await page.getByRole('menuitem').filter({hasText:'canvas_viewer'}).innerText()).includes('Following'))
-    await page.keyboard.press('Escape')
-    await page.getByRole('button',{name:'Zoom in',exact:true}).click()
-    await page.locator('.follow-mode').waitFor({state:'hidden'})
-    // A later presence tick must not re-enable native follow after manual zoom.
-    b.p.awareness?.setLocalStateField('canvas',{viewport:{x:200,y:100,width:640,height:480}})
-    await wait(()=>![...b.p.awareness!.getStates()].some(([id,state])=>id!==b.doc.clientID&&state.canvas?.following===b.doc.clientID),'native unfollow published')
-    assert.equal(await page.locator('.follow-mode').count(),0)
+    await followBar().waitFor()
+    assert.equal(await menuFollowing(),true)
     await avatar.click()
-    await page.locator('.follow-mode').waitFor()
+    await page.locator('.follow-indicator').waitFor({state:'hidden'})
+    assert.equal(await menuFollowing(),false)
+    await avatar.click()
+    await followBar().waitFor()
+    // The presenter's view switches carry the follower along, and the camera
+    // is restored when Canvas mounts again.
     b.p.awareness?.setLocalStateField('view','editor')
     await page.waitForFunction(()=>new URL(location.href).searchParams.get('view')==='editor')
+    await followBar().waitFor()
     b.p.awareness?.setLocalStateField('view','canvas')
     await page.waitForFunction(()=>new URL(location.href).searchParams.get('view')==='canvas')
-    await page.locator('.follow-mode__badge').filter({hasText:'canvas_viewer'}).waitFor()
-    // Leaving the room (as opposed to changing views) cancels native follow.
+    await followBar().filter({hasText:'canvas_viewer'}).waitFor()
+    await assertContainment(200,100,640,480)
+    // Leaving the room pauses the follow; the same person coming back resumes it.
     b.p.awareness?.setLocalState(null)
-    await page.locator('.follow-mode').waitFor({state:'hidden'})
-    await page.getByRole('button',{name:'Users',exact:true}).click()
-    assert.equal(await page.getByRole('menuitem').filter({hasText:'Following'}).count(),0)
-    await page.keyboard.press('Escape')
-    console.log('PASS',engine,'native avatars, website follow, disconnect/zoom cancellation, cross-view continuity and peer leave')
+    await followBar('away').filter({hasText:'canvas_viewer'}).waitFor()
+    b.p.awareness?.setLocalState({user:viewerUser,view:'canvas',canvas:{viewport:{x:-100,y:-200,width:1280,height:720}}})
+    await followBar().waitFor()
+    await assertContainment()
+    await followBar().getByRole('button',{name:'Stop following',exact:true}).click()
+    await page.locator('.follow-indicator').waitFor({state:'hidden'})
+    assert.equal(await menuFollowing(),false)
+    console.log('PASS',engine,'one follow state for menu/avatars/follow bar, look-around without unfollow, cross-view continuity, pause and resume on peer leave')
     // UI mounting and cross-mode follow only; no drawing gestures are simulated.
     await page.getByRole('button',{name:'Editor',exact:true}).click()
     await page.locator('.monaco-editor').waitFor({state:'visible'})
@@ -154,6 +176,16 @@ try {
       a.p.awareness?.setLocalStateField('view','canvas')
       a.p.awareness?.setLocalStateField('canvas',{viewport:{x:-100,y:-200,width:1280,height:720}})
       await page.waitForFunction(()=>new URL(location.href).searchParams.get('view')==='canvas')
+      // Clicking the current view keeps following; switching by hand ends it with an undo toast.
+      await page.getByRole('button',{name:'Canvas',exact:true}).click()
+      await page.locator('.follow-indicator').waitFor()
+      await page.getByRole('button',{name:'Editor',exact:true}).click()
+      await page.locator('.follow-indicator').waitFor({state:'hidden'})
+      await page.getByRole('button',{name:'Follow again',exact:true}).click()
+      await page.waitForFunction(()=>new URL(location.href).searchParams.get('view')==='canvas')
+      await page.locator('.follow-indicator').waitFor()
+      await page.getByRole('button',{name:'Stop following',exact:true}).click()
+      await page.locator('.follow-indicator').waitFor({state:'hidden'})
       await page.getByRole('button',{name:'Editor',exact:true}).click()
     }
     assert.deepEqual(errors,[])

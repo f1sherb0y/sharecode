@@ -36,6 +36,7 @@ const web = await createServer({ plugins: [{ name: 'capture-follow-test-editors'
 await web.listen()
 
 const allowFollow = page => page.getByRole('checkbox', { name: 'Allow follow', exact: true })
+const followBar = (page, status = 'active') => page.locator(`.follow-indicator[data-follow-status="${status}"]`)
 const presenterItem = page => page.getByRole('menuitem').filter({ hasText: 'audit_admin' })
 async function menuItemText(page) {
   await page.getByRole('button', { name: 'Users', exact: true }).click()
@@ -56,6 +57,16 @@ async function waitFollowOff(page) {
     await sleep(100)
   }
   throw Error('Follower never saw Follow off')
+}
+// An existing follow pauses (it is not dropped) and can still be ended from the menu.
+async function waitFollowPaused(page) {
+  await followBar(page, 'blocked').waitFor()
+  for (let i = 0; i < 40; i++) {
+    const item = await menuItemText(page)
+    if (item.text.includes('Paused')) { assert.equal(item.disabled, false); return }
+    await sleep(100)
+  }
+  throw Error('Follower never saw Paused')
 }
 const monacoTop = page => page.evaluate(() => window.__followTest.editor.getScrollTop())
 const markdownTop = page => page.evaluate(() => document.querySelector('.md-editor-body').scrollTop)
@@ -95,7 +106,7 @@ try {
       await follower.waitForFunction(() => window.__followTest.editor.getScrollTop() < 50)
       await allowFollow(presenter).click()
       assert.equal(await allowFollow(presenter).isChecked(), false)
-      await waitFollowOff(follower)
+      await waitFollowPaused(follower)
       await presenter.evaluate(() => window.__followTest.editor.focus())
       await docKey(presenter, true)
       await sleep(1000)
@@ -110,12 +121,31 @@ try {
       await presenter.waitForFunction(() => new URL(location.href).searchParams.get('view') === 'canvas')
       await sleep(1000)
       assert.notEqual(new URL(follower.url()).searchParams.get('view'), 'canvas')
-      // The preference persists and can be re-enabled.
+      // The preference persists and can be re-enabled. The paused follow finds
+      // the reloaded presenter again and resumes by itself.
       await openCode(presenter)
       assert.equal(await allowFollow(presenter).isChecked(), false, 'preference persists across reloads')
+      await waitFollowPaused(follower)
       await allowFollow(presenter).click()
-      await wait(async () => { const item = await menuItemText(follower); return !item.disabled && /Follow$/.test(item.text.trim()) }, 'follow re-enabled, previous follow cleared')
-      console.log('PASS', engine, 'code room: default on, follow, opt-out stops follow and view switching, free control, persistence')
+      await followBar(follower).filter({ hasText: 'audit_admin' }).waitFor()
+      assert.match((await menuItemText(follower)).text, /Following/)
+      await presenter.evaluate(() => window.__followTest.editor.focus())
+      await docKey(presenter, true)
+      await follower.waitForFunction(() => window.__followTest.editor.getScrollTop() > 2000)
+      // The follower's own reload keeps the follow and re-centres on the presenter.
+      await openCode(follower)
+      await followBar(follower).filter({ hasText: 'audit_admin' }).waitFor()
+      await follower.waitForFunction(() => window.__followTest.editor.getScrollTop() > 2000)
+      await docKey(presenter, false)
+      await follower.waitForFunction(() => window.__followTest.editor.getScrollTop() < 50)
+      // Only the follower ends a follow; an ended follow is not restored.
+      await followBar(follower).getByRole('button', { name: 'Stop following', exact: true }).click()
+      await follower.locator('.follow-indicator').waitFor({ state: 'hidden' })
+      await openCode(follower)
+      await sleep(500)
+      assert.equal(await follower.locator('.follow-indicator').count(), 0, 'a stopped follow stays stopped after reload')
+      assert.match((await menuItemText(follower)).text, /Follow$/)
+      console.log('PASS', engine, 'code room: default on, follow, opt-out pauses follow and view switching, free control, persistence, automatic resume, follow survives follower reload')
 
       // Markdown rooms (Milkdown).
       for (const page of pages) {
@@ -130,12 +160,16 @@ try {
       await follower.waitForFunction(() => document.querySelector('.md-editor-body').scrollTop < 200)
       const followedTop = await markdownTop(follower)
       await allowFollow(presenter).click()
-      await waitFollowOff(follower)
+      await waitFollowPaused(follower)
       await presenter.locator('.ProseMirror p').last().click()
       await sleep(1000)
       assert.ok(Math.abs(await markdownTop(follower) - followedTop) < 5, 'blocked markdown presenter must not scroll the follower')
       await allowFollow(presenter).click()
-      console.log('PASS', engine, 'markdown room: follow, opt-out keeps follower in place')
+      await followBar(follower).waitFor()
+      // Clicking the checkbox blurred the presenter, which clears their Markdown cursor.
+      await presenter.locator('.ProseMirror p').last().click()
+      await follower.waitForFunction(() => document.querySelector('.md-editor-body').scrollTop > 1000)
+      console.log('PASS', engine, 'markdown room: follow, opt-out keeps follower in place, follow resumes')
 
       // Canvas (native Excalidraw follow).
       for (const page of pages) {
@@ -143,24 +177,42 @@ try {
         await page.waitForFunction(() => !!window.__testCanvasApi && document.querySelector('.excalidraw canvas'))
       }
       await follow(follower)
-      await follower.locator('.follow-mode').waitFor()
+      await followBar(follower).waitFor()
+      assert.equal(await follower.locator('.follow-mode').count(), 0, 'native Excalidraw follow mode stays off')
       let zoom = await canvasZoom(follower)
       await presenter.getByRole('button', { name: 'Zoom in', exact: true }).click()
       await wait(async () => Math.abs(await canvasZoom(follower) - zoom) > 0.01, 'canvas follower tracks presenter zoom')
+      const sameZoom = async () => Math.abs(await canvasZoom(follower) - await canvasZoom(presenter)) < 0.01
+      // Looking around does not end the follow; the next presenter move pulls the follower back.
+      await follower.getByRole('button', { name: 'Zoom out', exact: true }).click()
+      await sleep(400)
+      assert.equal(await sameZoom(), false, 'the follower keeps its own camera until the presenter moves')
+      assert.equal(await followBar(follower).count(), 1, 'looking around keeps following')
+      await presenter.getByRole('button', { name: 'Zoom in', exact: true }).click()
+      await wait(sameZoom, 'presenter move pulls the follower back')
       await allowFollow(presenter).click()
-      await follower.locator('.follow-mode').waitFor({ state: 'hidden' })
+      await waitFollowPaused(follower)
       zoom = await canvasZoom(follower)
       await presenter.getByRole('button', { name: 'Zoom in', exact: true }).click()
       await sleep(1000)
       assert.equal(await canvasZoom(follower), zoom, 'blocked canvas presenter must not move the follower')
-      // Native avatar follow is rejected as well, and the follower can still navigate.
-      await follower.locator('.UserList .Avatar').filter({ hasText: /^A$/ }).click()
-      await sleep(500)
-      assert.equal(await follower.locator('.follow-mode').count(), 0)
-      await follower.getByRole('button', { name: 'Zoom in', exact: true }).click()
-      await wait(async () => await canvasZoom(follower) > zoom, 'follower zooms freely')
+      // The paused follower navigates freely; resuming re-applies the presenter's camera.
+      await follower.getByRole('button', { name: 'Zoom out', exact: true }).click()
+      await wait(async () => await canvasZoom(follower) < zoom, 'paused follower zooms freely')
       await allowFollow(presenter).click()
-      console.log('PASS', engine, 'canvas: native follow, opt-out cancels and blocks avatar follow, free navigation')
+      await followBar(follower).waitFor()
+      await wait(sameZoom, 'resumed follow re-applies the presenter camera')
+      // Avatars toggle the same follow; an opted-out presenter cannot be newly followed.
+      const presenterAvatar = follower.locator('.UserList .Avatar').filter({ hasText: /^A$/ })
+      await presenterAvatar.click()
+      await follower.locator('.follow-indicator').waitFor({ state: 'hidden' })
+      await allowFollow(presenter).click()
+      await waitFollowOff(follower)
+      await presenterAvatar.click()
+      await sleep(500)
+      assert.equal(await follower.locator('.follow-indicator').count(), 0, 'opted-out presenter cannot be newly followed')
+      await allowFollow(presenter).click()
+      console.log('PASS', engine, 'canvas: shared follow bar, look-around without unfollow, opt-out pauses and resumes, avatar toggle, blocked avatar follow')
 
       // Guests get no opt-out and stay followable, even when an account in the
       // same browser stored "Allow follow" off.
@@ -203,7 +255,22 @@ try {
         await docKey(guest, true)
         await presenter.waitForFunction(() => window.__followTest.editor.getScrollTop() > 2000)
         assert.equal(await guest.evaluate(() => JSON.parse(localStorage.getItem('settings-storage')).state.allowFollow), false, 'stored opt-out is ignored for guests')
-        console.log('PASS', engine, 'guest: no opt-out toggle, followable despite a stored opt-out; users list right of font controls')
+        await presenter.getByRole('button', { name: 'Users', exact: true }).click()
+        await guestItem.click()
+        await presenter.locator('.follow-indicator').waitFor({ state: 'hidden' })
+        // A customer's follow survives reloading the page.
+        await guest.getByRole('button', { name: 'Users', exact: true }).click()
+        await guest.getByRole('menuitem').filter({ hasText: 'audit_admin' }).click()
+        await followBar(guest).filter({ hasText: 'audit_admin' }).waitFor()
+        await guest.reload()
+        await guest.waitForFunction(() => window.__followTest?.provider.synced && window.__followTest.editor.getModel().getLineCount() > 500)
+        await followBar(guest).filter({ hasText: 'audit_admin' }).waitFor()
+        await presenter.evaluate(() => window.__followTest.editor.focus())
+        await docKey(presenter, true)
+        await guest.waitForFunction(() => window.__followTest.editor.getScrollTop() > 2000)
+        await docKey(presenter, false)
+        await guest.waitForFunction(() => window.__followTest.editor.getScrollTop() < 50)
+        console.log('PASS', engine, 'guest: no opt-out toggle, followable despite a stored opt-out; users list right of font controls; guest follow survives reload')
       } finally { await guestContext.close() }
 
       assert.deepEqual(errors, [])

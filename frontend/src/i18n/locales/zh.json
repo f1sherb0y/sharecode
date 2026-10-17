@@ -163,6 +163,7 @@
       "follow": "跟随",
       "following": "跟随中",
       "followOff": "禁止跟随",
+      "followPaused": "已暂停",
       "allowFollow": "允许跟随",
       "allowFollowHint": "关闭后，其他人无法跟随你的光标和视图",
       "endRoom": "结束房间",
@@ -184,6 +185,14 @@
       "image": "插入图片",
       "linkPrompt": "链接地址：",
       "renderingDiagram": "正在渲染图表…"
+    },
+    "follow": {
+      "active": "正在跟随 {{name}}",
+      "blocked": "{{name}} 关闭了跟随 · 重新允许后自动继续",
+      "away": "{{name}} 暂时离开 · 回来后自动继续",
+      "stop": "停止跟随",
+      "stopped": "已停止跟随 {{name}}",
+      "resume": "重新跟随"
     },
     "status": {
       "pending": "更改已保留在本机",

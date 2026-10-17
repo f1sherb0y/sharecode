@@ -1,7 +1,7 @@
 import { loadCanvasView, loadMarkdownEditor, prepareEditorView } from '@/lib/editor-loaders'
 import { LANGUAGES } from '@/types'
 import { translateError } from '@/i18n/errors'
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useViewportHeight } from '@/hooks/use-viewport-height'
 import { useTranslation } from 'react-i18next'
@@ -63,6 +63,8 @@ import { RoomViewSwitch } from '@/components/features/room-view-switch'
 import { FontControls } from '@/components/features/font-controls'
 import { generateUserColor, cn, formatDateTime } from '@/lib/utils'
 import { isFollowable } from '@/lib/follow'
+import { FollowIndicator } from '@/components/features/follow-indicator'
+import { toast } from 'sonner'
 import type { Language } from '@/types'
 import type { MarkdownEditorHandle } from '@/components/features/markdown-editor'
 
@@ -236,11 +238,13 @@ export function EditorPage() {
 
   // 4. Awareness Hook
   const {
-    followingUserId,
-    setFollowingUserId,
     followingClientId,
-    setFollowingClientId
+    followingUserId,
+    followTarget,
+    follow,
+    unfollow,
   } = useEditorAwareness({
+    roomId,
     provider,
     ydoc,
     ytext,
@@ -248,27 +252,37 @@ export function EditorPage() {
     monacoRef,
     editorInstanceRef,
     modelRef,
+    editorVisible: isEditorReady && !isCanvas,
   })
+  const followActive = followTarget?.status === 'active'
 
-  const handleCanvasFollowChange = useCallback((clientId: number | null) => {
-    const user = clientId == null ? null : provider?.awareness?.getStates().get(clientId)?.user
-    setFollowingClientId(clientId)
-    setFollowingUserId(user?.id ?? null)
-  }, [provider, setFollowingClientId, setFollowingUserId])
+  // The users menu and Canvas avatars toggle the same follow. A peer who opted
+  // out cannot be newly followed, but an existing (paused) follow can be ended.
+  const toggleFollow = useCallback((clientId: number, userId?: string | null) => {
+    const awareness = provider?.awareness
+    if (!awareness || clientId === awareness.clientID) return
+    if (clientId === followingClientId) { unfollow(); return }
+    const state = awareness.getStates().get(clientId)
+    if (!isFollowable(state)) return
+    follow(clientId, (state?.user as { id?: string } | undefined)?.id ?? userId ?? null)
+  }, [provider, followingClientId, follow, unfollow])
 
   const changeView = useCallback((nextView: 'editor' | 'canvas') => {
-    if (!window.dispatchEvent(new Event('sharecode:flush', { cancelable: true }))) return
+    if (!window.dispatchEvent(new Event('sharecode:flush', { cancelable: true }))) return false
     setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', nextView); return next }, { replace: true })
+    return true
   }, [setSearchParams])
 
   useEffect(() => { provider?.awareness?.setLocalStateField('view', view) }, [provider, view])
 
-  // Opting out is enforced by followers: they stop following and keep control.
+  // Opting out is enforced by followers: their follow pauses and they keep control.
   // Guests cannot opt out (the toggle is hidden), so a preference stored by an
   // account in this browser never applies to them.
   const { allowFollow, setAllowFollow } = useSettingsStore()
   const followable = isGuestMode || allowFollow
-  useEffect(() => { provider?.awareness?.setLocalStateField('followable', followable) }, [provider, followable])
+  // A layout effect runs before the passive effect that publishes `user`, so a
+  // reloading presenter who opted out is never briefly followable.
+  useLayoutEffect(() => { provider?.awareness?.setLocalStateField('followable', followable) }, [provider, followable])
   const [followBlocked, setFollowBlocked] = useState<ReadonlySet<number>>(() => new Set())
   useEffect(() => {
     const awareness = provider?.awareness
@@ -281,11 +295,6 @@ export function EditorPage() {
     awareness.on('change', update)
     return () => awareness.off('change', update)
   }, [provider])
-  useEffect(() => {
-    if (followingClientId == null || !followBlocked.has(followingClientId)) return
-    setFollowingClientId(null)
-    setFollowingUserId(null)
-  }, [followBlocked, followingClientId, setFollowingClientId, setFollowingUserId])
   useEffect(() => {
     const awareness = provider?.awareness
     if (!awareness || followingClientId == null) return
@@ -323,6 +332,16 @@ export function EditorPage() {
     if (leftSlot !== rightSlot) return leftSlot - rightSlot
     return left.clientId - right.clientId
   })
+
+  const followName = followTarget?.name || remoteUsers.find(user => user.clientId === followingClientId)?.username || t('canvas.anonymous')
+
+  // Switching views by hand leaves the presenter's view, so it ends the follow.
+  const handleViewChange = (next: 'editor' | 'canvas') => {
+    if (next === view || !changeView(next) || followingClientId == null) return
+    const [clientId, userId, name] = [followingClientId, followingUserId, followName]
+    unfollow()
+    toast(t('editor.follow.stopped', { name }), { action: { label: t('editor.follow.resume'), onClick: () => follow(clientId, userId) } })
+  }
 
   // Code Runner Ref
   const codeRunnerRef = useRef<CodeRunnerPanelRef>(null)
@@ -482,7 +501,7 @@ export function EditorPage() {
             </span>
           </div>
 
-          <RoomViewSwitch onPrepare={target => prepareEditorView(target, isMarkdown)} value={view} onChange={next => { setFollowingUserId(null); setFollowingClientId(null); changeView(next) }} />
+          <RoomViewSwitch onPrepare={target => prepareEditorView(target, isMarkdown)} value={view} onChange={handleViewChange} />
 
           {/* Right: Actions */}
           <div className="editor-toolbar-actions flex items-center gap-1 shrink-0">
@@ -641,8 +660,7 @@ export function EditorPage() {
                     provider={provider}
                     ydoc={ydoc}
                     isSynced={isSynced}
-                    followingUserId={followingUserId}
-                    followingClientId={followingClientId}
+                    followingClientId={!isCanvas && followActive ? followingClientId : null}
                   />
                 </Suspense>
               ) : (
@@ -650,8 +668,9 @@ export function EditorPage() {
               )}
               </div>}
               {isCanvas && ydoc && isSynced && <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner /></div>}>
-                <CanvasView key={ydoc.guid} doc={ydoc} canEdit={canEdit && canWrite} theme={theme} provider={provider} followClientId={followingClientId} onFollowChange={handleCanvasFollowChange} onPending={setCanvasPending} />
+                <CanvasView key={ydoc.guid} doc={ydoc} canEdit={canEdit && canWrite} theme={theme} provider={provider} followClientId={followActive ? followingClientId : null} onFollowToggle={toggleFollow} onPending={setCanvasPending} />
               </Suspense>}
+              {followTarget && <FollowIndicator status={followTarget.status} name={followName} onStop={unfollow} />}
             </div>
 
             {visibleRunnerPosition === 'bottom' && !isMarkdown && !isCanvas && (
@@ -759,17 +778,12 @@ export function EditorPage() {
                 {connectedUsers.map((u) => {
                   const isFollowing = !u.isLocal && followingClientId === u.clientId
                   const isBlocked = !u.isLocal && followBlocked.has(u.clientId)
-                  const toggleFollow = () => {
-                    if (u.isLocal || isBlocked) return
-                    setFollowingUserId(isFollowing ? null : u.id ?? null)
-                    setFollowingClientId(isFollowing ? null : u.clientId)
-                  }
                   return (
                     <DropdownMenuItem
                       key={u.clientId}
                       className="gap-1 cursor-pointer"
-                      disabled={isBlocked}
-                      onClick={toggleFollow}
+                      disabled={isBlocked && !isFollowing}
+                      onClick={() => { if (!u.isLocal) toggleFollow(u.clientId, u.id) }}
                     >
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
                       <span className="truncate flex-1">
@@ -778,7 +792,7 @@ export function EditorPage() {
                       </span>
                       {!u.isLocal && (
                         <span className="ml-auto text-xs text-muted-foreground">
-                          {isBlocked ? t('editor.toolbar.followOff') : isFollowing ? t('editor.toolbar.following') : t('editor.toolbar.follow')}
+                          {isFollowing ? t(isBlocked ? 'editor.toolbar.followPaused' : 'editor.toolbar.following') : isBlocked ? t('editor.toolbar.followOff') : t('editor.toolbar.follow')}
                         </span>
                       )}
                     </DropdownMenuItem>
