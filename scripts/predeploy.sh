@@ -33,6 +33,7 @@ run_check build bash -c 'cd frontend && VITE_API_URL="" VITE_WS_URL="" VITE_ALLO
 run_check browser-sessions env -u ENGINE bash scripts/test-runner-local.sh tests/browser-sessions.mjs
 run_check session-renewal bash scripts/test-runner-local.sh tests/session-renewal.mjs
 run_check reconnect-recovery env -u ENGINE bash scripts/test-runner-local.sh tests/reconnect-recovery.mjs
+run_check role-permissions bash scripts/test-runner-local.sh tests/role-permissions.mjs
 run_check notes-permissions bash scripts/test-runner-local.sh tests/notes-permissions.mjs
 run_check follow-permission env -u ENGINE bash scripts/test-runner-local.sh tests/follow-permission.mjs
 for engine in chromium firefox webkit; do

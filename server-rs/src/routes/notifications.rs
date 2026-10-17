@@ -7,7 +7,7 @@ use sqlx::QueryBuilder;
 use uuid::Uuid;
 
 use crate::{
-    auth::{AdminUser, AuthUser},
+    auth::{StaffUser, AuthUser},
     db::db_error,
     error::ApiError,
     state::AppState,
@@ -37,10 +37,10 @@ struct NotificationWithReadRow {
 pub async fn create_notification(
     State(state): State<AppState>,
     client: ClientInfo,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     Json(payload): Json<CreateNotificationPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if auth_user.role != "superuser" {
+    if !crate::permissions::is_admin(&auth_user.role) {
         return Err(ApiError::not_found("Not found"));
     }
 

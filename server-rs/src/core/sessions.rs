@@ -85,9 +85,7 @@ pub async fn create(tx: &mut Transaction<'_, Postgres>, user: &UserRow, device_i
 }
 
 pub async fn load_user(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<UserRow, ApiError> {
-    sqlx::query_as::<_, UserRow>(r#"SELECT id,email,username,password,color,role,
-        "canReadAllRooms" AS can_read_all_rooms,"canWriteAllRooms" AS can_write_all_rooms,
-        "canDeleteAllRooms" AS can_delete_all_rooms,"isDeleted" AS is_deleted,
+    sqlx::query_as::<_, UserRow>(r#"SELECT id,email,username,password,color,role,"isDeleted" AS is_deleted,
         "createdAt" AS created_at,"tokenVersion" AS token_version,"lastSeen" AS last_seen
         FROM "User" WHERE id=$1 AND NOT "isDeleted" FOR SHARE"#)
         .bind(id).fetch_optional(&mut **tx).await.map_err(|e| db_error(e,"Failed to load session user"))?

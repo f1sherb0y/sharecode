@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const user = { id: 'autofill-user', username: 'autofill_user', role: 'superuser', color: '#218568' }
+const user = { id: 'autofill-user', username: 'autofill_user', role: 'admin', color: '#218568' }
 const password = 'Autofill#2026Strong'
 const web = await createServer({ cacheDir: 'node_modules/.vite-autofill-tests', server: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' })
 await web.listen()

@@ -14,8 +14,11 @@ async function request(path:string, method='GET', body?:unknown, token?:string) 
 }
 const root=(await request('/api/auth/login','POST',{username:'audit_admin',password:'LocalAudit#2026Strong'})).token
 const {room}=await request('/api/rooms','POST',{name:'Canvas integration',language:'python'},root)
-await request('/api/admin/users','POST',{username:'canvas_viewer',password:'LocalAudit#2026Strong',role:'admin',canReadAllRooms:true,canWriteAllRooms:false},root)
+await request('/api/admin/users','POST',{username:'canvas_viewer',password:'LocalAudit#2026Strong',role:'tech'},root)
 const viewer=(await request('/api/auth/login','POST',{username:'canvas_viewer',password:'LocalAudit#2026Strong'})).token
+// The read-only peer is a tech who joined through a read-only link.
+const {shareLink:viewerLink}=await request('/api/rooms/'+room.id+'/share-links','POST',{canEdit:false},root)
+await request('/api/share/'+viewerLink.token+'/accept','POST',{},viewer)
 const wait=async(fn:()=>unknown,label:string)=>{for(let i=0;i<300;i++){if(await fn())return;await new Promise(r=>setTimeout(r,25))}throw Error('Timed out: '+label)}
 function peer(token:string) {
  const doc=new Y.Doc(),messages:any[]=[]

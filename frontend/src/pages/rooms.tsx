@@ -30,7 +30,7 @@ import {
 } from '@/components/ui'
 import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
-import { canDeleteRoom, canManageRoomShares, canViewRoomPlayback } from '@/lib/room-permissions'
+import { canDeleteRoom, canManageRoom, canManageRoomShares, canViewRoomPlayback, isAdmin, isStaff } from '@/lib/room-permissions'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import { cn, formatDateMinutes } from '@/lib/utils'
@@ -152,9 +152,6 @@ export function RoomsPage() {
   const [roomToRename, setRoomToRename] = useState<{ id: string; name: string } | null>(null)
   const [renameRoomName, setRenameRoomName] = useState('')
 
-  // User selection for room access
-  const [selectedUsers, setSelectedUsers] = useState<Array<{ userId: string; canEdit: boolean }>>([])
-
   useEffect(() => {
     const normalized = new URLSearchParams(searchParams)
     let changed = false
@@ -197,13 +194,15 @@ export function RoomsPage() {
     enabled: !!user,
   })
 
-  const roomCreationUsersQuery = useQuery({
+  // Only agents and admins see other people's rooms, so only they filter by owner.
+  const canFilterOwners = isStaff(user)
+  const roomOwnersQuery = useQuery({
     queryKey: queryKeys.roomCreationUsers,
     queryFn: async () => {
-      const { users } = await api.getAllUsersForRoomCreation()
+      const { users } = await api.getRoomOwners()
       return users
     },
-    enabled: !!user,
+    enabled: canFilterOwners,
   })
 
   const createRoomMutation = useMutation({
@@ -213,11 +212,10 @@ export function RoomsPage() {
         newRoomLanguage,
         scheduledTime || undefined,
         duration ? parseInt(duration, 10) : undefined,
-        selectedUsers.length > 0 ? selectedUsers : undefined,
         newRoomCompany || undefined,
         newRoomPosition || undefined,
         timezone,
-        newRoomPrivate
+        isAdmin(user) && newRoomPrivate
       ),
     onSuccess: async ({ room }) => {
       await queryClient.invalidateQueries({ queryKey: ['rooms'] })
@@ -261,14 +259,14 @@ export function RoomsPage() {
   const rooms = roomsQuery.data?.rooms ?? []
   const pagination = roomsQuery.data?.pagination ?? EMPTY_PAGINATION
   const isLoading = roomsQuery.isLoading
-  const allUsers = roomCreationUsersQuery.data ?? []
+  const roomOwners = roomOwnersQuery.data ?? []
 
   useEffect(() => {
-    const queryError = roomsQuery.error ?? roomCreationUsersQuery.error
+    const queryError = roomsQuery.error ?? roomOwnersQuery.error
     if (queryError instanceof Error) {
       setError(queryError.message)
     }
-  }, [roomsQuery.error, roomCreationUsersQuery.error])
+  }, [roomsQuery.error, roomOwnersQuery.error])
 
   useEffect(() => {
     if (pagination.totalPages > 0 && rooms.length === 0 && page > pagination.totalPages) {
@@ -316,7 +314,6 @@ export function RoomsPage() {
     setNewRoomPosition('')
     setScheduledTime(getNextHalfHourBoundaryLocal())
     setDuration('60')
-    setSelectedUsers([])
   }
 
   const handleDeleteRoom = (roomId: string, roomName: string) => {
@@ -356,23 +353,6 @@ export function RoomsPage() {
     }
   }
 
-  const toggleUserSelection = (userId: string) => {
-    setSelectedUsers((prev) => {
-      const existing = prev.find((u) => u.userId === userId)
-      if (existing) {
-        return prev.filter((u) => u.userId !== userId)
-      }
-      return [...prev, { userId, canEdit: true }]
-    })
-  }
-
-  const toggleUserCanEdit = (userId: string) => {
-    setSelectedUsers((prev) =>
-      prev.map((u) => (u.userId === userId ? { ...u, canEdit: !u.canEdit } : u))
-    )
-  }
-
-  const availableUsers = allUsers.filter((u) => u.id !== user?.id)
   const pageButtons = useMemo(
     () => buildPageButtons(pagination.page, pagination.totalPages),
     [pagination.page, pagination.totalPages]
@@ -387,7 +367,7 @@ export function RoomsPage() {
   }
 
   const handleTogglePin = async (room: Room) => {
-    if (!user || (user.role !== 'admin' && user.role !== 'superuser')) return
+    if (!isStaff(user)) return
 
     try {
       setPinUpdatingRoomId(room.id)
@@ -414,7 +394,7 @@ export function RoomsPage() {
               <form onSubmit={handleCreateRoom}>
                 <DialogHeader>
                   <DialogTitle>{t('rooms.create.title')}</DialogTitle>
-                  <DialogDescription>{t('rooms.create.allowedUsersHint')}</DialogDescription>
+                  <DialogDescription>{t('rooms.create.hint')}</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-2 py-2">
                   <div className="space-y-1">
@@ -484,53 +464,13 @@ export function RoomsPage() {
                       onChange={(e) => setScheduledTime(e.target.value)}
                     />
                   </div>
-                  <label className="ui-check-row flex cursor-pointer items-start gap-1.5">
+                  {isAdmin(user) && <label className="ui-check-row flex cursor-pointer items-start gap-1.5">
                     <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-labelledby="privateRoomLabel" aria-describedby="privateRoomHint" />
                     <span className="grid gap-1">
                       <span id="privateRoomLabel" className="text-sm font-medium leading-none">{t('rooms.create.private')}</span>
                       <span id="privateRoomHint" className="text-xs text-muted-foreground">{t('rooms.create.privateHint')}</span>
                     </span>
-                  </label>
-                  {availableUsers.length > 0 && (
-                    <div className="space-y-1">
-                      <Label>{t('rooms.create.allowedUsers')}</Label>
-                      <div className="border rounded-md max-h-32 overflow-y-auto">
-                        {availableUsers.map((u) => {
-                          const selected = selectedUsers.find((s) => s.userId === u.id)
-                          return (
-                            <div
-                              key={u.id}
-                              className={cn(
-                                'room-create-user flex items-center justify-between px-1.5 py-1 text-sm hover:bg-accent cursor-pointer',
-                                selected && 'bg-accent/50'
-                              )}
-                              onClick={() => toggleUserSelection(u.id)}
-                            >
-                              <span>{u.username}</span>
-                              {selected && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    toggleUserCanEdit(u.id)
-                                  }}
-                                >
-                                  {selected.canEdit ? t('rooms.create.canEdit') : t('rooms.create.canView')}
-                                </Button>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                      {selectedUsers.length > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          {t('rooms.create.selectedUsers', { count: selectedUsers.length })}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  </label>}
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
@@ -620,8 +560,8 @@ export function RoomsPage() {
         <div className="rooms-list-toolbar flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="ui-page-title text-base font-semibold tracking-tight">{t('rooms.workspaceTitle')}</h1>
           <span className="text-xs text-muted-foreground">{t('rooms.pagination.total', { count: pagination.total })}</span>
-          <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1 sm:ml-auto sm:w-auto sm:grid-cols-[10rem_8rem_6rem]">
-            <div className="space-y-1">
+          <div className={cn('grid w-full gap-1 sm:ml-auto sm:w-auto', canFilterOwners ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:grid-cols-[10rem_8rem_6rem]' : 'grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[8rem_6rem]')}>
+            {canFilterOwners && <div className="space-y-1">
               <Label className="sr-only">{t('rooms.filters.owner')}</Label>
               <Select
                 value={ownerFilter}
@@ -637,14 +577,14 @@ export function RoomsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t('rooms.filters.allOwners')}</SelectItem>
-                  {allUsers.map((roomUser) => (
+                  {roomOwners.map((roomUser) => (
                     <SelectItem key={roomUser.id} value={roomUser.id}>
                       {roomUser.username}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </div>}
             <div className="space-y-1">
               <Label className="sr-only">{t('rooms.filters.activeness')}</Label>
               <Select
@@ -805,10 +745,10 @@ function RoomRow({
   const { t } = useTranslation()
 
   const isOwner = room.ownerId === currentUser?.id
-  const canShareRoom = !room.shareReadOnly && canManageRoomShares(currentUser, room.ownerId)
-  const canDeleteCurrentRoom = canDeleteRoom(currentUser, room.ownerId)
-  const canRenameRoom = isOwner || currentUser?.role === 'superuser'
-  const canPinRoom = !room.shareReadOnly && (currentUser?.role === 'admin' || currentUser?.role === 'superuser')
+  const canShareRoom = canManageRoomShares(currentUser, room.ownerId)
+  const canDeleteCurrentRoom = canDeleteRoom(currentUser)
+  const canRenameRoom = canManageRoom(currentUser, room.ownerId)
+  const canPinRoom = isStaff(currentUser)
   const participantCount = (room.participants?.length ?? 0) + 1
   const canViewPlayback = room.isEnded && canViewRoomPlayback(currentUser, room)
 

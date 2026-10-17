@@ -13,7 +13,7 @@ const wait = async (fn, label) => { for (let i = 0; i < 300; i++) { if (await fn
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const password = 'LocalAudit#2026Strong'
 const admin = (await request('/api/auth/login', 'POST', { username: 'audit_admin', password })).token
-await request('/api/admin/users', 'POST', { username: 'follow_peer', password, role: 'admin', canReadAllRooms: true, canWriteAllRooms: true }, admin)
+await request('/api/admin/users', 'POST', { username: 'follow_peer', password, role: 'agent' }, admin)
 const peerToken = (await request('/api/auth/login', 'POST', { username: 'follow_peer', password })).token
 
 async function seededRoom(name, language) {

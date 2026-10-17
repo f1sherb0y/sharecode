@@ -11,6 +11,7 @@ import 'react-datepicker/dist/react-datepicker.css'
 import '@/styles/audit.css'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores'
+import { isAdmin, isStaff } from '@/lib/room-permissions'
 import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { Button, Input, Spinner, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui'
 import { PageNavigation } from '@/components/ui/page-navigation'
@@ -22,8 +23,8 @@ export function AuditPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const user = useAuthStore(state => state.user)
-  const canViewDevices = user?.role === 'superuser'
-  const allowed = user?.role === 'admin' || user?.role === 'superuser'
+  const canViewDevices = isAdmin(user)
+  const allowed = isStaff(user)
   const [username, setUsername] = useState(params.get('username') ?? '')
   const [action, setAction] = useState('all')
   const [start, setStart] = useState<Date | null>(null)

@@ -27,6 +27,7 @@ cargo build --manifest-path server-rs/Cargo.toml --offline
 env DATABASE_URL=postgresql://runner_test:local_runner_test@127.0.0.1:55459/runner_test \
   PISTON_URL="${PISTON_URL:-http://127.0.0.1:2000}" \
   BIND_ADDRESS=127.0.0.1 PORT=55460 JWT_SECRET=local-runner-test-key-not-production \
+  ALLOW_REGISTRATION=true \
   ADMIN_USERNAME=audit_admin ADMIN_PASSWORD='LocalAudit#2026Strong' \
   ADMIN_EMAIL=audit@example.invalid FRONTEND_URL=http://127.0.0.1:55461 \
   APP_URL=http://127.0.0.1:55461 TRUSTED_PROXY_CIDRS='' \
@@ -43,6 +44,6 @@ throw Error('Local API not ready')
 JS
 case "${1:-tests/runner-permissions.mjs}" in
   tests/canvas-integration.ts) node --experimental-transform-types tests/canvas-integration.ts ;;
-  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs|tests/selection-blink.mjs|tests/private-rooms.mjs|tests/audit-devices.mjs|tests/session-renewal.mjs|tests/reconnect-recovery.mjs|tests/browser-sessions.mjs|tests/notes-permissions.mjs|tests/follow-permission.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
+  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs|tests/selection-blink.mjs|tests/role-permissions.mjs|tests/audit-devices.mjs|tests/session-renewal.mjs|tests/reconnect-recovery.mjs|tests/browser-sessions.mjs|tests/notes-permissions.mjs|tests/follow-permission.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
   *) echo 'Unknown local test suite' >&2; exit 2 ;;
 esac

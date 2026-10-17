@@ -1,9 +1,33 @@
 use crate::auth::{AuthActor, AuthUser};
 use crate::{db::db_error, error::ApiError};
 
+// The role alone decides room access. These rules are enforced identically on
+// the REST and WebSocket paths, together with room_is_visible() in SQL (see
+// the roles migration) — do not duplicate this logic elsewhere; call these helpers.
+/// 管理员: everything, including deleting rooms and creating private rooms.
+pub const ROLE_ADMIN: &str = "admin";
+/// 中介: sees, edits, shares, pins and ends every standard room.
+pub const ROLE_AGENT: &str = "agent";
+/// 技术: own rooms, live pinned rooms (read-only) and rooms joined by share link.
+pub const ROLE_TECH: &str = "tech";
+pub const VALID_ROLES: [&str; 3] = [ROLE_ADMIN, ROLE_AGENT, ROLE_TECH];
+
+pub fn is_admin(role: &str) -> bool {
+    role == ROLE_ADMIN
+}
+
+/// Agents and admins can read and write every room they can see.
+pub fn is_staff(role: &str) -> bool {
+    role == ROLE_ADMIN || role == ROLE_AGENT
+}
+
+pub fn has_global_read(user: &AuthUser) -> bool {
+    is_staff(&user.role)
+}
+
 // SQL lists use r (room), o (owner), and bind viewer ID/role/global-read first.
 pub const ROOM_VISIBILITY_SQL: &str = r#"room_is_visible(
-    $1, $2, $3, r."ownerId", o.role, r."isPrivate", r."isEnded", r."isDeleted",
+    $1, $2, $3, r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted",
     EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1),
     EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1 AND p."canReplay" AND p."shareLinkId" IS NOT NULL)
 )"#;
@@ -11,10 +35,6 @@ pub const ROOM_VISIBILITY_SQL: &str = r#"room_is_visible(
 pub const ROOM_PLAYBACK_SQL: &str = r#"(r."ownerId" = $1 OR $3
     OR (r."isPrivate" AND room_role_rank($2) > room_role_rank(o.role))
     OR (NOT r."isPrivate" AND EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1 AND p."canReplay" AND p."shareLinkId" IS NOT NULL)))"#;
-
-pub const SHARE_READ_ONLY_SQL: &str = r#"(NOT r."isPrivate" AND EXISTS(
-    SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1
-    AND p."canReplay" AND p."shareLinkId" IS NOT NULL AND NOT p."canEdit"))"#;
 
 #[derive(sqlx::FromRow)]
 pub struct RoomAccess {
@@ -24,9 +44,7 @@ pub struct RoomAccess {
     pub can_view_playback: bool,
     #[sqlx(default)]
     pub can_edit: bool,
-    pub share_read_only: bool,
     participant_can_edit: Option<bool>,
-    share_controls_edit: bool,
 }
 
 pub async fn require_room_access(
@@ -38,9 +56,7 @@ pub async fn require_room_access(
         r#"SELECT r."ownerId" as owner_id, r."isEnded" as is_ended,
         {ROOM_VISIBILITY_SQL} as can_view,
         {ROOM_PLAYBACK_SQL} as can_view_playback,
-        {SHARE_READ_ONLY_SQL} as share_read_only,
-        p."canEdit" as participant_can_edit,
-        (NOT r."isPrivate" AND COALESCE(p."canReplay", false) AND p."shareLinkId" IS NOT NULL) as share_controls_edit
+        p."canEdit" as participant_can_edit
         FROM "Room" r JOIN "User" o ON o.id = r."ownerId"
         LEFT JOIN "RoomParticipant" p ON p."roomId" = r.id AND p."userId" = $1
         WHERE r.id = $4"#
@@ -59,19 +75,10 @@ pub async fn require_room_access(
     access.can_edit = can_edit_room_content(
         access.is_ended,
         access.owner_id == user.id,
-        has_global_write(user),
+        is_staff(&user.role),
         access.participant_can_edit,
-        access.share_controls_edit,
     );
     Ok(access)
-}
-
-pub fn is_share_read_only(
-    room: &crate::models::RoomWithOwnerRow,
-    participant: Option<&crate::models::RoomParticipantWithUserRow>,
-) -> bool {
-    !room.is_private
-        && participant.is_some_and(|p| p.can_replay && p.share_link_id.is_some() && !p.can_edit)
 }
 
 // A successful result authorizes reading content; its value authorizes writing.
@@ -113,147 +120,61 @@ pub fn can_edit_room(
     can_edit_room_content(
         room.is_ended,
         room.owner_id == user.id,
-        has_global_write(user),
+        is_staff(&user.role),
         participant.map(|p| p.can_edit),
-        !room.is_private && participant.is_some_and(|p| p.can_replay && p.share_link_id.is_some()),
     )
 }
 
 // Document editing and note mutations must use exactly the same write rule.
+// A link membership's canEdit is the permission of the link last joined through.
 pub fn can_edit_room_content(
     is_ended: bool,
     is_owner: bool,
-    global_write: bool,
+    staff: bool,
     participant_can_edit: Option<bool>,
-    share_controls_edit: bool,
 ) -> bool {
-    if is_ended {
-        return false;
+    !is_ended && (is_owner || staff || participant_can_edit.unwrap_or(false))
+}
+
+/// Share links, the room name and its language belong to the owner and staff;
+/// members who joined through a link only edit content.
+pub fn can_manage_room(user: &AuthUser, room_owner_id: &str) -> bool {
+    user.id == room_owner_id || is_staff(&user.role)
+}
+
+pub fn can_end_room(user: &AuthUser, room_owner_id: &str) -> bool {
+    can_manage_room(user, room_owner_id)
+}
+
+/// Only admins delete rooms, including their own.
+pub fn can_delete_room(user: &AuthUser) -> bool {
+    is_admin(&user.role)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn roles_rank_admin_over_agent_over_tech() {
+        assert!(is_admin(ROLE_ADMIN) && !is_admin(ROLE_AGENT) && !is_admin(ROLE_TECH));
+        assert!(is_staff(ROLE_ADMIN) && is_staff(ROLE_AGENT) && !is_staff(ROLE_TECH));
+        // Retired role names grant nothing if an old value ever reappears.
+        for retired in ["superuser", "user", ""] {
+            assert!(!is_staff(retired) && !is_admin(retired));
+        }
     }
-    if share_controls_edit {
-        return participant_can_edit.unwrap_or(false);
+
+    #[test]
+    fn content_edits_follow_ownership_staff_or_link_permission() {
+        // Ended rooms are read-only for everyone.
+        assert!(!can_edit_room_content(true, true, true, Some(true)));
+        assert!(can_edit_room_content(false, true, false, None));
+        assert!(can_edit_room_content(false, false, true, Some(false)));
+        // A tech's membership edits only if the last link joined through allows it.
+        assert!(can_edit_room_content(false, false, false, Some(true)));
+        assert!(!can_edit_room_content(false, false, false, Some(false)));
+        // Pinned rooms grant visibility only.
+        assert!(!can_edit_room_content(false, false, false, None));
     }
-    is_owner || global_write || participant_can_edit.unwrap_or(false)
-}
-
-#[derive(Clone, Copy)]
-pub enum RoomLifecycleAction {
-    Delete,
-    End,
-}
-
-#[derive(Clone, Copy)]
-struct RoomLifecyclePermissions {
-    delete: bool,
-    end: bool,
-}
-
-#[derive(Clone, Copy)]
-struct RoomLifecyclePermissionMatrix {
-    owned: RoomLifecyclePermissions,
-    others: RoomLifecyclePermissions,
-}
-
-const USER_ROOM_LIFECYCLE_PERMISSIONS: RoomLifecyclePermissionMatrix =
-    RoomLifecyclePermissionMatrix {
-        owned: RoomLifecyclePermissions {
-            delete: false,
-            end: true,
-        },
-        others: RoomLifecyclePermissions {
-            delete: false,
-            end: false,
-        },
-    };
-
-const ADMIN_ROOM_LIFECYCLE_PERMISSIONS: RoomLifecyclePermissionMatrix =
-    USER_ROOM_LIFECYCLE_PERMISSIONS;
-
-const SUPERUSER_ROOM_LIFECYCLE_PERMISSIONS: RoomLifecyclePermissionMatrix =
-    RoomLifecyclePermissionMatrix {
-        owned: RoomLifecyclePermissions {
-            delete: true,
-            end: true,
-        },
-        others: RoomLifecyclePermissions {
-            delete: true,
-            end: true,
-        },
-    };
-
-fn room_lifecycle_permission_matrix(role: &str) -> RoomLifecyclePermissionMatrix {
-    match role {
-        "superuser" => SUPERUSER_ROOM_LIFECYCLE_PERMISSIONS,
-        "admin" => ADMIN_ROOM_LIFECYCLE_PERMISSIONS,
-        _ => USER_ROOM_LIFECYCLE_PERMISSIONS,
-    }
-}
-
-pub fn can_manage_room_lifecycle(
-    user: &AuthUser,
-    room_owner_id: &str,
-    action: RoomLifecycleAction,
-) -> bool {
-    let matrix = room_lifecycle_permission_matrix(&user.role);
-    let permissions = if user.id == room_owner_id {
-        matrix.owned
-    } else {
-        matrix.others
-    };
-
-    match action {
-        RoomLifecycleAction::Delete => permissions.delete,
-        RoomLifecycleAction::End => permissions.end,
-    }
-}
-
-// Only superusers have implicit global capabilities; admin flags are authoritative.
-// Previously admin implied write access even after its checkbox was cleared.
-// Superusers have all three global-room capabilities,
-// regardless of whether the `canReadAllRooms` / `canWriteAllRooms` /
-// `canDeleteAllRooms` flags are explicitly set on their account. The flags
-// exist to grant the same room-wide access to normal users. This is enforced
-// identically on the REST and WebSocket paths — do not duplicate this logic
-// elsewhere; call these helpers.
-
-pub fn role_has_global_read(
-    role: &str,
-    can_read_all_rooms: bool,
-    can_write_all_rooms: bool,
-    can_delete_all_rooms: bool,
-) -> bool {
-    role == "superuser" || can_read_all_rooms || can_write_all_rooms || can_delete_all_rooms
-}
-
-pub fn role_has_global_write(
-    role: &str,
-    can_write_all_rooms: bool,
-    can_delete_all_rooms: bool,
-) -> bool {
-    role == "superuser" || can_write_all_rooms || can_delete_all_rooms
-}
-
-pub fn role_has_global_delete(role: &str, can_delete_all_rooms: bool) -> bool {
-    role == "superuser" || can_delete_all_rooms
-}
-
-pub fn has_global_read(user: &AuthUser) -> bool {
-    role_has_global_read(
-        &user.role,
-        user.can_read_all_rooms,
-        user.can_write_all_rooms,
-        user.can_delete_all_rooms,
-    )
-}
-
-pub fn has_global_write(user: &AuthUser) -> bool {
-    role_has_global_write(
-        &user.role,
-        user.can_write_all_rooms,
-        user.can_delete_all_rooms,
-    )
-}
-
-pub fn has_global_delete(user: &AuthUser) -> bool {
-    role_has_global_delete(&user.role, user.can_delete_all_rooms)
 }

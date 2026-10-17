@@ -45,7 +45,8 @@ impl Config {
             .map(str::to_string)
             .collect();
         let frontend_hash_router = env_bool("FRONTEND_HASH_ROUTER", false);
-        let allow_registration = env_bool("ALLOW_REGISTRATION", true);
+        // Accounts are created by admins and agents; self-registration is opt-in.
+        let allow_registration = env_bool("ALLOW_REGISTRATION", false);
 
         let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
 

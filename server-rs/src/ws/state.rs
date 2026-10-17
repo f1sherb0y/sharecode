@@ -204,7 +204,7 @@ impl WsState {
         }
     }
 
-    // Recheck existing connections when room lifecycle/owner rank changes.
+    // Recheck existing connections when room lifecycle, pinning or owner rank changes.
     // Explicit guest invitations remain valid until the room ends or is deleted.
     pub async fn revoke_inaccessible_room(&self, db: &PgPool, room: &str) {
         if let Some(doc) = self.get_document(room).await {
@@ -219,9 +219,8 @@ impl WsState {
                 SELECT u.id FROM "User" u CROSS JOIN "Room" r
                 JOIN "User" o ON o.id = r."ownerId"
                 WHERE r.id = $1 AND u.id = ANY($2) AND NOT u."isDeleted"
-                  AND room_is_visible(u.id, u.role,
-                    u.role = 'superuser' OR u."canReadAllRooms" OR u."canWriteAllRooms" OR u."canDeleteAllRooms",
-                    r."ownerId", o.role, r."isPrivate", r."isEnded", r."isDeleted",
+                  AND room_is_visible(u.id, u.role, room_role_rank(u.role) > 0,
+                    r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted",
                     EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = u.id),
                     EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = u.id AND p."canReplay" AND p."shareLinkId" IS NOT NULL))
                 UNION ALL

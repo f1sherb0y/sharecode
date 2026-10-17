@@ -120,12 +120,12 @@ export function useEditorRoom(): EditorRoomState {
   }, [isGuestMode, guestProfile])
 
   const isOwner = !isGuestMode && (effectiveRoom?.isOwner ?? effectiveRoom?.ownerId === user?.id)
-  const canChangeLanguage = !isGuestMode && !effectiveRoom?.shareReadOnly && canChangeRoomLanguage(user, effectiveRoom?.ownerId)
+  const canChangeLanguage = !isGuestMode && canChangeRoomLanguage(user, effectiveRoom?.ownerId)
   const canEdit = isGuestMode
     ? (guestProfile?.guest.canEdit ?? false)
     : effectiveRoom?.canEdit === true
   const canManageRoom =
-    !isGuestMode && !effectiveRoom?.shareReadOnly && canManageRoomShares(user, effectiveRoom?.ownerId)
+    !isGuestMode && canManageRoomShares(user, effectiveRoom?.ownerId)
   const canEndRoom = !isGuestMode && canEndRoomByMatrix(user, effectiveRoom?.ownerId)
   const canViewPlayback = !isGuestMode && canViewRoomPlayback(user, effectiveRoom)
 

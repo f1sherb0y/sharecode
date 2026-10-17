@@ -64,7 +64,7 @@
       "title": "创建新房间",
       "name": "房间名称",
       "private": "设为私密房间",
-      "privateHint": "仅自己、受邀成员和级别高于你的账户可访问。房间结束后，普通受邀成员无法再访问。",
+      "privateHint": "中介和技术看不到。只有你和你邀请的人可以进入；房间结束后，受邀的技术无法再访问。",
       "namePlaceholder": "输入房间名称",
       "language": "编程语言",
       "company": "公司（可选）",
@@ -76,10 +76,7 @@
       "scheduledTimeHint": "格式：年-月-日 时:分（例如：2024-12-31 14:30）",
       "duration": "持续时间（分钟，可选）",
       "durationPlaceholder": "例如：60",
-      "allowedUsers": "允许的用户（可选）",
-      "allowedUsersHint": "选择可以访问此房间的用户",
-      "canEdit": "编辑",
-      "selectedUsers": "已选择 {{count}} 个用户",
+      "hint": "创建后可通过分享链接邀请他人。",
       "addUser": "添加用户",
       "noAllowedUsers": "尚未选择其他用户，目前只有你可以访问此房间。",
       "removeUser": "移除用户",
@@ -87,16 +84,13 @@
       "selectUsersTitle": "选择允许的用户",
       "selectUsersDescription": "选择可以访问房间的用户，并设置是否允许编辑。",
       "username": "用户名",
-      "canView": "查看",
       "searchPlaceholder": "搜索用户名…",
       "searchIntro": "开始输入用户名来查找想邀请的用户。",
       "searchNoResults": "没有匹配“{{query}}”的用户。",
       "modalCancel": "取消",
       "modalConfirm": "保存选择",
       "button": "创建房间",
-      "creating": "创建中...",
-      "selectedUsers_one": "已选择 {{count}} 个用户",
-      "selectedUsers_other": "已选择 {{count}} 个用户"
+      "creating": "创建中..."
     },
     "columns": {
       "name": "房间",
@@ -244,10 +238,6 @@
         "email": "邮箱（可选）",
         "emailPlaceholder": "输入邮箱",
         "role": "角色",
-        "roleUser": "普通用户",
-        "roleAdmin": "管理员",
-        "roleSuperuser": "超级管理员",
-        "permissions": "全局权限",
         "creating": "创建中...",
         "createButton": "创建用户"
       },
@@ -255,21 +245,11 @@
         "username": "用户名",
         "email": "邮箱",
         "role": "角色",
-        "permissions": "权限",
-        "read": "读取",
-        "write": "编辑",
         "created": "创建时间",
         "actions": "操作",
-        "delete": "删除",
         "update": "保存",
         "updating": "保存中...",
         "loading": "加载用户中..."
-      },
-      "permissions": {
-        "readAll": "读取全部房间",
-        "writeAll": "编辑全部房间",
-        "deleteAll": "删除全部房间",
-        "hint": "删除权限包含结束和编辑权限，编辑权限包含读取权限。"
       },
       "deleteTitle": "删除用户",
       "deleteConfirm": "删除用户 \"{{username}}\"？"
@@ -290,8 +270,7 @@
         "loading": "加载房间中..."
       },
       "deleteTitle": "删除房间",
-      "deleteConfirm": "删除房间 \"{{name}}\"？",
-      "superuserOnly": "房间与存储管理仅超级管理员可用。"
+      "deleteConfirm": "删除房间 \"{{name}}\"？"
     },
     "storage": {
       "title": "存储管理",
@@ -545,7 +524,7 @@
     },
     "publish": {
       "title": "发布通知",
-      "description": "超级管理员可以在这里发布全站通知。",
+      "description": "管理员可以在这里发布全站通知。",
       "required": "标题和内容不能为空。",
       "submit": "发布通知",
       "submitting": "发布中...",
@@ -570,7 +549,6 @@
     "back": "返回",
     "logout": "登出",
     "admin": "管理员",
-    "superuser": "超级管理员",
     "settings": "设置",
     "enterFullscreen": "进入全屏",
     "exitFullscreen": "退出全屏",
@@ -586,6 +564,11 @@
     "copied": "已复制",
     "requestFailed": "请求失败，请重试。",
     "unknownError": "未知错误"
+  },
+  "roles": {
+    "admin": "管理员",
+    "agent": "中介",
+    "tech": "技术"
   },
   "codeRunner": {
     "title": "代码运行器",

@@ -3,7 +3,7 @@ use chrono::Utc;
 use crate::{
     auth::{verify_token, TokenPayload},
     db::db_error,
-    permissions::{can_edit_room_content, role_has_global_write},
+    permissions::{can_edit_room_content, is_staff},
     state::AppState,
 };
 
@@ -50,16 +50,12 @@ async fn authenticate_user(
             u.role,
             u.username,
             u."tokenVersion" as token_version,
-            u."canWriteAllRooms" as can_write_all_rooms,
-            u."canDeleteAllRooms" as can_delete_all_rooms,
             u."isDeleted" as user_is_deleted,
 
             r."ownerId" as owner_id,
             r."isEnded" as is_ended,
-            room_is_visible(u.id, u.role,
-                u.role = 'superuser' OR u."canReadAllRooms" OR u."canWriteAllRooms" OR u."canDeleteAllRooms",
-                r."ownerId", o.role, r."isPrivate", r."isEnded", r."isDeleted", p.id IS NOT NULL, COALESCE(p."canReplay", false) AND p."shareLinkId" IS NOT NULL) as can_view,
-            (NOT r."isPrivate" AND COALESCE(p."canReplay", false) AND p."shareLinkId" IS NOT NULL) as share_controls_edit,
+            room_is_visible(u.id, u.role, room_role_rank(u.role) > 0,
+                r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted", p.id IS NOT NULL, COALESCE(p."canReplay", false) AND p."shareLinkId" IS NOT NULL) as can_view,
             p."canEdit" as participant_can_edit,
             p."shareLinkId" as participant_share_link_id
         FROM "User" u
@@ -91,16 +87,11 @@ async fn authenticate_user(
     if !row.can_view {
         return Err("Authentication failed: Access denied".to_string());
     }
-    let is_owner = row.owner_id == row.user_id;
-    let can_write_globally =
-        role_has_global_write(&row.role, row.can_write_all_rooms, row.can_delete_all_rooms);
-
     let can_edit = can_edit_room_content(
         row.is_ended,
-        is_owner,
-        can_write_globally,
+        row.owner_id == row.user_id,
+        is_staff(&row.role),
         row.participant_can_edit,
-        row.share_controls_edit,
     );
 
     let db = state.db.clone();
@@ -218,13 +209,10 @@ struct WsAuthCombinedRow {
     username: String,
     user_id: String,
     role: String,
-    can_write_all_rooms: bool,
-    can_delete_all_rooms: bool,
     user_is_deleted: bool,
     owner_id: String,
     can_view: bool,
     is_ended: bool,
-    share_controls_edit: bool,
     participant_can_edit: Option<bool>,
     participant_share_link_id: Option<String>,
 }

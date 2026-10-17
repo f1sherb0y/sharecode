@@ -41,6 +41,7 @@ cargo test --manifest-path server-rs/Cargo.toml --offline
 cargo build --manifest-path server-rs/Cargo.toml --offline
 env DATABASE_URL="postgresql://${USER}@127.0.0.1:55439/sharecode_sync_test" \
   BIND_ADDRESS=127.0.0.1 PORT=55440 JWT_SECRET=local-sync-test-key-not-production \
+  ALLOW_REGISTRATION=true \
   ADMIN_USERNAME=audit_admin ADMIN_PASSWORD='LocalAudit#2026Strong' \
   ADMIN_EMAIL=audit@example.invalid FRONTEND_URL=http://127.0.0.1:55441 \
   APP_URL=http://127.0.0.1:55441 TRUSTED_PROXY_CIDRS='' \

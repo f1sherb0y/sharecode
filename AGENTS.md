@@ -38,14 +38,16 @@
 
 ### 2. User Management
 - **Username-based authentication**: Login with username (email optional)
-- **Role-based access control**: Three tiers (superuser, admin, user)
-- **Fine-grained permissions**: Per-user flags for read/write/delete access to all rooms
+- **Role-based access control**: Three account roles: admin (管理员), agent (中介) and tech (技术). Customers (客户) join through share links without an account
+- **Role-only permissions**: No per-account flags; rules live in `server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`
+- **Staff-created accounts**: Self-registration is off by default (`ALLOW_REGISTRATION`); admins create any account, agents create tech accounts
 - **JWT tokens**: Secure authentication with 7-day expiration
 - **User profiles**: Color-coded users for easy identification
 
 ### 3. Room Management
-- **Room visibility**: Only owners and explicit participants can see/join rooms (admins/superusers can see all)
-- **Room ownership**: Creators maintain admin rights (delete, end session)
+- **Room visibility**: Techs see their own rooms, live pinned rooms (read-only) and rooms they joined by share link; agents and admins see and edit every standard room
+- **Share-link membership**: The link a tech last joined through decides whether they can edit; the room stays in their list for replay after it ends
+- **Room ownership**: Owners rename, share and end their rooms; only admins delete rooms or create private ones
 - **Language support**: 8 programming languages with syntax highlighting
   - JavaScript, TypeScript, Python, Java, C++, Rust, Go, PHP
 - **Scheduled sessions**: Optional start time and duration
@@ -57,12 +59,12 @@
 - **Gzip compression**: Efficient data transfer (~60-80% reduction)
 - **Video-style controls**: Play, pause, skip, speed control (0.5x-10x)
 - **Real-world timestamps**: Timeline shows actual clock time
-- **Role-aware access**: Owners and admins auto-redirect to playback for ended rooms; guests see an ended-room notice
+- **Role-aware access**: Owners, staff and link members auto-redirect to playback for ended rooms; guests see an ended-room notice
 
 ### 5. Admin Dashboard
 - **User management**: View all users, edit roles/permissions, soft delete accounts
 - **Room management**: View all rooms with details, delete rooms when permitted
-- **Protected routes**: Admin/superuser-only access with middleware verification
+- **Protected routes**: Agent/admin access verified by server extractors; storage, devices and notifications are admin-only
 
 ### 6. Internationalization (i18n)
 - **Multi-language support**: English and Chinese translations
@@ -108,8 +110,7 @@ Single HTTP Server (Port 3001)
 ### Database Schema
 ```
 User
-├── id, username, email?, password, color, role
-├── canReadAllRooms, canWriteAllRooms, canDeleteAllRooms
+├── id, username, email?, password, color, role (admin | agent | tech)
 ├── isDeleted (soft delete), lastSeen
 └── Relations: ownedRooms, rooms (participants)
 
@@ -117,8 +118,12 @@ Room
 ├── id (UUID - also serves as documentId for Yjs)
 ├── name, language
 ├── scheduledTime?, duration?
-├── isEnded, endedAt, isDeleted
+├── isPrivate, isPinned, isEnded, endedAt, isDeleted
 └── Relations: owner, participants
+
+RoomParticipant (share-link memberships)
+├── roomId, userId
+└── canEdit, shareLinkId (last link joined through), canReplay
 
 DocumentUpdate (playback data)
 ├── id, documentId (references Room.id)
@@ -191,7 +196,7 @@ Document (Y.js persistence)
 - Established WebSocket sync via custom yrs protocol
 
 ### 3. Feature Additions
-- Role hierarchy (superuser/admin/user) with fine-grained permissions
+- Role hierarchy, since October 2026 admin/agent/tech (replacing superuser/admin/user and per-user room flags)
 - Admin dashboard
 - Room scheduling with expiration
 - Session playback system
@@ -343,10 +348,10 @@ monacoModelRef.current?.setValue(ytext.toString())
 ## Best Practices Applied
 
 ### Security
-- **Strict Session Locking**: Ended rooms are completely inaccessible to normal participants (read access revoked).
+- **Strict Session Locking**: Ended rooms are read-only for everyone. Private-room and pinned-only access ends with the session; link members of standard rooms keep replay.
 - JWT-based authentication with secure secret
 - Password hashing with bcrypt (10 rounds)
-- Admin middleware for protected routes
+- Role extractors (`StaffUser`, admin checks) for protected routes; access changes revoke live WebSocket sessions
 - CORS configuration for multiple origins
 - Soft deletes for data retention
 
@@ -382,7 +387,8 @@ monacoModelRef.current?.setValue(ytext.toString())
   frontend build, real Chromium/Firefox/WebKit process-restart login tests,
   session renewal while editing, three-browser reconnect/durability recovery,
   all three workspace UI suites (including mobile
-  and DPI layouts), notes read/write permissions and reader/manager exports, three-browser
+  and DPI layouts), admin/agent/tech role permissions and share-link membership rules,
+  notes read/write permissions and reader/manager exports, three-browser
   follow opt-out pause/resume and reload persistence across code/Markdown/Canvas rooms,
   Sarasa font/CDN fallback checks, and standalone replay export.
 - Prerequisites: `just install`, `just browsers`, Docker running, and the

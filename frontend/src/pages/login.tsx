@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores'
 import { isTauriApp } from '@/lib/tauri'
 import { parseShareToken } from '@/lib/share'
 
-const ALLOW_REGISTRATION = import.meta.env.VITE_ALLOW_REGISTRATION !== 'false'
+const ALLOW_REGISTRATION = import.meta.env.VITE_ALLOW_REGISTRATION === 'true'
 
 export function LoginPage() {
   const { t } = useTranslation()

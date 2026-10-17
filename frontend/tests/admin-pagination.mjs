@@ -13,7 +13,7 @@ const token = (await ok('/api/auth/login', 'POST', { username: 'audit_admin', pa
 const get = path => ok(path, 'GET', undefined, token)
 const createdUsers = []
 for (let index = 0; index < 31; index++) {
-  createdUsers.push((await ok('/api/admin/users', 'POST', { username: `page_user_${String(index).padStart(2,'0')}`, email: `user${index}@example.invalid`, role: index < 3 ? 'admin' : 'user', password }, token)).user)
+  createdUsers.push((await ok('/api/admin/users', 'POST', { username: `page_user_${String(index).padStart(2,'0')}`, email: `user${index}@example.invalid`, role: index < 3 ? 'agent' : 'tech', password }, token)).user)
 }
 const ordinary = (await ok('/api/auth/login','POST',{username:createdUsers[30].username,password})).token
 const createdRooms = []
@@ -27,7 +27,7 @@ const users1=await get('/api/admin/users'),users2=await get('/api/admin/users?pa
 assert.equal(users1.users.length,25);assert.equal(users1.pagination.total,32);assert.equal(users2.users.length,7)
 assert.equal(new Set([...users1.users,...users2.users].map(u=>u.id)).size,32)
 assert.equal((await get('/api/admin/users?pageSize=999')).pagination.pageSize,100)
-assert.equal((await get('/api/admin/users?role=admin')).users.length,3)
+assert.equal((await get('/api/admin/users?role=agent')).users.length,3)
 assert.equal((await get('/api/admin/users?q=user30%40example.invalid')).users[0].id,createdUsers[30].id)
 assert.equal((await get('/api/admin/users?q=nomatch')).pagination.totalPages,0)
 const rooms1=await get('/api/admin/rooms'),rooms2=await get('/api/admin/rooms?page=2')

@@ -170,8 +170,8 @@ class ApiClient {
     return this.request(`/api/admin/users/${encodeURIComponent(id)}/devices?page=${page}`)
   }
 
-  // Users
-  async getAllUsersForRoomCreation(): Promise<{ users: User[] }> {
+  // Accounts that may own rooms, for the agents' and admins' owner filter.
+  async getRoomOwners(): Promise<{ users: User[] }> {
     return this.request<{ users: User[] }>('/api/users')
   }
 
@@ -181,7 +181,6 @@ class ApiClient {
     language: Language,
     scheduledTime?: string,
     duration?: number,
-    allowedUsers?: Array<{ userId: string; canEdit: boolean }>,
     company?: string,
     position?: string,
     timezone?: string,
@@ -189,7 +188,7 @@ class ApiClient {
   ): Promise<{ room: Room }> {
     return this.request<{ room: Room }>('/api/rooms', {
       method: 'POST',
-      body: JSON.stringify({ name, language, scheduledTime, duration, allowedUsers, company, position, timezone, isPrivate }),
+      body: JSON.stringify({ name, language, scheduledTime, duration, company, position, timezone, isPrivate }),
     })
   }
 
@@ -271,9 +270,6 @@ class ApiClient {
     password: string
     email?: string
     role?: Role
-    canReadAllRooms?: boolean
-    canWriteAllRooms?: boolean
-    canDeleteAllRooms?: boolean
   }): Promise<{ user: User }> {
     return this.request<{ user: User }>('/api/admin/users', {
       method: 'POST',
@@ -286,15 +282,7 @@ class ApiClient {
     return this.request(`/api/admin/users?${query}`, { signal })
   }
 
-  async updateUser(
-    userId: string,
-    data: {
-      role?: Role
-      canReadAllRooms?: boolean
-      canWriteAllRooms?: boolean
-      canDeleteAllRooms?: boolean
-    }
-  ): Promise<{ user: User }> {
+  async updateUser(userId: string, data: { role: Role }): Promise<{ user: User }> {
     return this.request<{ user: User }>(`/api/admin/users/${userId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),

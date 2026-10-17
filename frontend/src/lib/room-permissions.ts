@@ -1,108 +1,40 @@
 import type { Role, Room, User } from '@/types'
 
+// Mirrors server-rs/src/core/permissions.rs: the role alone decides room access.
+// The server stays authoritative; these only decide which controls to show.
+
+type Actor = Pick<User, 'id' | 'role'> | null | undefined
+
+/** Admins only: deleting rooms, private rooms, storage, devices, notifications. */
+export function isAdmin(user: Pick<User, 'role'> | null | undefined): boolean {
+  return user?.role === 'admin'
+}
+
+/** Agents and admins see, edit, share, pin and end every room and manage tech accounts. */
+export function isStaff(user: Pick<User, 'role'> | null | undefined): boolean {
+  return user?.role === 'admin' || user?.role === 'agent'
+}
+
 export function canViewRoomPlayback(user: User | null | undefined, room: Room | null | undefined): boolean {
   if (!user || !room) return false
-  // The server accounts for privacy, membership and relative owner rank.
-  return room.canViewPlayback ?? (room.ownerId === user.id || user.role === 'superuser' ||
-    user.canReadAllRooms || user.canWriteAllRooms || user.canDeleteAllRooms)
+  // The server accounts for privacy, link memberships and relative owner rank.
+  return room.canViewPlayback ?? (room.ownerId === user.id || isStaff(user))
 }
 
-export type RoomLifecycleAction = 'delete' | 'end'
-
-type RoomLifecyclePermissions = {
-  delete: boolean
-  end: boolean
+/** Share links, the room name and its language belong to the owner and staff. */
+export function canManageRoom(user: Actor, roomOwnerId: string | null | undefined): boolean {
+  return !!user && !!roomOwnerId && (user.id === roomOwnerId || isStaff(user))
 }
 
-type RoomLifecyclePermissionMatrix = {
-  owned: RoomLifecyclePermissions
-  others: RoomLifecyclePermissions
+export const canManageRoomShares = canManageRoom
+export const canChangeRoomLanguage = canManageRoom
+export const canEndRoom = canManageRoom
+
+export function canDeleteRoom(user: Actor): boolean {
+  return isAdmin(user)
 }
 
-const ROOM_LIFECYCLE_PERMISSION_MATRIX: Record<Role, RoomLifecyclePermissionMatrix> = {
-  user: {
-    owned: {
-      delete: false,
-      end: true,
-    },
-    others: {
-      delete: false,
-      end: false,
-    },
-  },
-  admin: {
-    owned: {
-      delete: false,
-      end: true,
-    },
-    others: {
-      delete: false,
-      end: false,
-    },
-  },
-  superuser: {
-    owned: {
-      delete: true,
-      end: true,
-    },
-    others: {
-      delete: true,
-      end: true,
-    },
-  },
-}
-
-export function canPerformRoomLifecycleAction(
-  user: Pick<User, 'id' | 'role'> | null | undefined,
-  roomOwnerId: string | null | undefined,
-  action: RoomLifecycleAction
-): boolean {
-  if (!user || !roomOwnerId) {
-    return false
-  }
-
-  const matrix = ROOM_LIFECYCLE_PERMISSION_MATRIX[user.role]
-  const permissions = user.id === roomOwnerId ? matrix.owned : matrix.others
-  return permissions[action]
-}
-
-export function canDeleteRoom(
-  user: Pick<User, 'id' | 'role'> | null | undefined,
-  roomOwnerId: string | null | undefined
-): boolean {
-  return canPerformRoomLifecycleAction(user, roomOwnerId, 'delete')
-}
-
-export function canEndRoom(
-  user: Pick<User, 'id' | 'role'> | null | undefined,
-  roomOwnerId: string | null | undefined
-): boolean {
-  return canPerformRoomLifecycleAction(user, roomOwnerId, 'end')
-}
-
-export function hasGlobalDeletePermission(
-  user: Pick<User, 'role' | 'canDeleteAllRooms'> | null | undefined
-): boolean {
-  if (!user) return false
-  return user.role === 'superuser' || user.canDeleteAllRooms
-}
-
-export function canManageRoomShares(
-  user: Pick<User, 'id' | 'role' | 'canDeleteAllRooms'> | null | undefined,
-  roomOwnerId: string | null | undefined
-): boolean {
-  if (!user || !roomOwnerId) {
-    return false
-  }
-
-  return user.id === roomOwnerId || user.role === 'superuser' || hasGlobalDeletePermission(user)
-}
-
-// Language is a room setting, independent of global document-write flags.
-export function canChangeRoomLanguage(
-  user: Pick<User, 'id' | 'role'> | null | undefined,
-  roomOwnerId: string | null | undefined
-): boolean {
-  return !!user && !!roomOwnerId &&
-    (user.id === roomOwnerId || user.role === 'admin' || user.role === 'superuser')
+/** Admins manage every account; agents create and remove tech accounts only. */
+export function canManageAccount(actor: Pick<User, 'role'> | null | undefined, role: Role): boolean {
+  return isAdmin(actor) || (isStaff(actor) && role === 'tech')
 }

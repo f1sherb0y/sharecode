@@ -1,4 +1,5 @@
-export type Role = 'user' | 'admin' | 'superuser'
+/** 管理员 admin, 中介 agent, 技术 tech; customers are share-link guests without accounts. */
+export type Role = 'admin' | 'agent' | 'tech'
 export type NotificationSeverity = 'normal' | 'emergency'
 
 export type Language =
@@ -24,9 +25,6 @@ export interface User {
   username: string
   color: string
   role: Role
-  canReadAllRooms: boolean
-  canWriteAllRooms: boolean
-  canDeleteAllRooms: boolean
   createdAt?: string
   lastSeen?: string
 }
@@ -44,7 +42,6 @@ export interface Room {
   canManageNotes?: boolean
   canReadNotes?: boolean
   canWriteNotes?: boolean
-  shareReadOnly?: boolean
   isPinned?: boolean
   isDeleted?: boolean
   scheduledTime?: string | null

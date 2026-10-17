@@ -1,4 +1,4 @@
-use crate::{auth::AdminUser, error::ApiError, state::AppState};
+use crate::{auth::StaffUser, error::ApiError, permissions::is_admin, state::AppState};
 use axum::{
     extract::{ConnectInfo, FromRef, FromRequestParts, Query, State},
     http::{request::Parts, HeaderMap},
@@ -232,10 +232,10 @@ struct AuditRow {
 }
 pub async fn list_events(
     State(state): State<AppState>,
-    AdminUser(user): AdminUser,
+    StaffUser(user): StaffUser,
     Query(query): Query<AuditQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    if user.role != "superuser" && query.device_id.is_some() {
+    if !is_admin(&user.role) && query.device_id.is_some() {
         return Err(ApiError::not_found("Not found"));
     }
     if query
@@ -271,7 +271,7 @@ pub async fn list_events(
         AND ($6::uuid IS NULL OR a."deviceId"=$6)
         AND (a."roomId" IS NULL OR EXISTS (
             SELECT 1 FROM "Room" r JOIN "User" o ON o.id=r."ownerId" WHERE r.id=a."roomId"
-            AND (NOT r."isPrivate" OR room_is_visible($7,$8,$9,r."ownerId",o.role,true,r."isEnded",false,
+            AND (NOT r."isPrivate" OR room_is_visible($7,$8,$9,r."ownerId",o.role,true,false,r."isEnded",false,
                 EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId"=r.id AND p."userId"=$7),false))
         ))"#;
     macro_rules! bindings {
@@ -298,9 +298,9 @@ pub async fn list_events(
     let page = (query.page.unwrap_or(1).max(1) as i64).min(pages.max(1));
     let rows = bindings!(sqlx::query_as::<_,AuditRow>(&format!(r#"SELECT a.id,a."createdAt" as created_at,a.action,a."actorId" as actor_id,a.username,a."targetId" as target_id,
         a.success,host(a."clientIp") as client_ip,host(a."peerIp") as peer_ip,a."ipSource" as ip_source,a."userAgent" as user_agent,a."requestId" as request_id,a.reason,
-        CASE WHEN $8 = 'superuser' THEN a."deviceId" END as device_id,
-        CASE WHEN $8 = 'superuser' THEN a.fingerprint END as fingerprint,
-        ($8 = 'superuser' AND a."newDevice") as new_device,a.details
+        CASE WHEN $8 = 'admin' THEN a."deviceId" END as device_id,
+        CASE WHEN $8 = 'admin' THEN a.fingerprint END as fingerprint,
+        ($8 = 'admin' AND a."newDevice") as new_device,a.details
         {filter} ORDER BY a."createdAt" DESC,a.id DESC LIMIT $10 OFFSET $11"#)))
         .bind(size).bind((page-1)*size).fetch_all(&mut *tx).await.map_err(|e|crate::db::db_error(e,"Failed to load audit events"))?;
     tx.commit()
@@ -368,11 +368,11 @@ struct DeviceRow {
 }
 pub async fn list_user_devices(
     State(state): State<AppState>,
-    AdminUser(actor): AdminUser,
+    StaffUser(actor): StaffUser,
     axum::extract::Path(user_id): axum::extract::Path<String>,
     Query(query): Query<AuditQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    if actor.role != "superuser" {
+    if !is_admin(&actor.role) {
         return Err(ApiError::not_found("Not found"));
     }
     sqlx::query_scalar::<_, i32>(r#"SELECT 1 FROM "User" WHERE id=$1 AND NOT "isDeleted""#)

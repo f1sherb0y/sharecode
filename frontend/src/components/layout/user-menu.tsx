@@ -11,6 +11,7 @@ import {
   Button,
 } from '@/components/ui'
 import { useAuthStore } from '@/stores'
+import { isStaff } from '@/lib/room-permissions'
 import { toast } from 'sonner'
 
 export function UserMenu() {
@@ -23,7 +24,7 @@ export function UserMenu() {
     catch { toast.error(t('auth.logoutFailed')) }
   }
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superuser'
+  const canOpenDashboard = isStaff(user)
 
   return (
     <DropdownMenu>
@@ -36,6 +37,7 @@ export function UserMenu() {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{user?.username}</p>
+            {user && <p className="text-xs leading-none text-muted-foreground">{t(`roles.${user.role}`)}</p>}
             {user?.email && (
               <p className="text-xs leading-none text-muted-foreground">
                 {user.email}
@@ -44,15 +46,15 @@ export function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {isAdmin && (
+        {canOpenDashboard && (
           <DropdownMenuItem asChild>
             <Link to="/admin" className="cursor-pointer">
               <Shield className="mr-1.5 h-4 w-4" />
-              {t('common.admin')}
+              {t('admin.title')}
             </Link>
           </DropdownMenuItem>
         )}
-        {isAdmin && <DropdownMenuItem asChild>
+        {canOpenDashboard && <DropdownMenuItem asChild>
           <Link to="/admin/audit"><Shield className="mr-1.5 h-4 w-4" />{t('audit.title')}</Link>
         </DropdownMenuItem>}
         <DropdownMenuItem asChild>

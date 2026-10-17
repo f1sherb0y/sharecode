@@ -10,13 +10,13 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    auth::{AdminUser, AuthUser},
+    auth::{AuthUser, StaffUser},
     db::db_error,
     error::ApiError,
     models::{RoomParticipantWithUserRow, RoomWithOwnerRow, UserSimpleRow},
     permissions::{
-        can_edit_room, can_manage_room_lifecycle, has_global_read, is_share_read_only,
-        require_room_access, RoomLifecycleAction, ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL,
+        can_delete_room, can_edit_room, can_end_room, can_manage_room, has_global_read, is_admin,
+        require_room_access, ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL,
     },
     state::AppState,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -49,16 +49,6 @@ pub struct CreateRoomPayload {
     pub scheduled_time: Option<String>,
     pub duration: Option<i32>,
     pub timezone: Option<String>,
-    #[serde(default, rename = "allowedUsers")]
-    pub allowed_users: Vec<AllowedUserPayload>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AllowedUserPayload {
-    #[serde(rename = "userId")]
-    pub user_id: String,
-    #[serde(rename = "canEdit")]
-    pub can_edit: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,9 +93,10 @@ struct PaginationMeta {
     has_prev: bool,
 }
 
+// Techs never pick other accounts: they share rooms through links instead.
 pub async fn get_all_users_for_room_creation(
     State(state): State<AppState>,
-    _auth_user: AuthUser,
+    _staff: StaffUser,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let users = sqlx::query_as::<_, UserSimpleRow>(
         r#"
@@ -153,6 +144,10 @@ pub async fn create_room(
         return Err(ApiError::bad_request("Unsupported language"));
     }
 
+    if payload.is_private && !is_admin(&auth_user.role) {
+        return Err(ApiError::forbidden("Only admins can create private rooms"));
+    }
+
     let scheduled_time = match payload.scheduled_time {
         Some(value) if !value.is_empty() => {
             Some(parse_scheduled_time(&value, payload.timezone.as_deref())?)
@@ -161,7 +156,6 @@ pub async fn create_room(
     };
 
     let duration = payload.duration.filter(|value| *value != 0);
-    let participant_count = payload.allowed_users.len() + 1;
 
     let mut tx = state
         .db
@@ -221,30 +215,7 @@ pub async fn create_room(
     .await
     .map_err(|err| db_error(err, "Failed to add owner as participant"))?;
 
-    if !payload.allowed_users.is_empty() {
-        for allowed in payload.allowed_users {
-            if allowed.user_id == auth_user.id {
-                continue;
-            }
-            let can_edit = allowed.can_edit.unwrap_or(true);
-            sqlx::query(
-                r#"
-                INSERT INTO "RoomParticipant" (id, "roomId", "userId", "canEdit")
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT ("roomId", "userId") DO NOTHING
-                "#,
-            )
-            .bind(Uuid::new_v4().to_string())
-            .bind(&room.id)
-            .bind(&allowed.user_id)
-            .bind(can_edit)
-            .execute(&mut *tx)
-            .await
-            .map_err(|err| db_error(err, "Failed to add participant"))?;
-        }
-    }
-
-    audit::record_details(&mut *tx, &client, "room.created", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"isPrivate":payload.is_private,"language":language,"participantCount":participant_count})).await?;
+    audit::record_details(&mut *tx, &client, "room.created", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"isPrivate":payload.is_private,"language":language})).await?;
     tx.commit()
         .await
         .map_err(|err| db_error(err, "Failed to commit room transaction"))?;
@@ -255,7 +226,6 @@ pub async fn create_room(
         room_id = %room.id,
         room_name = %room.name,
         language = %room.language,
-        participant_count = participant_count,
         "room created"
     );
 
@@ -348,7 +318,6 @@ pub async fn get_rooms(
             .map(|end_time| end_time < now)
             .unwrap_or(false);
 
-        let share_read_only = is_share_read_only(&room, user_participant);
         let mut value = room_to_json_with_flags(
             &room,
             participants,
@@ -358,7 +327,6 @@ pub async fn get_rooms(
             is_expired,
         );
         value["canViewPlayback"] = json!(room.can_view_playback);
-        value["shareReadOnly"] = json!(share_read_only);
         response.push(value);
     }
 
@@ -444,7 +412,6 @@ pub async fn get_room(
         obj.insert("canWriteNotes".to_string(), json!(access.can_edit));
         // Compatibility for clients from before notes had separate capabilities.
         obj.insert("canManageNotes".to_string(), json!(access.can_edit));
-        obj.insert("shareReadOnly".to_string(), json!(access.share_read_only));
     }
 
     Ok(Json(json!({ "room": room_value })))
@@ -470,12 +437,7 @@ pub async fn update_room(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // Order setting updates with WebSocket authentication/reconnect snapshots.
     let _access = state.ws.access.write().await;
-    if require_room_access(&state.db, &auth_user, &room_id)
-        .await?
-        .share_read_only
-    {
-        return Err(ApiError::not_found("Room not found"));
-    }
+    require_room_access(&state.db, &auth_user, &room_id).await?;
     let room = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         SELECT
@@ -513,9 +475,9 @@ pub async fn update_room(
     };
 
     let participants = fetch_participants(&state, &room.id).await?;
-    let is_owner = room.owner_id == auth_user.id;
-    let is_superuser = auth_user.role == "superuser";
-    let can_change_language = is_owner || matches!(auth_user.role.as_str(), "admin" | "superuser");
+    // Members who joined through a link edit content; settings stay with the owner and staff.
+    let can_change_settings = can_manage_room(&auth_user, &room.owner_id);
+    let can_change_language = can_change_settings;
     let language_only = payload.language.is_some()
         && payload.name.is_none()
         && payload.company.is_none()
@@ -538,7 +500,7 @@ pub async fn update_room(
     }
     let language_requested = payload.language.is_some();
     let rename_requested = payload.name.is_some();
-    if rename_requested && !is_owner && !is_superuser {
+    if rename_requested && !can_change_settings {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -613,16 +575,12 @@ pub async fn update_room(
 pub async fn set_room_pin(
     State(state): State<AppState>,
     client: ClientInfo,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     Path(room_id): Path<String>,
     Json(payload): Json<SetRoomPinPayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    if require_room_access(&state.db, &auth_user, &room_id)
-        .await?
-        .share_read_only
-    {
-        return Err(ApiError::not_found("Room not found"));
-    }
+    let _access = state.ws.access.write().await;
+    require_room_access(&state.db, &auth_user, &room_id).await?;
     if room_id.is_empty() {
         return Err(ApiError::bad_request("Room ID is required"));
     }
@@ -687,6 +645,10 @@ pub async fn set_room_pin(
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
+    // Techs who could only see the room because it was pinned lose access.
+    if !payload.is_pinned {
+        state.ws.revoke_inaccessible_room(&state.db, &room_id).await;
+    }
     let participants = fetch_participants(&state, &room.id).await?;
     let user_participant = participants.iter().find(|p| p.user_id == auth_user.id);
     let is_owner = room.owner_id == auth_user.id;
@@ -725,7 +687,7 @@ pub async fn delete_room(
     let room_access = require_room_access(&state.db, &auth_user, &room_id).await?;
     let room = room_access;
 
-    if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::Delete) {
+    if !can_delete_room(&auth_user) {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -792,7 +754,7 @@ pub async fn end_room(
 
     let room = room_access;
 
-    if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::End) {
+    if !can_end_room(&auth_user, &room.owner_id) {
         return Err(ApiError::not_found("Room not found"));
     }
 

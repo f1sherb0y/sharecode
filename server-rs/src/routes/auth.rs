@@ -111,9 +111,6 @@ pub async fn register(
             password,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
@@ -160,9 +157,6 @@ pub async fn register(
                 "username": user.username,
                 "color": user.color,
                 "role": user.role,
-                "canReadAllRooms": user.can_read_all_rooms,
-                "canWriteAllRooms": user.can_write_all_rooms,
-                "canDeleteAllRooms": user.can_delete_all_rooms,
             },
             "token": token,
             "browserSessionId": session_id,
@@ -204,9 +198,6 @@ pub async fn login(
             password,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
@@ -302,9 +293,6 @@ pub async fn login(
             "username": user.username,
             "color": user.color,
             "role": user.role,
-            "canReadAllRooms": user.can_read_all_rooms,
-            "canWriteAllRooms": user.can_write_all_rooms,
-            "canDeleteAllRooms": user.can_delete_all_rooms,
         },
         "token": token,
         "browserSessionId": session_id,
@@ -345,9 +333,6 @@ pub async fn change_password(
             password,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
@@ -445,9 +430,6 @@ pub async fn get_profile(
                     username,
                     color,
                     role,
-                    "canReadAllRooms" as can_read_all_rooms,
-                    "canWriteAllRooms" as can_write_all_rooms,
-                    "canDeleteAllRooms" as can_delete_all_rooms,
                     "createdAt" as created_at,
                     "tokenVersion" as token_version, "lastSeen" as last_seen
                 FROM "User"
@@ -476,9 +458,6 @@ pub async fn get_profile(
                     "username": user.username,
                     "color": user.color,
                     "role": user.role,
-                    "canReadAllRooms": user.can_read_all_rooms,
-                    "canWriteAllRooms": user.can_write_all_rooms,
-                    "canDeleteAllRooms": user.can_delete_all_rooms,
                     "createdAt": to_iso_string(user.created_at),
                 }
             })))

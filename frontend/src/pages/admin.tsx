@@ -27,11 +27,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Checkbox,
 } from '@/components/ui'
 import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { api } from '@/api'
-import { canDeleteRoom } from '@/lib/room-permissions'
+import { canDeleteRoom, canManageAccount, isAdmin, isStaff } from '@/lib/room-permissions'
 import { validatePasswordPolicy } from '@/lib/password-policy'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores'
@@ -39,13 +38,7 @@ import { formatDate, formatDateTime } from '@/lib/utils'
 import { LANGUAGES } from '@/types'
 import type { Language, Role, RoomPlaybackSize, PaginationMeta } from '@/types'
 
-type PermissionState = {
-  canReadAllRooms: boolean
-  canWriteAllRooms: boolean
-  canDeleteAllRooms: boolean
-}
-
-const ROLES: Role[] = ['user', 'admin', 'superuser']
+const ROLES: Role[] = ['tech', 'agent', 'admin']
 const ADMIN_SECTIONS = ['users', 'rooms'] as const
 const ROOM_STATUS_FILTERS = ['all', 'active', 'ended'] as const
 
@@ -94,29 +87,19 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
 }
 
-function getInitialPermissionsForRole(role: Role): PermissionState {
-  if (role === 'superuser') {
-    return { canReadAllRooms: true, canWriteAllRooms: true, canDeleteAllRooms: true }
-  }
-  if (role === 'admin') {
-    return { canReadAllRooms: true, canWriteAllRooms: true, canDeleteAllRooms: false }
-  }
-  return { canReadAllRooms: false, canWriteAllRooms: false, canDeleteAllRooms: false }
-}
-
 function CreateUserDialog({
   open,
   onOpenChange,
-  isSuperuser,
+  roles,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  isSuperuser: boolean
+  /** Admins create every role; agents create tech accounts only. */
+  roles: Role[]
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [role, setRole] = useState<Role>('user')
-  const [permissions, setPermissions] = useState<PermissionState>(getInitialPermissionsForRole('user'))
+  const [role, setRole] = useState<Role>('tech')
   const [error, setError] = useState('')
 
   const createUserMutation = useMutation({
@@ -125,9 +108,6 @@ function CreateUserDialog({
       password: string
       email?: string
       role?: Role
-      canReadAllRooms?: boolean
-      canWriteAllRooms?: boolean
-      canDeleteAllRooms?: boolean
     }) => api.createUser(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
@@ -137,21 +117,9 @@ function CreateUserDialog({
 
   useEffect(() => {
     if (open) return
-    setRole('user')
-    setPermissions(getInitialPermissionsForRole('user'))
+    setRole('tech')
     setError('')
   }, [open])
-
-  const roleLabel = (r: Role) => {
-    switch (r) {
-      case 'superuser':
-        return t('common.superuser')
-      case 'admin':
-        return t('common.admin')
-      default:
-        return t('admin.users.createForm.roleUser')
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -172,7 +140,6 @@ function CreateUserDialog({
         password,
         email: email || undefined,
         role,
-        ...permissions,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user')
@@ -230,21 +197,14 @@ function CreateUserDialog({
             </div>
             <div className="space-y-1">
               <Label>{t('admin.users.createForm.role')}</Label>
-              <Select
-                value={role}
-                onValueChange={(v) => {
-                  const nextRole = v as Role
-                  setRole(nextRole)
-                  setPermissions(getInitialPermissionsForRole(nextRole))
-                }}
-              >
+              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(isSuperuser ? ROLES : (['user'] as Role[])).map((r) => (
+                  {roles.map((r) => (
                     <SelectItem key={r} value={r}>
-                      {roleLabel(r)}
+                      {t(`roles.${r}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -302,15 +262,15 @@ export function AdminPage() {
 
   // Pending edits: per-user diff of fields the admin has touched but not yet saved.
   // Source of truth for current values is the query cache; this map holds only user intent.
-  const [pendingEdits, setPendingEdits] = useState<Map<string, Partial<{ role: Role } & PermissionState>>>(new Map())
+  const [pendingEdits, setPendingEdits] = useState<Map<string, { role?: Role }>>(new Map())
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [compressingRoomId, setCompressingRoomId] = useState<string | null>(null)
 
-  const isSuperuser = user?.role === 'superuser'
-  const isAdmin = user?.role === 'admin'
+  // Agents and admins use this page; storage, devices and role changes are admin-only.
+  const viewerIsAdmin = isAdmin(user)
   const showUsersSection = section === 'users'
   const showRoomsSection = section === 'rooms'
-  const canAccessAdmin = !!user && (user.role === 'admin' || user.role === 'superuser')
+  const canAccessAdmin = isStaff(user)
 
   const usersParams = { page: userPage, pageSize, role: userRoleFilter, q: searchParams.get('userSearch') ?? '' }
   const roomsParams = { page: roomPage, pageSize, status: roomStatusFilter, language: roomLanguage, owner: ownerSearch, q: searchParams.get('roomSearch') ?? '' }
@@ -339,7 +299,7 @@ export function AdminPage() {
   const dbSizeQuery = useQuery({
     queryKey: queryKeys.adminDbSize,
     queryFn: () => api.getDbStorageSize(),
-    enabled: isSuperuser && showRoomsSection,
+    enabled: viewerIsAdmin && showRoomsSection,
   })
 
   const playbackSizesQuery = useQuery({
@@ -348,7 +308,7 @@ export function AdminPage() {
       const { rooms } = await api.getRoomPlaybackSizes(visibleRoomIds, signal)
       return rooms
     },
-    enabled: isSuperuser && showRoomsSection && visibleRoomIds.length > 0,
+    enabled: viewerIsAdmin && showRoomsSection && visibleRoomIds.length > 0,
   })
 
   const clearPendingEditFor = useCallback((userId: string) => {
@@ -361,7 +321,7 @@ export function AdminPage() {
   }, [])
 
   const updateUserMutation = useMutation({
-    mutationFn: ({ userId, payload }: { userId: string; payload: Partial<{ role: Role } & PermissionState> }) =>
+    mutationFn: ({ userId, payload }: { userId: string; payload: { role: Role } }) =>
       api.updateUser(userId, payload),
     onSuccess: async (_data, { userId }) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers })
@@ -399,8 +359,8 @@ export function AdminPage() {
   const playbackSizes = useMemo(() => playbackSizesQuery.data ?? [], [playbackSizesQuery.data])
   const isLoadingUsers = usersQuery.isLoading
   const isLoadingRooms = roomsQuery.isLoading
-  const isLoadingStorage = isSuperuser ? dbSizeQuery.isLoading : false
-  const isLoadingPlaybackSizes = isSuperuser ? playbackSizesQuery.isLoading : false
+  const isLoadingStorage = viewerIsAdmin ? dbSizeQuery.isLoading : false
+  const isLoadingPlaybackSizes = viewerIsAdmin ? playbackSizesQuery.isLoading : false
 
   const updateAdminParams = useCallback((updates: Record<string, string | number>) => {
     setSearchParams(prev => {
@@ -444,7 +404,7 @@ export function AdminPage() {
     const tasks = [
       queryClient.invalidateQueries({ queryKey: queryKeys.adminRooms }),
     ]
-    if (isSuperuser) {
+    if (viewerIsAdmin) {
       tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.adminDbSize }))
       tasks.push(queryClient.invalidateQueries({ queryKey: queryKeys.adminPlaybackSizes }))
     }
@@ -456,16 +416,8 @@ export function AdminPage() {
     const original = users.find((u) => u.id === userId)
     if (!edits || !original) return
 
-    const payload: Partial<{ role: Role } & PermissionState> = {}
-    if (edits.role !== undefined && edits.role !== original.role) payload.role = edits.role
-    if (edits.canReadAllRooms !== undefined && edits.canReadAllRooms !== original.canReadAllRooms)
-      payload.canReadAllRooms = edits.canReadAllRooms
-    if (edits.canWriteAllRooms !== undefined && edits.canWriteAllRooms !== original.canWriteAllRooms)
-      payload.canWriteAllRooms = edits.canWriteAllRooms
-    if (edits.canDeleteAllRooms !== undefined && edits.canDeleteAllRooms !== original.canDeleteAllRooms)
-      payload.canDeleteAllRooms = edits.canDeleteAllRooms
-
-    if (Object.keys(payload).length === 0) return
+    if (edits.role === undefined || edits.role === original.role) return
+    const payload = { role: edits.role }
 
     setSavingUserId(userId)
     try {
@@ -533,7 +485,7 @@ export function AdminPage() {
     }
   }
 
-  const updateEditedUser = (userId: string, updates: Partial<{ role: Role } & PermissionState>) => {
+  const updateEditedUser = (userId: string, updates: { role?: Role }) => {
     setPendingEdits((prev) => {
       const next = new Map(prev)
       next.set(userId, { ...next.get(userId), ...updates })
@@ -546,24 +498,10 @@ export function AdminPage() {
     const original = users.find((u) => u.id === userId)
     if (!edits || !original) return false
 
-    return (
-      (edits.role !== undefined && edits.role !== original.role) ||
-      (edits.canReadAllRooms !== undefined && edits.canReadAllRooms !== original.canReadAllRooms) ||
-      (edits.canWriteAllRooms !== undefined && edits.canWriteAllRooms !== original.canWriteAllRooms) ||
-      (edits.canDeleteAllRooms !== undefined && edits.canDeleteAllRooms !== original.canDeleteAllRooms)
-    )
+    return edits.role !== undefined && edits.role !== original.role
   }
 
-  const roleDisplay = (role: Role) => {
-    switch (role) {
-      case 'superuser':
-        return t('common.superuser')
-      case 'admin':
-        return t('common.admin')
-      default:
-        return t('admin.users.createForm.roleUser')
-    }
-  }
+  const roleDisplay = (role: Role) => t(`roles.${role}`)
 
   const playbackByRoomId = useMemo(() => {
     const map = new Map<string, RoomPlaybackSize>()
@@ -584,7 +522,7 @@ export function AdminPage() {
       />
 
       <PageContainer>
-        {isSuperuser && deviceUser && <UserDevicesDialog key={deviceUser.id} user={deviceUser} onClose={() => setDeviceUser(null)} />}
+        {viewerIsAdmin && deviceUser && <UserDevicesDialog key={deviceUser.id} user={deviceUser} onClose={() => setDeviceUser(null)} />}
         {/* Delete User Dialog */}
         <Dialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
           <DialogContent>
@@ -721,7 +659,7 @@ export function AdminPage() {
               <CreateUserDialog
                 open={isCreateOpen}
                 onOpenChange={setIsCreateOpen}
-                isSuperuser={isSuperuser}
+                roles={ROLES.filter(role => canManageAccount(user, role))}
               />
             </div>
           </CardHeader>
@@ -738,9 +676,6 @@ export function AdminPage() {
                       <th className="px-1.5 py-1 font-medium">{t('admin.users.table.username')}</th>
                       <th className="px-1.5 py-1 font-medium hidden sm:table-cell">{t('admin.users.table.email')}</th>
                       <th className="px-1.5 py-1 font-medium">{t('admin.users.table.role')}</th>
-                      <th className="px-1.5 py-1 font-medium text-center w-12">{t('admin.users.table.read')}</th>
-                      <th className="px-1.5 py-1 font-medium text-center w-12">{t('admin.users.table.write')}</th>
-                      <th className="px-1.5 py-1 font-medium text-center w-12">{t('admin.users.table.delete')}</th>
                       <th className="px-1.5 py-1 font-medium hidden md:table-cell">{t('admin.users.table.created')}</th>
                       <th className="px-1.5 py-1 font-medium">{t('admin.users.table.actions')}</th>
                     </tr>
@@ -748,9 +683,8 @@ export function AdminPage() {
                   <tbody>
                     {users.map((u) => {
                       const edits = pendingEdits.get(u.id)
-                      const canDelete = isSuperuser
-                        ? u.id !== user?.id && u.role !== 'superuser'
-                        : u.role === 'user'
+                      // The server also keeps the last admin; the UI never offers removing admins.
+                      const canDelete = u.id !== user?.id && u.role !== 'admin' && canManageAccount(user, u.role)
 
                       return (
                         <tr key={u.id} className="border-b">
@@ -760,7 +694,7 @@ export function AdminPage() {
                           </td>
                           <td className="px-1.5 py-1 text-muted-foreground hidden sm:table-cell">{u.email ?? '-'}</td>
                           <td className="px-1.5 py-1">
-                            {isSuperuser && u.id !== user?.id ? (
+                            {viewerIsAdmin && u.id !== user?.id ? (
                               <Select
                                 value={edits?.role ?? u.role}
                                 onValueChange={(v) => updateEditedUser(u.id, { role: v as Role })}
@@ -780,33 +714,6 @@ export function AdminPage() {
                               <Badge variant="secondary" className="rounded-sm text-xs px-1 py-0">{roleDisplay(u.role)}</Badge>
                             )}
                           </td>
-                          <td className="px-1.5 py-1 text-center">
-                            <Checkbox
-                              checked={edits?.canReadAllRooms ?? u.canReadAllRooms}
-                              onCheckedChange={(checked) =>
-                                updateEditedUser(u.id, { canReadAllRooms: checked as boolean })
-                              }
-                              disabled={!isSuperuser || u.role === 'superuser'}
-                            />
-                          </td>
-                          <td className="px-1.5 py-1 text-center">
-                            <Checkbox
-                              checked={edits?.canWriteAllRooms ?? u.canWriteAllRooms}
-                              onCheckedChange={(checked) =>
-                                updateEditedUser(u.id, { canWriteAllRooms: checked as boolean })
-                              }
-                              disabled={!isSuperuser || u.role === 'superuser'}
-                            />
-                          </td>
-                          <td className="px-1.5 py-1 text-center">
-                            <Checkbox
-                              checked={edits?.canDeleteAllRooms ?? u.canDeleteAllRooms}
-                              onCheckedChange={(checked) =>
-                                updateEditedUser(u.id, { canDeleteAllRooms: checked as boolean })
-                              }
-                              disabled={!isSuperuser || u.role === 'superuser'}
-                            />
-                          </td>
                           <td className="px-1.5 py-1 text-muted-foreground hidden md:table-cell">{formatDate(u.createdAt ?? '')}</td>
                           <td className="px-1.5 py-1">
                             <div className="flex items-center gap-1">
@@ -821,7 +728,7 @@ export function AdminPage() {
                                   <span className="hidden sm:inline">{savingUserId === u.id ? t('admin.users.table.updating') : t('admin.users.table.update')}</span>
                                 </Button>
                               )}
-                              {isSuperuser && <Button size="sm" variant="outline" onClick={() => setDeviceUser({ id: u.id, username: u.username })}>{t('audit.devices')}</Button>}
+                              {viewerIsAdmin && <Button size="sm" variant="outline" onClick={() => setDeviceUser({ id: u.id, username: u.username })}>{t('audit.devices')}</Button>}
                               {canDelete && (
                                 <Button
                                   size="sm"
@@ -838,7 +745,7 @@ export function AdminPage() {
                     })}
                     {users.length === 0 && (
                       <tr>
-                        <td className="px-1.5 py-2 text-center text-muted-foreground" colSpan={8}>
+                        <td className="px-1.5 py-2 text-center text-muted-foreground" colSpan={5}>
                           {t('rooms.list.empty')}
                         </td>
                       </tr>
@@ -852,7 +759,7 @@ export function AdminPage() {
         )}
 
         {/* Rooms + Storage Section */}
-        {showRoomsSection && (isSuperuser || isAdmin) ? (
+        {showRoomsSection && (
           <Card>
             <CardHeader className="py-2">
               <div className="flex items-center justify-between">
@@ -875,7 +782,7 @@ export function AdminPage() {
                 </div>
               ) : (
                 <>
-                  {isSuperuser && (
+                  {viewerIsAdmin && (
                   <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 mb-2">
                     <div className="rounded-md border p-2">
                       <div className="text-xs text-muted-foreground">{t('admin.storage.dbSize')}</div>
@@ -938,7 +845,7 @@ export function AdminPage() {
                           const endedAt = playback?.endedAt ?? room.endedAt ?? null
                           const isEnded = playback?.isEnded ?? room.isEnded ?? false
                           const canCompress = isEnded && updates > 0
-                          const canDeleteCurrentRoom = canDeleteRoom(user, room.owner.id)
+                          const canDeleteCurrentRoom = canDeleteRoom(user)
 
                           return (
                             <tr key={room.id} className="border-b">
@@ -954,7 +861,7 @@ export function AdminPage() {
                               </td>
                               <td className="px-1.5 py-1">
                                 <Select value={room.language}
-                                  disabled={roomLanguageMutation.isPending || room.isDeleted || room.shareReadOnly}
+                                  disabled={roomLanguageMutation.isPending || room.isDeleted}
                                   onValueChange={language => roomLanguageMutation.mutate({ roomId: room.id, language: language as Language })}>
                                   <SelectTrigger className="h-control-sm w-[105px] text-xs" aria-label={`${t('admin.rooms.table.language')}: ${room.name}`}>
                                     <SelectValue />
@@ -1029,16 +936,7 @@ export function AdminPage() {
               )}
             </CardContent>
           </Card>
-        ) : showRoomsSection ? (
-          <Card>
-            <CardHeader className="py-2">
-              <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 px-1.5 sm:px-3">
-              <p className="text-sm text-muted-foreground">{t('admin.rooms.superuserOnly')}</p>
-            </CardContent>
-          </Card>
-        ) : null}
+        )}
         <AdminPagination pagination={pagination} disabled={showUsersSection ? usersQuery.isFetching : roomsQuery.isFetching}
           onPage={page => updateAdminParams({ [showUsersSection ? 'userPage' : 'roomPage']: page })} />
           </Tabs.Content>

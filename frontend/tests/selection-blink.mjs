@@ -9,8 +9,13 @@ async function request(path, method = 'GET', body, token) {
 }
 const password = 'LocalAudit#2026Strong'
 const admin = (await request('/api/auth/login', 'POST', { username: 'audit_admin', password })).token
-await request('/api/admin/users', 'POST', { username: 'blink_viewer', password, role: 'admin', canReadAllRooms: true, canWriteAllRooms: false }, admin)
+await request('/api/admin/users', 'POST', { username: 'blink_viewer', password, role: 'tech' }, admin)
 const viewer = (await request('/api/auth/login', 'POST', { username: 'blink_viewer', password })).token
+// The viewer only watches: a tech who joined through a read-only link.
+async function shareReadOnly(room) {
+  const { shareLink } = await request(`/api/rooms/${room.id}/share-links`, 'POST', { canEdit: false }, admin)
+  await request(`/api/share/${shareLink.token}/accept`, 'POST', {}, viewer)
+}
 const web = await createServer({ plugins: [{ name: 'capture-blink-test-editor', enforce: 'pre', transform(source, id) {
   if (id.endsWith('/hooks/use-monaco-editor.ts')) return source.replace('editorInstanceRef.current = editor', 'editorInstanceRef.current = editor; (window as any).__blinkTest = { editor, ytext, provider, monaco }')
   if (id.endsWith('/features/markdown-editor.tsx')) return source.replace('collabService.connect()', 'collabService.connect(); (window as any).__markdownBlinkTest = { view: ctx.get(editorViewCtx), provider, ydoc, TextSelection }')
@@ -22,6 +27,7 @@ try {
   for (const [name, type] of Object.entries({ chromium, firefox, webkit })) {
     if (process.env.ENGINE && process.env.ENGINE !== name) continue
     const { room } = await request('/api/rooms', 'POST', { name: 'Blink reliability', language: 'python' }, admin)
+    await shareReadOnly(room)
     const browser = await type.launch()
     try {
       const pages = [], errors = []
@@ -99,6 +105,7 @@ try {
       }
       await phone.screenshot({ path: `/tmp/sharecode-blink-mobile-${name}.png` }); await mobile.close()
       const markdownRoom = (await request('/api/rooms', 'POST', { name: 'Markdown blink', language: 'python' }, admin)).room
+      await shareReadOnly(markdownRoom)
       for (const page of pages) {
         await page.goto('http://127.0.0.1:55461/room/' + markdownRoom.id)
         await page.waitForFunction(() => window.__blinkTest?.provider.synced)

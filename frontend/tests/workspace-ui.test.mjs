@@ -10,7 +10,7 @@ import { createServer } from 'vite'
 let server, browser, base
 const engine = process.env.UI_BROWSER || 'chromium'
 const screenshots = '/tmp/sharecode-ui-review/' + engine
-const owner = { id: 'ui-owner', username: 'Lin', color: '#218568', role: 'superuser' }
+const owner = { id: 'ui-owner', username: 'Lin', color: '#218568', role: 'admin' }
 const playbackDoc = new Y.Doc()
 playbackDoc.getText('codemirror').insert(0, 'const compact = true\n')
 const playbackUpdate = gzipSync(Y.encodeStateAsUpdate(playbackDoc)).toString('base64')

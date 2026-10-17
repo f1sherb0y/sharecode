@@ -10,7 +10,7 @@ import { chromium, firefox, webkit } from 'playwright'
 const temp = await mkdtemp(join(tmpdir(), 'sharecode-loading-'))
 const name = `sharecode-loading-${process.pid}`
 const base = 'http://127.0.0.1:55463'
-const user = { id: 'fixture', username: 'fixture', role: 'superuser', color: '#226699' }
+const user = { id: 'fixture', username: 'fixture', role: 'admin', color: '#226699' }
 const doc = new Y.Doc(); doc.getText('codemirror').insert(0, '# Shared monospace\n\n中文 English $x^2$\n')
 const element = { id: 'legacy-text', type: 'text', x: 20, y: 20, width: 220, height: 25, angle: 0, strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 1, strokeStyle: 'solid', roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null, seed: 123, version: 1, versionNonce: 123, isDeleted: false, boundElements: null, updated: 0, link: null, locked: false, index: 'a0', fontFamily: 5, fontSize: 20, text: 'Canvas 中文 English', originalText: 'Canvas 中文 English', textAlign: 'left', verticalAlign: 'top', containerId: null, autoResize: true, lineHeight: 1.25 }
 doc.getMap('canvas-elements').set(element.id, { element })

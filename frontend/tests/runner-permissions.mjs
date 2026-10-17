@@ -14,31 +14,38 @@ const ok = async (...args) => { const r = await request(...args); assert.ok(r.st
 const login = async username => (await ok('/api/auth/login', 'POST', { username, password: 'LocalAudit#2026Strong' })).token
 const root = await login('audit_admin')
 const actors = {}
-for (const [username, role, write] of [['owner','user',false], ['admin','admin',true], ['readonly','admin',false], ['restricted','admin',false], ['member','user',false]]) {
-  const { user } = await ok('/api/admin/users', 'POST', { username, role, password: 'LocalAudit#2026Strong', canReadAllRooms: username !== 'restricted' && role === 'admin', canWriteAllRooms: write, canDeleteAllRooms: false }, root)
+for (const [username, role] of [['owner','tech'], ['agent','agent'], ['readonly','tech'], ['outsider','tech'], ['member','tech']]) {
+  const { user } = await ok('/api/admin/users', 'POST', { username, role, password: 'LocalAudit#2026Strong' }, root)
   actors[username] = { user, token: await login(username) }
 }
-const { room } = await ok('/api/rooms', 'POST', { name: 'Language permissions regression', language: 'python', allowedUsers: [{ userId: actors.member.user.id, canEdit: true }] }, actors.owner.token)
+const { room } = await ok('/api/rooms', 'POST', { name: 'Language permissions regression', language: 'python' }, actors.owner.token)
+// Techs share rooms with each other only through links; the link decides editing.
+for (const [actor, canEdit] of [['readonly', false], ['member', true]]) {
+  const { shareLink } = await ok(`/api/rooms/${room.id}/share-links`, 'POST', { canEdit }, actors.owner.token)
+  await ok(`/api/share/${shareLink.token}/accept`, 'POST', {}, actors[actor].token)
+}
 const doc = new Y.Doc(), messages = []
 let peer = new HocuspocusProvider({ url: API.replace('http', 'ws') + '/api/ws', name: room.id, document: doc, token: actors.readonly.token, onStateless: ({ payload }) => messages.push(JSON.parse(payload)) })
 const wait = async predicate => { for (let i=0;i<200;i++) { if(predicate())return; await new Promise(r=>setTimeout(r,25)) } throw Error('Timed out waiting for language synchronization') }
 try {
   await wait(() => peer.synced)
   assert.equal(peer.authorizedScope, 'readonly')
-  for (const [token, language] of [[root,'java'], [actors.admin.token,'c'], [actors.readonly.token,'cpp'], [actors.owner.token,'javascript']]) {
+  for (const [token, language] of [[root,'java'], [actors.agent.token,'c'], [actors.owner.token,'javascript']]) {
     await ok('/api/rooms/' + room.id, 'PUT', { language }, token)
     await wait(() => messages.at(-1)?.language === language)
     assert.equal((await ok('/api/rooms/' + room.id, 'GET', undefined, actors.owner.token)).room.language, language)
   }
-  assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors.member.token)).status, 404)
-  assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors.restricted.token)).status, 404)
-  assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python', name:'not allowed' }, actors.restricted.token)).status, 404)
+  // Room settings stay with the owner, agents and admins, even for link members who edit.
+  for (const actor of ['member', 'readonly', 'outsider']) {
+    assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors[actor].token)).status, 404)
+    assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python', name:'not allowed' }, actors[actor].token)).status, 404)
+  }
   assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'bogus' }, root)).status, 400)
   peer.destroy(); messages.length=0
   peer = new HocuspocusProvider({ url: API.replace('http','ws')+'/api/ws', name: room.id, document:doc, token:actors.readonly.token, onStateless:({payload})=>messages.push(JSON.parse(payload)) })
   await wait(() => messages.some(m=>m.type==='room-language' && m.language==='javascript'))
   assert.equal(peer.authorizedScope, 'readonly')
-  console.log('PASS owner/admin/superuser language permissions; restricted admin denied; ordinary member denied; read-only live sync and reconnect')
+  console.log('PASS owner/agent/admin language permissions; link members and outsiders denied; read-only live sync and reconnect')
   const samples = [
     ['python', 'print(input())'],
     ['java', 'public class Main { public static void main(String[] args) { System.out.println(new java.util.Scanner(System.in).nextLine()); } }'],
@@ -66,7 +73,7 @@ try {
   await web.listen()
   const browser = await chromium.launch()
   try {
-    for (const actor of ['admin','readonly','member']) {
+    for (const actor of ['agent','readonly','member']) {
       const context = await browser.newContext()
       await context.addInitScript(token=>{
         sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}))
@@ -77,17 +84,17 @@ try {
       await page.goto('http://127.0.0.1:55461/room/'+room.id)
       await page.locator('.monaco-editor').waitFor()
       const picker=page.getByRole('combobox',{name:'Language',exact:true})
-      if(actor==='member') assert.equal(await picker.count(),0)
+      if(actor!=='agent') assert.equal(await picker.count(),0)
       else {
         await picker.click()
-        await page.getByRole('option',{name:actor==='admin'?'python':'c',exact:true}).click()
-        await page.waitForFunction(language=>document.querySelector('.editor-statusbar [role=combobox]')?.textContent===language,actor==='admin'?'python':'c')
-        assert.equal((await ok('/api/rooms/'+room.id,'GET',undefined,root)).room.language,actor==='admin'?'python':'c')
+        await page.getByRole('option',{name:'python',exact:true}).click()
+        await page.waitForFunction(language=>document.querySelector('.editor-statusbar [role=combobox]')?.textContent===language,'python')
+        assert.equal((await ok('/api/rooms/'+room.id,'GET',undefined,root)).room.language,'python')
       }
       assert.deepEqual(errors,[])
       await context.close()
     }
-    console.log('PASS browser language picker: admin, read-only admin, ordinary member')
+    console.log('PASS browser language picker: agent changes it; read-only and editing link members do not see it')
   } finally { await browser.close(); await web.close() }
 
 } finally { peer.destroy(); doc.destroy() }

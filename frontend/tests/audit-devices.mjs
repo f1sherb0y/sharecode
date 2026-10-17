@@ -32,7 +32,8 @@ assert.equal(events.filter(e=>e.success&&e.action==='login').length,3)
 assert.equal(events.filter(e=>!e.success).length,1)
 await request(`/api/admin/users/${created.id}/devices`,'GET',undefined,member.token,404)
 await request('/api/admin/audit','GET',undefined,member.token,404)
-const administrator=(await request('/api/admin/users','POST',{username:'device_admin',password,role:'admin',canDeleteAllRooms:true},token,201)).user
+// Agents use the admin pages but never see device history; admins do.
+const administrator=(await request('/api/admin/users','POST',{username:'device_admin',password,role:'agent'},token,201)).user
 const adminAuth=await login(administrator.username,randomUUID())
 for(const id of [administrator.id,created.id,root.user.id,randomUUID()]) {
  await request(`/api/admin/users/${id}/devices`,'GET',undefined,adminAuth.token,404)
@@ -42,7 +43,7 @@ const adminAudit=await request('/api/admin/audit?username=device_user','GET',und
 assert(adminAudit.events.length>0)
 assert(adminAudit.events.every(e=>e.deviceId===null&&e.fingerprint===null&&e.newDevice===false))
 await request(`/api/admin/audit?deviceId=${deviceA}`,'GET',undefined,adminAuth.token,404)
-console.log('PASS superuser-only device history; admin self/other access and audit device-filter bypass denied; admin audit device fields redacted')
+console.log('PASS admin-only device history; agent self/other access and audit device-filter bypass denied; agent audit device fields redacted')
 // Duplicate fingerprint is a hint, not a reason to merge different browser IDs.
 await Promise.all([login('device_user',deviceB),login('device_user',deviceB)])
 devices=await request(`/api/admin/users/${created.id}/devices`,'GET',undefined,token)
@@ -58,7 +59,7 @@ await request(`/api/rooms/${room.id}`,'PUT',{language:'java'},token,200,headers(
 const note=(await request(`/api/rooms/${room.id}/notes`,'POST',{text:'Private secret note'},token,201,headers(deviceA))).note
 await request(`/api/rooms/${room.id}/notes/${note.id}`,'PUT',{text:'Other secret'},token,200,headers(deviceA))
 await request(`/api/rooms/${room.id}/notes/${note.id}`,'DELETE',undefined,token,200,headers(deviceA))
-await request(`/api/admin/users/${created.id}`,'PATCH',{canReadAllRooms:true},token,200,headers(deviceA))
+await request(`/api/admin/users/${created.id}`,'PATCH',{role:'agent'},token,200,headers(deviceA))
 await request('/api/admin/notifications','POST',{title:'Title not captured',content:'Content not captured'},token,201,headers(deviceA))
 await request('/api/auth/change-password','POST',{oldPassword:'Incorrect#123',newPassword:'ChangedAudit#2026'},member.token,400,headers(deviceB))
 const changed=await request('/api/auth/change-password','POST',{oldPassword:password,newPassword:'ChangedAudit#2026'},member.token,200,headers(deviceB))
@@ -66,16 +67,16 @@ await request('/api/auth/profile','GET',undefined,member.token,401)
 for(let i=0;i<30;i++) await request(`/api/rooms/${room.id}/pin`,'PUT',{isPinned:i%2===0},token,200,headers(deviceA))
 await request(`/api/rooms/${room.id}/end`,'POST',{},token,200,headers(deviceA))
 await request(`/api/rooms/${room.id}`,'DELETE',undefined,token,200,headers(deviceA))
-const peer=(await request('/api/admin/users','POST',{username:'audit_peer',password,role:'superuser'},token,201)).user
+const peer=(await request('/api/admin/users','POST',{username:'audit_peer',password,role:'admin'},token,201)).user
 const peerAuth=await login(peer.username,randomUUID())
 const peerAudit=await request('/api/admin/audit?pageSize=100','GET',undefined,peerAuth.token)
 assert(!peerAudit.events.some(e=>e.targetId===room.id||e.targetId===note.id||e.targetId===link.id))
 const audit=await request('/api/admin/audit?pageSize=100','GET',undefined,token)
 for(const action of ['login','user.registered','user.created','user.deleted','user.permissions_changed','password.changed','share.created','share.accept','share.revoke','room.created','room.updated','room.pin_changed','room.ended','room.deleted','note.created','note.updated','note.deleted','notification.created']) assert(audit.events.some(e=>e.action===action),action)
 const change=audit.events.find(e=>e.action==='user.permissions_changed')
-assert.equal(change.details.before.canReadAllRooms,false);assert.equal(change.details.after.canReadAllRooms,true)
+assert.equal(change.details.before.role,'tech');assert.equal(change.details.after.role,'agent')
 for(const secret of [password,'ChangedAudit#2026',link.token,'Private secret note','Never put this private content in audit','Title not captured','Content not captured']) assert(!JSON.stringify(audit).includes(secret),secret)
-console.log('PASS mutation audit coverage, permission before/after, no secrets/content, private-room audit isolation')
+console.log('PASS mutation audit coverage, role before/after, no secrets/content, private-room audit isolation')
 const sql=statement=>execFileSync('docker',['exec','-i',process.env.SHARECODE_TEST_CONTAINER,'psql','-U','runner_test','-d','runner_test','-v','ON_ERROR_STOP=1','-Atc',statement],{encoding:'utf8'})
 // Make timestamp order differ from ID order, including ties and exact time boundaries.
 sql(`UPDATE "AuditEvent" SET "createdAt"='2026-01-01 00:00:00+00' WHERE action='room.pin_changed' AND id%2=0`)
@@ -172,7 +173,7 @@ try {
     assert.deepEqual(errors,[])
     await context.close()
    }
-   console.log('PASS',engine,'superuser device controls present; admin device controls/fields absent; audit datetime/pagination, desktop and mobile 3x DPI')
+   console.log('PASS',engine,'admin device controls present; agent device controls/fields absent; audit datetime/pagination, desktop and mobile 3x DPI')
   } finally { await browser.close() }
  }
 } finally { await web.close() }

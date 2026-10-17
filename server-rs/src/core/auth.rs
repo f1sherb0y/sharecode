@@ -22,9 +22,6 @@ pub struct UserTokenPayload {
     pub email: Option<String>,
     pub username: String,
     pub role: String,
-    pub can_read_all_rooms: bool,
-    pub can_write_all_rooms: bool,
-    pub can_delete_all_rooms: bool,
     pub exp: i64,
     pub iat: i64,
 }
@@ -59,13 +56,11 @@ pub struct AuthUser {
     pub username: String,
     pub email: Option<String>,
     pub role: String,
-    pub can_read_all_rooms: bool,
-    pub can_write_all_rooms: bool,
-    pub can_delete_all_rooms: bool,
 }
 
+/// An agent (中介) or admin (管理员); everyone else gets 404.
 #[derive(Debug, Clone)]
-pub struct AdminUser(pub AuthUser);
+pub struct StaffUser(pub AuthUser);
 
 // Room content can be read or written by either an account or a share guest.
 // Guest claims still require room-specific database validation before use.
@@ -135,9 +130,6 @@ pub fn build_user_claims(user: &UserRow, now: chrono::DateTime<Utc>) -> UserToke
         email: user.email.clone(),
         username: user.username.clone(),
         role: user.role.clone(),
-        can_read_all_rooms: user.can_read_all_rooms,
-        can_write_all_rooms: user.can_write_all_rooms,
-        can_delete_all_rooms: user.can_delete_all_rooms,
         exp,
         iat,
     }
@@ -237,9 +229,6 @@ where
                     password,
                     color,
                     role,
-                    "canReadAllRooms" as can_read_all_rooms,
-                    "canWriteAllRooms" as can_write_all_rooms,
-                    "canDeleteAllRooms" as can_delete_all_rooms,
                     "isDeleted" as is_deleted,
                     "createdAt" as created_at,
                     "tokenVersion" as token_version, "lastSeen" as last_seen
@@ -271,15 +260,12 @@ where
                 username: user.username,
                 email: user.email,
                 role: user.role,
-                can_read_all_rooms: user.can_read_all_rooms,
-                can_write_all_rooms: user.can_write_all_rooms,
-                can_delete_all_rooms: user.can_delete_all_rooms,
             })
         }
     }
 }
 
-impl<S> FromRequestParts<S> for AdminUser
+impl<S> FromRequestParts<S> for StaffUser
 where
     S: Send + Sync,
     AppState: axum::extract::FromRef<S>,
@@ -292,10 +278,10 @@ where
     ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
         async move {
             let user = AuthUser::from_request_parts(parts, state).await?;
-            if user.role != "admin" && user.role != "superuser" {
+            if !crate::permissions::is_staff(&user.role) {
                 return Err(ApiError::not_found("Not found"));
             }
-            Ok(AdminUser(user))
+            Ok(StaffUser(user))
         }
     }
 }

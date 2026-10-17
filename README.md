@@ -12,7 +12,7 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 - 🔄 Follow mode - follow another user's viewport
 - 💾 Persistent document storage with PostgreSQL
 - 🔒 Room-based access control (including strict session locking for ended rooms)
-- 🔑 Fine-grained room permissions (read/write/delete all) with superuser, admin, and user roles
+- 🔑 Role-based access: admin (管理员), agent (中介) and tech (技术) accounts; customers join through share links
 - 🔗 Guest share links with configurable view/edit permissions
 
 ## Tech Stack
@@ -73,12 +73,12 @@ The application will be available at **http://localhost**
 - nginx serves frontend static files for other paths
 - WebSocket connections use `/api/ws`
 
-**Default Superuser Credentials:**
+**Default Admin Credentials:**
 - Username: `admin`
 - Password: `admin123`
 - Email: `admin@sharecode.local`
 
-**⚠️ IMPORTANT:** Change these credentials in `docker-compose.yml` before deploying to production! This account boots as the first **superuser** and can manage every other account.
+**⚠️ IMPORTANT:** Change these credentials in `docker-compose.yml` before deploying to production! This account boots as the first **admin** and can manage every other account.
 
 #### Docker Environment Configuration
 
@@ -91,7 +91,7 @@ environment:
   PORT: 3001
   LOG_LEVEL: info  # Options: debug, info, warn, error
   
-  # Superuser credentials - CHANGE THESE IN PRODUCTION
+  # Admin credentials - CHANGE THESE IN PRODUCTION
   ADMIN_USERNAME: admin
   ADMIN_PASSWORD: admin123
   ADMIN_EMAIL: admin@sharecode.local
@@ -233,13 +233,13 @@ FRONTEND_HASH_ROUTER=false
 # Logging - Options: debug, info, warn, error (default: info)
 LOG_LEVEL="info"
 
-# Allow registration (default true)
-ALLOW_REGISTRATION=true
+# Allow self-registration as a tech account (default false)
+ALLOW_REGISTRATION=false
 
 # Code execution (Piston)
 PISTON_URL="http://localhost:2000"
 
-# Superuser credentials - CHANGE THESE IN PRODUCTION
+# Admin credentials - CHANGE THESE IN PRODUCTION
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD="admin123"
 ADMIN_EMAIL="admin@sharecode.local"
@@ -272,81 +272,70 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `POST /api/rooms` - Create new room (authenticated)
 - `GET /api/rooms` - Get user's rooms (authenticated)
 - `GET /api/rooms/:roomId` - Get room details (authenticated)
-- `PUT /api/rooms/:roomId` - Update room (owner or users with write-all permission)
-- `POST /api/rooms/:roomId/end` - End an active room (owner or users with delete-all permission)
-- `DELETE /api/rooms/:roomId` - Delete room (owner or users with delete-all permission)
+- `PUT /api/rooms/:roomId` - Rename or change the language (owner, agents and admins)
+- `POST /api/rooms/:roomId/end` - End an active room (owner, agents and admins)
+- `DELETE /api/rooms/:roomId` - Delete room (admins)
 - `POST /api/rooms/:roomId/join` - Join room (authenticated)
 - `POST /api/rooms/:roomId/leave` - Leave room (authenticated)
-- `POST /api/rooms/:roomId/share-links` - Create a guest share link with view/edit permissions (owner)
-- `GET /api/rooms/:roomId/share-links` - List share links for the room (owner)
-- `DELETE /api/rooms/:roomId/share-links/:shareLinkId` - Delete an existing share link (owner)
+- `POST /api/rooms/:roomId/share-links` - Create a guest share link with view/edit permissions (owner, agents and admins)
+- `GET /api/rooms/:roomId/share-links` - List share links for the room (owner, agents and admins)
+- `DELETE /api/rooms/:roomId/share-links/:shareLinkId` - Delete an existing share link (owner, agents and admins)
 
 ### Share Links (Public)
 - `GET /api/share/:token` - Inspect share link details for a guest invite
 - `POST /api/share/:token/join` - Join a room as a guest by providing display name/email
 - `GET /api/share/session` - Refresh guest session details using the guest token
 
-### Admin / Superuser
-- `GET /api/admin/users` - List all active users (admin/superuser)
-- `POST /api/admin/users` - Create a new user with role + global permissions (admin limited to normal users, superuser for all)
-- `PATCH /api/admin/users/:id` - Update role or global permissions
-- `DELETE /api/admin/users/:id` - Soft delete a user (admins can only remove normal users; superusers can delete admins; superusers cannot be deleted)
+### Agents and Admins
+- `GET /api/admin/users` - List all active users
+- `POST /api/admin/users` - Create a user with a role (agents create tech accounts only)
+- `PATCH /api/admin/users/:id` - Change a user's role (admins only)
+- `DELETE /api/admin/users/:id` - Soft delete a user (agents can only remove tech accounts; the last admin cannot be removed)
+- `GET /api/admin/rooms` - List every room the caller can see
+- `GET /api/users` - Account list for the owner filter
 
-### Superuser Only
-- `GET /api/admin/rooms` - List all rooms
-- `DELETE /api/admin/rooms/:id` - Force-delete a room
+### Admins Only
+- `DELETE /api/admin/rooms/:id` - Delete a room
 - `GET /api/admin/storage/db-size` - Database size summary
 - `GET /api/admin/storage/playback` - Playback storage per room
 - `POST /api/admin/rooms/:id/playback/compress` - Compress playback to 1s resolution
 
 ## Permission Matrix
 
-The system combines a role hierarchy with three global room flags:
+The role alone decides what an account can do; there are no per-account
+permission flags. Customers (客户) have no account: a share link decides whether
+a guest can edit. Rules are enforced identically on the REST and WebSocket paths
+(`server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`).
 
-- `canReadAllRooms`
-- `canWriteAllRooms`
-- `canDeleteAllRooms`
-
-`canDeleteAllRooms` implies room-management authority such as ending/deleting rooms across the system. In the admin UI, superusers can edit all role and global-permission assignments.
-
-| Capability | User | Admin | Superuser |
+| Capability | Tech (技术) | Agent (中介) | Admin (管理员) |
 | --- | --- | --- | --- |
-| View own accessible rooms | Yes | Yes | Yes |
+| See rooms | Own, pinned (while live), joined by link | All standard rooms | All standard rooms |
 | Create rooms | Yes | Yes | Yes |
-| Join allowed rooms | Yes | Yes | Yes |
-| Read any room | No\* | Yes | Yes |
-| Edit any room | No\* | Yes | Yes |
-| View all users in admin panel | No | Yes | Yes |
-| Create normal users | No | Yes | Yes |
-| Create admins or superusers | No | No | Yes |
-| Edit normal users | No | Yes | Yes |
-| Edit admins | No | No | Yes |
-| Edit superusers | No | No | Yes |
-| Delete normal users | No | Yes | Yes |
-| Delete admins | No | No | Yes |
-| Delete superusers | No | No | No |
-| View all rooms in admin panel | No | No | Yes |
-| Force-delete any room | No | No | Yes |
-| View storage / playback admin pages | No | No | Yes |
-
-\* Normal users can get these capabilities via the global flags below.
-
-Global room flags apply on top of role and let you grant room-wide access without promoting a user to admin:
-
-| Global Flag | Effect |
-| --- | --- |
-| `canReadAllRooms` | User can see and open every room, even if not explicitly allowed. |
-| `canWriteAllRooms` | User can edit every room (implies `canReadAllRooms`). |
-| `canDeleteAllRooms` | User can end or delete every room (implies `canWriteAllRooms` and `canReadAllRooms`). |
-
-**Role ↔ global-flag interaction.** Admin and superuser roles implicitly have all three global-room capabilities (`canReadAllRooms` / `canWriteAllRooms` / `canDeleteAllRooms`), regardless of whether those flags are set on their account. The flags exist to grant the same room-wide access to normal users. This is enforced identically on the REST and WebSocket paths — see `core::permissions::role_has_global_{read,write,delete}`.
+| Edit room content | Own; others if the link allows | All | All |
+| Rename, change language, share, end | Own | All | All |
+| Replay / export ended rooms | Own and joined by link | All | All |
+| Pin rooms | No | Yes | Yes |
+| Delete rooms | No | No | Yes |
+| Create private rooms | No | No | Yes |
+| Manage accounts | No | Create/remove techs | All, including roles |
+| Audit log | No | Yes (device data hidden) | Yes |
+| Storage, devices, notifications | No | No | Yes |
 
 Notes:
 
-- Room owners can manage their own rooms regardless of role.
-- Admins are still restricted to user-level account management; they cannot manage admins or superusers.
-- Superusers can delete admins, including the last remaining admin.
-- Superusers cannot delete themselves, and superuser accounts are protected from deletion.
+- Pinned rooms are visible to every tech while live, but read-only unless the
+  tech owns the room or joined it through an editing link.
+- When a tech joins someone else's room through a share link, the link they
+  **last** joined through decides whether they can edit; the room stays in their
+  list and can be replayed after it ends. Owners and staff who can already see
+  the room keep their own access and leave the link unused.
+- Members who joined by link edit content only: renaming, the language, share
+  links and ending the room stay with the owner, agents and admins.
+- Only admins create private rooms. A private room is hidden from everyone except
+  its owner, its members and roles ranked above the owner (this covers rooms made
+  private before the role change).
+- Self-registration is off by default (`ALLOW_REGISTRATION=false`); admins and
+  agents create accounts.
 
 ## Supported Languages
 
@@ -405,18 +394,14 @@ sharecode/
 
 ### Room Access Control
 
-- Room owner has full control over their room (edit, delete, manage participants)
-- Participants can edit if `canEdit` is true, otherwise they are read-only
-- Optional fine-grained permissions allow any user to be granted:
-  - **Read all rooms** — view every active/ended room
-  - **Write all rooms** — edit any room (implies read-all)
-  - **Delete all rooms** — delete or end any room (implies read/write)
-- Three role tiers ship out-of-the-box:
-  - **Superuser** — manages admins, toggles all permissions, full room control
-  - **Admin** — manages regular users and can write all rooms
-  - **User** — controls personal rooms and any room the owner explicitly shares
-- Users must be authenticated to access rooms and their permission flags are validated on every REST/WebSocket request
-- The WebSocket server verifies access on every connection and auto-adds participants with read-only or read/write access based on their permissions
+- Room owners manage their own rooms (edit, share, end); only admins delete rooms
+- Members who joined through a share link edit only if the link they last used allows it
+- Three account roles ship out-of-the-box:
+  - **Admin (管理员)** — manages every account and room, including deletion and private rooms
+  - **Agent (中介)** — sees, edits, shares, pins and ends every standard room; manages tech accounts
+  - **Tech (技术)** — controls personal rooms, sees pinned rooms read-only, and joins others' rooms by link
+- Users must be authenticated to access rooms and their current role is validated on every REST/WebSocket request
+- The WebSocket server verifies access on every connection and disconnects sessions whose access is revoked (role change, unpinned room, ended room or revoked link)
 
 ## License
 

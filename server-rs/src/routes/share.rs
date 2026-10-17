@@ -15,7 +15,7 @@ use crate::{
     db::db_error,
     error::ApiError,
     models::{ShareLinkSummaryRow, ShareLinkWithRoomRow},
-    permissions::{has_global_delete, has_global_read, require_room_access},
+    permissions::{can_manage_room, has_global_read, require_room_access},
     state::AppState,
     utils::colors::random_user_color,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -66,12 +66,7 @@ pub async fn create_share_link(
     Path(room_id): Path<String>,
     Json(payload): Json<CreateShareLinkPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if require_room_access(&state.db, &auth_user, &room_id)
-        .await?
-        .share_read_only
-    {
-        return Err(ApiError::not_found("Room not found"));
-    }
+    require_room_access(&state.db, &auth_user, &room_id).await?;
     let room = sqlx::query_as::<_, RoomOwnerRow>(
         r#"
         SELECT id, "ownerId" as owner_id, "isDeleted" as is_deleted,
@@ -172,12 +167,7 @@ pub async fn list_share_links(
     auth_user: AuthUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    if require_room_access(&state.db, &auth_user, &room_id)
-        .await?
-        .share_read_only
-    {
-        return Err(ApiError::not_found("Room not found"));
-    }
+    require_room_access(&state.db, &auth_user, &room_id).await?;
     let room = sqlx::query_as::<_, RoomOwnerOnlyRow>(
         r#"
         SELECT id, "ownerId" as owner_id
@@ -235,12 +225,7 @@ pub async fn delete_share_link(
     Path((room_id, share_link_id)): Path<(String, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _access = state.ws.access.write().await;
-    if require_room_access(&state.db, &auth_user, &room_id)
-        .await?
-        .share_read_only
-    {
-        return Err(ApiError::not_found("Room not found"));
-    }
+    require_room_access(&state.db, &auth_user, &room_id).await?;
     let share_link = sqlx::query_as::<_, ShareLinkOwnerRow>(
         r#"
         SELECT l."roomId" as room_id, r."ownerId" as owner_id
@@ -498,9 +483,12 @@ pub async fn join_share_link(
     ))
 }
 
-/// Claim an invitation atomically. A higher-role standard-room invitation also
-/// persists replay access and replaces the participant's edit grant with the
-/// share permission. Reopening the same claimed invitation is idempotent.
+/// Claim an invitation atomically. A tech joining someone else's room gets the
+/// link's permission: the link last joined through decides, so a later read-only
+/// link downgrades an earlier edit link and vice versa. A standard room stays
+/// available for replay once it ends. The owner, and staff who can already see
+/// the room, keep their own access and leave the link unused. Reopening the
+/// same claimed invitation is idempotent.
 pub async fn accept_share_link(
     State(state): State<AppState>,
     auth_user: AuthUser,
@@ -516,9 +504,10 @@ pub async fn accept_share_link(
     let row = sqlx::query_as::<_, AccountInvitation>(r#"
         SELECT l.id, l."roomId" as room_id, l."canEdit" AND r."allowEdit" as can_edit,
             l."consumedAt" IS NOT NULL as consumed,
-            (NOT r."isPrivate" AND room_role_rank(o.role) > room_role_rank($3)) as grants_replay,
+            NOT r."isPrivate" as grants_replay,
+            r."ownerId" = $2 as is_owner,
             EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2 AND p."shareLinkId" = l.id) as already_claimed,
-            room_is_visible($2, $3, $4, r."ownerId", o.role, r."isPrivate", r."isEnded", r."isDeleted",
+            room_is_visible($2, $3, $4, r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted",
                 EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2),
                 EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2 AND p."canReplay" AND p."shareLinkId" IS NOT NULL)) as can_view,
             l."expiresAt" <= NOW() as expired
@@ -529,7 +518,7 @@ pub async fn accept_share_link(
     "#).bind(&token).bind(&auth_user.id).bind(&auth_user.role).bind(has_global_read(&auth_user)).fetch_optional(&mut *tx).await
       .map_err(|e| db_error(e, "Failed to load invitation"))?
       .ok_or_else(|| ApiError::not_found("Share link or active room not found"))?;
-    let claimed = !row.already_claimed && (!row.can_view || row.grants_replay);
+    let claimed = !row.already_claimed && !row.is_owner && (!row.can_view || !has_global_read(&auth_user));
     if claimed {
         if row.consumed {
             return Err(ApiError::gone("This share link has already been used"));
@@ -537,8 +526,7 @@ pub async fn accept_share_link(
         if row.expired {
             return Err(ApiError::gone("This share link has expired"));
         }
-        // A higher-role standard-room invitation explicitly replaces the
-        // member grant with the share permissions and retains replay access.
+        // The link replaces any earlier grant, including another link's.
         // Revocation removes that grant, including its replay permission.
         sqlx::query(
             r#"INSERT INTO "RoomParticipant" (id,"roomId","userId","canEdit","shareLinkId","canReplay")
@@ -592,6 +580,7 @@ struct AccountInvitation {
     can_edit: bool,
     can_view: bool,
     grants_replay: bool,
+    is_owner: bool,
     already_claimed: bool,
     consumed: bool,
     expired: bool,
@@ -630,8 +619,9 @@ fn build_room_url(state: &AppState, room_id: &str) -> Option<String> {
     Some(format!("{normalized}/{path}"))
 }
 
+// The owner, agents and admins share rooms; members who joined by link cannot re-share.
 fn can_manage_room_shares(auth_user: &AuthUser, owner_id: &str) -> bool {
-    auth_user.id == owner_id || auth_user.role == "superuser" || has_global_delete(auth_user)
+    can_manage_room(auth_user, owner_id)
 }
 
 fn share_link_is_consumed(link: &ShareLinkWithRoomRow) -> bool {

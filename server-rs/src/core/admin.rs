@@ -9,15 +9,6 @@ use crate::{
 };
 
 #[derive(Debug, sqlx::FromRow)]
-struct SuperuserRow {
-    id: String,
-    username: String,
-    can_read_all_rooms: bool,
-    can_write_all_rooms: bool,
-    can_delete_all_rooms: bool,
-}
-
-#[derive(Debug, sqlx::FromRow)]
 struct AdminRow {
     id: String,
     username: String,
@@ -26,42 +17,20 @@ struct AdminRow {
 pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiError> {
     let config = &state.config;
 
-    let existing_superuser = sqlx::query_as::<_, SuperuserRow>(
+    let existing_admin = sqlx::query_as::<_, AdminRow>(
         r#"
-        SELECT id, username, "canReadAllRooms" as can_read_all_rooms,
-               "canWriteAllRooms" as can_write_all_rooms,
-               "canDeleteAllRooms" as can_delete_all_rooms
+        SELECT id, username
         FROM "User"
-        WHERE role = 'superuser' AND "isDeleted" = false
+        WHERE role = 'admin' AND "isDeleted" = false
         LIMIT 1
         "#,
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|err| db_error(err, "Failed to check for superuser"))?;
+    .map_err(|err| db_error(err, "Failed to check for admin"))?;
 
-    if let Some(superuser) = existing_superuser {
-        info!("Superuser already exists: {}", superuser.username);
-
-        if !superuser.can_read_all_rooms
-            || !superuser.can_write_all_rooms
-            || !superuser.can_delete_all_rooms
-        {
-            sqlx::query(
-                r#"
-                UPDATE "User"
-                SET "canReadAllRooms" = true,
-                    "canWriteAllRooms" = true,
-                    "canDeleteAllRooms" = true
-                WHERE id = $1
-                "#,
-            )
-            .bind(&superuser.id)
-            .execute(&state.db)
-            .await
-            .map_err(|err| db_error(err, "Failed to update superuser permissions"))?;
-            info!("   Superuser permissions updated");
-        }
+    if let Some(admin) = existing_admin {
+        info!("Admin already exists: {}", admin.username);
 
         if config.admin_update_password {
             validate_password(&config.admin_password).map_err(|err| {
@@ -80,17 +49,17 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
                 "#,
             )
             .bind(&hashed)
-            .bind(&superuser.id)
+            .bind(&admin.id)
             .execute(&state.db)
             .await
-            .map_err(|err| db_error(err, "Failed to update superuser password"))?;
-            info!("   Superuser password updated");
+            .map_err(|err| db_error(err, "Failed to update admin password"))?;
+            info!("   Admin password updated");
         }
 
         return Ok(());
     }
 
-    let existing_admin = sqlx::query_as::<_, AdminRow>(
+    let existing_user = sqlx::query_as::<_, AdminRow>(
         r#"
         SELECT id, username
         FROM "User"
@@ -103,22 +72,13 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
     .await
     .map_err(|err| db_error(err, "Failed to check admin username"))?;
 
-    if let Some(user) = existing_admin {
-        sqlx::query(
-            r#"
-            UPDATE "User"
-            SET role = 'superuser',
-                "canReadAllRooms" = true,
-                "canWriteAllRooms" = true,
-                "canDeleteAllRooms" = true
-            WHERE id = $1
-            "#,
-        )
-        .bind(&user.id)
-        .execute(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to promote user to superuser"))?;
-        info!("Promoted existing user to superuser: {}", user.username);
+    if let Some(user) = existing_user {
+        sqlx::query(r#"UPDATE "User" SET role = 'admin' WHERE id = $1"#)
+            .bind(&user.id)
+            .execute(&state.db)
+            .await
+            .map_err(|err| db_error(err, "Failed to promote user to admin"))?;
+        info!("Promoted existing user to admin: {}", user.username);
         return Ok(());
     }
 
@@ -140,9 +100,8 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
     let color = random_user_color();
     sqlx::query(
         r#"
-        INSERT INTO "User" (id, email, username, password, color, role,
-                            "canReadAllRooms", "canWriteAllRooms", "canDeleteAllRooms")
-        VALUES ($1, $2, $3, $4, $5, 'superuser', true, true, true)
+        INSERT INTO "User" (id, email, username, password, color, role)
+        VALUES ($1, $2, $3, $4, $5, 'admin')
         "#,
     )
     .bind(Uuid::new_v4().to_string())
@@ -152,13 +111,13 @@ pub async fn initialize_admin(state: &AppState) -> Result<(), crate::error::ApiE
     .bind(&color)
     .execute(&mut *tx)
     .await
-    .map_err(|err| db_error(err, "Failed to create superuser"))?;
+    .map_err(|err| db_error(err, "Failed to create admin"))?;
 
     tx.commit()
         .await
         .map_err(|err| db_error(err, "Failed to commit admin transaction"))?;
 
-    info!("Superuser created: {}", config.admin_username);
+    info!("Admin created: {}", config.admin_username);
     info!("   Email: {}", config.admin_email);
     warn!("   [WARNING] Please change the default password in production!");
 

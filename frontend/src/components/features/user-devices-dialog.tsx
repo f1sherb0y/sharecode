@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores'
+import { isAdmin } from '@/lib/room-permissions'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Button, Spinner } from '@/components/ui'
 import { PageNavigation } from '@/components/ui/page-navigation'
 import { AuditDevice } from './audit-device'
@@ -13,7 +14,7 @@ export function UserDevicesDialog({ user, onClose }: { user: { id: string; usern
   const { t } = useTranslation()
   const navigate = useNavigate()
   const viewer = useAuthStore(state => state.user)
-  const allowed = viewer?.role === 'superuser'
+  const allowed = isAdmin(viewer)
   const [page, setPage] = useState(1)
   const query = useQuery({ queryKey: ['user-devices',viewer?.id,viewer?.role,user.id,page], queryFn: () => api.getUserDevices(user.id,page), refetchInterval: 15000, enabled: allowed })
   if (!allowed) return null

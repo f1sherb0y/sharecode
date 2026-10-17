@@ -10,9 +10,6 @@ pub struct UserRow {
     pub password: String,
     pub color: String,
     pub role: String,
-    pub can_read_all_rooms: bool,
-    pub can_write_all_rooms: bool,
-    pub can_delete_all_rooms: bool,
     pub is_deleted: bool,
     pub created_at: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
@@ -25,9 +22,6 @@ pub struct UserPublicRow {
     pub username: String,
     pub color: String,
     pub role: String,
-    pub can_read_all_rooms: bool,
-    pub can_write_all_rooms: bool,
-    pub can_delete_all_rooms: bool,
     pub created_at: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
 }
@@ -75,7 +69,6 @@ pub struct RoomAdminRow {
     pub is_private: bool,
     #[sqlx(default)]
     pub can_view_playback: bool,
-    pub share_read_only: bool,
     pub allow_edit: bool,
     pub is_pinned: bool,
     pub is_deleted: bool,

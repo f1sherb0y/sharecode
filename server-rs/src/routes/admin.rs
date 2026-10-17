@@ -11,13 +11,13 @@ use yrs::merge_updates_v1;
 use crate::core::audit::{self, ClientInfo};
 
 use crate::{
-    auth::AdminUser,
+    auth::{AuthUser, StaffUser},
     db::db_error,
     error::ApiError,
     models::{RoomAdminRow, UserPublicRow, UserRow},
     permissions::{
-        can_manage_room_lifecycle, has_global_read, require_room_access, RoomLifecycleAction,
-        ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL, SHARE_READ_ONLY_SQL,
+        can_delete_room, has_global_read, is_admin, require_room_access, ROLE_ADMIN, ROLE_TECH,
+        ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL, VALID_ROLES,
     },
     state::AppState,
     utils::colors::random_user_color,
@@ -25,7 +25,6 @@ use crate::{
     utils::time::{to_iso_string, to_iso_string_opt},
 };
 
-const VALID_ROLES: [&str; 3] = ["user", "admin", "superuser"];
 
 #[derive(Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,146 +110,15 @@ struct CompressedBucket {
     user_id: Option<String>,
 }
 
-#[derive(Clone, Copy)]
-struct PermissionFlags {
-    can_read_all_rooms: bool,
-    can_write_all_rooms: bool,
-    can_delete_all_rooms: bool,
-}
-
-fn normalize_boolean(value: Option<&Value>) -> Option<bool> {
-    let value = value?;
-    if let Some(bool_value) = value.as_bool() {
-        return Some(bool_value);
-    }
-    if let Some(text) = value.as_str() {
-        let normalized = text.trim().to_lowercase();
-        if normalized == "true" {
-            return Some(true);
-        }
-        if normalized == "false" {
-            return Some(false);
-        }
-        return Some(!text.is_empty());
-    }
-    if value.is_null() {
-        return None;
-    }
-    if let Some(num) = value.as_i64() {
-        return Some(num != 0);
-    }
-    if let Some(num) = value.as_u64() {
-        return Some(num != 0);
-    }
-    if let Some(num) = value.as_f64() {
-        return Some(num != 0.0 && !num.is_nan());
-    }
-    Some(true)
-}
-
-fn extract_permission_input(body: &Value) -> PermissionFlagsUpdate {
-    let source = if let Some(obj) = body.get("permissions").and_then(|value| value.as_object()) {
-        obj
-    } else if let Some(obj) = body.as_object() {
-        obj
-    } else {
-        return PermissionFlagsUpdate::default();
-    };
-
-    PermissionFlagsUpdate {
-        can_read_all_rooms: normalize_boolean(source.get("canReadAllRooms")),
-        can_write_all_rooms: normalize_boolean(source.get("canWriteAllRooms")),
-        can_delete_all_rooms: normalize_boolean(source.get("canDeleteAllRooms")),
-    }
-}
-
-#[derive(Default)]
-struct PermissionFlagsUpdate {
-    can_read_all_rooms: Option<bool>,
-    can_write_all_rooms: Option<bool>,
-    can_delete_all_rooms: Option<bool>,
-}
-
-fn merge_permissions(current: PermissionFlags, updates: PermissionFlagsUpdate) -> PermissionFlags {
-    PermissionFlags {
-        can_read_all_rooms: updates
-            .can_read_all_rooms
-            .unwrap_or(current.can_read_all_rooms),
-        can_write_all_rooms: updates
-            .can_write_all_rooms
-            .unwrap_or(current.can_write_all_rooms),
-        can_delete_all_rooms: updates
-            .can_delete_all_rooms
-            .unwrap_or(current.can_delete_all_rooms),
-    }
-}
-
-fn apply_permission_hierarchy(perms: PermissionFlags) -> PermissionFlags {
-    let mut result = perms;
-    if result.can_delete_all_rooms {
-        result.can_write_all_rooms = true;
-        result.can_read_all_rooms = true;
-    } else if result.can_write_all_rooms {
-        result.can_read_all_rooms = true;
-    }
-    result
-}
-
-fn normalize_permissions_for_role(role: &str, permissions: PermissionFlags) -> PermissionFlags {
-    if role == "superuser" {
-        return PermissionFlags {
-            can_read_all_rooms: true,
-            can_write_all_rooms: true,
-            can_delete_all_rooms: true,
-        };
-    }
-
-    apply_permission_hierarchy(permissions)
-}
-
-fn default_permissions_for_role(role: &str, requested: PermissionFlagsUpdate) -> PermissionFlags {
-    let base = if role == "admin" {
-        PermissionFlags {
-            can_read_all_rooms: true,
-            can_write_all_rooms: true,
-            can_delete_all_rooms: false,
-        }
-    } else {
-        PermissionFlags {
-            can_read_all_rooms: false,
-            can_write_all_rooms: false,
-            can_delete_all_rooms: false,
-        }
-    };
-
-    let merged = merge_permissions(base, requested);
-    normalize_permissions_for_role(role, merged)
-}
-
-fn validate_delegation(
-    actor: &crate::auth::AuthUser,
-    permissions: PermissionFlags,
-) -> Result<(), ApiError> {
-    if actor.role != "superuser"
-        && ((permissions.can_read_all_rooms && !crate::permissions::has_global_read(actor))
-            || (permissions.can_write_all_rooms && !crate::permissions::has_global_write(actor))
-            || (permissions.can_delete_all_rooms && !crate::permissions::has_global_delete(actor)))
-    {
-        return Err(ApiError::not_found("Not found"));
-    }
-    Ok(())
-}
-
-fn has_permission_changes(update: &PermissionFlagsUpdate) -> bool {
-    update.can_read_all_rooms.is_some()
-        || update.can_write_all_rooms.is_some()
-        || update.can_delete_all_rooms.is_some()
+/// Admins manage every account; agents only create and remove tech accounts.
+fn can_manage_account(actor: &AuthUser, role: &str) -> bool {
+    is_admin(&actor.role) || role == ROLE_TECH
 }
 
 pub async fn create_user(
     State(state): State<AppState>,
     client: ClientInfo,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     Json(payload): Json<Value>,
 ) -> Result<impl IntoResponse, ApiError> {
     let username = payload
@@ -268,7 +136,7 @@ pub async fn create_user(
     let requested_role = payload
         .get("role")
         .and_then(|v| v.as_str())
-        .unwrap_or("user");
+        .unwrap_or(ROLE_TECH);
 
     if username.is_empty() || password.is_empty() {
         return Err(ApiError::bad_request("Username and password are required"));
@@ -280,15 +148,7 @@ pub async fn create_user(
         return Err(ApiError::bad_request("Invalid role"));
     }
 
-    if auth_user.role == "admin" && requested_role != "user" {
-        return Err(ApiError::not_found("Not found"));
-    }
-
-    if auth_user.role != "superuser" && requested_role == "superuser" {
-        return Err(ApiError::not_found("Not found"));
-    }
-
-    if auth_user.role != "superuser" && requested_role == "admin" {
+    if !can_manage_account(&auth_user, requested_role) {
         return Err(ApiError::not_found("Not found"));
     }
 
@@ -329,10 +189,6 @@ pub async fn create_user(
     let hashed_password = hash(password, 12)
         .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
 
-    let requested_permissions = extract_permission_input(&payload);
-    let permissions = default_permissions_for_role(requested_role, requested_permissions);
-    validate_delegation(&auth_user, permissions)?;
-
     let mut tx = state
         .db
         .begin()
@@ -340,18 +196,14 @@ pub async fn create_user(
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let user = sqlx::query_as::<_, UserPublicRow>(
         r#"
-        INSERT INTO "User" (id, email, username, password, color, role,
-                            "canReadAllRooms", "canWriteAllRooms", "canDeleteAllRooms")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO "User" (id, email, username, password, color, role)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING
             id,
             email,
             username,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
         "#,
@@ -362,14 +214,11 @@ pub async fn create_user(
     .bind(hashed_password)
     .bind(random_user_color())
     .bind(requested_role)
-    .bind(permissions.can_read_all_rooms)
-    .bind(permissions.can_write_all_rooms)
-    .bind(permissions.can_delete_all_rooms)
     .fetch_one(&mut *tx)
     .await
     .map_err(|err| crate::db::user_creation_error(err))?;
 
-    audit::record_details(&mut *tx, &client, "user.created", Some(&auth_user.id), Some(&auth_user.username), Some(&user.id), true, None, None, json!({"role":user.role,"canReadAllRooms":user.can_read_all_rooms,"canWriteAllRooms":user.can_write_all_rooms,"canDeleteAllRooms":user.can_delete_all_rooms})).await?;
+    audit::record_details(&mut *tx, &client, "user.created", Some(&auth_user.id), Some(&auth_user.username), Some(&user.id), true, None, None, json!({"role":user.role})).await?;
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
@@ -379,9 +228,6 @@ pub async fn create_user(
         user_id = %user.id,
         username = %user.username,
         role = %user.role,
-        can_read_all_rooms = user.can_read_all_rooms,
-        can_write_all_rooms = user.can_write_all_rooms,
-        can_delete_all_rooms = user.can_delete_all_rooms,
         "user created"
     );
 
@@ -393,7 +239,7 @@ pub async fn create_user(
 
 pub async fn get_all_users(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    _admin: StaffUser,
     Query(query): Query<AdminListQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pattern = search_pattern(query.q.as_deref());
@@ -420,9 +266,6 @@ pub async fn get_all_users(
             username,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
@@ -448,15 +291,23 @@ pub async fn get_all_users(
 
 pub async fn update_user(
     State(state): State<AppState>,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     client: ClientInfo,
     Path(user_id): Path<String>,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let _access = state.ws.access.write().await;
-    let requested_role = payload.get("role").and_then(|v| v.as_str());
-    let permission_updates = extract_permission_input(&payload);
-    let has_permission_changes = has_permission_changes(&permission_updates);
+    // The role is the only account permission; only admins change it.
+    if !is_admin(&auth_user.role) {
+        return Err(ApiError::not_found("Not found"));
+    }
+    let requested_role = payload
+        .get("role")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ApiError::bad_request("Role is required"))?;
+    if !VALID_ROLES.contains(&requested_role) {
+        return Err(ApiError::bad_request("Invalid role"));
+    }
 
     let target_user = sqlx::query_as::<_, UserRow>(
         r#"
@@ -467,9 +318,6 @@ pub async fn update_user(
             password,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
@@ -487,67 +335,25 @@ pub async fn update_user(
         _ => return Err(ApiError::not_found("User not found")),
     };
 
-    if target_user.id == auth_user.id
-        && requested_role.is_some()
-        && requested_role != Some("superuser")
-    {
+    if target_user.id == auth_user.id && requested_role != target_user.role {
         return Err(ApiError::not_found("Not found"));
     }
 
-    if auth_user.role == "admin" && target_user.role != "user" {
-        return Err(ApiError::not_found("Not found"));
-    }
-
-    if let Some(role) = requested_role {
-        if !VALID_ROLES.contains(&role) {
-            return Err(ApiError::bad_request("Invalid role"));
-        }
-
-        if auth_user.role != "superuser" {
-            return Err(ApiError::not_found("Not found"));
-        }
-    }
-
-    if requested_role == Some("superuser") && auth_user.role != "superuser" {
-        return Err(ApiError::not_found("Not found"));
-    }
-
-    if has_permission_changes && auth_user.role != "superuser" && target_user.role != "user" {
-        return Err(ApiError::not_found("Not found"));
-    }
-
-    if target_user.role == "superuser"
-        && requested_role.is_some()
-        && requested_role != Some("superuser")
-    {
-        let superuser_count = sqlx::query_scalar::<_, i64>(
-            r#"SELECT COUNT(*) FROM "User" WHERE role = 'superuser' AND "isDeleted" = false"#,
+    if target_user.role == ROLE_ADMIN && requested_role != ROLE_ADMIN {
+        let admin_count = sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*) FROM "User" WHERE role = 'admin' AND "isDeleted" = false"#,
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|err| db_error(err, "Failed to count superusers"))?;
+        .map_err(|err| db_error(err, "Failed to count admins"))?;
 
-        if superuser_count <= 1 {
+        if admin_count <= 1 {
             return Err(ApiError::not_found("Not found"));
         }
     }
 
-    let current_permissions = PermissionFlags {
-        can_read_all_rooms: target_user.can_read_all_rooms,
-        can_write_all_rooms: target_user.can_write_all_rooms,
-        can_delete_all_rooms: target_user.can_delete_all_rooms,
-    };
-
-    let mut permissions = current_permissions;
-    if has_permission_changes {
-        permissions = merge_permissions(current_permissions, permission_updates);
-    }
-
-    let final_role = requested_role.unwrap_or(&target_user.role);
-    permissions = normalize_permissions_for_role(final_role, permissions);
-    validate_delegation(&auth_user, permissions)?;
-
-    let affected_private_rooms = if final_role != target_user.role {
+    // The owner's rank decides who else may see their private rooms.
+    let affected_private_rooms = if requested_role != target_user.role {
         sqlx::query_scalar::<_, String>(
             r#"SELECT id FROM "Room" WHERE "ownerId" = $1 AND "isPrivate" AND NOT "isDeleted""#,
         )
@@ -567,10 +373,7 @@ pub async fn update_user(
     let updated = sqlx::query_as::<_, UserPublicRow>(
         r#"
         UPDATE "User"
-        SET role = $2,
-            "canReadAllRooms" = $3,
-            "canWriteAllRooms" = $4,
-            "canDeleteAllRooms" = $5
+        SET role = $2
         WHERE id = $1
         RETURNING
             id,
@@ -578,23 +381,17 @@ pub async fn update_user(
             username,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
         "#,
     )
     .bind(&user_id)
-    .bind(final_role)
-    .bind(permissions.can_read_all_rooms)
-    .bind(permissions.can_write_all_rooms)
-    .bind(permissions.can_delete_all_rooms)
+    .bind(requested_role)
     .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to update user"))?;
 
-    audit::record_details(&mut *tx, &client, "user.permissions_changed", Some(&auth_user.id), Some(&auth_user.username), Some(&user_id), true, None, None, json!({"before":{"role":target_user.role,"canReadAllRooms":target_user.can_read_all_rooms,"canWriteAllRooms":target_user.can_write_all_rooms,"canDeleteAllRooms":target_user.can_delete_all_rooms},"after":{"role":updated.role,"canReadAllRooms":updated.can_read_all_rooms,"canWriteAllRooms":updated.can_write_all_rooms,"canDeleteAllRooms":updated.can_delete_all_rooms}})).await?;
+    audit::record_details(&mut *tx, &client, "user.permissions_changed", Some(&auth_user.id), Some(&auth_user.username), Some(&user_id), true, None, None, json!({"before":{"role":target_user.role},"after":{"role":updated.role}})).await?;
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to commit user update"))?;
@@ -609,7 +406,7 @@ pub async fn update_user(
 
 pub async fn delete_user(
     State(state): State<AppState>,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     client: ClientInfo,
     Path(user_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
@@ -623,9 +420,6 @@ pub async fn delete_user(
             password,
             color,
             role,
-            "canReadAllRooms" as can_read_all_rooms,
-            "canWriteAllRooms" as can_write_all_rooms,
-            "canDeleteAllRooms" as can_delete_all_rooms,
             "isDeleted" as is_deleted,
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
@@ -647,29 +441,21 @@ pub async fn delete_user(
         return Err(ApiError::not_found("Not found"));
     }
 
-    if auth_user.role == "admin" && user.role != "user" {
+    if !can_manage_account(&auth_user, &user.role) {
         return Err(ApiError::not_found("Not found"));
     }
 
-    if user.role == "superuser" {
-        if auth_user.role != "superuser" {
-            return Err(ApiError::not_found("Not found"));
-        }
-
-        let superuser_count = sqlx::query_scalar::<_, i64>(
-            r#"SELECT COUNT(*) FROM "User" WHERE role = 'superuser' AND "isDeleted" = false"#,
+    if user.role == ROLE_ADMIN {
+        let admin_count = sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*) FROM "User" WHERE role = 'admin' AND "isDeleted" = false"#,
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|err| db_error(err, "Failed to count superusers"))?;
+        .map_err(|err| db_error(err, "Failed to count admins"))?;
 
-        if superuser_count <= 1 {
+        if admin_count <= 1 {
             return Err(ApiError::not_found("Not found"));
         }
-    }
-
-    if user.role == "admin" && auth_user.role != "superuser" {
-        return Err(ApiError::not_found("Not found"));
     }
 
     let mut tx = state
@@ -720,7 +506,7 @@ pub async fn delete_user(
 
 pub async fn get_all_rooms(
     State(state): State<AppState>,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     Query(query): Query<AdminListQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pattern = search_pattern(query.q.as_deref());
@@ -757,7 +543,7 @@ pub async fn get_all_rooms(
         r."scheduledTime" as scheduled_time, r.duration, r."isEnded" as is_ended,
         r."endedAt" as ended_at, r."createdAt" as created_at, r."updatedAt" as updated_at,
         o.username as owner_username, o.email as owner_email,
-        {ROOM_PLAYBACK_SQL} as can_view_playback, {SHARE_READ_ONLY_SQL} as share_read_only
+        {ROOM_PLAYBACK_SQL} as can_view_playback
         {filter} ORDER BY r."createdAt" DESC, r.id DESC LIMIT $8 OFFSET $9"#
     );
     let rooms = sqlx::query_as::<_, RoomAdminRow>(&sql)
@@ -786,7 +572,6 @@ pub async fn get_all_rooms(
             "allowEdit": room.allow_edit,
             "isPrivate": room.is_private,
             "canViewPlayback": room.can_view_playback,
-            "shareReadOnly": room.share_read_only,
             "isPinned": room.is_pinned,
             "isDeleted": room.is_deleted,
             "scheduledTime": crate::utils::time::to_iso_string_opt(room.scheduled_time),
@@ -808,9 +593,9 @@ pub async fn get_all_rooms(
 
 pub async fn get_db_storage_size(
     State(state): State<AppState>,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
 ) -> Result<Json<Value>, ApiError> {
-    if auth_user.role != "superuser" {
+    if !is_admin(&auth_user.role) {
         return Err(ApiError::not_found("Not found"));
     }
 
@@ -833,10 +618,10 @@ pub async fn get_db_storage_size(
 
 pub async fn get_room_playback_sizes(
     State(state): State<AppState>,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     Query(query): Query<PlaybackSizesQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    if auth_user.role != "superuser" {
+    if !is_admin(&auth_user.role) {
         return Err(ApiError::not_found("Not found"));
     }
 
@@ -899,11 +684,11 @@ pub async fn get_room_playback_sizes(
 pub async fn compress_room_playback(
     State(state): State<AppState>,
     client: ClientInfo,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     require_room_access(&state.db, &auth_user, &room_id).await?;
-    if auth_user.role != "superuser" {
+    if !is_admin(&auth_user.role) {
         return Err(ApiError::not_found("Not found"));
     }
 
@@ -1047,7 +832,7 @@ pub async fn compress_room_playback(
 pub async fn delete_room(
     State(state): State<AppState>,
     client: ClientInfo,
-    AdminUser(auth_user): AdminUser,
+    StaffUser(auth_user): StaffUser,
     Path(room_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let _access = state.ws.access.write().await;
@@ -1070,7 +855,7 @@ pub async fn delete_room(
         None => return Err(ApiError::not_found("Room not found")),
     };
 
-    if !can_manage_room_lifecycle(&auth_user, &room.owner_id, RoomLifecycleAction::Delete) {
+    if !can_delete_room(&auth_user) {
         return Err(ApiError::not_found("Room not found"));
     }
 
@@ -1159,9 +944,6 @@ fn user_to_json(user: &UserPublicRow) -> Value {
         "username": user.username,
         "color": user.color,
         "role": user.role,
-        "canReadAllRooms": user.can_read_all_rooms,
-        "canWriteAllRooms": user.can_write_all_rooms,
-        "canDeleteAllRooms": user.can_delete_all_rooms,
         "createdAt": to_iso_string(user.created_at),
         "lastSeen": to_iso_string(user.last_seen),
     })

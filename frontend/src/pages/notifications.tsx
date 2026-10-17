@@ -28,6 +28,7 @@ import { api } from '@/api'
 import { queryKeys } from '@/lib/query-keys'
 import { cn, formatDateTime } from '@/lib/utils'
 import { useAuthStore } from '@/stores'
+import { isAdmin } from '@/lib/room-permissions'
 import type { NotificationSeverity } from '@/types'
 
 const SEVERITIES: NotificationSeverity[] = ['normal', 'emergency']
@@ -43,7 +44,7 @@ export function NotificationsPage() {
   const [error, setError] = useState('')
   const autoMarkedRef = useRef(false)
 
-  const canPublish = user?.role === 'superuser'
+  const canPublish = isAdmin(user)
 
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications,

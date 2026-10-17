@@ -17,7 +17,7 @@ const server = dev
   ? await createServer({ cacheDir: 'node_modules/.vite-session-export-tests', server: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' })
   : await preview({ preview: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' })
 if ('listen' in server) await server.listen()
-const user = { id: 'private-user-alice', username: 'PRIVATE-USERNAME', email: 'private@example.invalid', role: 'superuser', color: '#ff0000' }
+const user = { id: 'private-user-alice', username: 'PRIVATE-USERNAME', email: 'private@example.invalid', role: 'admin', color: '#ff0000' }
 const room = { id: 'PRIVATE-ROOM-ID', name: 'PRIVATE-ROOM-NAME', language: 'markdown', ownerId: user.id, owner: user, isEnded: true, isDeleted: false, createdAt: '2026-09-17T00:00:00Z', participants: [] }
 const remoteImage = 'https://images.example.invalid/original.png'
 const { history, secret, pixel } = fixture(remoteImage)
