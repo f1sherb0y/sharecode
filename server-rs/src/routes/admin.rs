@@ -54,7 +54,7 @@ impl AdminListQuery {
     }
 }
 
-fn search_pattern(value: Option<&str>) -> String {
+pub(super) fn search_pattern(value: Option<&str>) -> String {
     // Treat search text literally, including PostgreSQL LIKE metacharacters.
     format!(
         "%{}%",
@@ -458,6 +458,17 @@ pub async fn delete_user(
     .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to delete user"))?;
+    // Their sessions still to come go back to the unassigned list.
+    let unassigned_sessions = sqlx::query(
+        r#"UPDATE "Appointment" SET "techId" = NULL, "updatedAt" = NOW()
+        WHERE "techId" = $1 AND status = 'scheduled'
+          AND "startsAt" + "durationMinutes" * INTERVAL '1 minute' > NOW()"#,
+    )
+    .bind(&user_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to unassign sessions"))?
+    .rows_affected();
 
     tracing::info!(
         actor_id = %auth_user.id,
@@ -469,7 +480,7 @@ pub async fn delete_user(
         "user deleted"
     );
 
-    audit::record(
+    audit::record_details(
         &mut *tx,
         &client,
         "user.deleted",
@@ -478,6 +489,8 @@ pub async fn delete_user(
         Some(&user_id),
         true,
         None,
+        None,
+        json!({"unassignedSessions": unassigned_sessions}),
     )
     .await?;
     tx.commit()

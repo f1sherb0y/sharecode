@@ -23,7 +23,7 @@ use crate::{
     ws,
 };
 
-const SUPPORTED_LANGUAGES: [&str; 11] = [
+pub(super) const SUPPORTED_LANGUAGES: [&str; 11] = [
     "javascript",
     "typescript",
     "python",
@@ -163,8 +163,59 @@ pub async fn create_room(
         .await
         .map_err(|err| db_error(err, "Failed to begin room transaction"))?;
 
-    let room_id = Uuid::new_v4().to_string();
-    let room = sqlx::query_as::<_, RoomWithOwnerRow>(
+    let room = insert_room(
+        &mut tx,
+        NewRoom {
+            name: &name,
+            language: &language,
+            company: company.as_deref(),
+            position: position.as_deref(),
+            owner_id: &auth_user.id,
+            scheduled_time,
+            duration,
+            is_private: payload.is_private,
+        },
+    )
+    .await?;
+    let room_id = room.id.clone();
+
+    audit::record_details(&mut *tx, &client, "room.created", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"isPrivate":payload.is_private,"language":language})).await?;
+    tx.commit()
+        .await
+        .map_err(|err| db_error(err, "Failed to commit room transaction"))?;
+
+    tracing::info!(
+        actor_id = %auth_user.id,
+        actor_role = %auth_user.role,
+        room_id = %room.id,
+        room_name = %room.name,
+        language = %room.language,
+        "room created"
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "room": room_to_json_owner(&room) })),
+    ))
+}
+
+pub(super) struct NewRoom<'a> {
+    pub name: &'a str,
+    pub language: &'a str,
+    pub company: Option<&'a str>,
+    pub position: Option<&'a str>,
+    pub owner_id: &'a str,
+    pub scheduled_time: Option<DateTime<Utc>>,
+    pub duration: Option<i32>,
+    pub is_private: bool,
+}
+
+/// Inserts a room with its owner's membership inside the caller's transaction.
+pub(super) async fn insert_room(
+    tx: &mut sqlx::PgConnection,
+    room: NewRoom<'_>,
+) -> Result<RoomWithOwnerRow, ApiError> {
+    let created = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         INSERT INTO "Room" (id, name, language, company, position, "ownerId", "scheduledTime", duration, "updatedAt", "isPrivate")
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
@@ -189,15 +240,15 @@ pub async fn create_room(
             (SELECT color FROM "User" WHERE id = "ownerId") as owner_color
         "#,
     )
-    .bind(&room_id)
-    .bind(&name)
-    .bind(&language)
-    .bind(company)
-    .bind(position)
-    .bind(&auth_user.id)
-    .bind(scheduled_time)
-    .bind(duration)
-    .bind(payload.is_private)
+    .bind(Uuid::new_v4().to_string())
+    .bind(room.name)
+    .bind(room.language)
+    .bind(room.company)
+    .bind(room.position)
+    .bind(room.owner_id)
+    .bind(room.scheduled_time)
+    .bind(room.duration)
+    .bind(room.is_private)
     .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create room"))?;
@@ -209,30 +260,12 @@ pub async fn create_room(
         "#,
     )
     .bind(Uuid::new_v4().to_string())
-    .bind(&room.id)
-    .bind(&auth_user.id)
+    .bind(&created.id)
+    .bind(room.owner_id)
     .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to add owner as participant"))?;
-
-    audit::record_details(&mut *tx, &client, "room.created", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"isPrivate":payload.is_private,"language":language})).await?;
-    tx.commit()
-        .await
-        .map_err(|err| db_error(err, "Failed to commit room transaction"))?;
-
-    tracing::info!(
-        actor_id = %auth_user.id,
-        actor_role = %auth_user.role,
-        room_id = %room.id,
-        room_name = %room.name,
-        language = %room.language,
-        "room created"
-    );
-
-    Ok((
-        StatusCode::CREATED,
-        Json(json!({ "room": room_to_json_owner(&room) })),
-    ))
+    Ok(created)
 }
 
 pub async fn get_rooms(
@@ -918,7 +951,7 @@ fn room_to_json_basic(room: &RoomWithOwnerRow) -> serde_json::Value {
     })
 }
 
-fn room_to_json_owner(room: &RoomWithOwnerRow) -> serde_json::Value {
+pub(super) fn room_to_json_owner(room: &RoomWithOwnerRow) -> serde_json::Value {
     let mut value = room_to_json_basic(room);
     if let Some(obj) = value.as_object_mut() {
         obj.insert(

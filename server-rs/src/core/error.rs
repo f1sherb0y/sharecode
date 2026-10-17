@@ -12,6 +12,8 @@ pub enum ApiError {
     #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
+    Conflict(String),
+    #[error("{0}")]
     Gone(String),
     #[error("{0}")]
     ServiceUnavailable(String),
@@ -36,6 +38,10 @@ impl ApiError {
         Self::NotFound(message.into())
     }
 
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::Conflict(message.into())
+    }
+
     pub fn gone(message: impl Into<String>) -> Self {
         Self::Gone(message.into())
     }
@@ -56,6 +62,7 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
             ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             ApiError::Gone(msg) => (StatusCode::GONE, msg),
             ApiError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
             ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),

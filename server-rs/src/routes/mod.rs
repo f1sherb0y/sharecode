@@ -5,8 +5,10 @@ use crate::state::AppState;
 use crate::ws;
 
 mod admin;
+mod appointments;
 mod auth;
 mod code;
+mod customers;
 mod health;
 mod invites;
 mod notes;
@@ -36,6 +38,10 @@ pub fn router(state: AppState) -> Router {
             post(notifications::mark_all_notifications_read),
         )
         .route(
+            "/api/notifications/read",
+            post(notifications::mark_notifications_read),
+        )
+        .route(
             "/api/config/registration",
             get(auth::get_registration_status),
         )
@@ -43,6 +49,21 @@ pub fn router(state: AppState) -> Router {
         .route("/api/invites", post(invites::create_invite))
         .route("/api/invites", get(invites::list_invites))
         .route("/api/invites/{id}", delete(invites::delete_invite))
+        // Scheduling: customers (agents and admins) and sessions
+        .route("/api/customers", get(customers::list_customers))
+        .route("/api/customers", post(customers::create_customer))
+        .route("/api/customers/{id}", get(customers::get_customer))
+        .route("/api/customers/{id}", put(customers::update_customer))
+        .route("/api/customers/{id}", delete(customers::delete_customer))
+        .route("/api/appointments", get(appointments::list_appointments))
+        .route("/api/appointments", post(appointments::create_appointment))
+        .route("/api/appointments/{id}", get(appointments::get_appointment))
+        .route("/api/appointments/{id}", put(appointments::update_appointment))
+        .route("/api/appointments/{id}", delete(appointments::delete_appointment))
+        .route(
+            "/api/appointments/{id}/room",
+            post(appointments::open_appointment_room),
+        )
         // Rooms
         .route("/api/users", get(rooms::get_all_users_for_room_creation))
         .route("/api/rooms", post(rooms::create_room))

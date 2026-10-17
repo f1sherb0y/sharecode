@@ -16,6 +16,7 @@ use crate::{
     error::ApiError,
     models::{ShareLinkSummaryRow, ShareLinkWithRoomRow},
     permissions::{can_manage_room, has_global_read, require_room_access},
+    share_links::GUEST_SHARE_TTL_HOURS,
     state::AppState,
     utils::colors::random_user_color,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -103,10 +104,15 @@ pub async fn create_share_link(
         .begin()
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
+    // A scheduled session's room keeps its links valid until the session ends.
     let share_link = sqlx::query_as::<_, ShareLinkSummaryRow>(
         r#"
-        INSERT INTO "RoomShareLink" (id, "roomId", token, "canEdit", "createdBy")
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO "RoomShareLink" (id, "roomId", token, "canEdit", "createdBy", "expiresAt")
+        VALUES ($1, $2, $3, $4, $5, GREATEST(
+            NOW() + $6 * INTERVAL '1 hour',
+            (SELECT MAX(a."startsAt" + a."durationMinutes" * INTERVAL '1 minute') FROM "Appointment" a
+             WHERE a."roomId" = $2 AND a.status = 'scheduled')
+        ))
         RETURNING
             id,
             token,
@@ -123,6 +129,7 @@ pub async fn create_share_link(
     .bind(&token)
     .bind(can_edit)
     .bind(&auth_user.id)
+    .bind(GUEST_SHARE_TTL_HOURS as f64)
     .fetch_one(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create share link"))?;
