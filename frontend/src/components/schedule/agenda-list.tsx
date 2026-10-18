@@ -5,7 +5,7 @@ import type { Appointment } from '@/types'
 import { Badge } from '@/components/ui'
 import { getLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { formatDayKey, sessionsOnDay } from '@/lib/schedule'
+import { formatDayKey, groupSpan, overlapGroups, sessionsOnDay, type LaneRank } from '@/lib/schedule'
 import { timeInputValue } from '@/lib/zoned-time'
 
 interface AgendaListProps {
@@ -14,20 +14,28 @@ interface AgendaListProps {
   appointments: Appointment[]
   timezone: string
   showTech: boolean
+  /** Off when every session is the same customer's, named above the list. */
+  showCustomer?: boolean
   colorOf: (appointment: Appointment) => string
+  /** Orders simultaneous sessions from left to right. */
+  laneRank?: LaneRank
   onOpen: (appointment: Appointment) => void
   /** Extra controls per session, such as opening its room. */
   actions?: (appointment: Appointment) => ReactNode
   empty: string
 }
 
-/** Sessions grouped by day; the default on phones. */
-export function AgendaList({ days, today, appointments, timezone, showTech, colorOf, onOpen, actions, empty }: AgendaListProps) {
+/**
+ * Sessions grouped by day; the default on phones. Sessions that overlap share a
+ * row under one time, side by side where there is room.
+ */
+export function AgendaList({ days, today, appointments, timezone, showTech, showCustomer = true, colorOf, laneRank, onOpen, actions, empty }: AgendaListProps) {
   const { t } = useTranslation()
   const locale = getLocale()
+  const range = (from: number, to: number) => `${timeInputValue(from, timezone)}–${timeInputValue(to, timezone)}`
   const groups = days
-    .map(day => ({ day, sessions: sessionsOnDay(appointments, day, timezone) }))
-    .filter(group => group.sessions.length > 0)
+    .map(day => ({ day, slots: overlapGroups(sessionsOnDay(appointments, day, timezone), laneRank) }))
+    .filter(group => group.slots.length > 0)
 
   if (groups.length === 0) {
     return <p className="schedule-empty">{empty}</p>
@@ -35,39 +43,54 @@ export function AgendaList({ days, today, appointments, timezone, showTech, colo
 
   return (
     <div className="schedule-agenda">
-      {groups.map(({ day, sessions }) => (
+      {groups.map(({ day, slots }) => (
         <section key={day} aria-labelledby={`agenda-${day}`} className="schedule-agenda-day">
           <h2 id={`agenda-${day}`} className={cn('schedule-agenda-date', day === today && 'is-today')}>
             {formatDayKey(day, locale, { weekday: 'long', month: 'long', day: 'numeric' })}
             {day === today && <Badge variant="outline">{t('schedule.today')}</Badge>}
           </h2>
           <ul className="schedule-agenda-list">
-            {sessions.map(appointment => (
-              <li
-                key={appointment.id}
-                className={cn('schedule-agenda-item', `schedule-agenda-${appointment.status}`)}
-                style={{ '--event-color': colorOf(appointment) } as CSSProperties}
-              >
-                <button type="button" className="schedule-agenda-main" onClick={() => onOpen(appointment)}>
-                  <span className="schedule-agenda-time">
-                    {timeInputValue(Date.parse(appointment.startsAt), timezone)}–{timeInputValue(Date.parse(appointment.endsAt), timezone)}
-                  </span>
-                  <span className="schedule-agenda-title">
-                    {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-label={t('schedule.conflictBadge')} />}
-                    <span className="truncate">{appointment.customer.name}</span>
-                  </span>
-                  <span className="schedule-agenda-meta">
-                    {[showTech ? appointment.tech?.username ?? t('schedule.unassigned') : null, appointment.company, appointment.position].filter(Boolean).join(' · ')}
-                  </span>
-                  {appointment.status !== 'scheduled' && (
-                    <Badge variant={appointment.status === 'cancelled' ? 'destructive' : 'secondary'} className="schedule-agenda-status">
-                      {t(`schedule.status.${appointment.status}`)}
-                    </Badge>
-                  )}
-                </button>
-                {actions && <div className="schedule-agenda-actions">{actions(appointment)}</div>}
-              </li>
-            ))}
+            {slots.map(slot => {
+              const span = groupSpan(slot)
+              return (
+                <li key={slot[0]!.id} className="schedule-agenda-slot">
+                  <span className="schedule-agenda-time" aria-hidden="true">{range(span.from, span.to)}</span>
+                  <ul className="schedule-agenda-cards">
+                    {slot.map(appointment => {
+                      const from = Date.parse(appointment.startsAt)
+                      const to = Date.parse(appointment.endsAt)
+                      // A session shows its own time only when it differs from the row's.
+                      const ownTime = from !== span.from || to !== span.to
+                      const tech = showTech ? appointment.tech?.username ?? t('schedule.unassigned') : null
+                      const title = showCustomer ? appointment.customer.name : tech
+                      const meta = [showCustomer ? tech : null, appointment.company, appointment.position].filter(Boolean).join(' · ')
+                      return (
+                        <li
+                          key={appointment.id}
+                          className={cn('schedule-agenda-item', `schedule-agenda-${appointment.status}`)}
+                          style={{ '--event-color': colorOf(appointment) } as CSSProperties}
+                        >
+                          <button type="button" className="schedule-agenda-main" onClick={() => onOpen(appointment)}>
+                            <span className="schedule-agenda-title">
+                              {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-label={t('schedule.conflictBadge')} />}
+                              <span className={cn('schedule-agenda-own-time', !ownTime && 'sr-only')}>{range(from, to)}</span>
+                              <span className="truncate">{title}</span>
+                            </span>
+                            <span className="schedule-agenda-meta">{meta}</span>
+                            {appointment.status !== 'scheduled' && (
+                              <Badge variant={appointment.status === 'cancelled' ? 'destructive' : 'secondary'} className="schedule-agenda-status">
+                                {t(`schedule.status.${appointment.status}`)}
+                              </Badge>
+                            )}
+                          </button>
+                          {actions && <div className="schedule-agenda-actions">{actions(appointment)}</div>}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </li>
+              )
+            })}
           </ul>
         </section>
       ))}

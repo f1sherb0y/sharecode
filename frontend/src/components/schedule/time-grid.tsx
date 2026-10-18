@@ -1,17 +1,18 @@
-import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
 import type { Appointment } from '@/types'
 import { cn } from '@/lib/utils'
-import { FIRST_VISIBLE_HOUR, HOUR_HEIGHT, daySegments, type DaySegment } from '@/lib/schedule'
+import { FIRST_VISIBLE_HOUR, daySegments, visibleRange, type DaySegment, type LaneRank } from '@/lib/schedule'
 import { atMinute, minuteOfDay, timeInputValue } from '@/lib/zoned-time'
 import { pointerMinute, type DragPreview, type GridDrop } from './use-schedule-drag'
 
-export interface GridColumn {
+export interface GridRow {
   key: string
   day: string
-  /** Day-view columns belong to a tech (null: unassigned); week-view columns have none. */
+  /** Day-view rows belong to a tech (null: unassigned); week-view rows have none. */
   techId?: string | null
+  /** Empty when the page title already names the only row's day. */
   label: string
   sublabel?: string
   color?: string
@@ -19,18 +20,20 @@ export interface GridColumn {
 }
 
 interface TimeGridProps {
-  columns: GridColumn[]
+  rows: GridRow[]
   appointments: Appointment[]
   timezone: string
   now: number
   editable: boolean
   showTech: boolean
   colorOf: (appointment: Appointment) => string
+  /** Orders simultaneous sessions in a row from the top. */
+  laneRank?: LaneRank
   onOpen: (appointment: Appointment) => void
   onDrop: (drop: GridDrop) => void
   drag: {
     preview: DragPreview | null
-    begin: (event: ReactPointerEvent, init: { kind: DragPreview['kind']; appointment?: Appointment; grabOffset?: number; origin?: { day: string; techId: string | null | undefined; minute: number } }) => void
+    begin: (event: ReactPointerEvent, init: { kind: DragPreview['kind']; appointment?: Appointment; grabOffset?: number; origin?: { day: string; techId: string | null | undefined; minute: number }; row?: HTMLElement }) => void
     endsDrag: () => boolean
   }
   /** Scrolls this minute of the day into view when it changes. */
@@ -38,36 +41,56 @@ interface TimeGridProps {
   label: string
 }
 
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
-/** Matches .schedule-event's line-height; a session shows only the lines that fit whole. */
+/** Matches .schedule-event's line-height and padding: a lane holds whole lines. */
 const EVENT_LINE = 15
 const EVENT_CHROME = 6
+const LANE_GAP = 2
+const ROW_PADDING = 3
 
-function belongs(appointment: Appointment, column: GridColumn): boolean {
-  return column.techId === undefined || (appointment.tech?.id ?? null) === column.techId
+function belongs(appointment: Appointment, row: GridRow): boolean {
+  return row.techId === undefined || (appointment.tech?.id ?? null) === row.techId
 }
 
-/** The tech a dragged session would have: dropping on a tech's column assigns it. */
-function landingTech(preview: DragPreview, columns: GridColumn[]): Appointment['tech'] {
+/** The tech a dragged session would have: dropping on a tech's row assigns it. */
+function landingTech(preview: DragPreview, rows: GridRow[]): Appointment['tech'] {
   const original = preview.appointment?.tech ?? null
   if (preview.kind !== 'move' || preview.techId === undefined || preview.techId === original?.id) return original
   if (preview.techId === null) return null
-  const column = columns.find(c => c.techId === preview.techId)
-  return { id: preview.techId, username: column?.label ?? '', color: column?.color ?? '', role: 'tech', isDeleted: false }
+  const row = rows.find(r => r.techId === preview.techId)
+  return { id: preview.techId, username: row?.label ?? '', color: row?.color ?? '', role: 'tech', isDeleted: false }
 }
 
-/** Week and day views: hours down, days or techs across. */
-export function TimeGrid({ columns, appointments, timezone, now, editable, showTech, colorOf, onOpen, onDrop, drag, focusMinute, label }: TimeGridProps) {
+/**
+ * Week and day views as timelines: a row per weekday (week) or per tech (day),
+ * hours across. Sessions at the same time in a row take lanes, one under another.
+ */
+export function TimeGrid({ rows, appointments, timezone, now, editable, showTech, colorOf, laneRank, onOpen, onDrop, drag, focusMinute, label }: TimeGridProps) {
   const { t } = useTranslation()
   const scroller = useRef<HTMLDivElement>(null)
 
+  const laidOut = useMemo(() => rows.map(row => {
+    const segments = daySegments(appointments.filter(appointment => belongs(appointment, row)), row.day, timezone, laneRank)
+    return { row, segments, lanes: Math.max(1, ...segments.map(segment => segment.columns)) }
+  }), [rows, appointments, timezone, laneRank])
+  const { from, to } = useMemo(() => visibleRange(laidOut.flatMap(({ segments }) => segments)), [laidOut])
+  const span = to - from
+  const hours = Array.from({ length: span / 60 }, (_, index) => from / 60 + index)
+  const x = (minute: number) => `${((Math.min(to, Math.max(from, minute)) - from) / span) * 100}%`
+  const width = (start: number, end: number) => `${((Math.min(to, end) - Math.max(from, start)) / span) * 100}%`
+  // Name, then the tech (week view for agents) and the company and position.
+  const lines = showTech ? 3 : 2
+  const laneHeight = lines * EVENT_LINE + EVENT_CHROME + LANE_GAP
+  const rowHeight = (lanes: number) => lanes * laneHeight - LANE_GAP + 2 * ROW_PADDING
+
+  // A timeline wider than the window opens at the working day, or at the session asked for.
   useEffect(() => {
-    scroller.current?.scrollTo({ top: FIRST_VISIBLE_HOUR * HOUR_HEIGHT - 8 })
-  }, [])
-  useEffect(() => {
-    if (focusMinute == null || !scroller.current) return
-    scroller.current.scrollTo({ top: Math.max(0, (focusMinute / 60 - 1) * HOUR_HEIGHT) })
-  }, [focusMinute])
+    const scroll = scroller.current
+    const track = scroll?.querySelector<HTMLElement>('[data-schedule-row]')
+    if (!scroll || !track || scroll.scrollWidth <= scroll.clientWidth) return
+    const minute = focusMinute ?? FIRST_VISIBLE_HOUR * 60
+    const hour = track.offsetWidth / hours.length
+    scroll.scrollTo({ left: Math.max(0, ((minute - from) / span) * track.offsetWidth - (focusMinute == null ? 0 : 2 * hour)) })
+  }, [focusMinute, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const preview = drag.preview
   const moving = preview && preview.kind !== 'create' ? preview.appointment?.id : undefined
@@ -77,50 +100,36 @@ export function TimeGrid({ columns, appointments, timezone, now, editable, showT
     startsAt: preview.startsAt.toISOString(),
     endsAt: new Date(preview.startsAt.getTime() + preview.durationMinutes * 60000).toISOString(),
     durationMinutes: preview.durationMinutes,
-    tech: landingTech(preview, columns),
+    tech: landingTech(preview, rows),
   } : null
 
-  const timeRange = (appointment: Appointment) =>
-    `${timeInputValue(Date.parse(appointment.startsAt), timezone)}–${timeInputValue(Date.parse(appointment.endsAt), timezone)}`
+  const timeRange = (start: number, end: number) => `${timeInputValue(start, timezone)}–${timeInputValue(end, timezone)}`
 
   const describe = (appointment: Appointment) => [
-    timeRange(appointment),
+    timeRange(Date.parse(appointment.startsAt), Date.parse(appointment.endsAt)),
     appointment.customer.name,
     appointment.tech?.username ?? t('schedule.unassigned'),
     t(`schedule.status.${appointment.status}`),
     appointment.hasConflict ? t('schedule.conflictBadge') : '',
   ].filter(Boolean).join(', ')
 
-  const renderSegment = (segment: DaySegment, column: GridColumn, isGhost = false) => {
+  const renderSegment = (segment: DaySegment, row: GridRow) => {
     const { appointment } = segment
-    const height = Math.max(18, ((segment.end - segment.start) / 60) * HOUR_HEIGHT - 2)
     const style = {
-      top: (segment.start / 60) * HOUR_HEIGHT,
-      height,
-      left: `calc(${(segment.column / segment.columns) * 100}% + 1px)`,
-      width: `calc(${100 / segment.columns}% - 3px)`,
+      left: `calc(${x(segment.start)} + 1px)`,
+      width: `calc(${width(segment.start, segment.end)} - 2px)`,
+      top: ROW_PADDING + segment.column * laneHeight,
+      height: laneHeight - LANE_GAP,
       '--event-color': colorOf(appointment),
     } as CSSProperties
-    const lines = Math.max(1, Math.floor((height - EVENT_CHROME) / EVENT_LINE))
-    const compact = lines === 1
-    if (isGhost) {
-      return (
-        <div key={`ghost-${column.key}`} className={cn('schedule-event schedule-event-ghost', compact && 'schedule-event-compact')} style={style} aria-hidden="true">
-          <span className="schedule-event-time">
-            {timeRange(appointment)}
-            {compact && <span className="schedule-event-inline"> {appointment.customer.name}</span>}
-          </span>
-          {!compact && <span className="schedule-event-title">{appointment.customer.name}</span>}
-        </div>
-      )
-    }
+    // No time on the card: the hours above the grid show it.
     const meta = [
       showTech ? appointment.tech?.username ?? t('schedule.unassigned') : null,
       [appointment.company, appointment.position].filter(Boolean).join(' · '),
-    ].filter(Boolean).slice(0, Math.max(0, lines - 2))
+    ].filter(Boolean).slice(0, lines - 1)
     return (
       <button
-        key={`${appointment.id}-${column.key}`}
+        key={`${appointment.id}-${row.key}`}
         type="button"
         data-appointment={appointment.id}
         className={cn(
@@ -128,14 +137,13 @@ export function TimeGrid({ columns, appointments, timezone, now, editable, showT
           `schedule-event-${appointment.status}`,
           !appointment.tech && 'schedule-event-unassigned',
           appointment.hasConflict && 'schedule-event-conflict',
-          compact && 'schedule-event-compact',
           moving === appointment.id && 'schedule-event-moving',
         )}
         style={style}
         aria-label={describe(appointment)}
         title={describe(appointment)}
         onPointerDown={editable ? (event) => {
-          const grabbedAt = atMinute(column.day, pointerMinute({ clientY: event.clientY, currentTarget: event.currentTarget.parentElement! }), timezone)
+          const grabbedAt = atMinute(row.day, pointerMinute({ clientX: event.clientX, currentTarget: event.currentTarget.parentElement! }), timezone)
           drag.begin(event, { kind: 'move', appointment, grabOffset: Math.round((grabbedAt.getTime() - Date.parse(appointment.startsAt)) / 60000) })
         } : undefined}
         onClick={(event) => {
@@ -143,12 +151,10 @@ export function TimeGrid({ columns, appointments, timezone, now, editable, showT
           if (!drag.endsDrag()) onOpen(appointment)
         }}
       >
-        <span className="schedule-event-time">
+        <span className="schedule-event-title">
           {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-hidden="true" />}
-          {timeRange(appointment)}
-          {compact && <span className="schedule-event-inline"> {appointment.customer.name}</span>}
+          <span className="truncate">{appointment.customer.name}</span>
         </span>
-        {!compact && <span className="schedule-event-title">{appointment.customer.name}</span>}
         {meta.map((text, index) => <span key={index} className="schedule-event-meta">{text}</span>)}
         {editable && !segment.continuesAfter && (
           <span
@@ -156,8 +162,9 @@ export function TimeGrid({ columns, appointments, timezone, now, editable, showT
             aria-hidden="true"
             onPointerDown={(event) => {
               // How far from the end it was grabbed, so the end moves exactly as far as the pointer.
-              const column = event.currentTarget.closest('[data-schedule-column]')!
-              drag.begin(event, { kind: 'resize', appointment, grabOffset: pointerMinute({ clientY: event.clientY, currentTarget: column }) - segment.end })
+              const track = event.currentTarget.closest<HTMLElement>('[data-schedule-row]')!
+              const minute = pointerMinute({ clientX: event.clientX, currentTarget: track })
+              drag.begin(event, { kind: 'resize', appointment, grabOffset: minute - segment.end, origin: { day: row.day, techId: row.techId, minute }, row: track })
             }}
           />
         )}
@@ -165,82 +172,90 @@ export function TimeGrid({ columns, appointments, timezone, now, editable, showT
     )
   }
 
+  // While dragging, the landing time is shown: the hours above mark only whole hours.
+  const renderGhost = (key: string, start: number, end: number, title: string, lanes: number, color?: string) => (
+    <div
+      key={key}
+      className={cn('schedule-event schedule-event-ghost', !color && 'schedule-event-new')}
+      style={{
+        left: `calc(${x(start)} + 1px)`,
+        width: `calc(${width(start, end)} - 2px)`,
+        top: ROW_PADDING,
+        height: rowHeight(lanes) - 2 * ROW_PADDING,
+        ...(color ? { '--event-color': color } : {}),
+      } as CSSProperties}
+      aria-hidden="true"
+    >
+      <span className="schedule-event-time">{title}</span>
+    </div>
+  )
+
   const nowMinute = minuteOfDay(now, timezone)
-  // Today stands out among days; a day split by person needs no marker.
-  const marksToday = new Set(columns.map(column => column.day)).size > 1
+  // Today stands out among days; rows for people on one day need no marker.
+  const marksToday = new Set(rows.map(row => row.day)).size > 1
+  const labeled = rows.some(row => row.label)
 
   return (
-    <div className="schedule-grid" style={{ '--columns': columns.length } as CSSProperties} role="region" aria-label={label}>
+    <div className={cn('schedule-grid', !labeled && 'is-unlabeled')} style={{ '--hours': hours.length } as CSSProperties} role="region" aria-label={label}>
       <div className="schedule-grid-scroll" ref={scroller} data-schedule-scroll>
         <div className="schedule-grid-inner">
           <div className="schedule-grid-head" aria-hidden="true">
-            <div className="schedule-gutter" />
-            {columns.map(column => (
-              <div key={column.key} className={cn('schedule-column-head', marksToday && column.isToday && 'is-today')}>
-                {column.color && <span className="schedule-dot" style={{ background: column.color }} />}
-                <span className="schedule-column-label">{column.label}</span>
-                {column.sublabel && <span className="schedule-column-sublabel">{column.sublabel}</span>}
-              </div>
-            ))}
-          </div>
-          <div className="schedule-grid-body">
-            <div className="schedule-gutter" aria-hidden="true">
-              {HOURS.map(hour => (
-                <span key={hour} className="schedule-hour" style={{ top: hour * HOUR_HEIGHT }}>
-                  {hour === 0 ? '' : `${String(hour).padStart(2, '0')}:00`}
-                </span>
+            {labeled && <div className="schedule-row-label schedule-corner" />}
+            <div className="schedule-hours">
+              {hours.map(hour => (
+                <span key={hour} className="schedule-hour" style={{ left: x(hour * 60) }}>{String(hour).padStart(2, '0')}:00</span>
               ))}
             </div>
-            {columns.map(column => {
-              const own = appointments.filter(appointment => belongs(appointment, column))
-              const segments = daySegments(own, column.day, timezone)
-              const ghostSegments = ghost && belongs(ghost, column) ? daySegments([ghost], column.day, timezone) : []
-              const creating = preview?.kind === 'create' && preview.day === column.day && preview.techId === column.techId
-              return (
+          </div>
+          {laidOut.map(({ row, segments, lanes }) => {
+            const ghostSegments = ghost && belongs(ghost, row) ? daySegments([ghost], row.day, timezone) : []
+            const creating = preview?.kind === 'create' && preview.day === row.day && preview.techId === row.techId
+            const createStart = creating && preview ? minuteOfDay(preview.startsAt, timezone) : 0
+            return (
+              <div key={row.key} className={cn('schedule-row', marksToday && row.isToday && 'is-today')}>
+                {labeled && (
+                  <div className="schedule-row-label">
+                    {row.color && <span className="schedule-dot" style={{ background: row.color }} aria-hidden="true" />}
+                    <span className="schedule-row-name">{row.label}</span>
+                    {row.sublabel && <span className="schedule-row-sublabel">{row.sublabel}</span>}
+                  </div>
+                )}
                 <div
-                  key={column.key}
-                  className={cn('schedule-column', marksToday && column.isToday && 'is-today', editable && 'is-editable')}
-                  data-schedule-column
-                  data-day={column.day}
-                  data-tech={column.techId === undefined ? undefined : column.techId ?? ''}
-                  aria-label={[column.label, column.sublabel].filter(Boolean).join(' ')}
+                  className={cn('schedule-track', editable && 'is-editable')}
+                  style={{ height: rowHeight(lanes) }}
+                  data-schedule-row
+                  data-day={row.day}
+                  data-tech={row.techId === undefined ? undefined : row.techId ?? ''}
+                  data-from={from}
+                  data-to={to}
+                  aria-label={[row.label, row.sublabel].filter(Boolean).join(' ') || undefined}
                   onPointerDown={editable ? (event) => {
                     if (event.target !== event.currentTarget) return
-                    drag.begin(event, { kind: 'create', origin: { day: column.day, techId: column.techId, minute: pointerMinute(event) } })
+                    drag.begin(event, { kind: 'create', origin: { day: row.day, techId: row.techId, minute: pointerMinute(event) }, row: event.currentTarget })
                   } : undefined}
                   onClick={editable ? (event) => {
                     if (event.target !== event.currentTarget || drag.endsDrag()) return
                     // A click or tap on free time proposes a session there, on the half hour.
                     const minute = Math.floor(pointerMinute(event) / 30) * 30
-                    onDrop({ kind: 'create', startsAt: atMinute(column.day, minute, timezone), durationMinutes: 60, techId: column.techId })
+                    onDrop({ kind: 'create', startsAt: atMinute(row.day, minute, timezone), durationMinutes: 60, techId: row.techId })
                   } : undefined}
                 >
-                  {segments.map(segment => renderSegment(segment, column))}
-                  {ghostSegments.map(segment => renderSegment({ ...segment, column: 0, columns: 1 }, column, true))}
-                  {creating && preview && (
-                    <div
-                      className="schedule-event schedule-event-ghost schedule-event-new"
-                      style={{
-                        top: (minuteOfDay(preview.startsAt, timezone) / 60) * HOUR_HEIGHT,
-                        height: Math.max(18, (preview.durationMinutes / 60) * HOUR_HEIGHT - 2),
-                        left: 1,
-                        width: 'calc(100% - 3px)',
-                      }}
-                      aria-hidden="true"
-                    >
-                      <span className="schedule-event-time">
-                        {timeInputValue(preview.startsAt, timezone)}–{timeInputValue(preview.startsAt.getTime() + preview.durationMinutes * 60000, timezone)}
-                      </span>
-                      <span className="schedule-event-title">{t('schedule.newSession')}</span>
-                    </div>
+                  {segments.map(segment => renderSegment(segment, row))}
+                  {ghost && ghostSegments.map(segment => renderGhost(
+                    `ghost-${segment.start}`, segment.start, segment.end,
+                    `${timeRange(Date.parse(ghost.startsAt), Date.parse(ghost.endsAt))} ${ghost.customer.name}`, lanes, colorOf(ghost),
+                  ))}
+                  {creating && preview && renderGhost(
+                    'new', createStart, createStart + preview.durationMinutes,
+                    `${timeRange(preview.startsAt.getTime(), preview.startsAt.getTime() + preview.durationMinutes * 60000)} ${t('schedule.newSession')}`, lanes,
                   )}
-                  {column.isToday && (
-                    <div className="schedule-now" style={{ top: (nowMinute / 60) * HOUR_HEIGHT }} aria-hidden="true" />
+                  {row.isToday && nowMinute >= from && nowMinute <= to && (
+                    <div className="schedule-now" style={{ left: x(nowMinute) }} aria-hidden="true" />
                   )}
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

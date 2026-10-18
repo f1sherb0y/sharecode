@@ -815,7 +815,7 @@
     "tabs": {
       "label": "排班分区",
       "calendar": "日历",
-      "customers": "客户"
+      "sessions": "场次"
     },
     "views": {
       "label": "日历视图",
@@ -836,9 +836,10 @@
     },
     "unassignedPanel": {
       "title": "未分配",
-      "hint": "打开场次选择技术，或在日视图中把场次拖到技术那一列。",
-      "hintDay": "把场次拖到技术那一列即可分配。",
-      "empty": "接下来的场次都已分配技术。"
+      "hint": "打开场次选择技术，或在日视图中把场次拖到技术那一行。",
+      "hintDay": "把场次拖到技术那一行即可分配。",
+      "empty": "接下来的场次都已分配技术。",
+      "onCalendar": "其中 {{count}} 场在下方日历中。"
     },
     "drag": {
       "moved": "场次已调整。",
@@ -893,7 +894,9 @@
       "saveAnyway": "仍然保存",
       "customerRequired": "请选择客户。",
       "timeRequired": "请填写日期和开始时间。",
-      "createdBy": "由 {{username}} 安排"
+      "createdBy": "由 {{username}} 安排",
+      "customerUpcoming": "{{count}} 场待进行",
+      "bookAnother": "再约一场"
     },
     "room": {
       "title": "房间",
@@ -911,25 +914,17 @@
     },
     "customers": {
       "title": "客户",
-      "description": "所有中介和管理员共用一份客户列表。",
       "search": "搜索客户",
       "searchPlaceholder": "姓名或联系方式",
       "new": "新建客户",
       "empty": "还没有客户。",
       "noMatches": "没有匹配的客户。",
-      "columns": {
-        "name": "姓名",
-        "contact": "联系方式",
-        "upcoming": "待进行",
-        "next": "下一场",
-        "last": "上一场"
-      },
       "createTitle": "新建客户",
       "name": "姓名",
       "contact": "联系方式",
       "contactPlaceholder": "电话、微信或邮箱",
       "notes": "备注",
-      "notesPlaceholder": "只有中介和管理员能看到这些备注",
+      "notesPlaceholder": "例如：方便的时间、背景",
       "save": "保存",
       "saving": "保存中...",
       "saved": "客户已保存。",
@@ -938,9 +933,9 @@
       "deleteTitle": "删除 {{name}}？",
       "deleteConfirm": "客户会从列表中移除，过去的场次仍保留客户姓名。",
       "deleted": "客户已删除。",
-      "history": "场次",
-      "historyEmpty": "还没有场次。",
-      "planSession": "安排场次"
+      "edit": "编辑客户",
+      "editTitle": "编辑客户",
+      "privacy": "技术只能看到客户姓名，联系方式和备注只有中介和管理员能看到。"
     },
     "todayCard": {
       "title": "今天的场次",
@@ -960,6 +955,17 @@
       "many_one": "{{count}} 条排班变动",
       "many_other": "{{count}} 条排班变动",
       "manyDescription": "你的场次有变动，打开通知查看详情。"
+    },
+    "sessions": {
+      "all": "全部场次",
+      "allTitle": "全部场次",
+      "moreCustomers": "加载更多客户",
+      "upcoming": "即将进行",
+      "past": "已结束",
+      "noUpcoming": "没有即将进行的场次。",
+      "noPast": "还没有已结束的场次。",
+      "noPastDays": "最近 {{count}} 天没有已结束的场次。",
+      "earlier": "加载更早的场次"
     }
   }
 }

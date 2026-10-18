@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Appointment } from '@/types'
-import { HOUR_HEIGHT, SNAP_MINUTES, clamp, snap } from '@/lib/schedule'
+import { SNAP_MINUTES, clamp, snap } from '@/lib/schedule'
 import { atMinute } from '@/lib/zoned-time'
 
 /** What a drag or click on the time grid asks for. */
@@ -13,7 +13,7 @@ export interface DragPreview {
   appointment: Appointment | null
   startsAt: Date
   durationMinutes: number
-  /** Day of the column under the pointer and its tech: undefined in week view, null for unassigned. */
+  /** Day of the row under the pointer and its tech: undefined in week view, null for unassigned. */
   day: string
   techId: string | null | undefined
 }
@@ -32,8 +32,10 @@ interface Session {
   y: number
   /** Minutes from the session start to where it was grabbed. */
   grabOffset: number
-  /** The column a new session is drawn in, and the minute the pointer went down. */
+  /** The row a new session is drawn in, or a session stretched in, and the minute the pointer went down. */
   origin: Hit | null
+  /** That row's element: drawing and stretching follow the pointer along it, wherever it is vertically. */
+  row: HTMLElement | null
   active: boolean
   preview: DragPreview | null
 }
@@ -41,32 +43,34 @@ interface Session {
 const THRESHOLD = 4
 const EDGE = 40
 
-// Columns carry data-schedule-column, data-day and, in the day view, data-tech
-// ('' for unassigned). Drags hit-test whatever column is under the pointer, so
-// the same code serves the grid and the unassigned list beside it.
-function hitTest(x: number, y: number): Hit | null {
-  const column = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-schedule-column]')
-  const day = column?.dataset.day
-  if (!column || !day) return null
-  const rect = column.getBoundingClientRect()
-  const tech = column.dataset.tech
-  return {
-    day,
-    techId: tech === undefined ? undefined : tech || null,
-    minute: clamp(((y - rect.top) / HOUR_HEIGHT) * 60, 0, 1440),
-  }
+// Rows carry data-schedule-row, data-day, the minutes they span (data-from,
+// data-to) and, in the day view, data-tech ('' for unassigned). Moves hit-test
+// whatever row is under the pointer, so the same code serves the grid and the
+// unassigned strip above it.
+function minuteAt(row: HTMLElement, x: number): number {
+  const rect = row.getBoundingClientRect()
+  const from = Number(row.dataset.from)
+  const to = Number(row.dataset.to)
+  return clamp(from + ((x - rect.left) / rect.width) * (to - from), from, to)
 }
 
-/** The grid minute under a pointer event inside a column. */
-export function pointerMinute(event: { clientY: number; currentTarget: Element }): number {
-  const rect = event.currentTarget.getBoundingClientRect()
-  return clamp(((event.clientY - rect.top) / HOUR_HEIGHT) * 60, 0, 1440)
+function hitTest(x: number, y: number): Hit | null {
+  const row = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-schedule-row]')
+  const day = row?.dataset.day
+  if (!row || !day) return null
+  const tech = row.dataset.tech
+  return { day, techId: tech === undefined ? undefined : tech || null, minute: minuteAt(row, x) }
+}
+
+/** The minute of the day under a pointer event inside a row. */
+export function pointerMinute(event: { clientX: number; currentTarget: Element }): number {
+  return minuteAt(event.currentTarget as HTMLElement, event.clientX)
 }
 
 /**
- * Mouse and pen drags on the time grid: draw a new session, move one (also to
- * another tech's column in the day view) or stretch its end. Touch keeps
- * scrolling and uses taps instead.
+ * Mouse and pen drags on the timeline: draw a new session, move one (to another
+ * day in the week view, another tech in the day view) or stretch its end. Touch
+ * keeps scrolling and uses taps instead.
  */
 export function useScheduleDrag({ timezone, onDrop }: { timezone: string; onDrop: (drop: GridDrop) => void }) {
   const [preview, setPreview] = useState<DragPreview | null>(null)
@@ -81,8 +85,6 @@ export function useScheduleDrag({ timezone, onDrop }: { timezone: string; onDrop
     if (current.kind === 'create') {
       const origin = current.origin
       if (!origin) return null
-      // A new session is drawn within the column it started in.
-      if (hit.day !== origin.day || hit.techId !== origin.techId) return current.preview
       const from = Math.floor(origin.minute / SNAP_MINUTES) * SNAP_MINUTES
       const to = snap(hit.minute)
       const start = Math.min(from, to)
@@ -99,13 +101,13 @@ export function useScheduleDrag({ timezone, onDrop }: { timezone: string; onDrop
     const appointment = current.appointment!
     if (current.kind === 'resize') {
       const start = Date.parse(appointment.startsAt)
-      const end = atMinute(hit.day, snap(hit.minute - current.grabOffset), timezone).getTime()
+      const end = atMinute(current.origin!.day, snap(hit.minute - current.grabOffset), timezone).getTime()
       return {
         kind: 'resize',
         appointment,
         startsAt: new Date(start),
         durationMinutes: clamp(Math.round((end - start) / 60000), SNAP_MINUTES, 1440),
-        day: hit.day,
+        day: current.origin!.day,
         techId: undefined,
       }
     }
@@ -131,23 +133,33 @@ export function useScheduleDrag({ timezone, onDrop }: { timezone: string; onDrop
       if (Math.abs(x - current.x) + Math.abs(y - current.y) < THRESHOLD) return
       current.active = true
     }
-    const hit = hitTest(x, y)
+    // Drawing and stretching stay in their row; a move lands on the row under the pointer.
+    const hit = current.kind !== 'move' && current.row && current.origin
+      ? { ...current.origin, minute: minuteAt(current.row, x) }
+      : hitTest(x, y)
     if (hit) {
       current.preview = compute(current, hit)
       setPreview(current.preview)
     }
   }, [compute])
 
-  // Near the top or bottom edge, keep scrolling the grid under a still pointer.
+  // Near an edge of the grid, keep scrolling it under a still pointer.
   const autoScroll = useCallback(() => {
     const scroller = document.querySelector<HTMLElement>('[data-schedule-scroll]')
     const current = session.current
     if (!scroller || !current?.active) return stopScrolling()
     const rect = scroller.getBoundingClientRect()
     const { x, y } = lastPointer.current
-    const step = y < rect.top + EDGE ? -12 : y > rect.bottom - EDGE ? 12 : 0
-    if (!step) return stopScrolling()
-    scroller.scrollTop += step
+    const inside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+    const stepX = !inside ? 0 : x < rect.left + EDGE ? -12 : x > rect.right - EDGE ? 12 : 0
+    const stepY = !inside ? 0 : y < rect.top + EDGE ? -12 : y > rect.bottom - EDGE ? 12 : 0
+    const canScroll = (stepX < 0 && scroller.scrollLeft > 0)
+      || (stepX > 0 && scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth)
+      || (stepY < 0 && scroller.scrollTop > 0)
+      || (stepY > 0 && scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight)
+    if (!canScroll) return stopScrolling()
+    scroller.scrollLeft += stepX
+    scroller.scrollTop += stepY
     update(x, y)
     scrollFrame.current = requestAnimationFrame(autoScroll)
   }, [update])
@@ -207,12 +219,12 @@ export function useScheduleDrag({ timezone, onDrop }: { timezone: string; onDrop
 
   /**
    * Starts a possible drag. `grabOffset` is how far (in minutes) from the session's
-   * start it was grabbed to move it, or from its end to stretch it; `origin` is the
-   * column a new session is drawn in.
+   * start it was grabbed to move it, or from its end to stretch it; `origin` and
+   * `row` are where a new session is drawn or a session stretched.
    */
   const begin = useCallback((
     event: ReactPointerEvent,
-    init: { kind: DragPreview['kind']; appointment?: Appointment; grabOffset?: number; origin?: Hit },
+    init: { kind: DragPreview['kind']; appointment?: Appointment; grabOffset?: number; origin?: Hit; row?: HTMLElement },
   ) => {
     if (event.button !== 0 || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return
     event.stopPropagation()
@@ -226,6 +238,7 @@ export function useScheduleDrag({ timezone, onDrop }: { timezone: string; onDrop
       y: event.clientY,
       grabOffset: init.grabOffset ?? 0,
       origin: init.origin ?? null,
+      row: init.row ?? null,
       active: false,
       preview: null,
     }

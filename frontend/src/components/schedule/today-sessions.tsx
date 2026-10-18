@@ -6,7 +6,7 @@ import { CalendarDays } from 'lucide-react'
 import { api } from '@/api'
 import { queryKeys } from '@/lib/query-keys'
 import { isStaff } from '@/lib/room-permissions'
-import { UNASSIGNED_COLOR } from '@/lib/schedule'
+import { UNASSIGNED_COLOR, groupSpan, overlapGroups } from '@/lib/schedule'
 import { addDays, dayStart, timeInputValue, todayKey } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 import { useAuthStore, useSettingsStore } from '@/stores'
@@ -37,9 +37,17 @@ export function TodaySessions() {
   const sessions = (data ?? []).filter(appointment => appointment.status !== 'cancelled')
   if (sessions.length === 0) return null
   const now = Date.now()
-  // Finished sessions drop to the end so the next one is on top.
-  const ordered = [...sessions].sort((a, b) =>
-    Number(Date.parse(a.endsAt) <= now) - Number(Date.parse(b.endsAt) <= now) || Date.parse(a.startsAt) - Date.parse(b.startsAt))
+  const range = (from: number, to: number) => `${timeInputValue(from, timezone)}–${timeInputValue(to, timezone)}`
+  // Simultaneous sessions share a row. Finished rows drop to the end so the next one is on top.
+  const finished = (group: typeof sessions) => group.every(appointment => Date.parse(appointment.endsAt) <= now)
+  const rows = overlapGroups(sessions).sort((a, b) => Number(finished(a)) - Number(finished(b)))
+  const shownRows: typeof rows = []
+  let shownCount = 0
+  for (const row of rows) {
+    if (shownRows.length > 0 && shownCount + row.length > SHOWN) break
+    shownRows.push(row)
+    shownCount += row.length
+  }
 
   return (
     <section className="today-sessions" aria-labelledby="today-sessions-title">
@@ -54,28 +62,43 @@ export function TodaySessions() {
         </Link>
       </div>
       <ul className="today-sessions-list">
-        {ordered.slice(0, SHOWN).map(appointment => (
-          <li
-            key={appointment.id}
-            className={cn('today-session', Date.parse(appointment.endsAt) <= now && 'is-past')}
-            style={{ '--event-color': appointment.tech?.color ?? UNASSIGNED_COLOR } as CSSProperties}
-          >
-            <Link to={`/schedule?view=day&date=${today}&session=${appointment.id}`} className="today-session-main">
-              <span className="today-session-time tabular-nums">
-                {timeInputValue(Date.parse(appointment.startsAt), timezone)}–{timeInputValue(Date.parse(appointment.endsAt), timezone)}
-              </span>
-              <span className="truncate font-medium">{appointment.customer.name}</span>
-              <span className="truncate text-xs text-muted-foreground">
-                {[staff ? appointment.tech?.username ?? t('schedule.unassigned') : null, appointment.company, appointment.position].filter(Boolean).join(' · ')}
-              </span>
-            </Link>
-            {appointment.status === 'completed' ? <StatusBadge status="completed" /> : <SessionRoomActions appointment={appointment} compact />}
-          </li>
-        ))}
+        {shownRows.map(row => {
+          const span = groupSpan(row)
+          return (
+            <li key={row[0]!.id} className="today-slot">
+              <span className="today-session-time tabular-nums" aria-hidden="true">{range(span.from, span.to)}</span>
+              <ul className="today-slot-cards">
+                {row.map(appointment => {
+                  const from = Date.parse(appointment.startsAt)
+                  const to = Date.parse(appointment.endsAt)
+                  const ownTime = from !== span.from || to !== span.to
+                  return (
+                    <li
+                      key={appointment.id}
+                      className={cn('today-session', to <= now && 'is-past')}
+                      style={{ '--event-color': appointment.tech?.color ?? UNASSIGNED_COLOR } as CSSProperties}
+                    >
+                      <Link to={`/schedule?view=day&date=${today}&session=${appointment.id}`} className="today-session-main">
+                        <span className="truncate">
+                          <span className={cn('today-session-own-time tabular-nums', !ownTime && 'sr-only')}>{range(from, to)} </span>
+                          <span className="font-medium">{appointment.customer.name}</span>
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {[staff ? appointment.tech?.username ?? t('schedule.unassigned') : null, appointment.company, appointment.position].filter(Boolean).join(' · ')}
+                        </span>
+                      </Link>
+                      {appointment.status === 'completed' ? <StatusBadge status="completed" /> : <SessionRoomActions appointment={appointment} compact />}
+                    </li>
+                  )
+                })}
+              </ul>
+            </li>
+          )
+        })}
       </ul>
-      {ordered.length > SHOWN && (
+      {sessions.length > shownCount && (
         <Link to={staff ? '/schedule?view=day' : '/schedule?view=list'} className="today-sessions-more">
-          {t('schedule.todayCard.more', { count: ordered.length - SHOWN })}
+          {t('schedule.todayCard.more', { count: sessions.length - shownCount })}
         </Link>
       )}
     </section>

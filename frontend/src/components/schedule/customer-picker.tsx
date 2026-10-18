@@ -163,7 +163,11 @@ export function CustomerPicker({ id, value, onChange }: CustomerPickerProps) {
               onClick={() => choose(index)}
             >
               <span className="truncate font-medium">{customer.name}</span>
-              {customer.contact && <span className="truncate text-xs text-muted-foreground">{customer.contact}</span>}
+              {(customer.contact || customer.upcomingCount > 0) && (
+                <span className="truncate text-xs text-muted-foreground">
+                  {[customer.contact, customer.upcomingCount > 0 ? t('schedule.dialog.customerUpcoming', { count: customer.upcomingCount }) : null].filter(Boolean).join(' · ')}
+                </span>
+              )}
             </li>
           ))}
           {customers.length === 0 && !isFetching && search && (

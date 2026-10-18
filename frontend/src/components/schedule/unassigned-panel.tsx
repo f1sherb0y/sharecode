@@ -8,7 +8,10 @@ import type { Appointment } from '@/types'
 import type { DragPreview } from './use-schedule-drag'
 
 interface UnassignedPanelProps {
+  /** Upcoming sessions without a tech that the calendar beside it does not show. */
   appointments: Appointment[]
+  /** How many more the calendar shows already; they are not listed twice. */
+  onCalendar: number
   isLoading: boolean
   timezone: string
   /** Day view shows a column per tech to drop on. */
@@ -21,23 +24,27 @@ interface UnassignedPanelProps {
   }
 }
 
-/** Upcoming sessions without a tech, ready to be dragged onto the calendar. */
-export function UnassignedPanel({ appointments, isLoading, timezone, canDropOnTech, onOpen, drag }: UnassignedPanelProps) {
+/**
+ * Upcoming sessions without a tech, ready to be dragged onto the calendar: beside
+ * it on wide windows, in a strip above it on narrower ones.
+ */
+export function UnassignedPanel({ appointments, onCalendar, isLoading, timezone, canDropOnTech, onOpen, drag }: UnassignedPanelProps) {
   const { t } = useTranslation()
   const locale = getLocale()
   return (
     <aside className="schedule-unassigned" aria-labelledby="unassigned-title">
       <h2 id="unassigned-title" className="schedule-side-title">
         {t('schedule.unassignedPanel.title')}
-        <span className="schedule-count">{appointments.length}</span>
+        <span className="schedule-count">{appointments.length + onCalendar}</span>
       </h2>
-      <p className="text-xs text-muted-foreground">
+      <p className="schedule-unassigned-hint">
         {canDropOnTech ? t('schedule.unassignedPanel.hintDay') : t('schedule.unassignedPanel.hint')}
+        {onCalendar > 0 && <> {t('schedule.unassignedPanel.onCalendar', { count: onCalendar })}</>}
       </p>
       {isLoading ? (
         <div className="flex justify-center py-2"><Spinner size="sm" /></div>
       ) : appointments.length === 0 ? (
-        <p className="py-1 text-xs text-muted-foreground">{t('schedule.unassignedPanel.empty')}</p>
+        onCalendar === 0 && <p className="py-1 text-xs text-muted-foreground">{t('schedule.unassignedPanel.empty')}</p>
       ) : (
         <ul className="schedule-unassigned-list">
           {appointments.map(appointment => (

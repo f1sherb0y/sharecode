@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
-import { TriangleAlert } from 'lucide-react'
+import { CalendarPlus, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge,
@@ -34,12 +34,15 @@ import { APPOINTMENT_STATUSES, type Appointment, type AppointmentInput, type App
 import { CustomerPicker, type PickedCustomer } from './customer-picker'
 import { SessionRoomActions } from './session-room-actions'
 
-/** Defaults for a new session, e.g. from a click on the calendar. */
+/** Defaults for a new session, e.g. from a click on the calendar or another session of the customer. */
 export interface SessionDraft {
   startsAt: Date
   durationMinutes: number
   techId?: string | null
   customer?: PickedCustomer | null
+  agentId?: string | null
+  company?: string | null
+  position?: string | null
 }
 
 interface AppointmentDialogProps {
@@ -55,6 +58,8 @@ interface AppointmentDialogProps {
   timezone: string
   onSaved: (appointment: Appointment) => void
   onDeleted: (appointmentId: string) => void
+  /** Starts another session for the same customer, like this one. */
+  onBookAnother?: (appointment: Appointment) => void
 }
 
 const NONE = 'none'
@@ -64,7 +69,7 @@ function conflictsOf(error: unknown): ScheduleConflict[] | null {
   return data?.status === 409 && Array.isArray(data.data?.conflicts) ? data.data.conflicts : null
 }
 
-export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, viewer, users, colors, timezone, onSaved, onDeleted }: AppointmentDialogProps) {
+export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, viewer, users, colors, timezone, onSaved, onDeleted, onBookAnother }: AppointmentDialogProps) {
   const { t } = useTranslation()
   const [customer, setCustomer] = useState<PickedCustomer | null>(null)
   const [techId, setTechId] = useState(NONE)
@@ -87,12 +92,12 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
     const start = appointment ? Date.parse(appointment.startsAt) : (draft?.startsAt.getTime() ?? Date.now())
     setCustomer(appointment ? appointment.customer : (draft?.customer ?? null))
     setTechId((appointment ? appointment.tech?.id : draft?.techId) ?? NONE)
-    setAgentId(appointment ? appointment.agent?.id ?? NONE : staff && viewer ? viewer.id : NONE)
+    setAgentId(appointment ? appointment.agent?.id ?? NONE : draft?.agentId ?? (staff && viewer ? viewer.id : NONE))
     setDate(dateKeyOf(start, timezone))
     setTime(timeInputValue(start, timezone))
     setDuration(appointment?.durationMinutes ?? draft?.durationMinutes ?? DEFAULT_DURATION)
-    setCompany(appointment?.company ?? '')
-    setPosition(appointment?.position ?? '')
+    setCompany((appointment ? appointment.company : draft?.company) ?? '')
+    setPosition((appointment ? appointment.position : draft?.position) ?? '')
     setNotes(appointment?.notes ?? '')
     setStatus(appointment?.status ?? 'scheduled')
     setConflicts(null)
@@ -131,7 +136,13 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
         : (await api.createAppointment(input)).appointment
     },
     onSuccess: (saved) => {
-      toast.success(appointment ? t('schedule.dialog.saved') : t('schedule.dialog.created'))
+      if (appointment) toast.success(t('schedule.dialog.saved'))
+      else {
+        // Customers often book several sessions: the next one is a click away.
+        toast.success(t('schedule.dialog.created'), onBookAnother
+          ? { action: { label: t('schedule.dialog.bookAnother'), onClick: () => onBookAnother(saved) } }
+          : undefined)
+      }
       onSaved(saved)
     },
     onError: (err) => {
@@ -186,7 +197,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
               <DialogHeader>
                 <DialogTitle>{appointment.customer.name}</DialogTitle>
                 <DialogDescription>
-                  {dayLabel(appointment.startsAt)} · {range(appointment.startsAt, appointment.endsAt)} · {formatDuration(appointment.durationMinutes, units)}
+                  {dayLabel(appointment.startsAt)} · {range(appointment.startsAt, appointment.endsAt)}
                 </DialogDescription>
               </DialogHeader>
               <dl className="schedule-details">
@@ -222,7 +233,14 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
             </DialogHeader>
 
             <div className="space-y-1">
-              <Label htmlFor="session-customer">{t('schedule.dialog.customer')}</Label>
+              <div className="flex items-center justify-between gap-1">
+                <Label htmlFor="session-customer">{t('schedule.dialog.customer')}</Label>
+                {appointment && onBookAnother && !appointment.customer.isDeleted && (
+                  <Button type="button" size="sm" variant="ghost" className="-my-1" onClick={() => onBookAnother(appointment)}>
+                    <CalendarPlus />{t('schedule.dialog.bookAnother')}
+                  </Button>
+                )}
+              </div>
               <CustomerPicker id="session-customer" value={customer} onChange={setCustomer} />
             </div>
 

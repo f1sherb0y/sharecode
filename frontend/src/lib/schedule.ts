@@ -4,12 +4,12 @@ import { addDays, addMonths, dayStart, daysBetween, minuteOfDay, startOfMonth, s
 export type ScheduleView = 'day' | 'week' | 'month' | 'list'
 export const SCHEDULE_VIEWS: ScheduleView[] = ['day', 'week', 'month', 'list']
 
-export const HOUR_HEIGHT = 48
 export const SNAP_MINUTES = 15
 export const DEFAULT_DURATION = 60
 export const DURATION_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240]
-/** Where the time grid opens, so a workday is in view. */
+/** The hours the timeline always spans; sessions outside them widen it. */
 export const FIRST_VISIBLE_HOUR = 8
+export const LAST_VISIBLE_HOUR = 22
 
 export interface ViewRange {
   /** Calendar days shown, as date keys. */
@@ -64,8 +64,14 @@ export interface DaySegment {
   columns: number
 }
 
+/**
+ * Orders sessions that overlap, e.g. by tech, so each tech keeps the same place
+ * among simultaneous sessions.
+ */
+export type LaneRank = (appointment: Appointment) => number
+
 /** Splits sessions into per-day pieces and lays out overlapping pieces side by side. */
-export function daySegments(appointments: Appointment[], day: string, timeZone: string): DaySegment[] {
+export function daySegments(appointments: Appointment[], day: string, timeZone: string, rank?: LaneRank): DaySegment[] {
   const start = dayStart(day, timeZone).getTime()
   const end = dayStart(addDays(day, 1), timeZone).getTime()
   const pieces: DaySegment[] = []
@@ -85,35 +91,70 @@ export function daySegments(appointments: Appointment[], day: string, timeZone: 
       columns: 1,
     })
   }
-  return layoutOverlaps(pieces)
+  return layoutOverlaps(pieces, rank)
 }
 
-function layoutOverlaps(pieces: DaySegment[]): DaySegment[] {
+function layoutOverlaps(pieces: DaySegment[], rank: LaneRank = () => 0): DaySegment[] {
   pieces.sort((a, b) => a.start - b.start || b.end - a.end || a.appointment.id.localeCompare(b.appointment.id))
   let cluster: DaySegment[] = []
   let clusterEnd = -1
-  const columnEnds: number[] = []
-  const flush = () => {
-    const columns = Math.max(1, columnEnds.length)
-    for (const piece of cluster) piece.columns = columns
+  // Pieces that overlap, directly or through others, share their lanes. Lanes go
+  // in rank order; a lane takes every later piece that fits beside the ones in it.
+  const place = () => {
+    const ordered = [...cluster].sort((a, b) =>
+      rank(a.appointment) - rank(b.appointment) || a.start - b.start || a.appointment.id.localeCompare(b.appointment.id))
+    const lanes: DaySegment[][] = []
+    for (const piece of ordered) {
+      let lane = lanes.findIndex(taken => taken.every(other => other.end <= piece.start || other.start >= piece.end))
+      if (lane === -1) lane = lanes.push([]) - 1
+      lanes[lane]!.push(piece)
+      piece.column = lane
+    }
+    for (const piece of cluster) piece.columns = lanes.length
     cluster = []
-    columnEnds.length = 0
   }
   for (const piece of pieces) {
-    if (piece.start >= clusterEnd) flush()
-    let column = columnEnds.findIndex(columnEnd => columnEnd <= piece.start)
-    if (column === -1) {
-      column = columnEnds.length
-      columnEnds.push(piece.end)
-    } else {
-      columnEnds[column] = piece.end
-    }
-    piece.column = column
+    if (piece.start >= clusterEnd && cluster.length > 0) place()
     cluster.push(piece)
     clusterEnd = Math.max(clusterEnd, piece.end)
   }
-  flush()
+  if (cluster.length > 0) place()
   return pieces
+}
+
+/** The timeline's span in minutes of the day: the working day, widened to whole hours around every session. */
+export function visibleRange(segments: DaySegment[]): { from: number; to: number } {
+  let from = FIRST_VISIBLE_HOUR * 60
+  let to = LAST_VISIBLE_HOUR * 60
+  for (const segment of segments) {
+    from = Math.min(from, Math.floor(segment.start / 60) * 60)
+    to = Math.max(to, Math.ceil(segment.end / 60) * 60)
+  }
+  return { from, to }
+}
+
+/** Sessions that overlap in time, as groups in start order: a list shows each group as one row. */
+export function overlapGroups(appointments: Appointment[], rank: LaneRank = () => 0): Appointment[][] {
+  const sorted = [...appointments].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt) || a.id.localeCompare(b.id))
+  const groups: Appointment[][] = []
+  let end = -Infinity
+  for (const appointment of sorted) {
+    if (groups.length === 0 || Date.parse(appointment.startsAt) >= end) groups.push([])
+    groups[groups.length - 1]!.push(appointment)
+    end = Math.max(end, Date.parse(appointment.endsAt))
+  }
+  for (const group of groups) {
+    group.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt) || rank(a) - rank(b) || a.id.localeCompare(b.id))
+  }
+  return groups
+}
+
+/** The time a group of sessions spans. */
+export function groupSpan(group: Appointment[]): { from: number; to: number } {
+  return {
+    from: Math.min(...group.map(appointment => Date.parse(appointment.startsAt))),
+    to: Math.max(...group.map(appointment => Date.parse(appointment.endsAt))),
+  }
 }
 
 /** Sessions touching a calendar day, earliest first. */

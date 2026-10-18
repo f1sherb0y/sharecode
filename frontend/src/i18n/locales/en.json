@@ -815,7 +815,7 @@
     "tabs": {
       "label": "Schedule sections",
       "calendar": "Calendar",
-      "customers": "Customers"
+      "sessions": "Sessions"
     },
     "views": {
       "label": "Calendar view",
@@ -836,9 +836,10 @@
     },
     "unassignedPanel": {
       "title": "Unassigned",
-      "hint": "Open a session to choose its tech, or drag it onto a tech's column in the day view.",
-      "hintDay": "Drag a session onto a tech's column to assign it.",
-      "empty": "Every upcoming session has a tech."
+      "hint": "Open a session to choose its tech, or drag it onto a tech's row in the day view.",
+      "hintDay": "Drag a session onto a tech's row to assign it.",
+      "empty": "Every upcoming session has a tech.",
+      "onCalendar": "Also on the calendar below: {{count}}."
     },
     "drag": {
       "moved": "Session moved.",
@@ -893,7 +894,9 @@
       "saveAnyway": "Save anyway",
       "customerRequired": "Choose a customer.",
       "timeRequired": "Enter a date and a start time.",
-      "createdBy": "Planned by {{username}}"
+      "createdBy": "Planned by {{username}}",
+      "customerUpcoming": "{{count}} upcoming",
+      "bookAnother": "Book another"
     },
     "room": {
       "title": "Room",
@@ -911,25 +914,17 @@
     },
     "customers": {
       "title": "Customers",
-      "description": "One customer list, shared by all agents and admins.",
       "search": "Search customers",
       "searchPlaceholder": "Name or contact",
       "new": "New customer",
       "empty": "No customers yet.",
       "noMatches": "No customers match.",
-      "columns": {
-        "name": "Name",
-        "contact": "Contact",
-        "upcoming": "Upcoming",
-        "next": "Next session",
-        "last": "Last session"
-      },
       "createTitle": "New customer",
       "name": "Name",
       "contact": "Contact",
       "contactPlaceholder": "Phone, WeChat or email",
       "notes": "Notes",
-      "notesPlaceholder": "Only agents and admins see these notes",
+      "notesPlaceholder": "For example, preferred times or background",
       "save": "Save",
       "saving": "Saving...",
       "saved": "Customer saved.",
@@ -938,9 +933,9 @@
       "deleteTitle": "Delete {{name}}?",
       "deleteConfirm": "The customer leaves the list. Past sessions keep their name.",
       "deleted": "Customer deleted.",
-      "history": "Sessions",
-      "historyEmpty": "No sessions yet.",
-      "planSession": "Plan a session"
+      "edit": "Edit customer",
+      "editTitle": "Edit customer",
+      "privacy": "Techs see only the customer's name; contact and notes stay with agents and admins."
     },
     "todayCard": {
       "title": "Today's sessions",
@@ -960,6 +955,17 @@
       "many_one": "{{count}} schedule update",
       "many_other": "{{count}} schedule updates",
       "manyDescription": "Your sessions changed. Open the notifications to see what changed."
+    },
+    "sessions": {
+      "all": "All sessions",
+      "allTitle": "All sessions",
+      "moreCustomers": "Show more customers",
+      "upcoming": "Upcoming",
+      "past": "Past",
+      "noUpcoming": "No upcoming sessions.",
+      "noPast": "No past sessions.",
+      "noPastDays": "No sessions in the last {{count}} days.",
+      "earlier": "Load earlier sessions"
     }
   }
 }
