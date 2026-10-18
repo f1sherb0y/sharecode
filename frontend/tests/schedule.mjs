@@ -2,7 +2,7 @@
 // API and in the calendar. Run with scripts/test-runner-local.sh; all accounts,
 // customers and sessions are disposable.
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
 const API = 'http://127.0.0.1:55460'
@@ -199,16 +199,18 @@ assert.equal(link.expiresAt, opened.appointment.endsAt)
 const plainRoom = (await request('/api/rooms', 'POST', { name: 'Plain', language: 'python' }, as('tech_a'), 201)).room
 const plainLink = (await request(`/api/rooms/${plainRoom.id}/share-links`, 'POST', {}, as('tech_a'), 201)).shareLink
 assert(Math.abs(Date.parse(plainLink.expiresAt) - Date.now() - 6 * 3600e3) < 60e3, 'other links keep 6 hours')
-// Moving the session moves its room; a new tech takes the room over.
+// Moving the session moves its room; a new tech takes the room over and the previous one keeps it.
 await request('/api/appointments/' + first.id, 'PUT', { startsAt: at(1, 17), durationMinutes: 90, company: 'Globex' }, as('agent_a'))
 let room = (await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('agent_a'))).room
 assert.deepEqual([Date.parse(room.scheduledTime), room.duration, room.company], [Date.parse(at(1, 17)), 90, 'Globex'])
 await request('/api/appointments/' + first.id, 'PUT', { techId: id('tech_b') }, as('agent_a'))
 room = (await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('tech_b'))).room
 assert.equal(room.owner.username, 'tech_b'); assert.equal(room.canEdit, true)
-await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('tech_a'), 404)
+const kept = (await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('tech_a'))).room
+assert.deepEqual([kept.owner.username, kept.canEdit], ['tech_b', true], 'the previous tech still edits the room')
+assert((await request('/api/rooms?pageSize=100', 'GET', undefined, as('tech_a'))).rooms.some(r => r.id === opened.room.id), 'and still lists it')
 await request(`/api/appointments/${first.id}/room`, 'POST', {}, as('tech_a'), 404)
-assert.equal(sql(`SELECT count(*) FROM "RoomParticipant" WHERE "roomId" = ${literal(opened.room.id)} AND "userId" = ${literal(id('tech_a'))}`), '0')
+assert.equal(sql(`SELECT "canEdit" AND "canReplay" AND "shareLinkId" IS NULL FROM "RoomParticipant" WHERE "roomId" = ${literal(opened.room.id)} AND "userId" = ${literal(id('tech_a'))}`), 't')
 // An unassigned session's room belongs to the staff member who opens it, until a tech is assigned.
 const later = (await plan('agent_a', { customerId: wang.id, startsAt: at(4, 9), durationMinutes: 30 })).appointment
 const staffRoom = await request(`/api/appointments/${later.id}/room`, 'POST', {}, as('agent_b'), 201)
@@ -219,6 +221,9 @@ assert.equal((await request('/api/rooms/' + staffRoom.room.id, 'GET', undefined,
 await request(`/api/rooms/${opened.room.id}/end`, 'POST', undefined, as('tech_b'))
 let session = (await request('/api/appointments/' + first.id, 'GET', undefined, as('tech_b'))).appointment
 assert.deepEqual([session.status, session.room.isEnded], ['completed', true])
+assert.equal((await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('tech_a'))).room.isEnded, true)
+await request(`/api/rooms/${opened.room.id}/playback/updates`, 'GET', undefined, as('tech_a'))
+await request(`/api/rooms/${opened.room.id}/playback/updates`, 'GET', undefined, as('tech_gone'), 404)
 assert.equal((await request(`/api/appointments/${first.id}/room`, 'POST', {}, as('tech_b'))).room.id, opened.room.id, 'the ended room opens for replay')
 const replaced = await request(`/api/appointments/${first.id}/room`, 'POST', { replace: true }, as('tech_b'), 201)
 assert.notEqual(replaced.room.id, opened.room.id)
@@ -233,7 +238,26 @@ assert.equal(sql(`SELECT status FROM "Appointment" WHERE id = ${literal(first.id
 await request(`/api/appointments/${doubled.id}/room`, 'POST', {}, as('agent_a'), 404)
 const cancelledSession = (await plan('agent_a', { customerId: wang.id, techId: id('tech_a'), startsAt: at(5, 9), status: 'cancelled' })).appointment
 await request(`/api/appointments/${cancelledSession.id}/room`, 'POST', {}, as('agent_a'), 400)
-console.log('PASS session rooms: owned by the tech, idempotent, time/company sync, links last the session, reassignment moves ownership, end completes, replace')
+// The inactivity sweep (run when a server starts) closes idle rooms but never a
+// session's room, even days after the session.
+const idle = (await request('/api/rooms', 'POST', { name: 'Idle', language: 'python' }, as('tech_a'), 201)).room
+const pastSession = (await plan('agent_a', { customerId: li.id, techId: id('tech_a'), startsAt: at(-3, 9), durationMinutes: 60 })).appointment
+const pastRoom = (await request(`/api/appointments/${pastSession.id}/room`, 'POST', {}, as('tech_a'), 201)).room
+sql(`UPDATE "Room" SET "updatedAt" = NOW() - INTERVAL '7 hours' WHERE id IN (${literal(idle.id)}, ${literal(pastRoom.id)})`)
+const ended = roomId => sql(`SELECT "isEnded" FROM "Room" WHERE id = ${literal(roomId)}`) === 't'
+const sweeper = spawn(new URL('../../server-rs/target/debug/sharecode-server', import.meta.url).pathname, [], {
+  stdio: 'ignore',
+  env: { ...process.env, DATABASE_URL: 'postgresql://runner_test:local_runner_test@127.0.0.1:55459/runner_test', BIND_ADDRESS: '127.0.0.1', PORT: '55462',
+    JWT_SECRET: 'local-runner-test-key-not-production', ADMIN_USERNAME: 'audit_admin', ADMIN_PASSWORD: password, ADMIN_EMAIL: 'audit@example.invalid',
+    FRONTEND_URL: 'http://127.0.0.1:55461', APP_URL: 'http://127.0.0.1:55461', TRUSTED_PROXY_CIDRS: '' },
+})
+try {
+  for (let i = 0; i < 150 && !ended(idle.id); i++) await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(ended(idle.id), true, 'the sweep ran')
+  assert.equal(ended(pastRoom.id), false, "a session's room is ended by hand only")
+} finally { sweeper.kill() }
+await request(`/api/rooms/${pastRoom.id}/end`, 'POST', undefined, as('tech_a'))
+console.log('PASS session rooms: owned by the tech, idempotent, time/company sync, links last the session, reassignment moves ownership and keeps the previous tech, end completes, replace, never ended for inactivity')
 
 // Customers with sessions to come stay until those are moved or cancelled; history keeps their name.
 await request('/api/customers/' + zhang.id, 'DELETE', undefined, as('agent_b'), 409)
@@ -272,13 +296,14 @@ const auditText = JSON.stringify(audit)
 for (const secret of ['张三', 'Li Si', 'zhang_100%', 'Prefers evenings', 'Bring the take-home', 'Acme']) assert(!auditText.includes(secret), secret)
 console.log('PASS audit: customer and session changes recorded by ID, without names, contacts or notes')
 
-// The calendar in three browsers: agents plan by clicking free time, confirm overlaps,
-// drag between techs and stretch sessions; techs read their own and open the room;
+// The calendar in three browsers: timelines with hours across (a row per weekday,
+// or per tech on one day). Agents plan by clicking free time, confirm overlaps,
+// drag between techs and stretch sessions, book another session for a customer
+// and keep customers in the 场次 tab; techs read their own and open the room;
 // phones get the list. The device clock is set far from Shanghai on purpose.
 const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
 const WEB = 'http://127.0.0.1:55461'
-const HOUR = 48
 const openPage = async (browser, token, { mobile = false, lng = 'en' } = {}) => {
   const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1440, height: mobile ? 844 : 900 }, deviceScaleFactor: mobile ? 3 : 1, hasTouch: mobile, timezoneId: 'America/Los_Angeles' })
   await context.addInitScript(({ token, lng }) => { sessionStorage.setItem('sharecode-tab-auth', JSON.stringify({ state: { token }, version: 0 })); localStorage.setItem('i18nextLng', lng) }, { token, lng })
@@ -300,17 +325,33 @@ try {
     const browser = await type.launch()
     const uiDay = 20 + index * 2, day = at(uiDay, 0).slice(0, 10)
     const customerName = 'UI ' + engine
-    const waiting = (await plan('agent_a', { customerId: li.id, startsAt: at(uiDay, 14), durationMinutes: 60 })).appointment
+    // Waiting for a tech on the next day: the strip above the calendar lists it.
+    const waiting = (await plan('agent_a', { customerId: li.id, startsAt: at(uiDay + 1, 14), durationMinutes: 60 })).appointment
+    // Waiting on the day shown: its row shows it, so the strip does not list it again.
+    const shown = (await plan('agent_a', { customerId: wang.id, startsAt: at(uiDay, 18), durationMinutes: 30 })).appointment
     const today = (await plan('agent_a', { customerId: wang.id, techId: id('tech_b'), startsAt: at(0, 0, 5), durationMinutes: 30, company: 'Today ' + engine, allowConflicts: true })).appointment
+    const booked = []
     try {
       // Agents: click free time, add the customer in place, confirm an overlap.
       const { context, page, errors } = await openPage(browser, as('agent_a'))
       await page.goto(`${WEB}/schedule?view=day&date=${day}`)
-      const column = name => page.locator(`[data-schedule-column][data-tech="${name ? id(name) : ''}"]`)
+      const column = name => page.locator(`[data-schedule-row][data-tech="${name ? id(name) : ''}"]`)
+      // Where a time of day is on a tech's row: rows span data-from to data-to minutes.
+      const pointAt = async (name, hour, minute = 0) => {
+        const row = column(name)
+        const box = await row.boundingBox()
+        const from = Number(await row.getAttribute('data-from')), to = Number(await row.getAttribute('data-to'))
+        return { x: box.x + ((hour * 60 + minute - from) / (to - from)) * box.width, y: box.y + box.height / 2, minuteWidth: box.width / (to - from) }
+      }
       await column('tech_a').waitFor()
-      assert.equal(await column('').count(), 1, 'the day view has an unassigned column')
-      let box = await column('tech_a').boundingBox()
-      await page.mouse.click(box.x + box.width / 2, box.y + 10 * HOUR + 12)
+      assert.equal(await column('').count(), 1, 'the day view has an unassigned row')
+      await column('').locator(`[data-appointment="${shown.id}"]`).waitFor()
+      const strip = page.locator('.schedule-unassigned')
+      await strip.locator('.schedule-unassigned-list button').filter({ hasText: 'Li Si' }).waitFor()
+      assert.equal(await strip.locator('.schedule-unassigned-list button').filter({ hasText: 'Wang Wu' }).filter({ hasText: '18:00' }).count(), 0, 'not listed twice')
+      assert.match(await strip.innerText(), /Also on the calendar below: 1\./)
+      let point = await pointAt('tech_a', 10, 15)
+      await page.mouse.click(point.x, point.y)
       let dialog = page.getByRole('dialog', { name: 'New session' })
       await dialog.waitFor()
       assert.deepEqual([await dialog.getByLabel('Date').inputValue(), await dialog.getByLabel('Start').inputValue()], [day, '10:00'])
@@ -329,9 +370,11 @@ try {
       assert.equal(Date.parse(first.startsAt), Date.parse(at(uiDay, 10)))
       await column('tech_a').locator(`[data-appointment="${first.id}"]`).waitFor()
       await dialog.waitFor({ state: 'hidden' })
+      // The hours above the rows give the time; the session shows who and what.
+      assert.doesNotMatch(await column('tech_a').locator(`[data-appointment="${first.id}"]`).innerText(), /\d:\d\d/)
 
-      box = await column('tech_a').boundingBox()
-      await page.mouse.click(box.x + box.width / 2, box.y + 11 * HOUR + 12)
+      point = await pointAt('tech_a', 11, 15)
+      await page.mouse.click(point.x, point.y)
       dialog = page.getByRole('dialog', { name: 'New session' })
       await dialog.getByLabel('Start').fill('10:30')
       await dialog.getByRole('combobox', { name: 'Customer' }).fill(customerName)
@@ -354,27 +397,30 @@ try {
       assert.equal(second.hasConflict, true)
       await page.waitForFunction(selector => document.querySelectorAll(selector).length === 2, `[data-tech="${id('tech_a')}"] .schedule-event-conflict`)
 
-      // Drag the overlap to the other tech, then stretch the first session by half an hour.
-      const secondBox = await page.locator(`[data-appointment="${second.id}"]`).boundingBox()
+      // Simultaneous sessions of a row take lanes, one under the other.
+      const [firstBox, secondBox] = await Promise.all([first, second].map(a => page.locator(`[data-appointment="${a.id}"]`).boundingBox()))
+      assert(secondBox.y >= firstBox.y + firstBox.height - 1, 'the overlap takes the next lane')
+
+      // Drag the overlap down to the other tech, then stretch the first session by half an hour.
       const otherBox = await column('tech_b').boundingBox()
       saved = page.waitForResponse(r => r.url().endsWith('/api/appointments/' + second.id) && r.request().method() === 'PUT')
-      await drag(page, { x: secondBox.x + secondBox.width / 2, y: secondBox.y + 10 }, { x: otherBox.x + otherBox.width / 2, y: secondBox.y + 10 })
+      await drag(page, { x: secondBox.x + 10, y: secondBox.y + secondBox.height / 2 }, { x: secondBox.x + 10, y: otherBox.y + otherBox.height / 2 })
       const moved = (await (await saved).json()).appointment
       assert.deepEqual([moved.tech.username, Date.parse(moved.startsAt), moved.hasConflict], ['tech_b', Date.parse(at(uiDay, 10, 30)), false])
       await column('tech_b').locator(`[data-appointment="${second.id}"]`).waitFor()
       await page.waitForFunction(selector => document.querySelectorAll(selector).length === 0, `[data-tech="${id('tech_a')}"] .schedule-event-conflict`)
       const handle = await column('tech_a').locator(`[data-appointment="${first.id}"] .schedule-event-resize`).boundingBox()
       saved = page.waitForResponse(r => r.url().endsWith('/api/appointments/' + first.id) && r.request().method() === 'PUT')
-      await drag(page, { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 }, { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 + HOUR / 2 })
+      await drag(page, { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 }, { x: handle.x + handle.width / 2 + 30 * point.minuteWidth, y: handle.y + handle.height / 2 })
       assert.equal((await (await saved).json()).appointment.durationMinutes, 90)
       assert.equal((await appointment(first.id)).durationMinutes, 90)
 
-      // An unassigned session goes to a tech by dropping it on their column at its time.
+      // A session waiting on another day goes to a tech by dropping it on their row at a time.
       const waitingItem = page.locator('.schedule-unassigned-list button').filter({ hasText: 'Li Si' }).filter({ hasText: '14:00' })
       const itemBox = await waitingItem.first().boundingBox()
-      box = await column('tech_b').boundingBox()
+      point = await pointAt('tech_b', 14)
       saved = page.waitForResponse(r => r.url().endsWith('/api/appointments/' + waiting.id) && r.request().method() === 'PUT')
-      await drag(page, { x: itemBox.x + 20, y: itemBox.y + 10 }, { x: box.x + box.width / 2, y: box.y + 14 * HOUR + 2 }, 12)
+      await drag(page, { x: itemBox.x + 20, y: itemBox.y + 10 }, { x: point.x + 2, y: point.y }, 12)
       const taken = (await (await saved).json()).appointment
       assert.deepEqual([taken.tech.username, Date.parse(taken.startsAt)], ['tech_b', Date.parse(at(uiDay, 14))])
       await column('tech_b').locator(`[data-appointment="${waiting.id}"]`).waitFor()
@@ -400,16 +446,73 @@ try {
       await edit.waitFor({ state: 'hidden' })
       assert(!page.url().includes('session='))
 
-      // Customers: the shared list and each customer's sessions.
-      await page.getByRole('tab', { name: 'Customers' }).click()
+      // The week: a row per weekday, Monday first, hours across, fitting the window as it narrows.
+      await page.getByRole('button', { name: 'Week', exact: true }).click()
+      // Week rows are days, not techs.
+      const rows = page.locator('[data-schedule-row]:not([data-tech])')
+      await rows.nth(6).waitFor()
+      await rows.locator(`[data-appointment="${first.id}"]`).waitFor()
+      const days = await rows.evaluateAll(list => list.map(row => row.dataset.day))
+      assert.equal(days.length, 7)
+      assert(days.includes(day))
+      assert.equal(new Date(days[0] + 'T12:00:00Z').getUTCDay(), 1, 'Monday first')
+      const scroller = page.locator('[data-schedule-scroll]')
+      const fits = () => scroller.evaluate(el => el.scrollWidth <= el.clientWidth + 1)
+      const wide = (await rows.first().boundingBox()).width
+      assert(await fits(), 'the week fits a wide window')
+      await page.setViewportSize({ width: 1024, height: 768 })
+      await page.waitForFunction(width => document.querySelector('[data-schedule-row]').getBoundingClientRect().width < width - 100, wide)
+      assert(await fits(), 'and a narrower one')
+      await page.setViewportSize({ width: 1440, height: 900 })
+
+      // 场次: customers on the left, the chosen customer's sessions on the right.
+      await page.getByRole('tab', { name: 'Sessions' }).click()
       await page.getByLabel('Search customers').fill(customerName)
-      await page.waitForFunction(name => [...document.querySelectorAll('.schedule-table tbody tr')].map(row => row.cells[0]?.textContent).join() === name, customerName)
-      await page.getByRole('button', { name: customerName, exact: true }).click()
-      const profile = page.getByRole('dialog', { name: customerName })
-      await profile.locator('.schedule-history button').nth(1).waitFor()
+      const entry = page.locator('.schedule-customer').filter({ hasText: customerName })
+      await entry.waitFor()
+      // The search is debounced: wait until the list holds only the match.
+      await page.waitForFunction(() => document.querySelectorAll('.schedule-customer:not(.schedule-customer-all)').length === 1)
+      assert.match(await entry.innerText(), /ui@example\.invalid/)
+      await entry.click()
+      const pane = page.locator('.schedule-session-pane')
+      await pane.getByRole('heading', { name: customerName }).waitFor()
+      await pane.locator('.schedule-agenda-item').nth(1).waitFor()
+      assert.equal(await pane.locator('.schedule-agenda-item').count(), 2)
+      await pane.getByRole('button', { name: 'Edit customer' }).click()
+      const profile = page.getByRole('dialog', { name: 'Edit customer' })
       assert.equal(await profile.getByLabel('Contact').inputValue(), 'ui@example.invalid')
-      assert.equal(await profile.locator('.schedule-history button').count(), 2)
       await page.keyboard.press('Escape')
+      await profile.waitFor({ state: 'hidden' })
+
+      // Book another: the same customer, tech, company and length, the next day at the same time.
+      await pane.locator('.schedule-agenda-item').filter({ hasText: 'tech_a' }).locator('.schedule-agenda-main').click()
+      const editFirst = page.getByRole('dialog', { name: 'Edit session' })
+      await editFirst.getByRole('button', { name: 'Book another' }).click()
+      const another = page.getByRole('dialog', { name: 'New session' })
+      await another.waitFor()
+      assert.deepEqual([await another.getByLabel('Date').inputValue(), await another.getByLabel('Start').inputValue(), await another.getByLabel('Company').inputValue()],
+        [at(uiDay + 1, 0).slice(0, 10), '10:00', 'Initech'])
+      assert.match(await another.getByRole('combobox', { name: 'Tech' }).innerText(), /tech_a/)
+      saved = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST')
+      await another.getByRole('button', { name: 'Create session' }).click()
+      const again = (await (await saved).json()).appointment
+      booked.push(again)
+      assert.deepEqual([again.customer.id, again.tech.username, again.durationMinutes, again.company, Date.parse(again.startsAt)],
+        [first.customer.id, 'tech_a', 90, 'Initech', Date.parse(at(uiDay + 1, 10))])
+      // Each "created" toast offers the next booking; earlier ones may still be showing.
+      await page.locator('[data-sonner-toast]').filter({ hasText: 'Session created.' }).getByRole('button', { name: 'Book another' }).first().waitFor()
+      await pane.locator('.schedule-agenda-item').nth(2).waitFor()
+
+      // A new customer from the list's add button, then removed from the pane above their sessions.
+      await page.getByRole('button', { name: 'New customer' }).click()
+      const created = page.getByRole('dialog', { name: 'New customer' })
+      await created.getByLabel('Name').fill('Temp ' + engine)
+      await created.getByRole('button', { name: 'Save' }).click()
+      await pane.getByRole('heading', { name: 'Temp ' + engine }).waitFor()
+      await pane.getByText('No upcoming sessions.').waitFor()
+      await pane.getByRole('button', { name: 'Delete customer' }).click()
+      await page.getByRole('dialog', { name: `Delete Temp ${engine}?` }).getByRole('button', { name: 'Delete' }).click()
+      await pane.getByRole('heading', { name: 'All sessions' }).waitFor()
       await page.screenshot({ path: `/tmp/sharecode-schedule-agent-${engine}.png` })
       assert.deepEqual(errors, [])
       await context.close()
@@ -424,7 +527,7 @@ try {
         await page.goto(`${WEB}/schedule?view=week&date=${day}`)
         await page.locator(`[data-appointment="${waiting.id}"]`).waitFor()
         assert.equal(await page.locator(`[data-appointment="${first.id}"]`).count(), 0, "another tech's session")
-        assert.equal(await page.locator('.schedule-event-resize, .schedule-column.is-editable').count(), 0)
+        assert.equal(await page.locator('.schedule-event-resize, .schedule-track.is-editable').count(), 0)
         await page.locator(`[data-appointment="${waiting.id}"]`).click()
         const details = page.getByRole('dialog', { name: 'Li Si' })
         await details.waitFor()
@@ -444,7 +547,8 @@ try {
         await page.goto(`${WEB}/schedule?date=${day}`)
         assert.equal(await page.getByRole('button', { name: '列表', exact: true }).getAttribute('aria-pressed'), 'true')
         await page.locator(`.schedule-agenda-item`).first().waitFor()
-        assert.equal(await page.locator('.schedule-agenda-item').count(), actor === 'tech_b' ? 2 : 3)
+        // tech_b: the moved overlap and the session taken from the strip; agents: every session planned here.
+        assert.equal(await page.locator('.schedule-agenda-item').count(), actor === 'tech_b' ? 2 : [first, second, waiting, shown, ...booked].length)
         assert(await fitsWidth(page), 'no sideways scrolling')
         if (actor === 'agent_a') {
           await page.getByRole('button', { name: '新建场次', exact: true }).click()
@@ -452,13 +556,22 @@ try {
           await form.waitFor()
           assert(await form.evaluate(el => el.scrollWidth <= el.clientWidth + 1))
           await page.keyboard.press('Escape')
+          await form.waitFor({ state: 'hidden' })
+          // 场次 on a phone: the customer list, then one customer's sessions with a way back.
+          await page.getByRole('tab', { name: '场次' }).click()
+          await page.locator('.schedule-customer').filter({ hasText: customerName }).click()
+          await page.locator('.schedule-session-pane .schedule-agenda-item').first().waitFor()
+          assert(!(await page.locator('.schedule-customer-pane').isVisible()), 'one side at a time')
+          assert(await fitsWidth(page), 'no sideways scrolling')
+          await page.getByRole('button', { name: '客户', exact: true }).click()
+          await page.locator('.schedule-customer-pane').waitFor()
         }
         await page.screenshot({ path: `/tmp/sharecode-schedule-${actor}-mobile-${engine}.png` })
         assert.deepEqual(errors, [])
         await context.close()
       }
-      for (const session of [first, second, waiting, today]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'calendar: click to plan, inline customer, overlap confirmation, drag to another tech, resize, unassigned drop, customer link; tech read-only with room; phone list; EN/ZH')
+      for (const session of [first, second, waiting, shown, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
+      console.log('PASS', engine, 'timelines: click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, week rows fit the window; 场次: customers and their sessions, book another, customer add/delete; tech read-only with room; phone list and 场次; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }
