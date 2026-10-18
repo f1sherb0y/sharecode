@@ -17,6 +17,7 @@ mod playback;
 mod rooms;
 mod share;
 mod sessions;
+mod tours;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -41,6 +42,8 @@ pub fn router(state: AppState) -> Router {
             "/api/notifications/read",
             post(notifications::mark_notifications_read),
         )
+        .route("/api/tours", get(tours::list_seen_tours))
+        .route("/api/tours/{id}", put(tours::mark_tour_seen))
         .route(
             "/api/config/registration",
             get(auth::get_registration_status),
