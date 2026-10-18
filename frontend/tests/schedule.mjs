@@ -586,17 +586,56 @@ try {
       await abroadCard.click()
       let form = page.getByRole('dialog', { name: 'Edit session' })
       await form.waitFor()
+      const zoneField = form.getByRole('combobox', { name: 'Time zone' })
       assert.equal(await form.locator('#session-time').inputValue(), `${eastern.hour}:${eastern.minute}`)
-      await form.getByText('· Eastern Time').waitFor()
+      assert.equal((await zoneField.innerText()).trim(), 'Eastern Time', 'the form opens in the calendar zone')
+      // Switching the form's zone shows the same moment in that zone.
+      await zoneField.click()
+      await page.getByRole('option', { name: 'United Kingdom Time' }).click()
+      const british = inZone(abroad.startsAt, 'Europe/London')
+      assert.deepEqual([await form.locator('#session-date').inputValue(), await form.locator('#session-time').inputValue()], [`${british.year}-${british.month}-${british.day}`, `${british.hour}:${british.minute}`])
       await page.keyboard.press('Escape')
       await form.waitFor({ state: 'hidden' })
-      // The 场次 tab shows the same session in Shanghai time, without a zone.
+      // The 场次 tab shows the same session in Shanghai time.
       await page.goto(`${WEB}/schedule?tab=sessions&tz=America/New_York&session=${abroad.id}`)
       form = page.getByRole('dialog', { name: 'Edit session' })
       await form.waitFor()
       assert.equal(await form.locator('#session-time').inputValue(), '21:00')
-      assert.equal(await form.getByText('· Eastern Time').count(), 0)
+      assert.equal((await form.getByRole('combobox', { name: 'Time zone' }).innerText()).trim(), 'China Standard Time')
       await page.keyboard.press('Escape')
+      await form.waitFor({ state: 'hidden' })
+      // A new session entered in a customer's zone is saved at that moment.
+      await page.getByRole('button', { name: 'New session', exact: true }).first().click()
+      form = page.getByRole('dialog', { name: 'New session' })
+      await form.waitFor()
+      await form.locator('#session-customer').fill('Wang')
+      await page.getByRole('option', { name: /Wang Wu/ }).click()
+      await form.getByRole('combobox', { name: 'Time zone' }).click()
+      await page.getByRole('option', { name: 'Pacific Time' }).click()
+      const pacificDay = at(uiDay + 4, 0).slice(0, 10)
+      await form.locator('#session-date').fill(pacificDay)
+      await form.locator('#session-time').fill('09:30')
+      const pacificSaved = page.waitForResponse(response => response.url().endsWith('/api/appointments') && response.request().method() === 'POST')
+      await form.getByRole('button', { name: 'Create session' }).click()
+      const pacific = (await (await pacificSaved).json()).appointment
+      booked.push(pacific)
+      const pacificParts = inZone(pacific.startsAt, 'America/Los_Angeles')
+      assert.deepEqual([`${pacificParts.year}-${pacificParts.month}-${pacificParts.day}`, `${pacificParts.hour}:${pacificParts.minute}`], [pacificDay, '09:30'])
+      await form.waitFor({ state: 'hidden' })
+      // New rooms use the same date, start and length fields.
+      await page.goto(`${WEB}/rooms`)
+      await page.getByRole('button', { name: 'Create New Room' }).first().click()
+      const roomForm = page.getByRole('dialog')
+      await roomForm.locator('#roomName').fill('Fields ' + engine)
+      await roomForm.locator('#room-date').fill(pacificDay)
+      await roomForm.locator('#room-time').fill('14:00')
+      await roomForm.getByRole('combobox', { name: 'Duration' }).click()
+      await page.getByRole('option', { name: '1 h 30 min' }).click()
+      await roomForm.locator('button[type=submit]').click()
+      await page.waitForURL('**/room/**')
+      const createdRoom = (await request('/api/rooms/' + page.url().split('/room/')[1].split(/[?#]/)[0], 'GET', undefined, as('agent_a'))).room
+      assert.equal(Date.parse(createdRoom.scheduledTime), Date.parse(`${pacificDay}T14:00:00+08:00`), 'room times are China time')
+      assert.equal(createdRoom.duration, 90)
       await page.screenshot({ path: `/tmp/sharecode-schedule-agent-${engine}.png` })
       assert.deepEqual(errors, [])
       await context.close()
@@ -719,7 +758,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time while 场次 keeps Shanghai; legend of techs in view; EN/ZH')
+      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time while 场次 keeps Shanghai; session form zone switch; room form time row; legend of techs in view; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }
