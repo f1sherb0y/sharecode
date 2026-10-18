@@ -460,9 +460,15 @@ try {
       const fits = () => scroller.evaluate(el => el.scrollWidth <= el.clientWidth + 1)
       const wide = (await rows.first().boundingBox()).width
       assert(await fits(), 'the week fits a wide window')
-      await page.setViewportSize({ width: 1024, height: 768 })
+      await page.setViewportSize({ width: 1280, height: 800 })
       await page.waitForFunction(width => document.querySelector('[data-schedule-row]').getBoundingClientRect().width < width - 100, wide)
       assert(await fits(), 'and a narrower one')
+      // Below that, an hour keeps room for a half-hour session's name: the timeline scrolls, not the page.
+      await page.setViewportSize({ width: 1024, height: 768 })
+      await page.waitForFunction(() => { const el = document.querySelector('[data-schedule-scroll]'); return el.scrollWidth > el.clientWidth + 1 })
+      const hourWidth = await page.locator('.schedule-hour').evaluateAll(hours => hours[1].getBoundingClientRect().left - hours[0].getBoundingClientRect().left)
+      assert(hourWidth >= 79, `an hour is ${hourWidth}px wide`)
+      assert(await fitsWidth(page), 'no sideways scrolling of the page')
       await page.setViewportSize({ width: 1440, height: 900 })
 
       // 场次: customers on the left, the chosen customer's sessions on the right.

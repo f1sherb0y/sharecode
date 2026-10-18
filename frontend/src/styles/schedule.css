@@ -66,10 +66,11 @@
   .schedule-page.is-fit .schedule-body, .schedule-page.is-fit .schedule-main { flex: 1; min-height: 0; }
 
   /* Week and day: a timeline per weekday or per tech, hours across. Rows are as
-     tall as their lanes; hours share the width, down to --schedule-hour each. */
+     tall as their lanes; hours share the width, down to --schedule-hour each,
+     which still fits a half-hour session's name. Narrower windows scroll it. */
   .schedule-grid {
     --schedule-label: 6.5rem;
-    --schedule-hour: 3.5rem;
+    --schedule-hour: 5rem;
     display: flex;
     flex: 0 1 auto;
     flex-direction: column;
@@ -128,7 +129,7 @@
   .schedule-row.is-today .schedule-track { background-color: color-mix(in srgb, var(--color-destructive) 3%, transparent); }
   .schedule-now { position: absolute; top: 0; bottom: 0; z-index: 4; width: 2px; margin-left: -1px; background: var(--color-destructive); pointer-events: none; }
   @media (max-width: 767px) {
-    .schedule-grid { --schedule-label: 4.5rem; --schedule-hour: 3rem; }
+    .schedule-grid { --schedule-label: 4.5rem; --schedule-hour: 4rem; }
   }
 
   .schedule-event {
