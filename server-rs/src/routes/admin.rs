@@ -124,10 +124,6 @@ pub async fn create_user(
         .get("password")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let email = payload
-        .get("email")
-        .and_then(|v| v.as_str())
-        .map(|v| v.to_string());
     let requested_role = payload
         .get("role")
         .and_then(|v| v.as_str())
@@ -159,24 +155,6 @@ pub async fn create_user(
         }));
     }
 
-    if let Some(ref email_value) = email {
-        let existing_email = sqlx::query_scalar::<_, bool>(
-            r#"SELECT "isDeleted" FROM "User" WHERE email = $1 LIMIT 1"#,
-        )
-        .bind(email_value)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to check email"))?;
-
-        if let Some(deleted) = existing_email {
-            return Err(ApiError::bad_request(if deleted {
-                "This email belongs to a deleted account and is still reserved. Restore that account or use another email."
-            } else {
-                "Email already in use"
-            }));
-        }
-    }
-
     let hashed_password = hash(password, 12)
         .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
 
@@ -187,8 +165,8 @@ pub async fn create_user(
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let user = sqlx::query_as::<_, UserPublicRow>(
         r#"
-        INSERT INTO "User" (id, email, username, password, color, role)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO "User" (id, username, password, color, role)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING
             id,
             email,
@@ -200,7 +178,6 @@ pub async fn create_user(
         "#,
     )
     .bind(Uuid::new_v4().to_string())
-    .bind(email)
     .bind(username)
     .bind(hashed_password)
     .bind(random_user_color())
@@ -240,7 +217,7 @@ pub async fn get_all_users(
     }
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "User"
-        WHERE "isDeleted" = false AND (username ILIKE $1 OR COALESCE(email, '') ILIKE $1)
+        WHERE "isDeleted" = false AND username ILIKE $1
         AND ($2::text IS NULL OR role = $2)"#,
     )
     .bind(&pattern)
@@ -261,7 +238,7 @@ pub async fn get_all_users(
             "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
         WHERE "isDeleted" = false
-        AND (username ILIKE $1 OR COALESCE(email, '') ILIKE $1)
+        AND username ILIKE $1
         AND ($2::text IS NULL OR role = $2)
         ORDER BY "createdAt" DESC, id DESC LIMIT $3 OFFSET $4
         "#,
@@ -461,8 +438,7 @@ pub async fn delete_user(
     // Their sessions still to come go back to the unassigned list.
     let unassigned_sessions = sqlx::query(
         r#"UPDATE "Appointment" SET "techId" = NULL, "updatedAt" = NOW()
-        WHERE "techId" = $1 AND status = 'scheduled'
-          AND "startsAt" + "durationMinutes" * INTERVAL '1 minute' > NOW()"#,
+        WHERE "techId" = $1 AND "startsAt" + "durationMinutes" * INTERVAL '1 minute' > NOW()"#,
     )
     .bind(&user_id)
     .execute(&mut *tx)
@@ -539,7 +515,7 @@ pub async fn get_all_rooms(
         r."isPinned" as is_pinned, r."isDeleted" as is_deleted,
         r."scheduledTime" as scheduled_time, r.duration, r."isEnded" as is_ended,
         r."endedAt" as ended_at, r."createdAt" as created_at, r."updatedAt" as updated_at,
-        o.username as owner_username, o.email as owner_email,
+        o.username as owner_username,
         {ROOM_PLAYBACK_SQL} as can_view_playback
         {filter} ORDER BY r."createdAt" DESC, r.id DESC LIMIT $8 OFFSET $9"#
     );
@@ -580,7 +556,6 @@ pub async fn get_all_rooms(
             "owner": {
                 "id": room.owner_id,
                 "username": room.owner_username,
-                "email": room.owner_email,
             },
         }));
     }
@@ -925,7 +900,6 @@ fn merge_bucket_user_id(pending: &[PlaybackUpdateRow]) -> Option<String> {
 fn user_to_json(user: &UserPublicRow) -> Value {
     json!({
         "id": user.id,
-        "email": user.email,
         "username": user.username,
         "color": user.color,
         "role": user.role,

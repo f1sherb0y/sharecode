@@ -30,7 +30,6 @@ use crate::{
 pub struct RegisterPayload {
     pub username: Option<String>,
     pub password: Option<String>,
-    pub email: Option<String>,
     #[serde(rename = "inviteCode")]
     pub invite_code: Option<String>,
 }
@@ -58,7 +57,6 @@ pub async fn register(
     sessions::check_origin(&state.config, &headers)?;
     let username = payload.username.unwrap_or_default();
     let password = payload.password.unwrap_or_default();
-    let email = payload.email;
     let invite_code = invites::normalize_code(payload.invite_code.as_deref().unwrap_or_default());
 
     if username.is_empty() || password.is_empty() {
@@ -96,20 +94,6 @@ pub async fn register(
         return Err(ApiError::bad_request("Username already taken"));
     }
 
-    if let Some(ref email_value) = email {
-        let existing_email = sqlx::query_scalar::<_, bool>(
-            r#"SELECT "isDeleted" FROM "User" WHERE email = $1 LIMIT 1"#,
-        )
-        .bind(email_value)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|err| db_error(err, "Failed to check existing email"))?;
-
-        if existing_email.is_some() {
-            return Err(ApiError::bad_request("Email already in use"));
-        }
-    }
-
     let hashed_password = hash(password, 12)
         .map_err(|err| ApiError::internal(format!("Failed to hash password: {err}")))?;
     let color = random_user_color();
@@ -121,8 +105,8 @@ pub async fn register(
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let user = sqlx::query_as::<_, UserRow>(
         r#"
-        INSERT INTO "User" (id, email, username, password, color, role)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO "User" (id, username, password, color, role)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING
             id,
             email,
@@ -136,7 +120,6 @@ pub async fn register(
         "#,
     )
     .bind(Uuid::new_v4().to_string())
-    .bind(email)
     .bind(&username)
     .bind(&hashed_password)
     .bind(&color)
@@ -174,7 +157,6 @@ pub async fn register(
         Json(json!({
             "user": {
                 "id": user.id,
-                "email": user.email,
                 "username": user.username,
                 "color": user.color,
                 "role": user.role,
@@ -310,7 +292,6 @@ pub async fn login(
     Ok(([(header::SET_COOKIE, sessions::cookie_header(&state.config, &secret)), (header::CACHE_CONTROL, "no-store".parse().unwrap())], Json(json!({
         "user": {
             "id": user.id,
-            "email": user.email,
             "username": user.username,
             "color": user.color,
             "role": user.role,
@@ -475,7 +456,6 @@ pub async fn get_profile(
                 "actorType": "user",
                 "user": {
                     "id": user.id,
-                    "email": user.email,
                     "username": user.username,
                     "color": user.color,
                     "role": user.role,
@@ -492,7 +472,6 @@ pub async fn get_profile(
                     g."roomId" as room_id,
                     g.token,
                     g."displayName" as display_name,
-                    g.email,
                     g.color,
                     g."canEdit" as can_edit,
                     r.name as room_name,
@@ -551,7 +530,6 @@ pub async fn get_profile(
                 "guest": {
                     "id": guest.id,
                     "displayName": guest.display_name,
-                    "email": guest.email,
                     "color": guest.color,
                     "canEdit": effective_can_edit,
                 },
@@ -587,7 +565,6 @@ struct GuestProfileRow {
     room_id: String,
     token: String,
     display_name: String,
-    email: Option<String>,
     color: String,
     can_edit: bool,
     room_name: String,

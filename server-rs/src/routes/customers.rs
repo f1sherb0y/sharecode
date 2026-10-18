@@ -19,8 +19,9 @@ use crate::{
     utils::time::{to_iso_string, to_iso_string_opt},
 };
 
-// 排班 customer profiles: one list shared by every agent and admin. Customers
-// never sign in, and techs only see the customer of their own sessions.
+// 排班 customer profiles: one list shared by every agent and admin, where each
+// customer belongs to the agent who created it. Customers never sign in, and
+// techs only see the customer of their own sessions.
 const MAX_NAME_CHARS: usize = 100;
 const MAX_CONTACT_CHARS: usize = 200;
 pub(super) const MAX_NOTES_CHARS: usize = 2000;
@@ -63,6 +64,8 @@ pub struct CustomerListQuery {
     page: Option<u32>,
     page_size: Option<u32>,
     q: Option<String>,
+    /// Only the caller's own customers: the ones they created.
+    mine: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -99,33 +102,36 @@ struct CustomerRow {
     last_session_at: Option<DateTime<Utc>>,
 }
 
-// c is the customer. Cancelled sessions count for nothing.
+// c is the customer. Sessions still to come are those that have not ended yet.
 const CUSTOMER_SELECT: &str = r#"SELECT c.id, c.name, c.contact, c.notes,
     c."createdAt" as created_at, c."updatedAt" as updated_at,
     cb.id as created_by_id, cb.username as created_by_username,
     s.session_count, s.upcoming_count, s.next_session_at, s.last_session_at
     FROM "Customer" c JOIN "User" cb ON cb.id = c."createdBy"
     LEFT JOIN LATERAL (
-        SELECT COUNT(*) FILTER (WHERE a.status <> 'cancelled') as session_count,
-            COUNT(*) FILTER (WHERE a.status = 'scheduled'
-                AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW()) as upcoming_count,
-            MIN(a."startsAt") FILTER (WHERE a.status <> 'cancelled'
-                AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW()) as next_session_at,
-            MAX(a."startsAt") FILTER (WHERE a.status <> 'cancelled' AND a."startsAt" <= NOW()) as last_session_at
+        SELECT COUNT(*) as session_count,
+            COUNT(*) FILTER (WHERE a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW())
+                as upcoming_count,
+            MIN(a."startsAt") FILTER (WHERE a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW())
+                as next_session_at,
+            MAX(a."startsAt") FILTER (WHERE a."startsAt" <= NOW()) as last_session_at
         FROM "Appointment" a WHERE a."customerId" = c.id
     ) s ON true"#;
 
 pub async fn list_customers(
     State(state): State<AppState>,
-    _staff: StaffUser,
+    StaffUser(auth_user): StaffUser,
     Query(query): Query<CustomerListQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pattern = search_pattern(query.q.as_deref());
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "Customer" c
-        WHERE NOT c."isDeleted" AND (c.name ILIKE $1 OR COALESCE(c.contact, '') ILIKE $1)"#,
+        WHERE NOT c."isDeleted" AND (c.name ILIKE $1 OR COALESCE(c.contact, '') ILIKE $1)
+          AND (NOT $2 OR c."createdBy" = $3)"#,
     )
     .bind(&pattern)
+    .bind(query.mine)
+    .bind(&auth_user.id)
     .fetch_one(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to count customers"))?;
@@ -135,11 +141,14 @@ pub async fn list_customers(
     let customers = sqlx::query_as::<_, CustomerRow>(&format!(
         r#"{CUSTOMER_SELECT}
         WHERE NOT c."isDeleted" AND (c.name ILIKE $1 OR COALESCE(c.contact, '') ILIKE $1)
+          AND (NOT $4 OR c."createdBy" = $5)
         ORDER BY lower(c.name), c.id LIMIT $2 OFFSET $3"#
     ))
     .bind(&pattern)
     .bind(size)
     .bind((page - 1) * size)
+    .bind(query.mine)
+    .bind(&auth_user.id)
     .fetch_all(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to load customers"))?;
@@ -295,7 +304,7 @@ pub async fn update_customer(
 }
 
 /// Removes a customer from the list. Past sessions keep their name; one with
-/// sessions still to come must have them moved or cancelled first.
+/// sessions still to come must have them moved or deleted first.
 pub async fn delete_customer(
     State(state): State<AppState>,
     client: ClientInfo,
@@ -317,8 +326,7 @@ pub async fn delete_customer(
     .ok_or_else(|| ApiError::not_found("Customer not found"))?;
     let upcoming: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "Appointment"
-        WHERE "customerId" = $1 AND status = 'scheduled'
-          AND "startsAt" + "durationMinutes" * INTERVAL '1 minute' > NOW()"#,
+        WHERE "customerId" = $1 AND "startsAt" + "durationMinutes" * INTERVAL '1 minute' > NOW()"#,
     )
     .bind(&customer_id)
     .fetch_one(&mut *tx)

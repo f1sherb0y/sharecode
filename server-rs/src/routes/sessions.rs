@@ -56,7 +56,7 @@ pub async fn refresh(State(state): State<AppState>, client: ClientInfo, headers:
     tx.commit().await.map_err(|e| db_error(e,"Failed to commit session renewal"))?;
     Ok(([(header::SET_COOKIE, sessions::cookie_header(&state.config, &secret)), (header::CACHE_CONTROL,"no-store".parse().unwrap())],
         Json(json!({"token":token,"browserSessionId":session_id,"user":{
-            "id":user.id,"username":user.username,"email":user.email,"color":user.color,"role":user.role
+            "id":user.id,"username":user.username,"color":user.color,"role":user.role
         }}))))
 }
 

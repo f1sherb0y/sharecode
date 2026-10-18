@@ -57,7 +57,6 @@ pub struct CreateShareLinkPayload {
 #[derive(Debug, Deserialize)]
 pub struct JoinSharePayload {
     pub username: Option<String>,
-    pub email: Option<String>,
 }
 
 pub async fn create_share_link(
@@ -104,14 +103,14 @@ pub async fn create_share_link(
         .begin()
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
-    // A scheduled session's room keeps its links valid until the session ends.
+    // A session's room keeps its links valid until the session ends.
     let share_link = sqlx::query_as::<_, ShareLinkSummaryRow>(
         r#"
         INSERT INTO "RoomShareLink" (id, "roomId", token, "canEdit", "createdBy", "expiresAt")
         VALUES ($1, $2, $3, $4, $5, GREATEST(
             NOW() + $6 * INTERVAL '1 hour',
             (SELECT MAX(a."startsAt" + a."durationMinutes" * INTERVAL '1 minute') FROM "Appointment" a
-             WHERE a."roomId" = $2 AND a.status = 'scheduled')
+             WHERE a."roomId" = $2)
         ))
         RETURNING
             id,
@@ -303,9 +302,6 @@ pub async fn join_share_link(
     Json(payload): Json<JoinSharePayload>,
 ) -> Result<impl IntoResponse, ApiError> {
     let username = payload.username.unwrap_or_default().trim().to_string();
-    let email = payload.email.unwrap_or_default().trim().to_string();
-
-    let normalized_email = if email.is_empty() { None } else { Some(email) };
 
     if username.is_empty() {
         return Err(ApiError::bad_request("Username is required"));
@@ -407,8 +403,8 @@ pub async fn join_share_link(
 
     let guest_id = sqlx::query_scalar::<_, String>(
         r#"
-        INSERT INTO "GuestSession" (id, "shareLinkId", "roomId", token, "displayName", email, color, "canEdit")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO "GuestSession" (id, "shareLinkId", "roomId", token, "displayName", color, "canEdit")
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
         "#,
     )
@@ -417,7 +413,6 @@ pub async fn join_share_link(
     .bind(&share_link.room_id)
     .bind(&session_token)
     .bind(&username)
-    .bind(&normalized_email)
     .bind(&guest_color)
     .bind(can_edit)
     .fetch_one(&mut *tx)
@@ -429,7 +424,6 @@ pub async fn join_share_link(
         share_link.room_id.clone(),
         share_link.id.clone(),
         username.clone(),
-        normalized_email.clone(),
         guest_color.clone(),
         can_edit,
         session_token.clone(),
@@ -460,7 +454,6 @@ pub async fn join_share_link(
         room_id = %share_link.room_id,
         guest_id = %guest_id,
         guest_name = %username,
-        guest_email = ?normalized_email,
         can_edit = can_edit,
         "share link joined"
     );
@@ -473,7 +466,6 @@ pub async fn join_share_link(
             "guest": {
                 "id": guest_id,
                 "displayName": username,
-                "email": normalized_email,
                 "color": guest_color,
                 "canEdit": can_edit,
             },

@@ -24,32 +24,31 @@ use crate::{
 // 排班 sessions (场次). Agents and admins plan every tech's sessions openly;
 // techs see only their own, read-only, and are notified of changes instead of
 // confirming them. A session can open a room owned by its tech, where the
-// customer joins through a share link.
+// customer joins through a share link. A session planned by mistake or called
+// off is deleted; none is cancelled or completed by hand.
 const MIN_DURATION_MINUTES: i32 = 5;
 const MAX_DURATION_MINUTES: i32 = 1440;
 const MAX_RANGE_DAYS: i64 = 100;
 const MAX_FIELD_CHARS: usize = 100;
 const MAX_ROOM_NAME_CHARS: usize = 120;
-const STATUS_SCHEDULED: &str = "scheduled";
-const STATUS_CANCELLED: &str = "cancelled";
-const STATUSES: [&str; 3] = [STATUS_SCHEDULED, "completed", STATUS_CANCELLED];
+/// The name of a session room without a company or position.
+const UNNAMED_ROOM: &str = "场次";
 
-// a is the session. A scheduled session reads as completed once its room ended.
+// a is the session. It reads as completed once its room has ended.
 pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as starts_at,
     a."durationMinutes" as duration_minutes, a.company, a.position, a.notes,
-    CASE WHEN a.status = 'scheduled' AND r."isEnded" THEN 'completed' ELSE a.status END as status,
+    CASE WHEN r."isEnded" THEN 'completed' ELSE 'scheduled' END as status,
     a."createdAt" as created_at, a."updatedAt" as updated_at,
     c.id as customer_id, c.name as customer_name, c.contact as customer_contact,
     c.notes as customer_notes, c."isDeleted" as customer_is_deleted,
     t.id as tech_id, t.username as tech_username, t.color as tech_color, t.role as tech_role,
     t."isDeleted" as tech_is_deleted,
-    g.id as agent_id, g.username as agent_username, g.color as agent_color,
     cb.id as created_by_id, cb.username as created_by_username,
     r.id as room_id, r.name as room_name, r.language as room_language, r."isEnded" as room_is_ended,
     r."endedAt" as room_ended_at,
-    (a."techId" IS NOT NULL AND a.status <> 'cancelled' AND EXISTS (
+    (a."techId" IS NOT NULL AND EXISTS (
         SELECT 1 FROM "Appointment" b
-        WHERE b.id <> a.id AND b."techId" = a."techId" AND b.status <> 'cancelled'
+        WHERE b.id <> a.id AND b."techId" = a."techId"
           AND b."startsAt" < a."startsAt" + a."durationMinutes" * INTERVAL '1 minute'
           AND a."startsAt" < b."startsAt" + b."durationMinutes" * INTERVAL '1 minute'
     )) as has_conflict
@@ -57,7 +56,6 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
     JOIN "Customer" c ON c.id = a."customerId"
     JOIN "User" cb ON cb.id = a."createdBy"
     LEFT JOIN "User" t ON t.id = a."techId"
-    LEFT JOIN "User" g ON g.id = a."agentId"
     LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted""#;
 
 #[derive(sqlx::FromRow)]
@@ -81,9 +79,6 @@ pub(super) struct AppointmentRow {
     tech_color: Option<String>,
     tech_role: Option<String>,
     tech_is_deleted: Option<bool>,
-    agent_id: Option<String>,
-    agent_username: Option<String>,
-    agent_color: Option<String>,
     created_by_id: String,
     created_by_username: String,
     room_id: Option<String>,
@@ -100,13 +95,11 @@ struct StoredAppointment {
     customer_id: String,
     customer_name: String,
     tech_id: Option<String>,
-    agent_id: Option<String>,
     starts_at: DateTime<Utc>,
     duration_minutes: i32,
     company: Option<String>,
     position: Option<String>,
     notes: Option<String>,
-    status: String,
     room_id: Option<String>,
     room_owner_id: Option<String>,
     room_is_live: Option<bool>,
@@ -128,6 +121,8 @@ pub struct ListAppointmentsQuery {
     tech_id: Option<String>,
     customer_id: Option<String>,
     unassigned: bool,
+    /// Staff only: their customers' sessions and the ones they planned.
+    mine: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -136,8 +131,6 @@ pub struct AppointmentPayload {
     customer_id: Option<String>,
     #[serde(deserialize_with = "double_option")]
     tech_id: Option<Option<String>>,
-    #[serde(deserialize_with = "double_option")]
-    agent_id: Option<Option<String>>,
     starts_at: Option<String>,
     duration_minutes: Option<i32>,
     #[serde(deserialize_with = "double_option")]
@@ -146,7 +139,6 @@ pub struct AppointmentPayload {
     position: Option<Option<String>>,
     #[serde(deserialize_with = "double_option")]
     notes: Option<Option<String>>,
-    status: Option<String>,
     /// Save even if the tech already has a session at that time.
     allow_conflicts: bool,
 }
@@ -159,7 +151,8 @@ pub struct AppointmentRoomPayload {
     replace: bool,
 }
 
-/// Sessions overlapping [from, to). Techs only ever get their own.
+/// Sessions overlapping [from, to). Techs only ever get their own; `mine` keeps
+/// a planner's own: their customers' sessions and the ones they planned.
 pub async fn list_appointments(
     State(state): State<AppState>,
     auth_user: AuthUser,
@@ -183,6 +176,7 @@ pub async fn list_appointments(
           AND ($3::text IS NULL OR a."techId" = $3)
           AND ($4::text IS NULL OR a."customerId" = $4)
           AND (NOT $5 OR a."techId" IS NULL)
+          AND (NOT $6 OR c."createdBy" = $7 OR a."createdBy" = $7)
         ORDER BY a."startsAt", a.id LIMIT 2000"#
     ))
     .bind(from)
@@ -190,6 +184,8 @@ pub async fn list_appointments(
     .bind(tech_id)
     .bind(query.customer_id.filter(|id| !id.is_empty()))
     .bind(staff && query.unassigned)
+    .bind(staff && query.mine)
+    .bind(&auth_user.id)
     .fetch_all(&state.db)
     .await
     .map_err(|err| db_error(err, "Failed to load sessions"))?;
@@ -223,14 +219,11 @@ pub async fn create_appointment(
         .filter(|id| !id.is_empty())
         .ok_or_else(|| ApiError::bad_request("Customer is required"))?;
     let tech_id = payload.tech_id.flatten();
-    // The agent in charge defaults to whoever plans the session.
-    let agent_id = payload.agent_id.unwrap_or_else(|| Some(auth_user.id.clone()));
     let starts_at = parse_start(payload.starts_at.as_deref())?;
     let duration = check_duration(payload.duration_minutes.unwrap_or(60))?;
     let company = clean_field(payload.company.flatten(), "Company is too long")?;
     let position = clean_field(payload.position.flatten(), "Position is too long")?;
     let notes = clean_text(payload.notes.flatten(), MAX_NOTES_CHARS, "Notes are too long")?;
-    let status = check_status(payload.status.as_deref().unwrap_or(STATUS_SCHEDULED))?;
 
     let mut tx = state
         .db
@@ -238,13 +231,8 @@ pub async fn create_appointment(
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let customer_name = active_customer(&mut tx, &customer_id).await?;
-    if let Some(tech) = &tech_id {
+    if let Some(tech) = tech_id.as_deref() {
         check_assignee(&mut tx, tech).await?;
-    }
-    if let Some(agent) = &agent_id {
-        check_agent(&mut tx, agent).await?;
-    }
-    if let Some(tech) = tech_id.as_deref().filter(|_| status != STATUS_CANCELLED) {
         lock_tech_schedule(&mut tx, tech).await?;
         if !payload.allow_conflicts {
             let conflicts = find_conflicts(&mut tx, tech, starts_at, duration, None).await?;
@@ -256,20 +244,18 @@ pub async fn create_appointment(
 
     let appointment_id = Uuid::new_v4().to_string();
     sqlx::query(
-        r#"INSERT INTO "Appointment" (id, "customerId", "techId", "agentId", "startsAt", "durationMinutes",
-            company, position, notes, status, "createdBy")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
+        r#"INSERT INTO "Appointment" (id, "customerId", "techId", "startsAt", "durationMinutes",
+            company, position, notes, "createdBy")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
     )
     .bind(&appointment_id)
     .bind(&customer_id)
     .bind(&tech_id)
-    .bind(&agent_id)
     .bind(starts_at)
     .bind(duration)
     .bind(&company)
     .bind(&position)
     .bind(&notes)
-    .bind(status)
     .bind(&auth_user.id)
     .execute(&mut *tx)
     .await
@@ -283,8 +269,8 @@ pub async fn create_appointment(
         company: company.as_deref(),
         position: position.as_deref(),
     };
-    if let Some(tech) = tech_id.as_deref() {
-        if status == STATUS_SCHEDULED && session.is_ahead() && tech != auth_user.id {
+    if let Some(tech) = tech_id.as_deref().filter(|tech| *tech != auth_user.id) {
+        if session.is_ahead() {
             session.send(&mut tx, tech, &auth_user.id, NoticeKind::Assigned, None).await?;
         }
     }
@@ -300,8 +286,8 @@ pub async fn create_appointment(
         None,
         None,
         json!({
-            "customerId": customer_id, "techId": tech_id, "agentId": agent_id,
-            "startsAt": to_iso_string(starts_at), "durationMinutes": duration, "status": status,
+            "customerId": customer_id, "techId": tech_id,
+            "startsAt": to_iso_string(starts_at), "durationMinutes": duration,
         }),
     )
     .await?;
@@ -331,8 +317,8 @@ pub async fn update_appointment(
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let current = sqlx::query_as::<_, StoredAppointment>(
         r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."techId" as tech_id,
-            a."agentId" as agent_id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
-            a.company, a.position, a.notes, a.status, r.id as room_id, r."ownerId" as room_owner_id,
+            a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
+            a.company, a.position, a.notes, r.id as room_id, r."ownerId" as room_owner_id,
             NOT r."isEnded" as room_is_live
         FROM "Appointment" a JOIN "Customer" c ON c.id = a."customerId"
         LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted"
@@ -349,7 +335,6 @@ pub async fn update_appointment(
         .filter(|id| !id.is_empty())
         .unwrap_or_else(|| current.customer_id.clone());
     let tech_id = payload.tech_id.unwrap_or_else(|| current.tech_id.clone());
-    let agent_id = payload.agent_id.unwrap_or_else(|| current.agent_id.clone());
     let starts_at = match payload.starts_at.as_deref() {
         Some(value) => parse_start(Some(value))?,
         None => current.starts_at,
@@ -367,7 +352,6 @@ pub async fn update_appointment(
         Some(value) => clean_text(value, MAX_NOTES_CHARS, "Notes are too long")?,
         None => current.notes.clone(),
     };
-    let status = check_status(payload.status.as_deref().unwrap_or(&current.status))?;
 
     let customer_name = if customer_id == current.customer_id {
         current.customer_name.clone()
@@ -378,20 +362,15 @@ pub async fn update_appointment(
     if let Some(tech) = tech_id.as_deref().filter(|_| tech_changed) {
         check_assignee(&mut tx, tech).await?;
     }
-    if let Some(agent) = agent_id.as_deref().filter(|_| agent_id != current.agent_id) {
-        check_agent(&mut tx, agent).await?;
-    }
     let time_changed = starts_at != current.starts_at || duration != current.duration_minutes;
     let changes: Vec<&str> = [
         ("customer", customer_id != current.customer_id),
         ("tech", tech_changed),
-        ("agent", agent_id != current.agent_id),
         ("time", starts_at != current.starts_at),
         ("duration", duration != current.duration_minutes),
         ("company", company != current.company),
         ("position", position != current.position),
         ("notes", notes != current.notes),
-        ("status", status != current.status),
     ]
     .into_iter()
     .filter_map(|(field, changed)| changed.then_some(field))
@@ -403,8 +382,8 @@ pub async fn update_appointment(
         return Ok(Json(json!({ "appointment": appointment_json(&row, true) })).into_response());
     }
     // Edits that cannot create an overlap, like notes, never trip a conflict saved on purpose.
-    let may_overlap = tech_changed || time_changed || current.status == STATUS_CANCELLED;
-    if let Some(tech) = tech_id.as_deref().filter(|_| status != STATUS_CANCELLED && may_overlap) {
+    let may_overlap = tech_changed || time_changed;
+    if let Some(tech) = tech_id.as_deref().filter(|_| may_overlap) {
         lock_tech_schedule(&mut tx, tech).await?;
         if !payload.allow_conflicts {
             let conflicts =
@@ -416,30 +395,29 @@ pub async fn update_appointment(
     }
 
     sqlx::query(
-        r#"UPDATE "Appointment" SET "customerId" = $2, "techId" = $3, "agentId" = $4, "startsAt" = $5,
-            "durationMinutes" = $6, company = $7, position = $8, notes = $9, status = $10, "updatedAt" = NOW()
+        r#"UPDATE "Appointment" SET "customerId" = $2, "techId" = $3, "startsAt" = $4,
+            "durationMinutes" = $5, company = $6, position = $7, notes = $8, "updatedAt" = NOW()
         WHERE id = $1"#,
     )
     .bind(&appointment_id)
     .bind(&customer_id)
     .bind(&tech_id)
-    .bind(&agent_id)
     .bind(starts_at)
     .bind(duration)
     .bind(&company)
     .bind(&position)
     .bind(&notes)
-    .bind(status)
     .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to update session"))?;
 
-    // A live room follows its session: the time and role, and its new tech as owner.
+    // A live room follows its session: the time and role, the name made of them
+    // unless it was renamed by hand, and its new tech as owner.
     if let (Some(room_id), Some(true)) = (current.room_id.as_deref(), current.room_is_live) {
         if time_changed || company != current.company || position != current.position {
             sqlx::query(
                 r#"UPDATE "Room" SET "scheduledTime" = $2, duration = $3, company = $4, position = $5,
-                    "updatedAt" = NOW()
+                    name = CASE WHEN name = $6 THEN $7 ELSE name END, "updatedAt" = NOW()
                 WHERE id = $1"#,
             )
             .bind(room_id)
@@ -447,6 +425,8 @@ pub async fn update_appointment(
             .bind(duration)
             .bind(&company)
             .bind(&position)
+            .bind(room_name(current.company.as_deref(), current.position.as_deref()))
+            .bind(room_name(company.as_deref(), position.as_deref()))
             .execute(&mut *tx)
             .await
             .map_err(|err| db_error(err, "Failed to update the session's room"))?;
@@ -490,39 +470,24 @@ pub async fn update_appointment(
         company: company.as_deref(),
         position: position.as_deref(),
     };
-    let was_scheduled = current.status == STATUS_SCHEDULED;
-    let is_scheduled = status == STATUS_SCHEDULED;
     let mine = |tech: &str| tech == auth_user.id;
     if tech_changed {
         if let Some(old) = current.tech_id.as_deref().filter(|t| !mine(t)) {
-            if was_scheduled && before.is_ahead() {
+            if before.is_ahead() {
                 before.send(&mut tx, old, &auth_user.id, NoticeKind::Unassigned, None).await?;
             }
         }
         if let Some(new) = tech_id.as_deref().filter(|t| !mine(t)) {
-            if is_scheduled && after.is_ahead() {
+            if after.is_ahead() {
                 after.send(&mut tx, new, &auth_user.id, NoticeKind::Assigned, None).await?;
             }
         }
     } else if let Some(tech) = tech_id.as_deref().filter(|t| !mine(t)) {
-        let details: Vec<&str> = changes
-            .iter()
-            .copied()
-            .filter(|field| !matches!(*field, "agent" | "status"))
-            .collect();
-        if was_scheduled && status == STATUS_CANCELLED {
-            if before.is_ahead() {
-                before.send(&mut tx, tech, &auth_user.id, NoticeKind::Cancelled, None).await?;
-            }
-        } else if !was_scheduled && is_scheduled {
-            if after.is_ahead() {
-                after.send(&mut tx, tech, &auth_user.id, NoticeKind::Assigned, None).await?;
-            }
-        } else if is_scheduled && !details.is_empty() && (after.is_ahead() || before.is_ahead()) {
+        if after.is_ahead() || before.is_ahead() {
             let previous = json!({
                 "previousStartsAt": to_iso_string(current.starts_at),
                 "previousDurationMinutes": current.duration_minutes,
-                "changes": details,
+                "changes": changes,
             });
             after.send(&mut tx, tech, &auth_user.id, NoticeKind::Updated, Some(previous)).await?;
         }
@@ -541,7 +506,6 @@ pub async fn update_appointment(
         json!({
             "changes": changes,
             "techId": { "before": current.tech_id, "after": tech_id },
-            "status": { "before": current.status, "after": status },
             "startsAt": to_iso_string(starts_at), "durationMinutes": duration,
             "allowConflicts": payload.allow_conflicts,
         }),
@@ -555,8 +519,8 @@ pub async fn update_appointment(
     Ok(Json(json!({ "appointment": appointment_json(&row, true) })).into_response())
 }
 
-/// Deletes a session planned by mistake; its room, if any, stays as it is.
-/// Cancelling keeps the session on the calendar instead.
+/// Deletes a session planned by mistake or called off; its room, if any, stays
+/// as it is. A tech losing a session still to come is told it was cancelled.
 pub async fn delete_appointment(
     State(state): State<AppState>,
     client: ClientInfo,
@@ -572,8 +536,8 @@ pub async fn delete_appointment(
         r#"DELETE FROM "Appointment" a USING "Customer" c
         WHERE a.id = $1 AND c.id = a."customerId"
         RETURNING a."customerId" as customer_id, c.name as customer_name, a."techId" as tech_id,
-            a."agentId" as agent_id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
-            a.company, a.position, a.notes, a.status, a."roomId" as room_id,
+            a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
+            a.company, a.position, a.notes, a."roomId" as room_id,
             NULL::text as room_owner_id, NULL::boolean as room_is_live"#,
     )
     .bind(&appointment_id)
@@ -591,7 +555,7 @@ pub async fn delete_appointment(
         position: current.position.as_deref(),
     };
     if let Some(tech) = current.tech_id.as_deref().filter(|t| *t != auth_user.id) {
-        if current.status == STATUS_SCHEDULED && session.is_ahead() {
+        if session.is_ahead() {
             session.send(&mut tx, tech, &auth_user.id, NoticeKind::Cancelled, None).await?;
         }
     }
@@ -607,7 +571,7 @@ pub async fn delete_appointment(
         current.room_id.as_deref(),
         json!({
             "customerId": current.customer_id, "techId": current.tech_id,
-            "startsAt": to_iso_string(current.starts_at), "status": current.status,
+            "startsAt": to_iso_string(current.starts_at),
         }),
     )
     .await?;
@@ -640,8 +604,8 @@ pub async fn open_appointment_room(
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let current = sqlx::query_as::<_, StoredAppointment>(
         r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."techId" as tech_id,
-            a."agentId" as agent_id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
-            a.company, a.position, a.notes, a.status, r.id as room_id, r."ownerId" as room_owner_id,
+            a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
+            a.company, a.position, a.notes, r.id as room_id, r."ownerId" as room_owner_id,
             NOT r."isEnded" as room_is_live
         FROM "Appointment" a JOIN "Customer" c ON c.id = a."customerId"
         LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted"
@@ -666,9 +630,6 @@ pub async fn open_appointment_room(
             .into_response());
         }
     }
-    if current.status == STATUS_CANCELLED {
-        return Err(ApiError::bad_request("Cancelled sessions have no room"));
-    }
     let tech_is_active = match current.tech_id.as_deref() {
         Some(tech) => is_active_user(&mut tx, tech).await?,
         None => false,
@@ -678,11 +639,7 @@ pub async fn open_appointment_room(
         _ if staff => auth_user.id.clone(),
         _ => return Err(ApiError::not_found("Appointment not found")),
     };
-    let name = room_name(
-        &current.customer_name,
-        current.company.as_deref(),
-        current.position.as_deref(),
-    );
+    let name = room_name(current.company.as_deref(), current.position.as_deref());
     let room = insert_room(
         &mut tx,
         NewRoom {
@@ -697,12 +654,8 @@ pub async fn open_appointment_room(
         },
     )
     .await?;
-    // A new room reopens a session marked completed, e.g. after its room was ended early.
-    sqlx::query(
-        r#"UPDATE "Appointment" SET "roomId" = $2, "updatedAt" = NOW(),
-            status = CASE WHEN status = 'completed' THEN 'scheduled' ELSE status END
-        WHERE id = $1"#,
-    )
+    // A session whose room ended reads as scheduled again with the new one.
+    sqlx::query(r#"UPDATE "Appointment" SET "roomId" = $2, "updatedAt" = NOW() WHERE id = $1"#)
         .bind(&appointment_id)
         .bind(&room.id)
         .execute(&mut *tx)
@@ -776,9 +729,6 @@ pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
             "role": row.tech_role,
             "isDeleted": row.tech_is_deleted.unwrap_or(false),
         })),
-        "agent": row.agent_id.as_ref().map(|id| json!({
-            "id": id, "username": row.agent_username, "color": row.agent_color,
-        })),
         "room": row.room_id.as_ref().map(|id| json!({
             "id": id,
             "name": row.room_name,
@@ -833,13 +783,6 @@ async fn check_assignee(tx: &mut sqlx::PgConnection, user_id: &str) -> Result<()
     }
 }
 
-async fn check_agent(tx: &mut sqlx::PgConnection, user_id: &str) -> Result<(), ApiError> {
-    match account_role(tx, user_id).await? {
-        Some(role) if is_staff(&role) => Ok(()),
-        _ => Err(ApiError::bad_request("Invalid agent")),
-    }
-}
-
 /// Serializes changes to one tech's sessions so two planners cannot double-book them.
 async fn lock_tech_schedule(tx: &mut sqlx::PgConnection, tech_id: &str) -> Result<(), ApiError> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
@@ -861,7 +804,7 @@ async fn find_conflicts(
         r#"SELECT a.id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
             c.name as customer_name
         FROM "Appointment" a JOIN "Customer" c ON c.id = a."customerId"
-        WHERE a."techId" = $1 AND a.status <> 'cancelled' AND ($4::text IS NULL OR a.id <> $4)
+        WHERE a."techId" = $1 AND ($4::text IS NULL OR a.id <> $4)
           AND a."startsAt" < $3 AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > $2
         ORDER BY a."startsAt", a.id LIMIT 20"#,
     )
@@ -1038,29 +981,21 @@ fn check_duration(minutes: i32) -> Result<i32, ApiError> {
     }
 }
 
-fn check_status(status: &str) -> Result<&'static str, ApiError> {
-    STATUSES
-        .into_iter()
-        .find(|known| *known == status)
-        .ok_or_else(|| ApiError::bad_request("Invalid session status"))
-}
-
 fn clean_field(value: Option<String>, too_long: &'static str) -> Result<Option<String>, ApiError> {
     clean_text(value, MAX_FIELD_CHARS, too_long)
 }
 
-/// "Customer · Company Position", kept within the room name limit.
-fn room_name(customer: &str, company: Option<&str>, position: Option<&str>) -> String {
-    let role = [company, position]
+/// "Company Position", kept within the room name limit. The customer's name
+/// stays out of it.
+fn room_name(company: Option<&str>, position: Option<&str>) -> String {
+    let name = [company, position]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
         .join(" ");
-    let name = if role.is_empty() {
-        customer.to_string()
-    } else {
-        format!("{customer} · {role}")
-    };
+    if name.is_empty() {
+        return UNNAMED_ROOM.to_string();
+    }
     name.chars().take(MAX_ROOM_NAME_CHARS).collect()
 }
 
@@ -1078,16 +1013,20 @@ mod tests {
     }
 
     #[test]
-    fn durations_statuses_and_room_names_are_bounded() {
+    fn durations_are_bounded() {
         assert!(check_duration(4).is_err() && check_duration(1441).is_err());
         assert_eq!(check_duration(5).unwrap(), 5);
         assert_eq!(check_duration(1440).unwrap(), 1440);
-        assert_eq!(check_status("cancelled").unwrap(), STATUS_CANCELLED);
-        assert!(check_status("done").is_err());
-        assert_eq!(room_name("张三", Some("字节"), Some("后端")), "张三 · 字节 后端");
-        assert_eq!(room_name("张三", None, Some("后端")), "张三 · 后端");
-        assert_eq!(room_name("张三", None, None), "张三");
-        assert_eq!(room_name(&"长".repeat(200), None, None).chars().count(), MAX_ROOM_NAME_CHARS);
+    }
+
+    #[test]
+    fn room_names_are_company_and_position_without_the_customer() {
+        assert_eq!(room_name(Some("字节"), Some("后端")), "字节 后端");
+        assert_eq!(room_name(None, Some("后端")), "后端");
+        assert_eq!(room_name(Some("字节"), None), "字节");
+        assert_eq!(room_name(None, None), UNNAMED_ROOM);
+        let long = "长".repeat(200);
+        assert_eq!(room_name(Some(&long), None).chars().count(), MAX_ROOM_NAME_CHARS);
     }
 
     #[test]
