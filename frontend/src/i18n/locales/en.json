@@ -291,7 +291,7 @@
     "play": "Play",
     "pause": "Pause",
     "speed": "Speed",
-    "accessDenied": "Playback is limited to the room owner or administrators.",
+    "accessDenied": "Playback is limited to the room owner or managers.",
     "noData": "No playback data is available for this room.",
     "loadFailed": "Failed to load playback data. Please try again later.",
     "backToRooms": "Back to rooms",
@@ -513,7 +513,7 @@
     "close": "Close",
     "back": "Back",
     "logout": "Logout",
-    "admin": "Admin",
+    "admin": "Super admin",
     "settings": "Settings",
     "enterFullscreen": "Enter fullscreen",
     "exitFullscreen": "Exit fullscreen",
@@ -531,8 +531,8 @@
     "unknownError": "Unknown error"
   },
   "roles": {
-    "admin": "Admin",
-    "agent": "Agent",
+    "admin": "Super admin",
+    "agent": "Manager",
     "tech": "Tech"
   },
   "codeRunner": {
@@ -563,7 +563,7 @@
   },
   "audit": {
     "title": "Audit log",
-    "denied": "Administrator access required.",
+    "denied": "Super admin access required.",
     "account": "Account (exact match)",
     "filter": "Filter",
     "refresh": "Refresh",
@@ -707,7 +707,7 @@
     "companyTooLong": "The company can be at most 100 characters.",
     "positionTooLong": "The position can be at most 100 characters.",
     "invalidTech": "That account can no longer take sessions.",
-    "invalidAgent": "Choose an active agent or admin.",
+    "invalidAgent": "Choose an active manager.",
     "invalidDuration": "A session lasts between 5 minutes and 24 hours.",
     "startRequired": "Enter a valid start time.",
     "customerRequired": "Choose a customer.",
@@ -787,7 +787,7 @@
       "noCustomers": "No matching customers.",
       "tech": "Tech",
       "techsGroup": "Techs",
-      "staffGroup": "Agents and admins",
+      "staffGroup": "Managers",
       "deletedAccount": "{{username}} (removed)",
       "date": "Date",
       "start": "Start",
@@ -903,7 +903,7 @@
       }
     },
     "zone": "Time zone",
-    "agent": "Agent"
+    "agent": "Manager"
   },
   "tour": {
     "previous": "Back",

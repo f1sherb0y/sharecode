@@ -1,4 +1,4 @@
-/** 管理员 admin, 中介 agent, 技术 tech; customers are share-link guests without accounts. */
+/** 超级管理员 admin, 管理 agent (shown as Super admin and Manager), 技术 tech; customers are share-link guests without accounts. */
 export type Role = 'admin' | 'agent' | 'tech'
 export type NotificationSeverity = 'normal' | 'emergency'
 

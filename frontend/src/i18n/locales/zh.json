@@ -291,7 +291,7 @@
     "play": "播放",
     "pause": "暂停",
     "speed": "速度",
-    "accessDenied": "仅房主或管理员可以查看回放。",
+    "accessDenied": "仅房主或管理可以查看回放。",
     "noData": "该房间没有可用的回放数据。",
     "loadFailed": "加载回放失败，请稍后再试。",
     "backToRooms": "返回房间列表",
@@ -513,7 +513,7 @@
     "close": "关闭",
     "back": "返回",
     "logout": "登出",
-    "admin": "管理员",
+    "admin": "超级管理员",
     "settings": "设置",
     "enterFullscreen": "进入全屏",
     "exitFullscreen": "退出全屏",
@@ -531,8 +531,8 @@
     "unknownError": "未知错误"
   },
   "roles": {
-    "admin": "管理员",
-    "agent": "中介",
+    "admin": "超级管理员",
+    "agent": "管理",
     "tech": "技术"
   },
   "codeRunner": {
@@ -563,7 +563,7 @@
   },
   "audit": {
     "title": "审计日志",
-    "denied": "需要管理员权限。",
+    "denied": "需要超级管理员权限。",
     "account": "账号（精确匹配）",
     "filter": "筛选",
     "refresh": "刷新",
@@ -707,7 +707,7 @@
     "companyTooLong": "公司名称最多 100 个字符。",
     "positionTooLong": "岗位最多 100 个字符。",
     "invalidTech": "这个账号已无法分配场次。",
-    "invalidAgent": "请选择在职的中介或管理员。",
+    "invalidAgent": "请选择在职的管理。",
     "invalidDuration": "场次时长需在 5 分钟到 24 小时之间。",
     "startRequired": "请填写有效的开始时间。",
     "customerRequired": "请选择客户。",
@@ -787,7 +787,7 @@
       "noCustomers": "没有匹配的客户。",
       "tech": "技术",
       "techsGroup": "技术",
-      "staffGroup": "中介和管理员",
+      "staffGroup": "管理",
       "deletedAccount": "{{username}}（已删除）",
       "date": "日期",
       "start": "开始时间",
@@ -903,7 +903,7 @@
       }
     },
     "zone": "时区",
-    "agent": "中介"
+    "agent": "管理"
   },
   "tour": {
     "previous": "上一步",

@@ -38,7 +38,7 @@
 
 ### 2. User Management
 - **Username-based authentication**: Login with username; accounts and guests have no email
-- **Role-based access control**: Three account roles: admin (管理员), agent (中介) and tech (技术). Customers (客户) join through share links without an account
+- **Role-based access control**: Three account roles: admin (超级管理员, shown as Super admin), agent (管理, shown as Manager) and tech (技术); the UI calls both staff roles 管理. Customers (客户) join through share links without an account
 - **Role-only permissions**: No per-account flags; rules live in `server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`
 - **Invite-only registration**: Agents and admins issue single-use codes (valid 7 days) from the account menu; registering with one always creates a tech. Admins also create accounts of any role directly
 - **JWT tokens**: Secure authentication with 7-day expiration

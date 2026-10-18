@@ -163,7 +163,7 @@ try {
     await page.waitForURL('**/rooms')
     await page.getByRole('button',{name:mobile?'创建新房间':'Create New Room',exact:true}).waitFor()
     await page.goto(WEB+`/admin/audit?username=device_user&deviceId=${deviceA}`)
-    await page.getByRole('alert').getByText(mobile?'需要管理员权限。':'Administrator access required.',{exact:true}).waitFor()
+    await page.getByRole('alert').getByText(mobile?'需要超级管理员权限。':'Super admin access required.',{exact:true}).waitFor()
     assert.equal(await page.locator('tbody tr').count(),0)
     assert.deepEqual(agentAdminRequests,[])
     assert.deepEqual(errors,[])

@@ -1,4 +1,4 @@
-// Role matrix for admin (管理员), agent (中介) and tech (技术) accounts plus share
+// Role matrix for admin (超级管理员), agent (管理) and tech (技术) accounts plus share
 // guests. Run with scripts/test-runner-local.sh; all accounts and rooms are disposable.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -403,14 +403,14 @@ try {
         await page.getByRole('link', { name: 'Private UI ' + engine + ' ' + lng, exact: true }).waitFor()
         assert(await page.getByLabel(mobile ? '私密房间' : 'Private room', { exact: true }).count() > 0)
         await page.getByRole('button', { name: mobile ? '账号菜单' : 'Account menu', exact: true }).click()
-        await page.getByText(mobile ? '管理员' : 'Admin', { exact: true }).waitFor()
+        await page.getByText(mobile ? '超级管理员' : 'Super admin', { exact: true }).waitFor()
         assert.equal(await page.getByRole('menuitem', { name: mobile ? '邀请技术' : 'Invite techs', exact: true }).count(), 1)
         assert.deepEqual(errors, [])
         await context.close()
       }
       // Agents and techs never see the private option or the admin side; only agents
       // filter rooms by owner and invite techs.
-      for (const [actor, ownerFilter, roleLabel] of [['agent_owner', 1, 'Agent'], ['tech_peer', 0, 'Tech']]) {
+      for (const [actor, ownerFilter, roleLabel] of [['agent_owner', 1, 'Manager'], ['tech_peer', 0, 'Tech']]) {
         const { context, page, errors } = await openPage(browser, as(actor))
         await page.goto('http://127.0.0.1:55461/rooms')
         await page.getByRole('combobox', { name: 'Activeness', exact: true }).waitFor()
@@ -429,7 +429,7 @@ try {
         await page.waitForURL('**/rooms')
         await page.getByRole('combobox', { name: 'Activeness', exact: true }).waitFor()
         await page.goto('http://127.0.0.1:55461/admin/audit')
-        await page.getByRole('alert').getByText('Administrator access required.', { exact: true }).waitFor()
+        await page.getByRole('alert').getByText('Super admin access required.', { exact: true }).waitFor()
         assert.deepEqual(errors, [])
         await context.close()
       }

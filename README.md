@@ -12,7 +12,7 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 - 🔄 Follow mode - follow another user's viewport
 - 💾 Persistent document storage with PostgreSQL
 - 🔒 Room-based access control (including strict session locking for ended rooms)
-- 🔑 Role-based access: admin (管理员), agent (中介) and tech (技术) accounts; customers join through share links
+- 🔑 Role-based access: admin (超级管理员, Super admin), agent (管理, Manager) and tech (技术) accounts; customers join through share links
 - 🔗 Guest share links with configurable view/edit permissions
 - 📅 Scheduling (排班): a calendar where agents plan every tech's sessions and a 场次 page of customers and their sessions; techs are notified and open the session's room from it
 
@@ -329,7 +329,7 @@ permission flags. Customers (客户) have no account: a share link decides wheth
 a guest can edit. Rules are enforced identically on the REST and WebSocket paths
 (`server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`).
 
-| Capability | Tech (技术) | Agent (中介) | Admin (管理员) |
+| Capability | Tech (技术) | Agent (管理) | Admin (超级管理员) |
 | --- | --- | --- | --- |
 | See rooms | Own, pinned (while live), joined by link | All standard rooms | All standard rooms |
 | Create rooms | Yes | Yes | Yes |
@@ -517,8 +517,8 @@ sharecode/
 - Room owners manage their own rooms (edit, share, end); only admins delete rooms
 - Members who joined through a share link edit only if the link they last used allows it
 - Three account roles ship out-of-the-box:
-  - **Admin (管理员)** — manages every account and room, including deletion and private rooms
-  - **Agent (中介)** — sees, edits, shares, pins and ends every standard room; invites techs
+  - **Admin (超级管理员)** — manages every account and room, including deletion and private rooms
+  - **Agent (管理)** — sees, edits, shares, pins and ends every standard room; invites techs
   - **Tech (技术)** — controls personal rooms, sees pinned rooms read-only, and joins others' rooms by link
 - Users must be authenticated to access rooms and their current role is validated on every REST/WebSocket request
 - The WebSocket server verifies access on every connection and disconnects sessions whose access is revoked (role change, unpinned room, ended room or revoked link)
