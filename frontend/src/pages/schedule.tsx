@@ -20,6 +20,7 @@ import { AgendaList } from '@/components/schedule/agenda-list'
 import { AppointmentDialog, type SessionDraft } from '@/components/schedule/appointment-dialog'
 import { MonthGrid } from '@/components/schedule/month-grid'
 import { SessionRoomActions } from '@/components/schedule/session-room-actions'
+import { ScheduleTour } from '@/components/schedule/schedule-tour'
 import { SessionsPanel } from '@/components/schedule/sessions-panel'
 import { TimeGrid, type GridRow } from '@/components/schedule/time-grid'
 import { UnassignedPanel } from '@/components/schedule/unassigned-panel'
@@ -307,7 +308,7 @@ export function SchedulePage() {
         title={null}
         centerContent={<span className="font-semibold">{t('schedule.title')}</span>}
         rightContent={staff && tab === 'calendar' ? (
-          <Button onClick={() => newSession()} aria-label={t('schedule.newSession')}>
+          <Button onClick={() => newSession()} aria-label={t('schedule.newSession')} data-tour="new-session">
             <Plus /><span className="hidden sm:inline">{t('schedule.newSession')}</span>
           </Button>
         ) : undefined}
@@ -331,7 +332,7 @@ export function SchedulePage() {
               ))}
             </div>
             {onlyMine.available && (
-              <label className="ui-check-row ml-auto flex cursor-pointer items-center gap-1.5 text-sm">
+              <label className="ui-check-row ml-auto flex cursor-pointer items-center gap-1.5 text-sm" data-tour="only-mine">
                 <Checkbox checked={mine} onCheckedChange={value => onlyMine.setOnlyMine(value === true)} aria-label={t('schedule.onlyMine')} />
                 <span aria-hidden="true">{t('schedule.onlyMine')}</span>
               </label>
@@ -371,6 +372,7 @@ export function SchedulePage() {
                     key={value}
                     type="button"
                     aria-pressed={view === value}
+                    data-tour={`view-${value}`}
                     className={cn('schedule-view', view === value && 'is-active')}
                     onClick={() => setParams({ view: value })}
                   >
@@ -466,6 +468,8 @@ export function SchedulePage() {
           </>
         )}
       </PageContainer>
+
+      <ScheduleTour userId={user?.role === 'agent' ? user.id : null} params={searchParams} setParams={setParams} />
 
       <AppointmentDialog
         open={!!draft || !!openAppointment}

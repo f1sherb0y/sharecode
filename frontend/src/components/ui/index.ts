@@ -11,3 +11,4 @@ export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tool
 export { Spinner } from './spinner'
 export { Popover, PopoverTrigger, PopoverContent } from './popover'
 export { Checkbox } from './checkbox'
+export { Tour, type TourStep } from './tour'

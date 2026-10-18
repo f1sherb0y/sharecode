@@ -91,11 +91,11 @@ export function SessionsPanel({ timezone, now, colorOf, laneRank, customerId, on
               onChange={e => setQuery(e.target.value)}
             />
           </div>
-          <Button size="icon" variant="outline" aria-label={t('schedule.customers.new')} title={t('schedule.customers.new')} onClick={() => setEditing('new')}>
+          <Button size="icon" variant="outline" aria-label={t('schedule.customers.new')} title={t('schedule.customers.new')} onClick={() => setEditing('new')} data-tour="customer-add">
             <Plus />
           </Button>
         </div>
-        <nav className="schedule-customer-list" aria-label={t('schedule.customers.title')}>
+        <nav className="schedule-customer-list" aria-label={t('schedule.customers.title')} data-tour="customer-list">
           <button
             type="button"
             className={cn('schedule-customer schedule-customer-all', !selected && customerId !== null && 'is-active', !customerId && 'is-default')}
@@ -164,7 +164,7 @@ export function SessionsPanel({ timezone, now, colorOf, laneRank, customerId, on
                 </Button>
               </>
             )}
-            <Button onClick={() => onNewSession(selected ? customer : null)} disabled={!!selected && !customer}>
+            <Button onClick={() => onNewSession(selected ? customer : null)} disabled={!!selected && !customer} data-tour="session-add">
               <Plus /><span className="max-sm:sr-only">{t('schedule.newSession')}</span>
             </Button>
           </div>

@@ -196,7 +196,7 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
   const labeled = rows.some(row => row.label)
 
   return (
-    <div className={cn('schedule-grid', !labeled && 'is-unlabeled')} style={{ '--hours': hours.length } as CSSProperties} role="region" aria-label={label}>
+    <div className={cn('schedule-grid', !labeled && 'is-unlabeled')} style={{ '--hours': hours.length } as CSSProperties} role="region" aria-label={label} data-tour="calendar">
       <div className="schedule-grid-scroll" ref={scroller} data-schedule-scroll>
         <div className="schedule-grid-inner">
           <div className="schedule-grid-head" aria-hidden="true">

@@ -157,6 +157,14 @@ class ApiClient {
     })
   }
 
+  async getSeenTours(): Promise<{ seen: string[] }> {
+    return this.request<{ seen: string[] }>('/api/tours')
+  }
+
+  async markTourSeen(tour: string): Promise<{ seen: string[] }> {
+    return this.request<{ seen: string[] }>(`/api/tours/${tour}`, { method: 'PUT' })
+  }
+
   async createNotification(payload: {
     title: string
     content: string

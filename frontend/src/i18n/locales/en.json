@@ -870,6 +870,43 @@
       "noPast": "No past sessions.",
       "noPastDays": "No sessions in the last {{count}} days.",
       "earlier": "Load earlier sessions"
+    },
+    "tour": {
+      "customerAdd": {
+        "title": "New customer",
+        "body": "In Sessions, press + and enter the customer's name and contact. Customers you add are yours."
+      },
+      "customerList": {
+        "title": "Pick a customer",
+        "body": "Pick a customer to list all their sessions on the right."
+      },
+      "sessionAdd": {
+        "title": "New session",
+        "body": "Plan a session for the chosen customer: time, length, tech, company and position."
+      },
+      "newSession": {
+        "title": "New from the calendar",
+        "body": "Or press here, or click or drag across free time on the calendar."
+      },
+      "arrange": {
+        "title": "Move sessions",
+        "body": "Drag a session to another time or day; drag its right edge to change the length."
+      },
+      "assign": {
+        "title": "Assign a tech",
+        "body": "The day view has a row per tech: drag a session onto a row to give it to them. Unassigned sessions wait above the calendar; drag them in too."
+      },
+      "onlyMine": {
+        "title": "Only mine",
+        "body": "Shows only your customers and the sessions you planned; clear it to see everyone's."
+      }
     }
+  },
+  "tour": {
+    "previous": "Back",
+    "next": "Next",
+    "done": "Done",
+    "skip": "Skip",
+    "progress": "{{current}} / {{total}}"
   }
 }
