@@ -308,6 +308,17 @@ const auditText = JSON.stringify(audit)
 for (const secret of ['张三', 'Li Si', 'zhang_100%', 'Prefers evenings', 'Bring the take-home', 'Acme']) assert(!auditText.includes(secret), secret)
 console.log('PASS audit: customer and session changes recorded by ID, without names, contacts or notes')
 
+// The schedule tour: each account sees it once, on any device, and only known tours are kept.
+await request('/api/tours', 'GET', undefined, undefined, 401)
+assert.deepEqual(await request('/api/tours', 'GET', undefined, as('agent_a')), { seen: [] })
+await request('/api/tours/unknown', 'PUT', undefined, as('agent_a'), 404)
+assert.deepEqual(await request('/api/tours/schedule', 'PUT', undefined, as('agent_a')), { seen: ['schedule'] })
+assert.deepEqual(await request('/api/tours/schedule', 'PUT', undefined, as('agent_a')), { seen: ['schedule'] }, 'marking twice keeps one entry')
+assert.deepEqual(await request('/api/tours', 'GET', undefined, as('agent_b')), { seen: [] }, 'per account')
+// The calendar checks below drive these agents' pages directly.
+await request('/api/tours/schedule', 'PUT', undefined, as('agent_b'))
+console.log('PASS tours: once per account, unknown tours rejected')
+
 // The calendar in three browsers: timelines with hours across (a row per weekday,
 // or per tech on one day), as wide as the room list. Agents see their own by
 // default, plan by clicking free time, confirm overlaps, drag between techs and
@@ -565,6 +576,7 @@ try {
         await page.goto(`${WEB}/schedule?view=week&date=${day}`)
         await page.locator(`[data-appointment="${waiting.id}"]`).waitFor()
         assert.equal(await page.locator(`[data-appointment="${first.id}"]`).count(), 0, "another tech's session")
+        assert.equal(await page.locator('.ui-tour').count(), 0, 'techs get no tour')
         assert.equal(await page.locator('.schedule-event-resize, .schedule-track.is-editable').count(), 0)
         await page.locator(`[data-appointment="${waiting.id}"]`).click()
         const details = page.getByRole('dialog', { name: 'Li Si' })
@@ -608,8 +620,71 @@ try {
         assert.deepEqual(errors, [])
         await context.close()
       }
+      // A new agent gets the tour once: every step points at its part of the page, with
+      // Back, Next and Skip, and the page returns to where it was.
+      for (const [mode, mobile, lng] of [['walk', false, 'en'], ['skip', true, 'zh']]) {
+        const username = `tour_${mode}_${engine}`
+        await request('/api/admin/users', 'POST', { username, role: 'agent', password }, root, 201)
+        const token = (await login(username)).token
+        const { context, page, errors } = await openPage(browser, token, { mobile, lng })
+        await page.goto(`${WEB}/schedule?date=${day}`)
+        const card = page.locator('.ui-tour-card')
+        const spotlit = async target => {
+          await page.locator(`[data-tour="${target}"]`).waitFor()
+          await page.waitForFunction(target => {
+            const spot = document.querySelector('.ui-tour-spotlight')?.getBoundingClientRect()
+            const box = document.querySelector(`[data-tour="${target}"]`)?.getBoundingClientRect()
+            return !!spot && !!box && spot.left <= box.left && spot.top <= Math.max(box.top, 0)
+              && spot.right >= box.right && spot.bottom >= Math.min(box.bottom, window.innerHeight)
+          }, target)
+        }
+        const progress = text => card.getByText(text, { exact: true }).waitFor()
+        await progress('1 / 7')
+        if (mode === 'walk') {
+          await card.getByRole('heading', { name: 'New customer' }).waitFor()
+          await spotlit('customer-add')
+          assert.equal(new URL(page.url()).searchParams.get('tab'), 'sessions')
+          assert.equal(await card.getByRole('button', { name: 'Back' }).count(), 0, 'no Back on the first step')
+          await page.keyboard.press('Enter')
+          await progress('2 / 7')
+          await spotlit('customer-list')
+          await card.getByRole('button', { name: 'Back' }).click()
+          await progress('1 / 7')
+          for (const [step, target] of [[2, 'customer-list'], [3, 'session-add'], [4, 'new-session'], [5, 'calendar'], [6, 'view-day'], [7, 'only-mine']]) {
+            await card.getByRole('button', { name: 'Next' }).click()
+            await progress(`${step} / 7`)
+            await spotlit(target)
+            if (step === 5) assert.equal(new URL(page.url()).searchParams.get('view'), 'week')
+          }
+          // The page underneath does not take clicks while the tour is open.
+          const onlyMineBox = await page.locator('[data-tour="only-mine"]').boundingBox()
+          await page.mouse.click(onlyMineBox.x + 5, onlyMineBox.y + onlyMineBox.height / 2)
+          assert.equal(await page.getByRole('checkbox', { name: 'Only mine' }).getAttribute('data-state'), 'checked')
+          await card.getByRole('button', { name: 'Done' }).click()
+        } else {
+          await card.getByRole('heading', { name: '新建客户' }).waitFor()
+          await spotlit('customer-add')
+          await card.getByRole('button', { name: '下一步' }).click()
+          await progress('2 / 7')
+          await card.getByRole('button', { name: '跳过' }).click()
+        }
+        await card.waitFor({ state: 'detached' })
+        const params = new URL(page.url()).searchParams
+        assert.deepEqual([params.get('tab'), params.get('view'), params.get('customer'), params.get('date')], [null, null, null, day], 'the page is back where it was')
+        assert.deepEqual(await request('/api/tours', 'GET', undefined, token), { seen: ['schedule'] })
+        // Shown once: reloading does not bring it back.
+        const tours = page.waitForResponse(response => response.url().endsWith('/api/tours'))
+        await page.reload()
+        await tours
+        await page.locator('.schedule-toolbar').waitFor()
+        await page.waitForTimeout(300)
+        assert.equal(await page.locator('.ui-tour').count(), 0)
+        assert(await fitsWidth(page), 'no sideways scrolling')
+        assert.deepEqual(errors, [])
+        await context.close()
+      }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; EN/ZH')
+      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }
