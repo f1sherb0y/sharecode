@@ -900,7 +900,8 @@
         "title": "Only mine",
         "body": "Shows only your customers and the sessions you planned; clear it to see everyone's."
       }
-    }
+    },
+    "zone": "Time zone"
   },
   "tour": {
     "previous": "Back",

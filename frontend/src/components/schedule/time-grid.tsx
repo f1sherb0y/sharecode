@@ -82,15 +82,18 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
   const laneHeight = lines * EVENT_LINE + EVENT_CHROME + LANE_GAP
   const rowHeight = (lanes: number) => lanes * laneHeight - LANE_GAP + 2 * ROW_PADDING
 
+  // Sessions before the working day (common in another zone) are where the timeline opens.
+  const earliest = Math.min(FIRST_VISIBLE_HOUR * 60, ...laidOut.flatMap(({ segments }) => segments.map(segment => Math.floor(segment.start / 60) * 60)))
+
   // A timeline wider than the window opens at the working day, or at the session asked for.
   useEffect(() => {
     const scroll = scroller.current
     const track = scroll?.querySelector<HTMLElement>('[data-schedule-row]')
     if (!scroll || !track || scroll.scrollWidth <= scroll.clientWidth) return
-    const minute = focusMinute ?? FIRST_VISIBLE_HOUR * 60
+    const minute = focusMinute ?? earliest
     const hour = track.offsetWidth / hours.length
     scroll.scrollTo({ left: Math.max(0, ((minute - from) / span) * track.offsetWidth - (focusMinute == null ? 0 : 2 * hour)) })
-  }, [focusMinute, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [focusMinute, from, to, earliest]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const preview = drag.preview
   const moving = preview && preview.kind !== 'create' ? preview.appointment?.id : undefined

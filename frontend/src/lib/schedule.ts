@@ -5,6 +5,15 @@ export type ScheduleView = 'day' | 'week' | 'month' | 'list'
 export const SCHEDULE_VIEWS: ScheduleView[] = ['day', 'week', 'month', 'list']
 
 export const SNAP_MINUTES = 15
+
+/** Zones the calendar can be viewed in, for customers abroad; IANA names keep daylight saving right. */
+export const SCHEDULE_ZONES = ['Asia/Shanghai', 'America/New_York', 'America/Los_Angeles', 'Europe/Paris']
+
+/** The standard name of a zone in the UI language, e.g. Eastern Time / 北美东部时间. */
+export function zoneName(timeZone: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: 'longGeneric' })
+    .formatToParts(0).find(part => part.type === 'timeZoneName')?.value ?? timeZone
+}
 export const DEFAULT_DURATION = 60
 export const DURATION_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240]
 /** The hours the timeline always spans; sessions outside them widen it. */

@@ -13,6 +13,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Spinner,
 } from '@/components/ui'
 import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
@@ -41,6 +46,8 @@ import {
   stepAnchor,
   techColors,
   viewRange,
+  SCHEDULE_ZONES,
+  zoneName,
   type ScheduleView,
 } from '@/lib/schedule'
 import { addDays, dateKeyOf, dayStart, minuteOfDay, parseDateKey, timeInputValue, todayKey, toZonedIso } from '@/lib/zoned-time'
@@ -57,21 +64,26 @@ export function SchedulePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore(state => state.user)
-  const timezone = useSettingsStore(state => state.timezone)
+  const homeZone = useSettingsStore(state => state.timezone)
   const staff = isStaff(user)
   const onlyMine = useOnlyMine()
   const { mine } = onlyMine
   const narrow = useCompactViewport('(max-width: 767px)')
   const [searchParams, setSearchParams] = useSearchParams()
   const now = useNow()
-  const today = todayKey(timezone)
   const locale = getLocale()
+  const tab: Tab = staff && searchParams.get('tab') === 'sessions' ? 'sessions' : 'calendar'
+  // The calendar can be viewed in a customer's zone; everything else keeps the usual one.
+  const zones = SCHEDULE_ZONES.includes(homeZone) ? SCHEDULE_ZONES : [homeZone, ...SCHEDULE_ZONES]
+  const zoneParam = searchParams.get('tz')
+  const calendarZone = zoneParam && zones.includes(zoneParam) ? zoneParam : homeZone
+  const timezone = tab === 'calendar' ? calendarZone : homeZone
+  const today = todayKey(timezone)
 
   const viewParam = searchParams.get('view') as ScheduleView | null
   const view: ScheduleView = viewParam && SCHEDULE_VIEWS.includes(viewParam) ? viewParam : narrow ? 'list' : 'week'
   const dateParam = searchParams.get('date')
   const anchor = dateParam && parseDateKey(dateParam) ? dateParam : today
-  const tab: Tab = staff && searchParams.get('tab') === 'sessions' ? 'sessions' : 'calendar'
   const sessionId = searchParams.get('session')
 
   const setParams = useCallback((updates: Record<string, string | null>) => {
@@ -163,7 +175,7 @@ export function SchedulePage() {
   [appointments, pending, hidden])
 
   const techs = useMemo(() => users.filter(account => account.role === 'tech').sort((a, b) => a.username.localeCompare(b.username)), [users])
-  const legend = useMemo(() => {
+  const people = useMemo(() => {
     // Staff accounts that took a session in view join the techs.
     const extra = new Map<string, Pick<User, 'id' | 'username'>>()
     for (const appointment of appointments) {
@@ -171,12 +183,15 @@ export function SchedulePage() {
     }
     return [...techs, ...[...extra.values()].sort((a, b) => a.username.localeCompare(b.username))]
   }, [techs, appointments])
+  // The legend names only the techs with sessions in view; the day view keeps a row for every tech to plan on.
+  const legend = useMemo(() => people.filter(person => appointments.some(a => a.tech?.id === person.id)), [people, appointments])
+  const anyUnassigned = appointments.some(appointment => !appointment.tech)
 
-  // Simultaneous sessions keep the legend's order: each tech has the same place in every row.
+  // Simultaneous sessions keep the same order everywhere: each tech has the same place in every row.
   const laneRank = useCallback((appointment: Appointment) => {
-    const index = appointment.tech ? legend.findIndex(person => person.id === appointment.tech!.id) : -1
-    return index === -1 ? legend.length + (appointment.tech ? 0 : 1) : index
-  }, [legend])
+    const index = appointment.tech ? people.findIndex(person => person.id === appointment.tech!.id) : -1
+    return index === -1 ? people.length + (appointment.tech ? 0 : 1) : index
+  }, [people])
 
   const moveMutation = useMutation({
     mutationFn: ({ appointment, input }: { appointment: Appointment; input: AppointmentInput }) =>
@@ -253,7 +268,7 @@ export function SchedulePage() {
 
   const rows: GridRow[] = useMemo(() => {
     if (view === 'day' && staff) {
-      const people = legend.filter(person => !hidden.has(person.id)).map(person => ({
+      const techRows = people.filter(person => !hidden.has(person.id)).map(person => ({
         key: person.id,
         day: anchor,
         techId: person.id,
@@ -261,7 +276,7 @@ export function SchedulePage() {
         color: colors.get(person.id),
         isToday: anchor === today,
       }))
-      return hidden.has('') ? people : [...people, { key: 'unassigned', day: anchor, techId: null, label: t('schedule.unassigned'), color: UNASSIGNED_COLOR, isToday: anchor === today }]
+      return hidden.has('') ? techRows : [...techRows, { key: 'unassigned', day: anchor, techId: null, label: t('schedule.unassigned'), color: UNASSIGNED_COLOR, isToday: anchor === today }]
     }
     // A tech's day is a single row; the title above names it.
     if (view === 'day') return [{ key: anchor, day: anchor, label: '', isToday: anchor === today }]
@@ -272,7 +287,7 @@ export function SchedulePage() {
       sublabel: formatDayKey(day, locale, { month: 'numeric', day: 'numeric' }),
       isToday: day === today,
     }))
-  }, [view, staff, legend, hidden, anchor, colors, range.days, locale, today, t])
+  }, [view, staff, people, hidden, anchor, colors, range.days, locale, today, t])
 
   const rangeLabel = (() => {
     const format = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' })
@@ -366,6 +381,15 @@ export function SchedulePage() {
                 <h1 className="ui-page-title schedule-range" aria-live="polite">{rangeLabel}</h1>
                 {appointmentsQuery.isFetching && <Spinner size="sm" />}
               </div>
+              <div className="flex items-center gap-1">
+              <Select value={calendarZone} onValueChange={zone => setParams({ tz: zone === homeZone ? null : zone })}>
+                <SelectTrigger className="h-control-sm w-auto gap-1 text-sm" aria-label={t('schedule.zone')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {zones.map(zone => <SelectItem key={zone} value={zone}>{zoneName(zone, locale)}</SelectItem>)}
+                </SelectContent>
+              </Select>
               <div className="schedule-views" role="group" aria-label={t('schedule.views.label')}>
                 {SCHEDULE_VIEWS.map(value => (
                   <button
@@ -380,9 +404,10 @@ export function SchedulePage() {
                   </button>
                 ))}
               </div>
+              </div>
             </div>
 
-            {staff && legend.length > 0 && (
+            {staff && (legend.length > 0 || anyUnassigned) && (
               <div className="schedule-filters">
                 <div className="schedule-legend" role="group" aria-label={t('schedule.legend.label')}>
                   {legend.map(person => (
@@ -397,10 +422,12 @@ export function SchedulePage() {
                       {person.username}
                     </button>
                   ))}
-                  <button type="button" aria-pressed={!hidden.has('')} className="schedule-legend-item" onClick={() => toggle('')}>
-                    <span className="schedule-dot schedule-dot-unassigned" aria-hidden="true" />
-                    {t('schedule.unassigned')}
-                  </button>
+                  {anyUnassigned && (
+                    <button type="button" aria-pressed={!hidden.has('')} className="schedule-legend-item" onClick={() => toggle('')}>
+                      <span className="schedule-dot schedule-dot-unassigned" aria-hidden="true" />
+                      {t('schedule.unassigned')}
+                    </button>
+                  )}
                   {hidden.size > 0 && (
                     <button type="button" className="schedule-legend-reset" onClick={() => setHidden(new Set())}>{t('schedule.legend.showAll')}</button>
                   )}
@@ -480,6 +507,7 @@ export function SchedulePage() {
         users={users}
         colors={colors}
         timezone={timezone}
+        zone={timezone === homeZone ? undefined : zoneName(timezone, locale)}
         onSaved={async (saved) => {
           await refresh()
           setDraft(null)

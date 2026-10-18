@@ -53,6 +53,8 @@ interface AppointmentDialogProps {
   users: User[]
   colors: Map<string, string>
   timezone: string
+  /** The zone's name when the calendar is viewed in another zone than usual. */
+  zone?: string
   onSaved: (appointment: Appointment) => void
   onDeleted: (appointmentId: string) => void
 }
@@ -64,7 +66,7 @@ function conflictsOf(error: unknown): ScheduleConflict[] | null {
   return data?.status === 409 && Array.isArray(data.data?.conflicts) ? data.data.conflicts : null
 }
 
-export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, users, colors, timezone, onSaved, onDeleted }: AppointmentDialogProps) {
+export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, users, colors, timezone, zone, onSaved, onDeleted }: AppointmentDialogProps) {
   const { t } = useTranslation()
   const [customer, setCustomer] = useState<PickedCustomer | null>(null)
   const [techId, setTechId] = useState(NONE)
@@ -263,7 +265,9 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
                 <Input id="session-date" type="date" value={date} required onChange={e => setDate(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="session-time">{t('schedule.dialog.start')}</Label>
+                <Label htmlFor="session-time" className="truncate">
+                  {t('schedule.dialog.start')}{zone && <span className="font-normal text-muted-foreground"> · {zone}</span>}
+                </Label>
                 <Input id="session-time" type="time" step={300} value={time} required onChange={e => setTime(e.target.value)} />
               </div>
               <div className="col-span-2 space-y-1 sm:col-span-1">
