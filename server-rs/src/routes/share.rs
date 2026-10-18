@@ -516,7 +516,7 @@ pub async fn accept_share_link(
             EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2 AND p."shareLinkId" = l.id) as already_claimed,
             room_is_visible($2, $3, $4, r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted",
                 EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2),
-                EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2 AND p."canReplay" AND p."shareLinkId" IS NOT NULL)) as can_view,
+                EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $2 AND p."canReplay")) as can_view,
             l."expiresAt" <= NOW() as expired
         FROM "RoomShareLink" l JOIN "Room" r ON r.id=l."roomId"
         JOIN "User" o ON o.id = r."ownerId"

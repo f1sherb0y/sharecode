@@ -324,12 +324,6 @@ pub async fn update_appointment(
     Path(appointment_id): Path<String>,
     Json(payload): Json<AppointmentPayload>,
 ) -> Result<Response, ApiError> {
-    // A new tech also takes over the session's live room; order that with
-    // WebSocket access checks like other room permission changes.
-    let _access = match payload.tech_id {
-        Some(_) => Some(state.ws.access.write().await),
-        None => None,
-    };
     let mut tx = state
         .db
         .begin()
@@ -441,7 +435,6 @@ pub async fn update_appointment(
     .map_err(|err| db_error(err, "Failed to update session"))?;
 
     // A live room follows its session: the time and role, and its new tech as owner.
-    let mut room_owner_changed = None;
     if let (Some(room_id), Some(true)) = (current.room_id.as_deref(), current.room_is_live) {
         if time_changed || company != current.company || position != current.position {
             sqlx::query(
@@ -477,7 +470,6 @@ pub async fn update_appointment(
                     }),
                 )
                 .await?;
-                room_owner_changed = Some(room_id.to_string());
             }
         }
     }
@@ -558,10 +550,6 @@ pub async fn update_appointment(
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
-    if let Some(room_id) = room_owner_changed {
-        // The previous tech no longer owns the room or belongs to it.
-        state.ws.revoke_inaccessible_room(&state.db, &room_id).await;
-    }
 
     let row = load_appointment(&state.db, &appointment_id).await?;
     Ok(Json(json!({ "appointment": appointment_json(&row, true) })).into_response())
@@ -906,7 +894,7 @@ fn conflict_response(conflicts: &[ConflictRow]) -> Response {
         .into_response()
 }
 
-/// The new tech owns the room and edits it; the previous owner's own membership goes.
+/// The new tech owns the room; the previous owner stays a member of it.
 async fn transfer_room(
     tx: &mut sqlx::PgConnection,
     room_id: &str,
@@ -920,9 +908,14 @@ async fn transfer_room(
         .await
         .map_err(|err| db_error(err, "Failed to transfer the room"))?;
     if let Some(previous) = previous_owner {
+        // The previous tech keeps the room: they still edit it while it is live
+        // and can replay it after it ends. No share link backs this membership,
+        // so removing a link they once joined through does not take it away.
         sqlx::query(
-            r#"DELETE FROM "RoomParticipant" WHERE "roomId" = $1 AND "userId" = $2 AND "shareLinkId" IS NULL"#,
+            r#"INSERT INTO "RoomParticipant" (id, "roomId", "userId", "canEdit", "canReplay") VALUES ($1, $2, $3, true, true)
+            ON CONFLICT ("roomId", "userId") DO UPDATE SET "canEdit" = true, "canReplay" = true, "shareLinkId" = NULL"#,
         )
+        .bind(Uuid::new_v4().to_string())
         .bind(room_id)
         .bind(previous)
         .execute(&mut *tx)

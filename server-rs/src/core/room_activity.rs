@@ -64,12 +64,9 @@ pub async fn auto_end_inactive_rooms(state: &AppState) -> Result<u64, sqlx::Erro
           AND "isPinned" = false
           AND NOT (id = ANY($2))
           AND "updatedAt" <= NOW() - ($1 * INTERVAL '1 hour')
-          -- A session's room may be opened well ahead; it waits for the session.
-          AND NOT EXISTS (
-              SELECT 1 FROM "Appointment" a
-              WHERE a."roomId" = "Room".id AND a.status = 'scheduled'
-                AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW() - ($1 * INTERVAL '1 hour')
-          )
+          -- A scheduled session's room is ended by hand, never for inactivity:
+          -- it may be opened well ahead and used again after the session.
+          AND NOT EXISTS (SELECT 1 FROM "Appointment" a WHERE a."roomId" = "Room".id)
         RETURNING id, "endedAt" as ended_at
         "#,
     )

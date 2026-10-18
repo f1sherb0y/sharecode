@@ -29,12 +29,12 @@ pub fn has_global_read(user: &AuthUser) -> bool {
 pub const ROOM_VISIBILITY_SQL: &str = r#"room_is_visible(
     $1, $2, $3, r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted",
     EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1),
-    EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1 AND p."canReplay" AND p."shareLinkId" IS NOT NULL)
+    EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1 AND p."canReplay")
 )"#;
 
 pub const ROOM_PLAYBACK_SQL: &str = r#"(r."ownerId" = $1 OR $3
     OR (r."isPrivate" AND room_role_rank($2) > room_role_rank(o.role))
-    OR (NOT r."isPrivate" AND EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1 AND p."canReplay" AND p."shareLinkId" IS NOT NULL)))"#;
+    OR (NOT r."isPrivate" AND EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = $1 AND p."canReplay")))"#;
 
 #[derive(sqlx::FromRow)]
 pub struct RoomAccess {

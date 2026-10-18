@@ -55,7 +55,7 @@ async fn authenticate_user(
             r."ownerId" as owner_id,
             r."isEnded" as is_ended,
             room_is_visible(u.id, u.role, room_role_rank(u.role) > 0,
-                r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted", p.id IS NOT NULL, COALESCE(p."canReplay", false) AND p."shareLinkId" IS NOT NULL) as can_view,
+                r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted", p.id IS NOT NULL, COALESCE(p."canReplay", false)) as can_view,
             p."canEdit" as participant_can_edit,
             p."shareLinkId" as participant_share_link_id
         FROM "User" u

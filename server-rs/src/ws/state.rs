@@ -222,7 +222,7 @@ impl WsState {
                   AND room_is_visible(u.id, u.role, room_role_rank(u.role) > 0,
                     r."ownerId", o.role, r."isPrivate", r."isPinned", r."isEnded", r."isDeleted",
                     EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = u.id),
-                    EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = u.id AND p."canReplay" AND p."shareLinkId" IS NOT NULL))
+                    EXISTS(SELECT 1 FROM "RoomParticipant" p WHERE p."roomId" = r.id AND p."userId" = u.id AND p."canReplay"))
                 UNION ALL
                 SELECT g.id FROM "GuestSession" g JOIN "Room" r ON r.id = g."roomId"
                 JOIN "RoomShareLink" l ON l.id = g."shareLinkId"
