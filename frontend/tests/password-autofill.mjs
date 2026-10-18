@@ -79,8 +79,9 @@ try {
         // Invite links pre-fill the code; password managers fill the rest.
         const { context, page, submissions, errors } = await open(browser, 'register?invite=abcdefghjklm')
         const form = page.locator('#register-form')
-        await semantics(form, { inviteCode: 'off', username: 'username', email: 'email', password: 'new-password' })
-        const fields = { username: user.username, password, email: 'autofill@example.invalid' }
+        await semantics(form, { inviteCode: 'off', username: 'username', password: 'new-password' })
+        assert.equal(await form.locator('[name=email]').count(), 0, 'no email field')
+        const fields = { username: user.username, password }
         await autofill(form, fields)
         await submit(page, form, '/api/auth/register')
         await page.waitForURL('**/rooms')
@@ -104,13 +105,14 @@ try {
         const { context, page, submissions, errors } = await open(browser, 'admin', true)
         await page.getByRole('button', { name: 'Create User', exact: true }).click()
         const form = page.locator('#create-user-form')
-        await semantics(form, { username: 'username', password: 'new-password', email: 'email' })
-        await autofill(form, { username: 'new_user', password, email: 'new@example.invalid' })
+        await semantics(form, { username: 'username', password: 'new-password' })
+        assert.equal(await form.locator('[name=email]').count(), 0, 'no email field')
+        await autofill(form, { username: 'new_user', password })
         await submit(page, form, '/api/admin/users')
         await form.waitFor({ state: 'hidden' })
         assert.equal(submissions[0].body.username, 'new_user')
         assert.equal(submissions[0].body.password, password)
-        assert.equal(submissions[0].body.email, 'new@example.invalid')
+        assert.equal('email' in submissions[0].body, false)
         assert.deepEqual(errors, [])
         await context.close()
       }

@@ -13,7 +13,7 @@ const token = (await ok('/api/auth/login', 'POST', { username: 'audit_admin', pa
 const get = path => ok(path, 'GET', undefined, token)
 const createdUsers = []
 for (let index = 0; index < 31; index++) {
-  createdUsers.push((await ok('/api/admin/users', 'POST', { username: `page_user_${String(index).padStart(2,'0')}`, email: `user${index}@example.invalid`, role: index < 3 ? 'agent' : 'tech', password }, token)).user)
+  createdUsers.push((await ok('/api/admin/users', 'POST', { username: `page_user_${String(index).padStart(2,'0')}`, role: index < 3 ? 'agent' : 'tech', password }, token)).user)
 }
 const ordinary = (await ok('/api/auth/login','POST',{username:createdUsers[30].username,password})).token
 const createdRooms = []
@@ -28,7 +28,8 @@ assert.equal(users1.users.length,25);assert.equal(users1.pagination.total,32);as
 assert.equal(new Set([...users1.users,...users2.users].map(u=>u.id)).size,32)
 assert.equal((await get('/api/admin/users?pageSize=999')).pagination.pageSize,100)
 assert.equal((await get('/api/admin/users?role=agent')).users.length,3)
-assert.equal((await get('/api/admin/users?q=user30%40example.invalid')).users[0].id,createdUsers[30].id)
+assert.equal((await get('/api/admin/users?q=page_user_30')).users[0].id,createdUsers[30].id)
+assert.equal('email' in users1.users[0],false,'accounts have no email')
 assert.equal((await get('/api/admin/users?q=nomatch')).pagination.totalPages,0)
 const rooms1=await get('/api/admin/rooms'),rooms2=await get('/api/admin/rooms?page=2')
 assert.equal(rooms1.rooms.length,25);assert.equal(rooms1.pagination.total,57)
@@ -66,7 +67,7 @@ try {
    const pager=page.getByRole('navigation',{name:'Management pages'})
    await pager.getByRole('button',{name:'Next',exact:true}).click()
    await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===7)
-   await page.getByRole('textbox',{name:'Search username or email'}).fill('user30@example.invalid')
+   await page.getByRole('textbox',{name:'Search usernames'}).fill('page_user_30')
    await page.getByRole('button',{name:'Search',exact:true}).click()
    await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===1)
    assert.equal(new URL(page.url()).searchParams.get('userPage'),'1')
@@ -90,7 +91,7 @@ try {
    assert.equal(await page.locator('tbody tr').count(),3)
    await page.getByRole('tab',{name:'Users Management'}).click()
    await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===1)
-   assert.equal(await page.getByRole('textbox',{name:'Search username or email'}).inputValue(),'user30@example.invalid')
+   assert.equal(await page.getByRole('textbox',{name:'Search usernames'}).inputValue(),'page_user_30')
    assert.deepEqual(errors,[])
    await page.screenshot({path:`/tmp/sharecode-admin-${engine}.png`})
    console.log('PASS',engine,'tabs load on demand; page/search reset; filters survive reload/tab changes; bounded statistics')

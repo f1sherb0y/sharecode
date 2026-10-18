@@ -56,11 +56,15 @@ assert.deepEqual(await customerSearch('100%'), ['张三'], 'contacts are searche
 assert.deepEqual(await customerSearch('%'), ['张三'])
 const page = await request('/api/customers?pageSize=2&page=2', 'GET', undefined, as('agent_a'))
 assert.deepEqual([page.customers.length, page.pagination.total, page.pagination.totalPages], [1, 3, 2])
+// Each customer belongs to the agent who created it: "mine" lists their own.
+const mineOf = async actor => (await request('/api/customers?mine=true', 'GET', undefined, as(actor))).customers.map(c => c.name)
+assert.deepEqual([await mineOf('agent_a'), await mineOf('agent_b'), await mineOf('root')], [['张三'], ['Li Si'], ['Wang Wu']])
+assert.equal((await request('/api/customers?mine=true', 'GET', undefined, as('agent_b'))).pagination.total, 1)
 const edited = (await request('/api/customers/' + li.id, 'PUT', { contact: 'tel 123' }, as('agent_a'))).customer
 assert.equal(edited.contact, 'tel 123'); assert.equal(edited.name, 'Li Si')
 assert.equal((await request('/api/customers/' + li.id, 'PUT', { contact: null }, as('agent_b'))).customer.contact, null)
 await request('/api/customers/' + li.id, 'PUT', { name: '' }, as('agent_b'), 400)
-console.log('PASS customers: shared by agents and admins, hidden from techs, literal search, paging, partial edits')
+console.log('PASS customers: shared by agents and admins, owned by their creator, hidden from techs, literal search, paging, partial edits')
 
 // Sessions: agents plan every tech's sessions; techs only read their own.
 await request('/api/appointments', 'GET', undefined, as('agent_a'), 400)
@@ -72,9 +76,7 @@ await plan('agent_a', { startsAt: at(1, 10) }, 400)
 await plan('agent_a', { customerId: zhang.id, startsAt: '2026-10-20T10:00' }, 400)
 await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), durationMinutes: 4 }, 400)
 await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), durationMinutes: 1441 }, 400)
-await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), status: 'done' }, 400)
 await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), techId: 'nobody' }, 400)
-await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), agentId: id('tech_b') }, 400)
 await plan('agent_a', { customerId: 'missing', startsAt: at(1, 10) }, 400)
 const first = (await plan('agent_a', {
   customerId: zhang.id, techId: id('tech_a'), startsAt: at(1, 10).replace(':00+', ':59+'), durationMinutes: 60,
@@ -82,11 +84,16 @@ const first = (await plan('agent_a', {
 })).appointment
 assert.equal(first.startsAt, new Date(at(1, 10)).toISOString().replace('.000Z', '+00:00'), 'start times are kept to the minute')
 assert.equal(Date.parse(first.endsAt) - Date.parse(first.startsAt), 60 * 60e3)
-assert.deepEqual([first.status, first.company, first.tech.username, first.agent.username, first.customer.notes, first.hasConflict, first.room], ['scheduled', 'Acme', 'tech_a', 'agent_a', 'Prefers evenings', false, null])
-const unassigned = (await plan('agent_b', { customerId: li.id, startsAt: at(2, 14), durationMinutes: 90, agentId: null })).appointment
-assert.equal(unassigned.tech, null); assert.equal(unassigned.agent, null)
+assert.deepEqual([first.status, first.company, first.tech.username, first.createdBy.username, first.customer.notes, first.hasConflict, first.room], ['scheduled', 'Acme', 'tech_a', 'agent_a', 'Prefers evenings', false, null])
+assert.equal('agent' in first, false, 'whoever plans a session is its creator; there is no agent in charge')
+// A status or agent sent along is ignored: sessions are deleted, not cancelled, and complete when their room ends.
+const ignored = (await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 12), status: 'cancelled', agentId: id('agent_b') })).appointment
+assert.deepEqual([ignored.status, ignored.createdBy.username], ['scheduled', 'agent_a'])
+await request('/api/appointments/' + ignored.id, 'DELETE', undefined, as('agent_a'))
+const unassigned = (await plan('agent_b', { customerId: li.id, startsAt: at(2, 14), durationMinutes: 90 })).appointment
+assert.equal(unassigned.tech, null)
 const techB = (await plan('root', { customerId: wang.id, techId: id('tech_b'), startsAt: at(1, 10), durationMinutes: 45 })).appointment
-assert.equal(techB.agent.username, 'audit_admin', 'the planner is the default agent')
+assert.equal(techB.createdBy.username, 'audit_admin')
 // Techs see only their own sessions, without the customer's profile: no contact, no private notes.
 const techView = await list('tech_a')
 assert.deepEqual(techView.map(a => a.id), [first.id])
@@ -101,17 +108,23 @@ assert.deepEqual((await list('agent_b')).map(a => a.id).sort(), [first.id, unass
 assert.deepEqual((await list('agent_b', range(-30, 60) + '&unassigned=true')).map(a => a.id), [unassigned.id])
 assert.deepEqual((await list('agent_b', range(-30, 60) + '&techId=' + id('tech_b'))).map(a => a.id), [techB.id])
 assert.deepEqual((await list('agent_b', range(-30, 60) + '&customerId=' + zhang.id)).map(a => a.id), [first.id])
+// "Mine": the sessions of an agent's own customers and the ones they planned; techs have their own anyway.
+const mine = actor => list(actor, range(-30, 60) + '&mine=true').then(found => found.map(a => a.id).sort())
+assert.deepEqual([await mine('agent_a'), await mine('agent_b'), await mine('root')], [[first.id], [unassigned.id], [techB.id]])
+const crossed = (await plan('agent_a', { customerId: li.id, startsAt: at(9, 9) })).appointment
+assert.deepEqual([await mine('agent_a'), await mine('agent_b'), await mine('root')], [[first.id, crossed.id].sort(), [unassigned.id, crossed.id].sort(), [techB.id]], "planned for another agent's customer: both agents' own")
+await request('/api/appointments/' + crossed.id, 'DELETE', undefined, as('agent_a'))
+assert.deepEqual(await mine('tech_a'), [first.id])
 // A range returns the sessions overlapping it, including one that started before.
 assert.deepEqual((await list('agent_a', `from=${encodeURIComponent(at(1, 10, 30))}&to=${encodeURIComponent(at(1, 10, 40))}`)).map(a => a.id).sort(), [first.id, techB.id].sort())
 assert.deepEqual(await list('agent_a', `from=${encodeURIComponent(at(1, 11))}&to=${encodeURIComponent(at(1, 12))}`), [])
-console.log('PASS sessions: validation, defaults, minute precision, staff-only planning, techs read only their own, range and filters')
+console.log('PASS sessions: validation, defaults, minute precision, no status or agent, staff-only planning, techs read only their own, range, filters and "mine"')
 
-// Overlaps for one tech need confirmation; back-to-back and cancelled sessions do not.
+// Overlaps for one tech need confirmation; back-to-back sessions do not.
 const overlap = await plan('agent_b', { customerId: li.id, techId: id('tech_a'), startsAt: at(1, 10, 30), durationMinutes: 60 }, 409)
 assert.equal(overlap.error, 'Schedule conflict')
 assert.deepEqual(overlap.conflicts.map(c => [c.id, c.customer.name]), [[first.id, '张三']])
 await plan('agent_b', { customerId: li.id, techId: id('tech_a'), startsAt: at(1, 11), durationMinutes: 30 })
-await plan('agent_b', { customerId: li.id, techId: id('tech_a'), startsAt: at(1, 9, 30), durationMinutes: 30, status: 'cancelled' })
 const doubled = (await plan('agent_b', { customerId: li.id, techId: id('tech_a'), startsAt: at(1, 10, 30), durationMinutes: 60, allowConflicts: true })).appointment
 assert.equal(doubled.hasConflict, true)
 assert.equal((await request('/api/appointments/' + first.id, 'GET', undefined, as('agent_a'))).appointment.hasConflict, true)
@@ -126,36 +139,33 @@ const racers = await Promise.all(['agent_a', 'agent_b'].map(actor => fetch(API +
   body: JSON.stringify({ customerId: wang.id, techId: id('tech_b'), startsAt: at(3, 9), durationMinutes: 60 }),
 }).then(r => r.status)))
 assert.deepEqual(racers.sort(), [201, 409])
-console.log('PASS conflicts: overlaps need confirmation, back-to-back/cancelled are free, saved overlaps flagged, racing planners serialized')
+console.log('PASS conflicts: overlaps need confirmation, back-to-back is free, saved overlaps flagged, racing planners serialized')
 
 // Techs are told about their own sessions still to come, never about past ones.
 const firstNotices = await notices('tech_a')
 const assigned = firstNotices.find(n => n.kind === 'schedule.assigned' && n.data.appointmentId === first.id)
 assert(assigned, 'assignment notice')
 assert.deepEqual([assigned.data.customerName, assigned.data.durationMinutes, assigned.data.company, assigned.createdBy.username], ['张三', 60, 'Acme', 'agent_a'])
-assert.equal(firstNotices.filter(n => n.kind === 'schedule.assigned').length, 3, 'two sessions plus the overlap saved on purpose; not the cancelled one')
+assert.equal(firstNotices.filter(n => n.kind === 'schedule.assigned').length, 3, 'two sessions plus the overlap saved on purpose')
 assert.deepEqual(await notices('agent_a'), [], 'personal notices reach only their recipient')
 assert.deepEqual(await notices('tech_b').then(n => n.map(x => x.data.appointmentId)).then(ids => ids.includes(first.id)), false)
 await plan('agent_a', { customerId: zhang.id, techId: id('tech_b'), startsAt: at(-2, 9), durationMinutes: 60 })
 assert.equal((await notices('tech_b')).filter(n => n.kind === 'schedule.assigned').length, 2, 'no notice for a past session')
 await request('/api/notifications/read-all', 'POST', {}, as('tech_a'))
 assert.deepEqual(await notices('tech_a'), [])
-// Moving, reassigning and cancelling each tell the techs concerned.
+// Moving, reassigning and deleting each tell the techs concerned.
 await request('/api/appointments/' + first.id, 'PUT', { startsAt: at(1, 16), notes: 'Moved' }, as('agent_b'))
 const moved = (await notices('tech_a')).find(n => n.kind === 'schedule.updated')
 assert.deepEqual([moved.data.previousStartsAt, moved.data.startsAt, moved.data.changes], [first.startsAt, new Date(at(1, 16)).toISOString().replace('.000Z', '+00:00'), ['time', 'notes']])
-await request('/api/appointments/' + first.id, 'PUT', { status: 'completed' }, as('agent_b'))
-await request('/api/appointments/' + first.id, 'PUT', { status: 'scheduled' }, as('agent_b'))
 await request('/api/appointments/' + unassigned.id, 'PUT', { techId: id('tech_a') }, as('agent_b'))
 await request('/api/appointments/' + unassigned.id, 'PUT', { techId: id('tech_b') }, as('agent_b'))
-await request('/api/appointments/' + doubled.id, 'PUT', { status: 'cancelled' }, as('agent_b'))
 await request('/api/appointments/' + doubled.id, 'DELETE', undefined, as('agent_b'))
 await request('/api/appointments/' + doubled.id, 'DELETE', undefined, as('agent_b'), 404)
 const techANotices = (await notices('tech_a')).map(n => [n.kind, n.data.appointmentId]).reverse()
 assert.deepEqual(techANotices, [
-  ['schedule.updated', first.id], ['schedule.assigned', first.id], ['schedule.assigned', unassigned.id],
+  ['schedule.updated', first.id], ['schedule.assigned', unassigned.id],
   ['schedule.unassigned', unassigned.id], ['schedule.cancelled', doubled.id],
-], 'deleting a cancelled session tells nobody again')
+], 'deleting a session still to come tells its tech it is cancelled')
 const reassigned = (await notices('tech_b')).find(n => n.kind === 'schedule.assigned' && n.data.appointmentId === unassigned.id)
 assert.equal(reassigned.data.customerName, 'Li Si')
 // Saving the form unchanged writes, notifies and records nothing.
@@ -163,8 +173,8 @@ const unchanged = (await request('/api/appointments/' + first.id, 'GET', undefin
 const updateEvents = () => sql(`SELECT count(*) FROM "AuditEvent" WHERE action = 'appointment.updated'`)
 const eventsBefore = updateEvents()
 const resaved = (await request('/api/appointments/' + first.id, 'PUT', {
-  customerId: unchanged.customer.id, techId: unchanged.tech.id, agentId: unchanged.agent.id, startsAt: unchanged.startsAt,
-  durationMinutes: unchanged.durationMinutes, company: unchanged.company, position: unchanged.position, notes: unchanged.notes, status: unchanged.status,
+  customerId: unchanged.customer.id, techId: unchanged.tech.id, startsAt: unchanged.startsAt,
+  durationMinutes: unchanged.durationMinutes, company: unchanged.company, position: unchanged.position, notes: unchanged.notes,
 }, as('agent_b'))).appointment
 assert.equal(resaved.updatedAt, unchanged.updatedAt)
 assert.equal(updateEvents(), eventsBefore)
@@ -179,14 +189,14 @@ await request('/api/notifications/read-all', 'POST', {}, as('agent_a'))
 assert.equal(sql(`SELECT count(*) FROM "NotificationRead" r JOIN "Notification" n ON n.id = r."notificationId" WHERE r."userId" = ${literal(id('agent_a'))} AND n."recipientId" IS NOT NULL`), '0')
 const announcements = (await request('/api/notifications', 'GET', undefined, as('agent_a'))).notifications
 assert(announcements.every(n => n.kind === null), 'staff only see announcements')
-console.log('PASS notices: assigned/changed/reassigned/cancelled reach the techs concerned for upcoming sessions only; per-notice read state')
+console.log('PASS notices: assigned/changed/reassigned/deleted reach the techs concerned for upcoming sessions only; per-notice read state')
 
 // A session's room belongs to its tech and follows the session.
 await request(`/api/appointments/${first.id}/room`, 'POST', {}, as('tech_b'), 404)
 await request(`/api/appointments/${first.id}/room`, 'POST', { language: 'cobol' }, as('tech_a'), 400)
 const opened = await request(`/api/appointments/${first.id}/room`, 'POST', { language: 'python' }, as('tech_a'), 201)
 assert.equal(opened.created, true)
-assert.deepEqual([opened.room.owner.username, opened.room.language, opened.room.name, opened.room.company, opened.room.position, opened.room.duration], ['tech_a', 'python', '张三 · Acme Backend', 'Acme', 'Backend', 60])
+assert.deepEqual([opened.room.owner.username, opened.room.language, opened.room.name, opened.room.company, opened.room.position, opened.room.duration], ['tech_a', 'python', 'Acme Backend', 'Acme', 'Backend', 60], "the name has the company and position, not the customer's name")
 assert.equal(Date.parse(opened.room.scheduledTime), Date.parse(at(1, 16)))
 assert.equal(opened.appointment.room.id, opened.room.id)
 const reopened = await request(`/api/appointments/${first.id}/room`, 'POST', {}, as('agent_a'))
@@ -202,7 +212,12 @@ assert(Math.abs(Date.parse(plainLink.expiresAt) - Date.now() - 6 * 3600e3) < 60e
 // Moving the session moves its room; a new tech takes the room over and the previous one keeps it.
 await request('/api/appointments/' + first.id, 'PUT', { startsAt: at(1, 17), durationMinutes: 90, company: 'Globex' }, as('agent_a'))
 let room = (await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('agent_a'))).room
-assert.deepEqual([Date.parse(room.scheduledTime), room.duration, room.company], [Date.parse(at(1, 17)), 90, 'Globex'])
+assert.deepEqual([Date.parse(room.scheduledTime), room.duration, room.company, room.name], [Date.parse(at(1, 17)), 90, 'Globex', 'Globex Backend'])
+// A room renamed by hand keeps its name.
+await request('/api/rooms/' + opened.room.id, 'PUT', { name: 'Final round' }, as('tech_a'))
+await request('/api/appointments/' + first.id, 'PUT', { position: 'Platform' }, as('agent_a'))
+room = (await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('agent_a'))).room
+assert.deepEqual([room.name, room.position], ['Final round', 'Platform'])
 await request('/api/appointments/' + first.id, 'PUT', { techId: id('tech_b') }, as('agent_a'))
 room = (await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('tech_b'))).room
 assert.equal(room.owner.username, 'tech_b'); assert.equal(room.canEdit, true)
@@ -214,7 +229,7 @@ assert.equal(sql(`SELECT "canEdit" AND "canReplay" AND "shareLinkId" IS NULL FRO
 // An unassigned session's room belongs to the staff member who opens it, until a tech is assigned.
 const later = (await plan('agent_a', { customerId: wang.id, startsAt: at(4, 9), durationMinutes: 30 })).appointment
 const staffRoom = await request(`/api/appointments/${later.id}/room`, 'POST', {}, as('agent_b'), 201)
-assert.equal(staffRoom.room.owner.username, 'agent_b')
+assert.deepEqual([staffRoom.room.owner.username, staffRoom.room.name], ['agent_b', '场次'], 'without a company or position the room is named 场次')
 await request('/api/appointments/' + later.id, 'PUT', { techId: id('tech_a') }, as('agent_a'))
 assert.equal((await request('/api/rooms/' + staffRoom.room.id, 'GET', undefined, as('tech_a'))).room.owner.username, 'tech_a')
 // Ending the room completes the session; a new room can replace an ended one.
@@ -229,15 +244,12 @@ const replaced = await request(`/api/appointments/${first.id}/room`, 'POST', { r
 assert.notEqual(replaced.room.id, opened.room.id)
 assert.deepEqual([replaced.appointment.status, replaced.room.owner.username], ['scheduled', 'tech_b'])
 assert.equal((await request('/api/rooms/' + opened.room.id, 'GET', undefined, as('tech_b'))).room.isEnded, true, 'the old room stays with its history')
-// A session marked completed by hand reopens when it gets a new room.
+// Each new room reads as scheduled again until it ends.
 await request(`/api/rooms/${replaced.room.id}/end`, 'POST', undefined, as('tech_b'))
-assert.equal((await request('/api/appointments/' + first.id, 'PUT', { status: 'completed' }, as('agent_a'))).appointment.status, 'completed')
+assert.equal((await request('/api/appointments/' + first.id, 'GET', undefined, as('agent_a'))).appointment.status, 'completed')
 const reopenedRoom = await request(`/api/appointments/${first.id}/room`, 'POST', { replace: true }, as('tech_b'), 201)
 assert.equal(reopenedRoom.appointment.status, 'scheduled')
-assert.equal(sql(`SELECT status FROM "Appointment" WHERE id = ${literal(first.id)}`), 'scheduled')
 await request(`/api/appointments/${doubled.id}/room`, 'POST', {}, as('agent_a'), 404)
-const cancelledSession = (await plan('agent_a', { customerId: wang.id, techId: id('tech_a'), startsAt: at(5, 9), status: 'cancelled' })).appointment
-await request(`/api/appointments/${cancelledSession.id}/room`, 'POST', {}, as('agent_a'), 400)
 // The inactivity sweep (run when a server starts) closes idle rooms but never a
 // session's room, even days after the session.
 const idle = (await request('/api/rooms', 'POST', { name: 'Idle', language: 'python' }, as('tech_a'), 201)).room
@@ -259,14 +271,14 @@ try {
 await request(`/api/rooms/${pastRoom.id}/end`, 'POST', undefined, as('tech_a'))
 console.log('PASS session rooms: owned by the tech, idempotent, time/company sync, links last the session, reassignment moves ownership and keeps the previous tech, end completes, replace, never ended for inactivity')
 
-// Customers with sessions to come stay until those are moved or cancelled; history keeps their name.
+// Customers with sessions to come stay until those are moved or deleted; history keeps their name.
 await request('/api/customers/' + zhang.id, 'DELETE', undefined, as('agent_b'), 409)
 const history = await request('/api/customers/' + zhang.id, 'GET', undefined, as('agent_b'))
 assert(history.appointments.some(a => a.id === first.id))
 assert.equal(history.customer.upcomingCount, 1)
-await request('/api/appointments/' + first.id, 'PUT', { status: 'cancelled' }, as('agent_b'))
+await request('/api/appointments/' + first.id, 'PUT', { startsAt: at(-1, 9), allowConflicts: true }, as('agent_b'))
 for (const a of await list('agent_b', range(-30, 60) + '&customerId=' + zhang.id)) {
-  if (a.status === 'scheduled' && Date.parse(a.endsAt) > Date.now()) await request('/api/appointments/' + a.id, 'PUT', { status: 'cancelled' }, as('agent_b'))
+  if (Date.parse(a.endsAt) > Date.now()) await request('/api/appointments/' + a.id, 'DELETE', undefined, as('agent_b'))
 }
 await request('/api/customers/' + zhang.id, 'DELETE', undefined, as('agent_b'))
 await request('/api/customers/' + zhang.id, 'GET', undefined, as('agent_b'), 404)
@@ -297,10 +309,11 @@ for (const secret of ['张三', 'Li Si', 'zhang_100%', 'Prefers evenings', 'Brin
 console.log('PASS audit: customer and session changes recorded by ID, without names, contacts or notes')
 
 // The calendar in three browsers: timelines with hours across (a row per weekday,
-// or per tech on one day). Agents plan by clicking free time, confirm overlaps,
-// drag between techs and stretch sessions, book another session for a customer
-// and keep customers in the 场次 tab; techs read their own and open the room;
-// phones get the list. The device clock is set far from Shanghai on purpose.
+// or per tech on one day), as wide as the room list. Agents see their own by
+// default, plan by clicking free time, confirm overlaps, drag between techs and
+// stretch sessions, and keep customers and their sessions in the 场次 tab; techs
+// read their own and open the room; phones get the list. The device clock is set
+// far from Shanghai on purpose.
 const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
 const WEB = 'http://127.0.0.1:55461'
@@ -329,11 +342,18 @@ try {
     const waiting = (await plan('agent_a', { customerId: li.id, startsAt: at(uiDay + 1, 14), durationMinutes: 60 })).appointment
     // Waiting on the day shown: its row shows it, so the strip does not list it again.
     const shown = (await plan('agent_a', { customerId: wang.id, startsAt: at(uiDay, 18), durationMinutes: 30 })).appointment
-    const today = (await plan('agent_a', { customerId: wang.id, techId: id('tech_b'), startsAt: at(0, 0, 5), durationMinutes: 30, company: 'Today ' + engine, allowConflicts: true })).appointment
+    // Another agent's: hidden while "Only mine" is on.
+    const others = (await plan('agent_b', { customerId: li.id, startsAt: at(uiDay, 20), durationMinutes: 30 })).appointment
+    // In an hour: on the tech's card above the room list, which covers two hours back to ten ahead.
+    const today = (await plan('agent_a', { customerId: wang.id, techId: id('tech_b'), startsAt: new Date(Date.now() + 3600e3).toISOString(), durationMinutes: 30, company: 'Today ' + engine, allowConflicts: true })).appointment
     const booked = []
     try {
       // Agents: click free time, add the customer in place, confirm an overlap.
       const { context, page, errors } = await openPage(browser, as('agent_a'))
+      // The schedule is as wide as the room list.
+      await page.goto(`${WEB}/rooms`)
+      const pageWidth = () => page.locator('main > .app-container').evaluate(el => el.getBoundingClientRect().width)
+      const roomsWidth = await pageWidth()
       await page.goto(`${WEB}/schedule?view=day&date=${day}`)
       const column = name => page.locator(`[data-schedule-row][data-tech="${name ? id(name) : ''}"]`)
       // Where a time of day is on a tech's row: rows span data-from to data-to minutes.
@@ -344,12 +364,22 @@ try {
         return { x: box.x + ((hour * 60 + minute - from) / (to - from)) * box.width, y: box.y + box.height / 2, minuteWidth: box.width / (to - from) }
       }
       await column('tech_a').waitFor()
+      assert.equal(await pageWidth(), roomsWidth)
+      assert.equal(roomsWidth, 1200)
       assert.equal(await column('').count(), 1, 'the day view has an unassigned row')
       await column('').locator(`[data-appointment="${shown.id}"]`).waitFor()
       const strip = page.locator('.schedule-unassigned')
       await strip.locator('.schedule-unassigned-list button').filter({ hasText: 'Li Si' }).waitFor()
       assert.equal(await strip.locator('.schedule-unassigned-list button').filter({ hasText: 'Wang Wu' }).filter({ hasText: '18:00' }).count(), 0, 'not listed twice')
-      assert.match(await strip.innerText(), /Also on the calendar below: 1\./)
+      assert.equal(await strip.locator('.schedule-count').innerText(), String(await strip.locator('.schedule-unassigned-list button').count()), 'the count is what the strip lists')
+      // Only mine: on by default for agents; off shows the other agents' sessions too.
+      const onlyMine = page.getByRole('checkbox', { name: 'Only mine' })
+      assert.equal(await onlyMine.getAttribute('aria-checked'), 'true')
+      assert.equal(await page.locator(`[data-appointment="${others.id}"]`).count(), 0)
+      await onlyMine.click()
+      await column('').locator(`[data-appointment="${others.id}"]`).waitFor()
+      await onlyMine.click()
+      await page.locator(`[data-appointment="${others.id}"]`).waitFor({ state: 'detached' })
       let point = await pointAt('tech_a', 10, 15)
       await page.mouse.click(point.x, point.y)
       let dialog = page.getByRole('dialog', { name: 'New session' })
@@ -366,7 +396,7 @@ try {
       let saved = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST')
       await dialog.getByRole('button', { name: 'Create session' }).click()
       const first = (await (await saved).json()).appointment
-      assert.deepEqual([first.tech.username, first.durationMinutes, first.company, first.customer.name, first.agent.username], ['tech_a', 60, 'Initech', customerName, 'agent_a'])
+      assert.deepEqual([first.tech.username, first.durationMinutes, first.company, first.customer.name, first.createdBy.username], ['tech_a', 60, 'Initech', customerName, 'agent_a'])
       assert.equal(Date.parse(first.startsAt), Date.parse(at(uiDay, 10)))
       await column('tech_a').locator(`[data-appointment="${first.id}"]`).waitFor()
       await dialog.waitFor({ state: 'hidden' })
@@ -429,6 +459,10 @@ try {
       await column('tech_b').locator(`[data-appointment="${waiting.id}"]`).click()
       const edit = page.getByRole('dialog', { name: 'Edit session' })
       await edit.waitFor()
+      // No status, agent or "book another": deleting removes a session, and its creator is whoever planned it.
+      for (const gone of ['Status', 'Agent in charge']) assert.equal(await edit.getByText(gone, { exact: true }).count(), 0, gone)
+      assert.equal(await edit.getByRole('button', { name: 'Book another' }).count(), 0)
+      await edit.getByLabel('Notes', { exact: true }).waitFor()
       await edit.getByRole('button', { name: 'Customer link' }).click()
       const linkDialog = page.getByRole('dialog', { name: 'Customer link for Li Si' })
       await linkDialog.waitFor()
@@ -446,7 +480,7 @@ try {
       await edit.waitFor({ state: 'hidden' })
       assert(!page.url().includes('session='))
 
-      // The week: a row per weekday, Monday first, hours across, fitting the window as it narrows.
+      // The week: a row per weekday, Monday first, hours across, fitting the page.
       await page.getByRole('button', { name: 'Week', exact: true }).click()
       // Week rows are days, not techs.
       const rows = page.locator('[data-schedule-row]:not([data-tech])')
@@ -458,16 +492,15 @@ try {
       assert.equal(new Date(days[0] + 'T12:00:00Z').getUTCDay(), 1, 'Monday first')
       const scroller = page.locator('[data-schedule-scroll]')
       const fits = () => scroller.evaluate(el => el.scrollWidth <= el.clientWidth + 1)
-      const wide = (await rows.first().boundingBox()).width
-      assert(await fits(), 'the week fits a wide window')
+      assert(await fits(), 'the week fits the page')
       await page.setViewportSize({ width: 1280, height: 800 })
-      await page.waitForFunction(width => document.querySelector('[data-schedule-row]').getBoundingClientRect().width < width - 100, wide)
-      assert(await fits(), 'and a narrower one')
-      // Below that, an hour keeps room for a half-hour session's name: the timeline scrolls, not the page.
+      assert.equal(await pageWidth(), 1200)
+      assert(await fits(), 'which is as wide on a smaller screen')
+      // Narrower, an hour keeps room for a half-hour session's name: the timeline scrolls, not the page.
       await page.setViewportSize({ width: 1024, height: 768 })
       await page.waitForFunction(() => { const el = document.querySelector('[data-schedule-scroll]'); return el.scrollWidth > el.clientWidth + 1 })
       const hourWidth = await page.locator('.schedule-hour').evaluateAll(hours => hours[1].getBoundingClientRect().left - hours[0].getBoundingClientRect().left)
-      assert(hourWidth >= 79, `an hour is ${hourWidth}px wide`)
+      assert(hourWidth >= 75, `an hour is ${hourWidth}px wide`)
       assert(await fitsWidth(page), 'no sideways scrolling of the page')
       await page.setViewportSize({ width: 1440, height: 900 })
 
@@ -490,23 +523,22 @@ try {
       await page.keyboard.press('Escape')
       await profile.waitFor({ state: 'hidden' })
 
-      // Book another: the same customer, tech, company and length, the next day at the same time.
-      await pane.locator('.schedule-agenda-item').filter({ hasText: 'tech_a' }).locator('.schedule-agenda-main').click()
-      const editFirst = page.getByRole('dialog', { name: 'Edit session' })
-      await editFirst.getByRole('button', { name: 'Book another' }).click()
-      const another = page.getByRole('dialog', { name: 'New session' })
+      // A new session from the customer's page: the customer is chosen already.
+      await pane.getByRole('button', { name: 'New session' }).click()
+      const another = page.getByRole('dialog', { name: `New session for ${customerName}` })
       await another.waitFor()
-      assert.deepEqual([await another.getByLabel('Date').inputValue(), await another.getByLabel('Start').inputValue(), await another.getByLabel('Company').inputValue()],
-        [at(uiDay + 1, 0).slice(0, 10), '10:00', 'Initech'])
-      assert.match(await another.getByRole('combobox', { name: 'Tech' }).innerText(), /tech_a/)
+      assert.equal(await another.getByRole('combobox', { name: 'Customer' }).count(), 0, 'no customer field')
+      await another.getByLabel('Date').fill(at(uiDay + 1, 0).slice(0, 10))
+      await another.getByLabel('Start').fill('10:00')
+      await another.getByLabel('Company').fill('Initech')
+      await another.getByRole('combobox', { name: 'Tech' }).click()
+      await page.getByRole('option', { name: 'tech_a', exact: true }).click()
       saved = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST')
       await another.getByRole('button', { name: 'Create session' }).click()
       const again = (await (await saved).json()).appointment
       booked.push(again)
-      assert.deepEqual([again.customer.id, again.tech.username, again.durationMinutes, again.company, Date.parse(again.startsAt)],
-        [first.customer.id, 'tech_a', 90, 'Initech', Date.parse(at(uiDay + 1, 10))])
-      // Each "created" toast offers the next booking; earlier ones may still be showing.
-      await page.locator('[data-sonner-toast]').filter({ hasText: 'Session created.' }).getByRole('button', { name: 'Book another' }).first().waitFor()
+      assert.deepEqual([again.customer.id, again.tech.username, again.durationMinutes, again.company, Date.parse(again.startsAt), again.createdBy.username],
+        [first.customer.id, 'tech_a', 60, 'Initech', Date.parse(at(uiDay + 1, 10)), 'agent_a'])
       await pane.locator('.schedule-agenda-item').nth(2).waitFor()
 
       // A new customer from the list's add button, then removed from the pane above their sessions.
@@ -576,8 +608,8 @@ try {
         assert.deepEqual(errors, [])
         await context.close()
       }
-      for (const session of [first, second, waiting, shown, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'timelines: click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, week rows fit the window; 场次: customers and their sessions, book another, customer add/delete; tech read-only with room; phone list and 场次; EN/ZH')
+      for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
+      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }

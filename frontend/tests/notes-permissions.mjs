@@ -190,7 +190,7 @@ try {
           await page.getByText('Code Runner', { exact: true }).click()
           await page.getByRole('button', { name: 'Notes', exact: true }).click()
           await page.getByText('Visible note for every room reader', { exact: true }).waitFor()
-          const input = page.getByPlaceholder('Type a note...')
+          const input = page.getByRole('textbox', { name: 'New note', exact: true })
           if (actor === actors.writer || actor === actors.agent) {
             const text = `${actor.user.username} note ${engine}`
             await input.waitFor()

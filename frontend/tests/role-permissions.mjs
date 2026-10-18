@@ -441,7 +441,7 @@ try {
         await page.getByRole('button', { name: 'Account menu', exact: true }).click()
         await page.getByRole('menuitem', { name: 'Invite techs', exact: true }).click()
         const dialog = page.getByRole('dialog', { name: 'Invite techs' })
-        await dialog.getByLabel('Note (optional)').fill('UI ' + engine)
+        await dialog.getByLabel('Note', { exact: true }).fill('UI ' + engine)
         const created = page.waitForResponse(r => r.url().endsWith('/api/invites') && r.request().method() === 'POST')
         await dialog.getByRole('button', { name: 'Create invite', exact: true }).click()
         const { invite: uiInvite } = await (await created).json()
