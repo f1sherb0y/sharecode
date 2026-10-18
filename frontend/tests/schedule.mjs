@@ -562,6 +562,41 @@ try {
       await pane.getByRole('button', { name: 'Delete customer' }).click()
       await page.getByRole('dialog', { name: `Delete Temp ${engine}?` }).getByRole('button', { name: 'Delete' }).click()
       await pane.getByRole('heading', { name: 'All sessions' }).waitFor()
+      // The calendar can be viewed in a customer's zone; the 场次 tab and the rest keep Shanghai.
+      const abroad = (await plan('agent_a', { customerId: wang.id, techId: id('tech_a'), startsAt: at(uiDay + 3, 21), durationMinutes: 60, allowConflicts: true })).appointment
+      booked.push(abroad)
+      const inZone = (instant, timeZone) => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(instant)).map(part => [part.type, part.value]))
+      const eastern = inZone(abroad.startsAt, 'America/New_York')
+      const easternDay = `${eastern.year}-${eastern.month}-${eastern.day}`
+      await page.goto(`${WEB}/schedule?view=day&date=${easternDay}`)
+      await column('tech_a').waitFor()
+      await page.getByRole('combobox', { name: 'Time zone' }).click()
+      await page.getByRole('option', { name: 'Eastern Time' }).click()
+      await page.waitForURL(url => new URL(url).searchParams.get('tz') === 'America/New_York')
+      const abroadCard = column('tech_a').locator(`[data-appointment="${abroad.id}"]`)
+      await abroadCard.waitFor()
+      const expectedX = (await pointAt('tech_a', Number(eastern.hour), Number(eastern.minute))).x
+      assert(Math.abs((await abroadCard.boundingBox()).x - expectedX) < 4, 'placed at the Eastern wall-clock time')
+      // The legend names only the techs with sessions in view; the day view keeps a row for every tech.
+      const rowsWithSessions = await page.locator('[data-schedule-row]').evaluateAll(rows => rows.filter(row => row.querySelector('[data-appointment]')).map(row => row.dataset.tech))
+      const names = Object.fromEntries(Object.keys(actors).map(name => [id(name), name]))
+      const legendNames = await page.locator('.schedule-legend-item').allInnerTexts()
+      assert.deepEqual(legendNames.map(text => text.trim()).sort(), rowsWithSessions.map(tech => tech ? names[tech] : 'Unassigned').sort())
+      assert(await column('tech_b').count() === 1 && !legendNames.some(text => text.includes('tech_gone')))
+      await abroadCard.click()
+      let form = page.getByRole('dialog', { name: 'Edit session' })
+      await form.waitFor()
+      assert.equal(await form.locator('#session-time').inputValue(), `${eastern.hour}:${eastern.minute}`)
+      await form.getByText('· Eastern Time').waitFor()
+      await page.keyboard.press('Escape')
+      await form.waitFor({ state: 'hidden' })
+      // The 场次 tab shows the same session in Shanghai time, without a zone.
+      await page.goto(`${WEB}/schedule?tab=sessions&tz=America/New_York&session=${abroad.id}`)
+      form = page.getByRole('dialog', { name: 'Edit session' })
+      await form.waitFor()
+      assert.equal(await form.locator('#session-time').inputValue(), '21:00')
+      assert.equal(await form.getByText('· Eastern Time').count(), 0)
+      await page.keyboard.press('Escape')
       await page.screenshot({ path: `/tmp/sharecode-schedule-agent-${engine}.png` })
       assert.deepEqual(errors, [])
       await context.close()
@@ -684,7 +719,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); EN/ZH')
+      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time while 场次 keeps Shanghai; legend of techs in view; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }
