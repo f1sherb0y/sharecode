@@ -46,7 +46,7 @@ import {
   stepAnchor,
   techColors,
   viewRange,
-  SCHEDULE_ZONES,
+  scheduleZones,
   zoneName,
   type ScheduleView,
 } from '@/lib/schedule'
@@ -74,7 +74,7 @@ export function SchedulePage() {
   const locale = getLocale()
   const tab: Tab = staff && searchParams.get('tab') === 'sessions' ? 'sessions' : 'calendar'
   // The calendar can be viewed in a customer's zone; everything else keeps the usual one.
-  const zones = SCHEDULE_ZONES.includes(homeZone) ? SCHEDULE_ZONES : [homeZone, ...SCHEDULE_ZONES]
+  const zones = scheduleZones(homeZone)
   const zoneParam = searchParams.get('tz')
   const calendarZone = zoneParam && zones.includes(zoneParam) ? zoneParam : homeZone
   const timezone = tab === 'calendar' ? calendarZone : homeZone
@@ -507,7 +507,6 @@ export function SchedulePage() {
         users={users}
         colors={colors}
         timezone={timezone}
-        zone={timezone === homeZone ? undefined : zoneName(timezone, locale)}
         onSaved={async (saved) => {
           await refresh()
           setDraft(null)

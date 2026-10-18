@@ -7,7 +7,12 @@ export const SCHEDULE_VIEWS: ScheduleView[] = ['day', 'week', 'month', 'list']
 export const SNAP_MINUTES = 15
 
 /** Zones the calendar can be viewed in, for customers abroad; IANA names keep daylight saving right. */
-export const SCHEDULE_ZONES = ['Asia/Shanghai', 'America/New_York', 'America/Los_Angeles', 'Europe/Paris']
+export const SCHEDULE_ZONES = ['Asia/Shanghai', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Europe/Paris']
+
+/** The zones to offer, with the usual one first when it is not a common one. */
+export function scheduleZones(home: string): string[] {
+  return SCHEDULE_ZONES.includes(home) ? SCHEDULE_ZONES : [home, ...SCHEDULE_ZONES]
+}
 
 /** The standard name of a zone in the UI language, e.g. Eastern Time / 北美东部时间. */
 export function zoneName(timeZone: string, locale: string): string {

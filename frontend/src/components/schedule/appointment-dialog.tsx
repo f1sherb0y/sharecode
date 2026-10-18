@@ -27,12 +27,14 @@ import {
 import { api } from '@/api'
 import { getLocale } from '@/i18n'
 import { translateError } from '@/i18n/errors'
-import { DEFAULT_DURATION, DURATION_PRESETS, formatDayKey, formatDuration } from '@/lib/schedule'
+import { DEFAULT_DURATION, formatDayKey, scheduleZones } from '@/lib/schedule'
 import { atMinute, dateKeyOf, parseTimeInput, timeInputValue, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
+import { useSettingsStore } from '@/stores'
 import type { Appointment, AppointmentInput, AppointmentStatus, ScheduleConflict, User } from '@/types'
 import { CustomerPicker, type PickedCustomer } from './customer-picker'
 import { SessionRoomActions, hasRoomActions } from './session-room-actions'
+import { TimeFields } from './time-fields'
 
 /** Defaults for a new session, e.g. from a click on the calendar or the customer it is for. */
 export interface SessionDraft {
@@ -52,9 +54,8 @@ interface AppointmentDialogProps {
   staff: boolean
   users: User[]
   colors: Map<string, string>
+  /** The zone the dialog opens in: the calendar's; the form can switch it. */
   timezone: string
-  /** The zone's name when the calendar is viewed in another zone than usual. */
-  zone?: string
   onSaved: (appointment: Appointment) => void
   onDeleted: (appointmentId: string) => void
 }
@@ -66,13 +67,15 @@ function conflictsOf(error: unknown): ScheduleConflict[] | null {
   return data?.status === 409 && Array.isArray(data.data?.conflicts) ? data.data.conflicts : null
 }
 
-export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, users, colors, timezone, zone, onSaved, onDeleted }: AppointmentDialogProps) {
+export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, users, colors, timezone, onSaved, onDeleted }: AppointmentDialogProps) {
   const { t } = useTranslation()
   const [customer, setCustomer] = useState<PickedCustomer | null>(null)
   const [techId, setTechId] = useState(NONE)
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [duration, setDuration] = useState(DEFAULT_DURATION)
+  const [zone, setZone] = useState(timezone)
+  const homeZone = useSettingsStore(state => state.timezone)
   const [company, setCompany] = useState('')
   const [position, setPosition] = useState('')
   const [notes, setNotes] = useState('')
@@ -87,6 +90,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
     const start = appointment ? Date.parse(appointment.startsAt) : (draft?.startsAt.getTime() ?? Date.now())
     setCustomer(appointment ? appointment.customer : (draft?.customer ?? null))
     setTechId((appointment ? appointment.tech?.id : draft?.techId) ?? NONE)
+    setZone(timezone)
     setDate(dateKeyOf(start, timezone))
     setTime(timeInputValue(start, timezone))
     setDuration(appointment?.durationMinutes ?? draft?.durationMinutes ?? DEFAULT_DURATION)
@@ -101,11 +105,6 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
 
   const techs = useMemo(() => users.filter(user => user.role === 'tech'), [users])
   const staffUsers = useMemo(() => users.filter(user => user.role !== 'tech'), [users])
-  const durationOptions = useMemo(
-    () => [...new Set([...DURATION_PRESETS, duration])].sort((a, b) => a - b),
-    [duration],
-  )
-  const units = { hours: t('schedule.hoursUnit'), minutes: t('schedule.minutesUnit') }
 
   const saveMutation = useMutation({
     mutationFn: async (allowConflicts: boolean) => {
@@ -115,7 +114,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
       const input: AppointmentInput = {
         customerId: customer.id,
         techId: techId === NONE ? null : techId,
-        startsAt: toZonedIso(atMinute(date, minute, timezone), timezone),
+        startsAt: toZonedIso(atMinute(date, minute, zone), zone),
         durationMinutes: duration,
         company: company.trim() || null,
         position: position.trim() || null,
@@ -161,8 +160,18 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
 
   const locale = getLocale()
   const conflictTech = users.find(user => user.id === techId)?.username ?? appointment?.tech?.username ?? ''
-  const range = (from: string, to: string) => `${timeInputValue(Date.parse(from), timezone)}–${timeInputValue(Date.parse(to), timezone)}`
-  const dayLabel = (instant: string) => formatDayKey(dateKeyOf(Date.parse(instant), timezone), locale, { weekday: 'short', month: 'short', day: 'numeric' })
+  // The same moment, shown in another zone.
+  const switchZone = (next: string) => {
+    const minute = parseTimeInput(time)
+    if (date && minute !== null) {
+      const start = atMinute(date, minute, zone)
+      setDate(dateKeyOf(start, next))
+      setTime(timeInputValue(start, next))
+    }
+    setZone(next)
+  }
+  const range = (from: string, to: string) => `${timeInputValue(Date.parse(from), zone)}–${timeInputValue(Date.parse(to), zone)}`
+  const dayLabel = (instant: string) => formatDayKey(dateKeyOf(Date.parse(instant), zone), locale, { weekday: 'short', month: 'short', day: 'numeric' })
   const techOption = (user: User) => (
     <SelectItem key={user.id} value={user.id}>
       <span className="flex items-center gap-1.5">
@@ -259,29 +268,19 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
               </div>
             )}
 
-            <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-2 sm:grid-cols-3">
-              <div className="space-y-1">
-                <Label htmlFor="session-date">{t('schedule.dialog.date')}</Label>
-                <Input id="session-date" type="date" value={date} required onChange={e => setDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="session-time" className="truncate">
-                  {t('schedule.dialog.start')}{zone && <span className="font-normal text-muted-foreground"> · {zone}</span>}
-                </Label>
-                <Input id="session-time" type="time" step={300} value={time} required onChange={e => setTime(e.target.value)} />
-              </div>
-              <div className="col-span-2 space-y-1 sm:col-span-1">
-                <Label>{t('schedule.dialog.duration')}</Label>
-                <Select value={String(duration)} onValueChange={value => setDuration(Number(value))}>
-                  <SelectTrigger aria-label={t('schedule.dialog.duration')}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {durationOptions.map(minutes => (
-                      <SelectItem key={minutes} value={String(minutes)}>{formatDuration(minutes, units)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <TimeFields
+              id="session"
+              date={date}
+              time={time}
+              duration={duration}
+              onDate={setDate}
+              onTime={setTime}
+              onDuration={setDuration}
+              zone={zone}
+              zones={scheduleZones(homeZone)}
+              onZone={switchZone}
+              required
+            />
 
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="space-y-1">

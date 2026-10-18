@@ -32,6 +32,8 @@ import { Navbar, PageContainer } from '@/components/layout'
 import { api } from '@/api'
 import { canDeleteRoom, canManageRoom, canManageRoomShares, canViewRoomPlayback, isAdmin, isStaff } from '@/lib/room-permissions'
 import { queryKeys } from '@/lib/query-keys'
+import { TimeFields } from '@/components/schedule/time-fields'
+import { dateKeyOf, timeInputValue } from '@/lib/zoned-time'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import { cn, formatDateMinutes } from '@/lib/utils'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
@@ -79,19 +81,11 @@ function buildPageButtons(currentPage: number, totalPages: number): PageButtonIt
   return buttons
 }
 
-function getNextHalfHourBoundaryLocal(): string {
-  const next = new Date()
-  next.setSeconds(0, 0)
-  const minutes = next.getMinutes()
-  const addMinutes = minutes % 30 === 0 ? 30 : 30 - (minutes % 30)
-  next.setMinutes(minutes + addMinutes)
-
-  const year = next.getFullYear()
-  const month = String(next.getMonth() + 1).padStart(2, '0')
-  const day = String(next.getDate()).padStart(2, '0')
-  const hours = String(next.getHours()).padStart(2, '0')
-  const mins = String(next.getMinutes()).padStart(2, '0')
-  return `${year}-${month}-${day}T${hours}:${mins}`
+/** The next half hour, as date and time fields in the given zone. */
+function nextHalfHour(timeZone: string): { date: string; time: string } {
+  const step = 30 * 60_000
+  const next = (Math.floor(Date.now() / step) + 1) * step
+  return { date: dateKeyOf(next, timeZone), time: timeInputValue(next, timeZone) }
 }
 
 export function RoomsPage() {
@@ -140,8 +134,9 @@ export function RoomsPage() {
   const [newRoomLanguage, setNewRoomLanguage] = useState<Language>('javascript')
   const [newRoomCompany, setNewRoomCompany] = useState('')
   const [newRoomPosition, setNewRoomPosition] = useState('')
-  const [scheduledTime, setScheduledTime] = useState(getNextHalfHourBoundaryLocal())
-  const [duration, setDuration] = useState('60')
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [scheduledTime, setScheduledTime] = useState('')
+  const [duration, setDuration] = useState(60)
 
   // Delete dialog state
   const [roomToDelete, setRoomToDelete] = useState<{ id: string; name: string } | null>(null)
@@ -211,8 +206,8 @@ export function RoomsPage() {
       api.createRoom(
         newRoomName,
         newRoomLanguage,
-        scheduledTime || undefined,
-        duration ? parseInt(duration, 10) : undefined,
+        scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}` : undefined,
+        duration,
         newRoomCompany || undefined,
         newRoomPosition || undefined,
         timezone,
@@ -313,8 +308,7 @@ export function RoomsPage() {
     setNewRoomLanguage('javascript')
     setNewRoomCompany('')
     setNewRoomPosition('')
-    setScheduledTime(getNextHalfHourBoundaryLocal())
-    setDuration('60')
+    setDuration(60)
   }
 
   const handleDeleteRoom = (roomId: string, roomName: string) => {
@@ -362,8 +356,10 @@ export function RoomsPage() {
   const handleCreateOpenChange = (open: boolean) => {
     setIsCreateOpen(open)
     if (open) {
-      setScheduledTime(getNextHalfHourBoundaryLocal())
-      setDuration('60')
+      const next = nextHalfHour(timezone)
+      setScheduledDate(next.date)
+      setScheduledTime(next.time)
+      setDuration(60)
     }
   }
 
@@ -404,20 +400,20 @@ export function RoomsPage() {
                     <DialogTitle>{t('rooms.create.title')}</DialogTitle>
                   </DialogHeader>
                   <div className="grid gap-2 py-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="roomName">{t('rooms.create.name')}</Label>
-                      <Input
-                        id="roomName"
-                        value={newRoomName}
-                        onChange={(e) => setNewRoomName(e.target.value)}
-                        required
-                      />
-                    </div>
                     <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="roomName">{t('rooms.create.name')}</Label>
+                        <Input
+                          id="roomName"
+                          value={newRoomName}
+                          onChange={(e) => setNewRoomName(e.target.value)}
+                          required
+                        />
+                      </div>
                       <div className="space-y-1">
                         <Label>{t('rooms.create.language')}</Label>
                         <Select value={newRoomLanguage} onValueChange={(v) => setNewRoomLanguage(v as Language)}>
-                          <SelectTrigger>
+                          <SelectTrigger aria-label={t('rooms.create.language')}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -429,6 +425,8 @@ export function RoomsPage() {
                           </SelectContent>
                         </Select>
                       </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
                       <div className="space-y-1">
                         <Label htmlFor="roomCompany">{t('rooms.create.company')}</Label>
                         <Input
@@ -437,8 +435,6 @@ export function RoomsPage() {
                           onChange={(e) => setNewRoomCompany(e.target.value)}
                         />
                       </div>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
                       <div className="space-y-1">
                         <Label htmlFor="roomPosition">{t('rooms.create.position')}</Label>
                         <Input
@@ -447,26 +443,16 @@ export function RoomsPage() {
                           onChange={(e) => setNewRoomPosition(e.target.value)}
                         />
                       </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="duration">{t('rooms.create.duration')}</Label>
-                        <Input
-                          id="duration"
-                          type="number"
-                          value={duration}
-                          onChange={(e) => setDuration(e.target.value)}
-                          min="1"
-                        />
-                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="scheduledTime">{t('rooms.create.scheduledTime')}</Label>
-                      <Input
-                        id="scheduledTime"
-                        type="datetime-local"
-                        value={scheduledTime}
-                        onChange={(e) => setScheduledTime(e.target.value)}
-                      />
-                    </div>
+                    <TimeFields
+                      id="room"
+                      date={scheduledDate}
+                      time={scheduledTime}
+                      duration={duration}
+                      onDate={setScheduledDate}
+                      onTime={setScheduledTime}
+                      onDuration={setDuration}
+                    />
                     {isAdmin(user) && <label className="ui-check-row flex cursor-pointer items-center gap-1.5">
                       <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-labelledby="privateRoomLabel" />
                       <span id="privateRoomLabel" className="text-sm font-medium leading-none">{t('rooms.create.private')}</span>
