@@ -41,6 +41,7 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
     a."createdAt" as created_at, a."updatedAt" as updated_at,
     c.id as customer_id, c.name as customer_name, c.contact as customer_contact,
     c.notes as customer_notes, c."isDeleted" as customer_is_deleted,
+    ow.id as owner_id, ow.username as owner_username, ow.color as owner_color,
     t.id as tech_id, t.username as tech_username, t.color as tech_color, t.role as tech_role,
     t."isDeleted" as tech_is_deleted,
     cb.id as created_by_id, cb.username as created_by_username,
@@ -54,6 +55,7 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
     )) as has_conflict
     FROM "Appointment" a
     JOIN "Customer" c ON c.id = a."customerId"
+    JOIN "User" ow ON ow.id = c."createdBy"
     JOIN "User" cb ON cb.id = a."createdBy"
     LEFT JOIN "User" t ON t.id = a."techId"
     LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted""#;
@@ -74,6 +76,9 @@ pub(super) struct AppointmentRow {
     customer_contact: Option<String>,
     customer_notes: Option<String>,
     customer_is_deleted: bool,
+    owner_id: String,
+    owner_username: String,
+    owner_color: String,
     tech_id: Option<String>,
     tech_username: Option<String>,
     tech_color: Option<String>,
@@ -705,6 +710,8 @@ pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
         "id": row.customer_id,
         "name": row.customer_name,
         "isDeleted": row.customer_is_deleted,
+        // The agent the customer belongs to; the calendar colors sessions by them.
+        "owner": { "id": row.owner_id, "username": row.owner_username, "color": row.owner_color },
     });
     // The profile stays with agents: techs meet customers through the session's
     // room, and the session's own notes are the ones written for its tech.
