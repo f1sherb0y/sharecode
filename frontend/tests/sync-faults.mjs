@@ -23,7 +23,7 @@ try{
  const room=(await request('/api/rooms','POST',{name:'audit-database-failure',language:'python'},admin)).room
  const a=peer(room),b=peer(room);await wait(()=>a.p.synced&&b.p.synced,'peers sync')
  const initial=barrier(a);await wait(()=>a.acks.includes(initial),'initial durable barrier')
- browser=await chromium.launch();const context=await browser.newContext();const page=await context.newPage();page.on('dialog',d=>d.accept());await page.goto(WEB+'/login');await page.evaluate(token=>{sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}));localStorage.setItem('i18nextLng','en')},admin);await page.goto(WEB+'/room/'+room.id);await page.waitForFunction(()=>document.body.textContent.includes('Saved'))
+ browser=await chromium.launch();const context=await browser.newContext();const page=await context.newPage();page.on('dialog',d=>d.accept());await page.goto(WEB+'/login');await page.locator('#login-form').waitFor();await page.evaluate(token=>{sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}));localStorage.setItem('i18nextLng','en')},admin);await page.goto(WEB+'/room/'+room.id);await page.waitForFunction(()=>document.body.textContent.includes('Saved'))
  await lockDatabase()
  const start=performance.now();a.doc.getText('codemirror').insert(0,'survive failed database commit 😀');const ack=barrier(a)
  await wait(()=>b.doc.getText('codemirror').length>0,'live broadcast despite locked database',1500)

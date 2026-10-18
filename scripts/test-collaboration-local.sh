@@ -11,10 +11,18 @@ if [[ -z "$pg_bin" ]]; then
     done
   fi
 fi
+# Without local PostgreSQL server binaries, run the same disposable database in
+# the development image (postgres:17-alpine); the tests still need the psql client.
+use_docker=false
 if [[ ! -x "$pg_bin/initdb" ]]; then
-  echo 'Set PG_BIN to a local PostgreSQL server bin directory (initdb, pg_ctl, postgres).' >&2
-  exit 1
+  if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+    use_docker=true
+  else
+    echo 'Set PG_BIN to a local PostgreSQL server bin directory (initdb, pg_ctl, postgres), or start Docker.' >&2
+    exit 1
+  fi
 fi
+command -v psql >/dev/null || { echo 'The tests need the psql client.' >&2; exit 1; }
 for port in 55439 55440 55441 55442 55443; do
   if (echo >"/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1; then
     echo "Port $port is occupied. Refusing to attach to an existing service." >&2
@@ -22,20 +30,36 @@ for port in 55439 55440 55441 55442 55443; do
   fi
 done
 work_dir="$(mktemp -d /tmp/sharecode-local-tests.XXXXXX)"
+container_name="sharecode-collab-test-$$"
 api_pid=''
 web_pid=''
 pg_started=false
 cleanup() {
   [[ -z "$web_pid" ]] || kill "$web_pid" 2>/dev/null || true
   [[ -z "$api_pid" ]] || kill "$api_pid" 2>/dev/null || true
-  if $pg_started; then "$pg_bin/pg_ctl" -D "$work_dir/pg" -m immediate stop >/dev/null; fi
+  if $pg_started && $use_docker; then docker rm -fv "$container_name" >/dev/null 2>&1 || true
+  elif $pg_started; then "$pg_bin/pg_ctl" -D "$work_dir/pg" -m immediate stop >/dev/null; fi
   echo "Local test logs and disposable database: $work_dir"
 }
 trap cleanup EXIT
-"$pg_bin/initdb" -D "$work_dir/pg" -A trust --no-locale -E UTF8 >"$work_dir/init.log"
-"$pg_bin/pg_ctl" -D "$work_dir/pg" -l "$work_dir/postgres.log" -o '-h 127.0.0.1 -p 55439 -k /tmp' start
-pg_started=true
-createdb -h 127.0.0.1 -p 55439 sharecode_sync_test
+if $use_docker; then
+  # Trust authentication for the local user, reachable on 127.0.0.1 only.
+  docker run -d --name "$container_name" -p 127.0.0.1:55439:5432 \
+    -e POSTGRES_USER="$USER" -e POSTGRES_DB=sharecode_sync_test \
+    -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_INITDB_ARGS='--no-locale -E UTF8' \
+    postgres:17-alpine >/dev/null
+  pg_started=true
+  for i in {1..150}; do
+    if psql -XAt -h 127.0.0.1 -p 55439 -d sharecode_sync_test -c 'SELECT 1' >/dev/null 2>&1; then break; fi
+    if (( i == 150 )); then docker logs "$container_name" >"$work_dir/postgres.log" 2>&1; echo 'Disposable PostgreSQL did not start' >&2; exit 1; fi
+    sleep 0.2
+  done
+else
+  "$pg_bin/initdb" -D "$work_dir/pg" -A trust --no-locale -E UTF8 >"$work_dir/init.log"
+  "$pg_bin/pg_ctl" -D "$work_dir/pg" -l "$work_dir/postgres.log" -o '-h 127.0.0.1 -p 55439 -k /tmp' start
+  pg_started=true
+  createdb -h 127.0.0.1 -p 55439 sharecode_sync_test
+fi
 cd "$project_dir"
 cargo test --manifest-path server-rs/Cargo.toml --offline
 cargo build --manifest-path server-rs/Cargo.toml --offline

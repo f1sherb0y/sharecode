@@ -101,7 +101,7 @@ test-i18n:
 test-server:
     cargo test --manifest-path server-rs/Cargo.toml
 
-# Run the full integration suite with disposable PostgreSQL (requires initdb/pg_ctl).
+# Run the full integration suite with disposable PostgreSQL (local initdb/pg_ctl, or Docker).
 test-integration:
     bash scripts/test-collaboration-local.sh
 
