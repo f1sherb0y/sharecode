@@ -399,18 +399,18 @@ yesterday's and tomorrow's say so.
   list. Week and day are timelines with the hours across: the week is days down
   the page without end and without a scrollbar (the wheel, dragging, a flick or
   the arrow keys move it; only the days in view are drawn), opening on the
-  current week, each day whole from 00:00 to 24:00 (Ctrl and the wheel, or a
-  pinch, zoom in on some hours; markers at the edges then count the sessions
-  outside and bring them in); the day has a row per tech plus one for
-  unassigned sessions. Sessions at the same time in a row sit in
-  lanes one under another, in tech order. The day view shows 14 hours (fewer on
-  narrow screens), 08:00–22:00 at first; dragging free space (or swiping,
-  Shift+wheel, the arrow keys) moves them on through the days without end, a
-  long dashed line marks where a day turns, with that day's date, and a marker
-  at a row's edge brings in the sessions beyond it. A red line for now runs
-  down the whole calendar, and **Reset** at the bottom right brings back today
-  (and the whole day, or the usual hours in the day view). The timelines load a week of sessions
-  at a time around what is in view. Week, day and month fit the window's height.
+  current week; the day has a row per tech plus one for unassigned sessions.
+  Sessions at the same time in a row sit in lanes one under another, in tech
+  order. Both show the whole day, 00:00 to 24:00, at first. Ctrl and the wheel
+  (or a pinch) zoom in on as little as two hours around the pointer, and
+  dragging free space (or swiping, Shift+wheel, the arrow keys) moves the
+  hours: within the day in the week, on through the days without end in the
+  day view, where a long dashed line marks where a day turns, with that day's
+  date. A marker at a row's edge counts the sessions beyond the hours and
+  brings them in. A red line for now runs down the whole calendar, and
+  **Reset** at the bottom right brings back today and the whole day. The
+  timelines load a week of sessions at a time around what is in view. Week,
+  day and month fit the window's height.
 - Sessions still waiting for a tech are striped wherever they appear.
 - Session cards are four lines: the customer's 管理, the customer, the tech
   (week view) and the company and position, never the time: the hours above

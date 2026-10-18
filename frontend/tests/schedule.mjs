@@ -560,6 +560,11 @@ try {
       await dayRow.locator('.schedule-more.is-before').click()
       await dayRow.locator(`[data-appointment="${shown.id}"]`).waitFor()
       assert.notEqual(await page.locator('.schedule-hour').first().innerText(), '00:00')
+      // Zoomed in, dragging free space moves the hours sideways within the day.
+      const zoomedFirst = await page.locator('.schedule-hour').first().innerText()
+      const panFrom = await dayRow.evaluate(freeX)
+      await drag(page, { x: panFrom, y: dayRowBox.y + 6 }, { x: panFrom - dayRowBox.width * 0.8, y: dayRowBox.y + 6 })
+      assert.notEqual(await page.locator('.schedule-hour').first().innerText(), zoomedFirst)
       // The days move on without end and without a scrollbar; Reset brings back today's week.
       const top = days[0]
       await page.mouse.move(free, rowBox.y + 6)
@@ -575,13 +580,14 @@ try {
       await rows.and(page.locator(`[data-day="${todayKey}"]`)).waitFor()
       assert((await inView()).includes(todayKey), 'Reset shows today')
       assert.equal(await page.locator('.schedule-hour').first().innerText(), '00:00', 'and the whole day')
-      // The day view's hours are dragged on through the days; where one begins, the hours above name it.
+      // The day view shows the whole day; its hours are dragged on through the days, and where one begins, the hours above name it.
       await page.getByRole('button', { name: 'Day', exact: true }).click()
       const waitingRow = column('')
       await waitingRow.waitFor()
       const dayBox = await waitingRow.boundingBox()
       const blank = await waitingRow.evaluate(freeX)
-      await drag(page, { x: blank, y: dayBox.y + 6 }, { x: blank - dayBox.width * 0.6, y: dayBox.y + 6 })
+      assert.equal(await page.locator('.schedule-hour').first().innerText(), '00:00')
+      await drag(page, { x: blank, y: dayBox.y + 6 }, { x: blank - dayBox.width * 0.3, y: dayBox.y + 6 })
       const nextDay = new Date(Date.parse(await waitingRow.getAttribute('data-day')) + 864e5)
       assert.match(await page.locator('.schedule-hour.is-midnight').innerText(), new RegExp(`\\b${nextDay.getUTCMonth() + 1}/${nextDay.getUTCDate()}\\b`))
 
@@ -835,7 +841,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, the week scrolled without end with whole days and Ctrl+wheel zoom, the day dragged through the days with dates at midnight, Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; EN/ZH')
+      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, whole days that Ctrl+wheel zooms and dragging pans (within the day in the endless week, on through the days in the day view, dates at midnight), Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }

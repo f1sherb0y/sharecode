@@ -19,12 +19,11 @@ export function zoneName(timeZone: string, locale: string): string {
 export const DEFAULT_DURATION = 60
 export const DURATION_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240]
 /**
- * Week and day timelines show a window of hours that is dragged sideways: 08:00–22:00
- * at first, fewer hours when the screen is too narrow for 14.
+ * Week and day timelines show the whole day at first; Ctrl and the wheel (or a pinch)
+ * zoom in on as little as MIN_WINDOW_MINUTES, and the hours then move sideways.
  */
-export const WINDOW_START_HOUR = 8
-export const MAX_WINDOW_HOURS = 14
-export const MIN_WINDOW_HOURS = 4
+export const DAY_MINUTES = 24 * 60
+export const MIN_WINDOW_MINUTES = 2 * 60
 
 export interface ViewRange {
   /** Calendar days shown, as date keys. */

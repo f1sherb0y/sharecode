@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, TriangleAlert } from 'lucide-reac
 import type { Appointment } from '@/types'
 import { getLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { HOUR_MS, MAX_WINDOW_HOURS, MINUTE_MS, MIN_WINDOW_HOURS, clamp, formatDayKey, type DayLayout, type Segment } from '@/lib/schedule'
+import { HOUR_MS, MINUTE_MS, clamp, formatDayKey, type DayLayout, type Segment } from '@/lib/schedule'
 import { dateKeyOf, timeInputValue, zonedParts } from '@/lib/zoned-time'
 import { pointerInstant, type DragPreview, type GridDrop } from './use-schedule-drag'
 
@@ -20,8 +20,11 @@ export const lanePitch = (lines: number) => lines * EVENT_LINE + EVENT_CHROME + 
 export const rowSize = (lanes: number, lines: number) => lanes * lanePitch(lines) - LANE_GAP + 2 * ROW_PADDING
 // Lanes share the track's height, whatever the row has grown to.
 const laneSpace = `(100% - ${2 * ROW_PADDING - LANE_GAP}px)`
-/** Below this width an hour leaves the window, down to MIN_WINDOW_HOURS. */
-const MIN_HOUR_WIDTH = 44
+/** Hours from one label to the next: the fewest that leave each label LABEL_WIDTH pixels. */
+const LABEL_STEPS = [1, 2, 3, 4, 6]
+export const LABEL_WIDTH = 40
+/** The wheel multiplies the hours shown by e to the power of this, per pixel turned. */
+const ZOOM_RATE = 0.002
 /** Narrower hours leave the hour after a date unlabeled, so the two do not touch. */
 const DATE_HOUR_WIDTH = 76
 const PAN_THRESHOLD = 4
@@ -56,24 +59,34 @@ export interface Tick {
   midnight: boolean
 }
 
-/** Whole hours of the zone across a window; where a day begins, the day view names it. */
+/** Hours from one label to the next on a track `width` pixels wide showing `span` minutes. */
+export function labelStep(width: number, span: number): number {
+  const hourWidth = (width / span) * 60
+  return LABEL_STEPS.find(hours => !width || hourWidth * hours >= LABEL_WIDTH) ?? 12
+}
+
+/** Whole hours of the zone across a window, labeled where there is room; where a day
+ *  begins inside the window, the day view names it. */
 export function useTicks(first: number, span: number, timeZone: string, datesAtMidnight: boolean, width: number): Tick[] {
   const locale = getLocale()
   const roomy = width <= 0 || (width / span) * 60 >= DATE_HOUR_WIDTH
+  const step = labelStep(width, span)
   return useMemo(() => {
     const list: Tick[] = []
     const end = first + span * MINUTE_MS
     const start = Math.ceil(first / MINUTE_MS) * MINUTE_MS
     for (let at = start + ((60 - zonedParts(start, timeZone).minute) % 60) * MINUTE_MS; at < end; at += HOUR_MS) {
       const hour = zonedParts(at, timeZone).hour
-      const midnight = hour === 0
-      let label = `${pad(hour)}:00`
-      if (datesAtMidnight && midnight) label = formatDayKey(dateKeyOf(at, timeZone), locale, DATE_FORMAT)
+      const midnight = hour === 0 && at > first
+      // Labels that would run past the right edge are left out.
+      const room = width > 0 ? ((end - at) / (span * MINUTE_MS)) * width : Infinity
+      let label = hour % step || room < LABEL_WIDTH ? '' : `${pad(hour)}:00`
+      if (datesAtMidnight && midnight) label = room < DATE_HOUR_WIDTH ? '' : formatDayKey(dateKeyOf(at, timeZone), locale, DATE_FORMAT)
       else if (datesAtMidnight && !roomy && list[list.length - 1]?.midnight) label = ''
       list.push({ at, label, midnight })
     }
     return list
-  }, [first, span, timeZone, datesAtMidnight, roomy, locale])
+  }, [first, span, timeZone, datesAtMidnight, width, roomy, step, locale])
 }
 
 /** The hours above the rows. */
@@ -112,19 +125,15 @@ export function HourLines({ ticks, first, span, halves: withHalves = true, style
   )
 }
 
-/** The tracks' width, and as many hours as fit it (at most 14). */
-export function useTrackWidth(hoursRef: RefObject<HTMLDivElement | null>, onFit: (hours: number) => void) {
+/** The tracks' width. */
+export function useTrackWidth(hoursRef: RefObject<HTMLDivElement | null>) {
   const [width, setWidth] = useState(0)
-  const onFitRef = useRef(onFit)
-  onFitRef.current = onFit
   useEffect(() => {
     const element = hoursRef.current
     if (!element) return
     const observer = new ResizeObserver(() => {
       const next = element.getBoundingClientRect().width
-      if (next <= 0) return
-      setWidth(next)
-      onFitRef.current(clamp(Math.floor(next / MIN_HOUR_WIDTH), MIN_WINDOW_HOURS, MAX_WINDOW_HOURS))
+      if (next > 0) setWidth(next)
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -132,23 +141,58 @@ export function useTrackWidth(hoursRef: RefObject<HTMLDivElement | null>, onFit:
   return width
 }
 
-/** Trackpads swipe sideways (and Shift turns a wheel) to move the window of hours. */
-export function useWheelPan(scroller: RefObject<HTMLDivElement | null>, width: number, span: number, onPan: (minutes: number) => void) {
-  const latest = useRef({ width, span, onPan })
-  latest.current = { width, span, onPan }
+/**
+ * The wheel on a timeline: with Ctrl held (or in a trackpad pinch) it zooms the hours
+ * about the pointer, once a frame; sideways (or with Shift) it moves them; otherwise it
+ * moves the rows (`onScroll`, for rows drawn without a scrollbar) or scrolls as usual.
+ */
+export function useTimelineWheel(target: RefObject<HTMLElement | null>, hoursRef: RefObject<HTMLElement | null>, handlers: {
+  width: number
+  span: number
+  onPan: (minutes: number) => void
+  /** Zooms by `factor` about the point `at` (0–1) across the hours. */
+  onZoom: (at: number, factor: number) => void
+  onScroll?: (pixels: number) => void
+  onStart?: () => void
+}) {
+  const latest = useRef(handlers)
+  latest.current = handlers
+  const zoom = useRef({ factor: 1, at: 0, frame: 0 })
+  useEffect(() => () => cancelAnimationFrame(zoom.current.frame), [])
   useEffect(() => {
-    const element = scroller.current
+    const element = target.current
     if (!element) return
     const wheel = (event: WheelEvent) => {
+      const { width, span, onPan, onScroll, onStart } = latest.current
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? element.clientHeight : 1
       const sideways = event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX
-      if (!sideways || (!event.shiftKey && Math.abs(event.deltaX) < Math.abs(event.deltaY))) return
-      event.preventDefault()
-      const { width, span, onPan } = latest.current
-      if (width) onPan(((sideways * (event.deltaMode === 1 ? 16 : 1)) / width) * span)
+      if (event.ctrlKey) {
+        event.preventDefault()
+        onStart?.()
+        const box = hoursRef.current?.getBoundingClientRect()
+        if (!box?.width) return
+        const pending = zoom.current
+        pending.factor *= Math.exp(event.deltaY * unit * ZOOM_RATE)
+        pending.at = clamp((event.clientX - box.left) / box.width, 0, 1)
+        if (!pending.frame) pending.frame = requestAnimationFrame(() => {
+          const { factor, at } = pending
+          pending.frame = 0
+          pending.factor = 1
+          latest.current.onZoom(at, factor)
+        })
+      } else if (sideways && (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY))) {
+        event.preventDefault()
+        onStart?.()
+        if (width) onPan(((sideways * unit) / width) * span)
+      } else if (onScroll) {
+        event.preventDefault()
+        onStart?.()
+        if (event.deltaY) onScroll(event.deltaY * unit)
+      }
     }
     element.addEventListener('wheel', wheel, { passive: false })
     return () => element.removeEventListener('wheel', wheel)
-  }, [scroller])
+  }, [target, hoursRef])
 }
 
 /**
@@ -246,7 +290,7 @@ export function NowLine({ position }: { position: number | null }) {
   return <div className="schedule-now-line" style={{ left: `calc(var(--schedule-label) + (100% - var(--schedule-label)) * ${position})` }} aria-hidden="true" />
 }
 
-/** Back to today and the usual hours. */
+/** Back to today and the whole day. */
 export function ResetButton({ onReset }: { onReset: () => void }) {
   const { t } = useTranslation()
   return (

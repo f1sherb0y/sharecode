@@ -6,6 +6,7 @@ import {
   EMPTY_LAYOUT,
   HourLines,
   HoursHeader,
+  LABEL_WIDTH,
   NowLine,
   ResetButton,
   Track,
@@ -13,8 +14,8 @@ import {
   rowSize,
   usePan,
   useTicks,
+  useTimelineWheel,
   useTrackWidth,
-  useWheelPan,
   type DragApi,
   type TimelineRow,
 } from './timeline-parts'
@@ -45,25 +46,26 @@ interface TimeGridProps {
   onDrop: (drop: GridDrop) => void
   /** Moves the window by so many minutes (later when positive), as far as one likes. */
   onPan: (minutes: number) => void
-  /** How many hours fit the rows' width. */
-  onFit: (hours: number) => void
-  /** Back to today and the usual hours. */
+  /** Zooms the hours by `factor` about the point `at` (0–1) across them. */
+  onZoom: (at: number, factor: number) => void
+  /** Back to today and the whole day. */
   onReset: () => void
   drag: DragApi
   label: string
 }
 
 /**
- * The day view: a row per tech (and one for sessions waiting for a tech), a window of
- * hours across that is dragged sideways through the days, a date where each begins.
- * Sessions at the same time in a row take lanes, one under another.
+ * The day view: a row per tech (and one for sessions waiting for a tech), the whole day
+ * across at first. Ctrl and the wheel (or a pinch) zoom the hours, which are dragged
+ * sideways through the days without end, a date where each begins. Sessions at the same
+ * time in a row take lanes, one under another.
  */
-export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding, showTech, colorOf, onOpen, onDrop, onPan, onFit, onReset, drag, label }: TimeGridProps) {
+export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding, showTech, colorOf, onOpen, onDrop, onPan, onZoom, onReset, drag, label }: TimeGridProps) {
   const scroller = useRef<HTMLDivElement>(null)
   const hoursRef = useRef<HTMLDivElement>(null)
-  const width = useTrackWidth(hoursRef, onFit)
-  useWheelPan(scroller, width, span, onPan)
+  const width = useTrackWidth(hoursRef)
   const pan = usePan({ span, width, onPanX: onPan })
+  useTimelineWheel(scroller, hoursRef, { width, span, onPan, onZoom, onStart: pan.handlers.stopGlide })
   const first = rows[0]?.start ?? 0
   const ticks = useTicks(first, span, timezone, true, width)
   // A marker at an edge brings the nearest session beyond it to the middle of the window.
@@ -125,7 +127,7 @@ export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding,
               />
             </div>
           ))}
-          <HourLines ticks={ticks} first={first} span={span} />
+          <HourLines ticks={ticks} first={first} span={span} halves={!width || (width / span) * 60 >= LABEL_WIDTH} />
         </div>
       </div>
       <NowLine position={(now - first) / (span * MINUTE_MS)} />

@@ -43,13 +43,12 @@ import { translateError } from '@/i18n/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { isStaff } from '@/lib/room-permissions'
 import {
+  DAY_MINUTES,
   DAY_MS,
-  MAX_WINDOW_HOURS,
   MINUTE_MS,
-  MIN_WINDOW_HOURS,
+  MIN_WINDOW_MINUTES,
   SCHEDULE_VIEWS,
   UNASSIGNED_COLOR,
-  WINDOW_START_HOUR,
   clamp,
   formatDayKey,
   indexSessions,
@@ -128,14 +127,19 @@ export function SchedulePage() {
   // "Add" is on: clicking or drawing on the timeline plans a session.
   const [adding, setAdding] = useState(false)
 
-  // The week shows whole days; the day view's window of hours starts at an instant that
-  // moves through the days without end, as many hours as fit the screen.
-  const [fitHours, setFitHours] = useState(() => clamp(Math.floor((window.innerWidth - 120) / 44), MIN_WINDOW_HOURS, MAX_WINDOW_HOURS))
-  const span = fitHours * 60
-  const [origin, setOrigin] = useState(() => windowStart(anchor, WINDOW_START_HOUR * 60, timezone))
-  const panDay = useCallback((minutes: number) => setOrigin(current => current + minutes * MINUTE_MS), [])
-  // A row lays out its day and as far either side as its window reaches.
-  const reach = span * MINUTE_MS / 2
+  // The day view's window of hours starts at an instant that moves through the days
+  // without end: the whole day at first, zoomed in to as little as MIN_WINDOW_MINUTES.
+  const [dayWindow, setDayWindow] = useState(() => ({ origin: dayStart(anchor, timezone).getTime(), span: DAY_MINUTES }))
+  const { origin, span } = dayWindow
+  const setOrigin = useCallback((next: number) => setDayWindow(current => (current.origin === next ? current : { ...current, origin: next })), [])
+  const panDay = useCallback((minutes: number) => setDayWindow(current => ({ ...current, origin: current.origin + minutes * MINUTE_MS })), [])
+  // Zooming keeps the time under the pointer where it is.
+  const zoomDay = useCallback((at: number, factor: number) => setDayWindow(current => {
+    const next = clamp(current.span * factor, MIN_WINDOW_MINUTES, DAY_MINUTES)
+    return next === current.span ? current : { origin: current.origin + at * (current.span - next) * MINUTE_MS, span: next }
+  }), [])
+  // A row lays out its day and half a day either side, as far as the window can reach.
+  const reach = DAY_MS / 2
   const shownDay = windowDay(origin, span, timezone)
   // The days the week shows, as it scrolls, and where it is asked to go.
   const [visibleDays, setVisibleDays] = useState<{ first: string; last: string } | null>(null)
@@ -404,9 +408,9 @@ export function SchedulePage() {
     return () => clearTimeout(timer)
   }, [dayToWrite, anchor, setParams])
 
-  // Back to today and the usual hours.
+  // Back to today and the whole day.
   const reset = () => {
-    if (view === 'day') setOrigin(windowStart(today, WINDOW_START_HOUR * 60, timezone))
+    if (view === 'day') setDayWindow({ origin: dayStart(today, timezone).getTime(), span: DAY_MINUTES })
     else {
       daysRef.current?.resetZoom()
       setFocus(current => ({ day: today, seq: current.seq + 1, align: 'week' }))
@@ -672,7 +676,7 @@ export function SchedulePage() {
                       onOpen={openSession}
                       onDrop={handleDrop}
                       onPan={panDay}
-                      onFit={setFitHours}
+                      onZoom={zoomDay}
                       onReset={reset}
                       drag={drag}
                       label={rangeLabel}
@@ -694,7 +698,6 @@ export function SchedulePage() {
                     colorOf={colorOf}
                     onOpen={openSession}
                     onDrop={handleDrop}
-                    onFit={setFitHours}
                     onReset={reset}
                     drag={drag}
                     label={rangeLabel}
