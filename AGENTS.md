@@ -37,7 +37,7 @@
 - **Live language switching**: Change syntax highlighting without page reload
 
 ### 2. User Management
-- **Username-based authentication**: Login with username (email optional)
+- **Username-based authentication**: Login with username; accounts and guests have no email
 - **Role-based access control**: Three account roles: admin (管理员), agent (中介) and tech (技术). Customers (客户) join through share links without an account
 - **Role-only permissions**: No per-account flags; rules live in `server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`
 - **Invite-only registration**: Agents and admins issue single-use codes (valid 7 days) from the account menu; registering with one always creates a tech. Admins also create accounts of any role directly
@@ -92,14 +92,15 @@
 - **Auto-updates ready**: Infrastructure for seamless app updates
 
 ### 9. Scheduling (排班)
-- **Calendar page** (`/schedule`): week (default) and day are timelines with hours across, a row per weekday (week) or per tech plus unassigned (day); simultaneous sessions take lanes in legend order; also month and a two-week list (default on phones). Week/day/month fit the window; entry on the room list plus a "Today's sessions" card above it
-- **No repeated information**: cards on the timelines show no time (the hour scale gives it); lists print the time once per row of simultaneous sessions, shown side by side when wide enough
-- **Agents plan every tech's sessions**: click or drag free time, drag to move (another weekday or another tech's row), stretch the right edge, drop from the unassigned strip above the calendar (it skips sessions the calendar shows); overlaps per tech need "Save anyway", and saves per tech are serialized with advisory locks
-- **场次 tab** (staff): customers on the left with "All sessions" first and **+** to add; the right side lists the chosen customer's (or everyone's) sessions with edit/delete for the customer and **New session**; phones show one side at a time
-- **Book another** (再约一场): from a session's dialog or the "created" toast, prefills the same customer, tech, agent, company, position and length the next day at the same time
-- **Techs**: their own sessions only, read-only; personal notices when a session still to come is assigned, changed, reassigned away or cancelled; no confirmation or availability
-- **Session rooms**: created on first "Open room"/"Customer link", owned by the tech, synced with the session while live (time, company/position, owner on reassignment; the previous tech stays a member with edit and replay); never ended for inactivity, only by hand; customer links carry the name and last until the session ends; ending the room completes the session
-- **Customers**: one shared list for agents and admins (contact and notes never reach techs); removal waits for upcoming sessions
+- **Calendar page** (`/schedule`): week (default) and day are timelines with hours across, a row per weekday (week) or per tech plus unassigned (day); simultaneous sessions take lanes in legend order; also month and a two-week list (default on phones). As wide as the room list (1200px); week/day/month fit the window's height; entry on the room list plus a "Today's sessions" card above it (two hours back to ten ahead)
+- **Ownership and "Only mine"** (只看我的): a customer belongs to the agent who created it; agents see their own customers' sessions and the ones they planned by default (calendar, 场次, today's card); admins see all
+- **No repeated or explanatory text**: cards on the timelines show no time (the hour scale gives it); lists print the time once per row of simultaneous sessions, shown side by side when wide enough; forms carry labels only (no placeholders that repeat them, no "(optional)" markers, no descriptions under dialog titles)
+- **Agents plan every tech's sessions**: click or drag free time, drag to move (another weekday or another tech's row), stretch the right edge, drop from the unassigned strip above the calendar (it skips sessions the calendar shows and hides when empty); overlaps per tech need "Save anyway", and saves per tech are serialized with advisory locks
+- **Sessions have no status or agent to set**: the planner is the creator; a session planned by mistake or called off is deleted; it reads as completed once its room has ended
+- **场次 tab** (staff): customers on the left with "All sessions" first and **+** to add; the right side lists the chosen customer's (or everyone's) sessions with edit/delete for the customer and **New session** (which then asks for no customer); phones show one side at a time
+- **Techs**: their own sessions only, read-only; personal notices when a session still to come is assigned, changed, reassigned away or deleted (shown as cancelled); no confirmation or availability
+- **Session rooms**: created on first "Open room"/"Customer link", owned by the tech, named "company position" (场次 without either, never the customer's name), synced with the session while live (time, company/position and the name unless renamed by hand, owner on reassignment; the previous tech stays a member with edit and replay); never ended for inactivity, only by hand; customer links carry the name and last until the session ends; ending the room completes the session; a past session without a room shows no room buttons
+- **Customers**: one shared list for agents and admins, each owned by its creator (contact and notes never reach techs); removal waits for upcoming sessions
 - **Privacy**: audit events for `customer.*`/`appointment.*` hold IDs, times and changed field names only
 
 ## Architecture Highlights
@@ -122,7 +123,7 @@ Single HTTP Server (Port 3001)
 ### Database Schema
 ```
 User
-├── id, username, email?, password, color, role (admin | agent | tech)
+├── id, username, email? (legacy, no longer set or shown), password, color, role (admin | agent | tech)
 ├── isDeleted (soft delete), lastSeen
 └── Relations: ownedRooms, rooms (participants)
 
@@ -153,14 +154,15 @@ Document (Y.js persistence)
 └── Stores compiled Y.Doc state
 
 Customer (shared by agents and admins)
-├── id, name, contact?, notes?, createdBy
-└── isDeleted (soft delete; sessions keep the name)
+├── id, name, contact?, notes?, createdBy (the agent it belongs to)
+├── isDeleted (soft delete; sessions keep the name)
+└── Index: (createdBy, lower(name), id) for "Only mine"
 
 Appointment (a scheduled session)
-├── id, customerId, techId? (null = unassigned), agentId?
+├── id, customerId, techId? (null = unassigned)
 ├── startsAt, durationMinutes (5-1440), company?, position?, notes?
-├── status (scheduled | completed | cancelled; reads completed once its room ends)
-├── roomId? (unique; the session's room), createdBy
+├── roomId? (unique; the session's room), createdBy (the planner)
+├── no stored status: completed once its room has ended, else scheduled
 └── Index: (techId, startsAt), (customerId, startsAt), startsAt
 
 Notification

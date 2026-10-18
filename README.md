@@ -263,7 +263,7 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register a tech account with an invite code (`{ username, password, email?, inviteCode }`)
+- `POST /api/auth/register` - Register a tech account with an invite code (`{ username, password, inviteCode }`)
 - `POST /api/auth/login` - Login
 - `GET /api/auth/profile` - Get user profile (authenticated)
 
@@ -282,7 +282,7 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 
 ### Share Links (Public)
 - `GET /api/share/:token` - Inspect share link details for a guest invite
-- `POST /api/share/:token/join` - Join a room as a guest by providing display name/email
+- `POST /api/share/:token/join` - Join a room as a guest by providing a display name
 - `GET /api/share/session` - Refresh guest session details using the guest token
 
 ### Agents and Admins
@@ -295,13 +295,13 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 ### Scheduling
 Techs get their own sessions only and every other scheduling endpoint answers
 them 404; agents and admins plan everyone's.
-- `GET /api/appointments?from=&to=` - Sessions overlapping a range of at most 100 days (RFC 3339 times; optional `techId`, `customerId`, `unassigned=true`)
+- `GET /api/appointments?from=&to=` - Sessions overlapping a range of at most 100 days (RFC 3339 times; optional `techId`, `customerId`, `unassigned=true`, and `mine=true` for the caller's own: sessions of customers they created and sessions they planned)
 - `GET /api/appointments/:id` - One session
-- `POST /api/appointments` - Plan a session (`{ customerId, techId?, agentId?, startsAt, durationMinutes?, company?, position?, notes?, status?, allowConflicts? }`); an overlap with the tech's other sessions answers 409 with the `conflicts` unless `allowConflicts` is set
-- `PUT /api/appointments/:id` - Move, reassign, edit, cancel or restore a session (any subset of the fields above)
-- `DELETE /api/appointments/:id` - Delete a session planned by mistake
+- `POST /api/appointments` - Plan a session (`{ customerId, techId?, startsAt, durationMinutes?, company?, position?, notes?, allowConflicts? }`); the caller is its creator, and an overlap with the tech's other sessions answers 409 with the `conflicts` unless `allowConflicts` is set
+- `PUT /api/appointments/:id` - Move, reassign or edit a session (any subset of the fields above)
+- `DELETE /api/appointments/:id` - Delete a session planned by mistake or called off
 - `POST /api/appointments/:id/room` - Open the session's room, creating it on first use (`{ language?, replace? }`; the assigned tech, agents and admins)
-- `GET /api/customers?q=&page=&pageSize=` - The shared customer list, searched by name or contact
+- `GET /api/customers?q=&page=&pageSize=&mine=` - The shared customer list, searched by name or contact; `mine=true` keeps the caller's own
 - `POST /api/customers`, `GET/PUT/DELETE /api/customers/:id` - Add, view (with the customer's sessions), edit or remove a customer
 - `POST /api/notifications/read` - Mark the given notifications read (`{ ids }`, 1-100)
 
@@ -339,7 +339,7 @@ a guest can edit. Rules are enforced identically on the REST and WebSocket paths
 | Create private rooms | No | No | Yes |
 | Invite techs (registration codes) | No | Yes | Yes |
 | Schedule: see sessions | Own, read-only | All | All |
-| Schedule: plan, move, reassign, cancel | No | Yes | Yes |
+| Schedule: plan, move, reassign, delete | No | Yes | Yes |
 | Customer list (contacts, notes) | No | Yes | Yes |
 | Admin dashboard: accounts, audit log, storage, devices, announcements | No | No | Yes |
 
@@ -364,58 +364,68 @@ Notes:
 
 ### Scheduling (排班)
 
-The **Schedule** page (button on the room list, and the account menu) has two
-tabs for agents and admins: **Calendar** and **场次 (Sessions)**. Techs see only
-the calendar. Above the room list, **Today's sessions** shows the day's sessions
-with their room buttons.
+The **Schedule** page (the button on the room list) is as wide as the room list
+and has two tabs for agents and admins: **Calendar** and **场次 (Sessions)**.
+Techs see only the calendar. Above the room list, **Today's sessions** shows the
+sessions from two hours ago to ten hours ahead with their room buttons;
+yesterday's and tomorrow's say so.
+
+- Each customer belongs to the agent who created it. **Only mine** (只看我的),
+  beside the tabs and on by default for agents, keeps the sessions of their own
+  customers and the sessions they planned, in the calendar, the 场次 tab and
+  Today's sessions. Admins see everything.
 
 - The calendar shows a week, a day, a month or a two-week list; phones open the
   list. Week and day are timelines with the hours across: the week has a row per
   weekday, Monday first, and the day a row per tech plus one for unassigned
   sessions. Sessions at the same time in a row sit in lanes one under another,
   in the techs' legend order. The timeline spans 08:00–22:00, widened to fit
-  earlier or later sessions, and scrolls sideways once the window is too narrow
+  earlier or later sessions, and scrolls sideways once the page is too narrow
   for it; week, day and month fit the window's height.
 - Session cards show the customer, the tech (week view) and the company and
   position, never the time: the hours above the rows give it. The list views
   print each time once per row of simultaneous sessions, which sit side by side
   where there is room. The UI does not repeat information shown nearby.
-- A session has a customer, a tech (or none yet), the agent in charge, a start,
-  a duration (5 minutes to 24 hours), the company and position, notes for the
-  tech and a status. Agents and admins plan any tech's sessions: click or drag
+- A session has a customer, a tech (or none yet), a start, a duration (5 minutes
+  to 24 hours), the company and position, and notes. Whoever plans it is its
+  creator; there is no agent in charge to pick. It has no status to set: one
+  planned by mistake or called off is deleted, and it reads as completed once
+  its room has ended. Agents and admins plan any tech's sessions: click or drag
   on free time, drag a session to move it (to another weekday in the week view,
   another tech's row in the day view), drag its right edge to change its length,
   or drop one from the **Unassigned** strip above the calendar, which lists
-  sessions waiting for a tech that the calendar does not already show. Techs do
-  not confirm sessions or give availability.
+  sessions waiting for a tech that the calendar does not already show (and is
+  hidden when there are none). Techs do not confirm sessions or give
+  availability.
 - **场次** lists customers on the left (search, **+** to add one) with a count of
   their upcoming sessions, and **All sessions** at the top. The right side shows
   the chosen customer's sessions, upcoming then past, or everyone's (the next
   100 days, and earlier ones a month at a time). From there agents edit or delete
-  the customer and add a session for them with **New session**; phones show one
-  side at a time.
-- Customers often book several sessions. **Book another** (再约一场) in a
-  session's dialog, and on the toast after creating one, opens a new session for
-  the same customer with the same tech, agent, company, position and length, the
-  next day at the same time (or tomorrow, if that has passed). The customer
+  the customer and add a session for them with **New session**, which then does
+  not ask for the customer again; phones show one side at a time. The customer
   search in the session form shows each customer's upcoming count.
-- Overlapping a tech's other session (cancelled ones aside) needs a second
-  click, **Save anyway**; back-to-back sessions are fine. Saves for the same tech
-  are serialized, so two planners cannot double-book them unnoticed.
+- Overlapping a tech's other session needs a second click, **Save anyway**;
+  back-to-back sessions are fine. Saves for the same tech are serialized, so two
+  planners cannot double-book them unnoticed.
 - Techs get a notice (a toast and the notifications page) when a session still
-  to come is assigned to them, changed, given to someone else or cancelled.
-  These notices are personal; announcements stay site-wide.
+  to come is assigned to them, changed, given to someone else or deleted
+  (shown as cancelled). These notices are personal; announcements stay
+  site-wide.
 - The first **Open room** or **Customer link** creates the session's room,
   owned by its tech (or by the agent opening it while it is unassigned) and
-  carrying its time, company and position. While the room is live it follows the
-  session: new times sync, and reassigning the session hands the room to the new
-  tech, while the previous tech stays a member who can still edit it and replay
-  it after it ends. Customer links fill in the customer's name and stay valid
+  carrying its time, company and position. It is named after the company and
+  position (场次 without either), never the customer. While the room is live it
+  follows the session: new times sync, the name follows the company and position
+  unless someone renamed the room, and reassigning the session hands the room to
+  the new tech, while the previous tech stays a member who can still edit it and
+  replay it after it ends. A session that is over without a room offers no room
+  buttons. Customer links fill in the customer's name and stay valid
   until the session ends (at least 6 hours). A session's room is never ended for
   inactivity, even after the session: it is ended by hand. Once the room ends,
   the session reads as completed with replay and download; **New room** starts
   over.
-- Customers are one list shared by agents and admins. Techs see a session's
+- Customers are one list shared by agents and admins (each still belongs to the
+  agent who created it, for **Only mine**). Techs see a session's
   customer name, never the contact or profile notes. A customer with sessions
   still to come cannot be removed; past sessions keep the name. Removing a tech's
   account returns their upcoming sessions to the unassigned list.
