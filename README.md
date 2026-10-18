@@ -378,9 +378,11 @@ yesterday's and tomorrow's say so.
   Today's sessions. Admins see everything.
 
 - For customers abroad, the calendar toolbar has a time zone switch: China
-  Standard, Eastern, Pacific or Central European Time. Only the calendar and the
-  sessions opened from it change; the 场次 tab and the rest of the app keep China
-  time. The legend above the calendar lists only the techs with sessions in view.
+  Standard, Eastern, Pacific, United Kingdom or Central European Time. Only the
+  calendar changes; the 场次 tab and the rest of the app keep China time. The
+  session form opens in the calendar's zone and has its own switch, so a time can
+  be entered in the customer's zone. New rooms and new sessions share the same
+  date, start and length fields. The legend above the calendar lists only the techs with sessions in view.
 
 - On their first visit, agents get a short guided tour of the page, on any
   device: adding a customer, planning a session, and moving and assigning
