@@ -898,7 +898,8 @@
         "body": "Shows only your customers and the sessions you planned; clear it to see everyone's."
       }
     },
-    "zone": "Time zone"
+    "zone": "Time zone",
+    "agent": "Agent"
   },
   "tour": {
     "previous": "Back",

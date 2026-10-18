@@ -248,7 +248,7 @@ export interface Appointment {
   /** Completed once its room has ended. */
   status: AppointmentStatus
   /** Techs get the name only; contact and notes are for agents and admins. */
-  customer: { id: string; name: string; contact?: string | null; notes?: string | null; isDeleted: boolean }
+  customer: { id: string; name: string; contact?: string | null; notes?: string | null; isDeleted: boolean; owner: { id: string; username: string; color: string } }
   tech: { id: string; username: string; color: string; role: Role; isDeleted: boolean } | null
   room: { id: string; name: string; language: Language; isEnded: boolean; endedAt: string | null } | null
   hasConflict: boolean

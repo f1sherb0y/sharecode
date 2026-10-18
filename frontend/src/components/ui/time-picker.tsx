@@ -1,33 +1,78 @@
-import { useMemo } from 'react'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
+import * as React from 'react'
+import { Clock } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Popover, PopoverContent, PopoverTrigger } from './popover'
 
 interface TimePickerProps {
   id?: string
   /** HH:MM */
   value: string
   onChange: (value: string) => void
-  /** Minutes between the offered times. */
-  step?: number
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
+const HOURS = Array.from({ length: 24 }, (_, hour) => pad(hour))
+const MINUTES = Array.from({ length: 12 }, (_, index) => pad(index * 5))
 
-/** A time field listing the day in steps, styled like every other select. */
-export function TimePicker({ id, value, onChange, step = 15 }: TimePickerProps) {
-  const times = useMemo(() => {
-    const list = Array.from({ length: (24 * 60) / step }, (_, index) => `${pad(Math.floor((index * step) / 60))}:${pad((index * step) % 60)}`)
-    // A time between the steps (e.g. saved earlier) stays selectable.
-    return /^\d{2}:\d{2}$/.test(value) && !list.includes(value) ? [...list, value].sort() : list
-  }, [step, value])
+/** A time field: pick the hour, then the minute, from two small grids. */
+export function TimePicker({ id, value, onChange }: TimePickerProps) {
+  const [open, setOpen] = React.useState(false)
+  const match = /^(\d{2}):(\d{2})$/.exec(value)
+  const hour = match?.[1] ?? '09'
+  const minute = match?.[2] ?? '00'
+  const panel = React.useRef<HTMLDivElement>(null)
 
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger id={id} className="tabular-nums" data-value={value}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent className="max-h-72">
-        {times.map(time => <SelectItem key={time} value={time} className="tabular-nums">{time}</SelectItem>)}
-      </SelectContent>
-    </Select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button id={id} type="button" className="ui-field cursor-pointer items-center justify-between gap-1 tabular-nums" data-value={value}>
+          <span>{value}</span>
+          <Clock className="h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        ref={panel}
+        className="ui-time-picker"
+        onOpenAutoFocus={event => {
+          event.preventDefault()
+          panel.current?.querySelector<HTMLButtonElement>(`[data-hour="${hour}"]`)?.focus()
+        }}
+      >
+        <div className="ui-time-hours" role="group">
+          {HOURS.map(item => (
+            <button
+              key={item}
+              type="button"
+              data-hour={item}
+              aria-pressed={item === hour}
+              className={cn('ui-time-cell', item === hour && 'is-selected')}
+              onClick={() => {
+                onChange(`${item}:${minute}`)
+                panel.current?.querySelector<HTMLButtonElement>(`[data-minute="${minute}"]`)?.focus()
+              }}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+        <div className="ui-time-minutes" role="group">
+          {MINUTES.map(item => (
+            <button
+              key={item}
+              type="button"
+              data-minute={item}
+              aria-pressed={item === minute}
+              className={cn('ui-time-cell', item === minute && 'is-selected')}
+              onClick={() => {
+                onChange(`${hour}:${item}`)
+                setOpen(false)
+              }}
+            >
+              :{item}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

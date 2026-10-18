@@ -4,6 +4,7 @@ import { TriangleAlert } from 'lucide-react'
 import type { Appointment } from '@/types'
 import { Badge } from '@/components/ui'
 import { getLocale } from '@/i18n'
+import { SessionPeople } from './session-people'
 import { cn } from '@/lib/utils'
 import { formatDayKey, groupSpan, overlapGroups, sessionsOnDay, type LaneRank } from '@/lib/schedule'
 import { timeInputValue } from '@/lib/zoned-time'
@@ -63,7 +64,7 @@ export function AgendaList({ days, today, appointments, timezone, showTech, show
                       const ownTime = from !== span.from || to !== span.to
                       const tech = showTech ? appointment.tech?.username ?? t('schedule.unassigned') : null
                       const title = showCustomer ? appointment.customer.name : tech
-                      const meta = [showCustomer ? tech : null, appointment.company, appointment.position].filter(Boolean).join(' · ')
+                      const role = [appointment.company, appointment.position].filter(Boolean).join(' · ')
                       return (
                         <li
                           key={appointment.id}
@@ -76,7 +77,13 @@ export function AgendaList({ days, today, appointments, timezone, showTech, show
                               <span className={cn('schedule-agenda-own-time', !ownTime && 'sr-only')}>{range(from, to)}</span>
                               <span className="truncate">{title}</span>
                             </span>
-                            <span className="schedule-agenda-meta">{meta}</span>
+                            {/* One customer's list names the tech in the title; its agent is the same on every row. */}
+                            {showCustomer ? (
+                              <span className="schedule-agenda-meta flex min-w-0 items-center gap-2">
+                                <SessionPeople appointment={appointment} showTech={showTech} />
+                                {role && <span className="truncate">{role}</span>}
+                              </span>
+                            ) : <span className="schedule-agenda-meta">{role}</span>}
                             {appointment.status === 'completed' && (
                               <Badge variant="secondary" className="schedule-agenda-status">{t('schedule.status.completed')}</Badge>
                             )}

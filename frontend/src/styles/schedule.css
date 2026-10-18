@@ -157,6 +157,10 @@
   .schedule-event-title { display: flex; align-items: center; gap: 2px; min-width: 0; font-weight: 600; }
   .schedule-event-meta, .schedule-event-time { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .schedule-event-meta { color: var(--color-muted-foreground); }
+  .schedule-people { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+  .schedule-people > span { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+  .schedule-people > span:last-child { flex-shrink: 1; }
+  .schedule-people svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; opacity: 0.7; }
   .schedule-event-time { font-variant-numeric: tabular-nums; font-weight: 500; }
   .schedule-event-alert { width: 0.75rem; height: 0.75rem; flex-shrink: 0; color: var(--color-destructive); }
   .schedule-event-unassigned { border-style: dashed; background: color-mix(in srgb, var(--event-color) 10%, var(--color-background)); }

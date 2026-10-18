@@ -164,14 +164,21 @@ export function SchedulePage() {
     }
     return techColors([...accounts.values()])
   }, [users, appointments])
+  // Sessions take the color of their customer's agent: one agent, one color.
+  const agents = useMemo(() => {
+    const owners = new Map<string, Pick<User, 'id' | 'color' | 'username'>>()
+    for (const appointment of appointments) owners.set(appointment.customer.owner.id, appointment.customer.owner)
+    return [...owners.values()].sort((a, b) => a.username.localeCompare(b.username))
+  }, [appointments])
+  const agentColors = useMemo(() => techColors(agents), [agents])
   const colorOf = useCallback(
-    (appointment: Appointment) => (appointment.tech ? colors.get(appointment.tech.id) ?? appointment.tech.color : UNASSIGNED_COLOR),
-    [colors],
+    (appointment: Appointment) => agentColors.get(appointment.customer.owner.id) ?? appointment.customer.owner.color ?? UNASSIGNED_COLOR,
+    [agentColors],
   )
 
   const visible = useMemo(() => appointments
     .map(appointment => (pending?.id === appointment.id ? pending : appointment))
-    .filter(appointment => !hidden.has(appointment.tech?.id ?? '')),
+    .filter(appointment => !hidden.has(appointment.customer.owner.id)),
   [appointments, pending, hidden])
 
   const techs = useMemo(() => users.filter(account => account.role === 'tech').sort((a, b) => a.username.localeCompare(b.username)), [users])
@@ -183,9 +190,6 @@ export function SchedulePage() {
     }
     return [...techs, ...[...extra.values()].sort((a, b) => a.username.localeCompare(b.username))]
   }, [techs, appointments])
-  // The legend names only the techs with sessions in view; the day view keeps a row for every tech to plan on.
-  const legend = useMemo(() => people.filter(person => appointments.some(a => a.tech?.id === person.id)), [people, appointments])
-  const anyUnassigned = appointments.some(appointment => !appointment.tech)
 
   // Simultaneous sessions keep the same order everywhere: each tech has the same place in every row.
   const laneRank = useCallback((appointment: Appointment) => {
@@ -268,15 +272,15 @@ export function SchedulePage() {
 
   const rows: GridRow[] = useMemo(() => {
     if (view === 'day' && staff) {
-      const techRows = people.filter(person => !hidden.has(person.id)).map(person => ({
+      // A row for every tech to plan on; colors belong to agents.
+      const techRows = people.map(person => ({
         key: person.id,
         day: anchor,
         techId: person.id,
         label: person.username,
-        color: colors.get(person.id),
         isToday: anchor === today,
       }))
-      return hidden.has('') ? techRows : [...techRows, { key: 'unassigned', day: anchor, techId: null, label: t('schedule.unassigned'), color: UNASSIGNED_COLOR, isToday: anchor === today }]
+      return [...techRows, { key: 'unassigned', day: anchor, techId: null, label: t('schedule.unassigned'), isToday: anchor === today }]
     }
     // A tech's day is a single row; the title above names it.
     if (view === 'day') return [{ key: anchor, day: anchor, label: '', isToday: anchor === today }]
@@ -287,7 +291,7 @@ export function SchedulePage() {
       sublabel: formatDayKey(day, locale, { month: 'numeric', day: 'numeric' }),
       isToday: day === today,
     }))
-  }, [view, staff, people, hidden, anchor, colors, range.days, locale, today, t])
+  }, [view, staff, people, anchor, range.days, locale, today, t])
 
   const rangeLabel = (() => {
     const format = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' })
@@ -319,6 +323,7 @@ export function SchedulePage() {
   return (
     <div className={cn('schedule-page flex flex-col', fit ? 'is-fit' : 'min-h-screen')}>
       <Navbar
+        fullWidth
         leftContent={<NavbarBack label={t('common.back')} onClick={() => navigate('/rooms')} />}
         title={null}
         centerContent={<span className="font-semibold">{t('schedule.title')}</span>}
@@ -329,7 +334,7 @@ export function SchedulePage() {
         ) : undefined}
       />
 
-      <PageContainer className="schedule-container">
+      <PageContainer className="schedule-container" fullWidth>
         {staff && (
           <div className="schedule-tabs">
             <div className="flex gap-1" role="tablist" aria-label={t('schedule.tabs.label')}>
@@ -407,10 +412,10 @@ export function SchedulePage() {
               </div>
             </div>
 
-            {staff && (legend.length > 0 || anyUnassigned) && (
+            {staff && agents.length > 0 && (
               <div className="schedule-filters">
                 <div className="schedule-legend" role="group" aria-label={t('schedule.legend.label')}>
-                  {legend.map(person => (
+                  {agents.map(person => (
                     <button
                       key={person.id}
                       type="button"
@@ -418,16 +423,10 @@ export function SchedulePage() {
                       className="schedule-legend-item"
                       onClick={() => toggle(person.id)}
                     >
-                      <span className="schedule-dot" style={{ background: colors.get(person.id) }} aria-hidden="true" />
+                      <span className="schedule-dot" style={{ background: agentColors.get(person.id) }} aria-hidden="true" />
                       {person.username}
                     </button>
                   ))}
-                  {anyUnassigned && (
-                    <button type="button" aria-pressed={!hidden.has('')} className="schedule-legend-item" onClick={() => toggle('')}>
-                      <span className="schedule-dot schedule-dot-unassigned" aria-hidden="true" />
-                      {t('schedule.unassigned')}
-                    </button>
-                  )}
                   {hidden.size > 0 && (
                     <button type="button" className="schedule-legend-reset" onClick={() => setHidden(new Set())}>{t('schedule.legend.showAll')}</button>
                   )}

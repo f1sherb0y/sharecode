@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
 import type { Appointment } from '@/types'
 import { cn } from '@/lib/utils'
+import { SessionPeople } from './session-people'
 import { FIRST_VISIBLE_HOUR, daySegments, visibleRange, type DaySegment, type LaneRank } from '@/lib/schedule'
 import { atMinute, minuteOfDay, timeInputValue } from '@/lib/zoned-time'
 import { pointerMinute, type DragPreview, type GridDrop } from './use-schedule-drag'
@@ -77,8 +78,8 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
   const hours = Array.from({ length: span / 60 }, (_, index) => from / 60 + index)
   const x = (minute: number) => `${((Math.min(to, Math.max(from, minute)) - from) / span) * 100}%`
   const width = (start: number, end: number) => `${((Math.min(to, end) - Math.max(from, start)) / span) * 100}%`
-  // Name, then the tech (week view for agents) and the company and position.
-  const lines = showTech ? 3 : 2
+  // The customer, then the tech (week view for agents) and the customer's agent.
+  const lines = 2
   const laneHeight = lines * EVENT_LINE + EVENT_CHROME + LANE_GAP
   const rowHeight = (lanes: number) => lanes * laneHeight - LANE_GAP + 2 * ROW_PADDING
 
@@ -112,6 +113,8 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
     timeRange(Date.parse(appointment.startsAt), Date.parse(appointment.endsAt)),
     appointment.customer.name,
     appointment.tech?.username ?? t('schedule.unassigned'),
+    appointment.customer.owner.username,
+    [appointment.company, appointment.position].filter(Boolean).join(' '),
     appointment.status === 'completed' ? t('schedule.status.completed') : '',
     appointment.hasConflict ? t('schedule.conflictBadge') : '',
   ].filter(Boolean).join(', ')
@@ -125,11 +128,6 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
       height: laneHeight - LANE_GAP,
       '--event-color': colorOf(appointment),
     } as CSSProperties
-    // No time on the card: the hours above the grid show it.
-    const meta = [
-      showTech ? appointment.tech?.username ?? t('schedule.unassigned') : null,
-      [appointment.company, appointment.position].filter(Boolean).join(' · '),
-    ].filter(Boolean).slice(0, lines - 1)
     return (
       <button
         key={`${appointment.id}-${row.key}`}
@@ -158,7 +156,8 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
           {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-hidden="true" />}
           <span className="truncate">{appointment.customer.name}</span>
         </span>
-        {meta.map((text, index) => <span key={index} className="schedule-event-meta">{text}</span>)}
+        {/* No time on the card: the hours above the grid show it. */}
+        <SessionPeople appointment={appointment} showTech={showTech} compact className="schedule-event-meta" />
         {editable && !segment.continuesAfter && (
           <span
             className="schedule-event-resize"

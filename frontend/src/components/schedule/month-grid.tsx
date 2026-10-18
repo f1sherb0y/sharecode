@@ -78,7 +78,7 @@ export function MonthGrid({ days, month, today, appointments, timezone, colorOf,
                       type="button"
                       className={cn('schedule-chip', `schedule-chip-${appointment.status}`, !appointment.tech && 'schedule-chip-unassigned')}
                       style={{ '--event-color': colorOf(appointment) } as CSSProperties}
-                      title={`${appointment.customer.name} · ${appointment.tech?.username ?? t('schedule.unassigned')}`}
+                      title={`${appointment.customer.name} · ${appointment.tech?.username ?? t('schedule.unassigned')} · ${appointment.customer.owner.username}`}
                       onClick={() => onOpen(appointment)}
                     >
                       {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-label={t('schedule.conflictBadge')} />}
