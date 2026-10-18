@@ -65,14 +65,12 @@
   .schedule-page.is-fit .schedule-container > div { flex: 1; min-height: 0; }
   .schedule-page.is-fit .schedule-body, .schedule-page.is-fit .schedule-main { flex: 1; min-height: 0; }
 
-  /* Week and day: a timeline per weekday or per tech, hours across. Rows share
-     the window's height (each lane three to seven lines tall, set inline) and
-     scroll when their lanes need more; hours share the full width, down to
-     --schedule-hour each, so 08:00–22:00 fits any window wider than a tablet
-     without a scrollbar. Only phones (which open the list) or a whole day scroll it. */
+  /* Week and day: a timeline per weekday or per tech, a window of hours across
+     that is dragged sideways (14 hours, fewer where they would be narrower than
+     44px). Rows share the window's height (each lane three to seven lines tall,
+     set inline) and scroll when their lanes need more. */
   .schedule-grid {
     --schedule-label: 5.5rem;
-    --schedule-hour: 3rem;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
@@ -82,8 +80,9 @@
     border-radius: var(--radius-md);
   }
   .schedule-grid.is-unlabeled { --schedule-label: 0px; }
-  .schedule-grid-scroll { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: auto; overscroll-behavior: contain; }
-  .schedule-grid-inner { position: relative; display: flex; flex: 1 0 auto; flex-direction: column; min-width: calc(var(--schedule-label) + var(--hours) * var(--schedule-hour)); }
+  .schedule-grid:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 1px; }
+  .schedule-grid-scroll { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; }
+  .schedule-grid-inner { position: relative; display: flex; flex: 1 0 auto; flex-direction: column; }
   .schedule-grid-head, .schedule-row { display: grid; grid-template-columns: var(--schedule-label) minmax(0, 1fr); }
   .schedule-grid.is-unlabeled :is(.schedule-grid-head, .schedule-row) { grid-template-columns: minmax(0, 1fr); }
   .schedule-grid-head { position: sticky; top: 0; z-index: 6; flex: none; border-bottom: 1px solid var(--color-border); background: var(--color-background); }
@@ -101,6 +100,7 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  .schedule-hour.is-midnight { border-left: 2px dashed var(--schedule-midnight); color: var(--color-foreground); font-weight: 600; }
   .schedule-row + .schedule-row { border-top: 1px solid var(--color-border); }
   /* The weekday over its date (or a tech's name), so narrow label columns keep both. */
   .schedule-row-label {
@@ -120,22 +120,49 @@
   }
   .schedule-row-label .schedule-dot { flex-shrink: 0; }
   .schedule-row-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .schedule-row-pick { text-align: left; }
+  .schedule-row-pick:hover { text-decoration: underline; text-underline-offset: 3px; }
   .schedule-row-sublabel { color: var(--color-muted-foreground); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
   .schedule-row.is-today :is(.schedule-row-name, .schedule-row-sublabel) { color: var(--color-destructive); font-weight: 600; }
-  .schedule-track {
-    position: relative;
-    min-width: 0;
-    background-image:
-      linear-gradient(to right, var(--color-border) 0 1px, transparent 1px),
-      linear-gradient(to right, color-mix(in srgb, var(--color-border) 45%, transparent) 0 1px, transparent 1px);
-    background-size: calc(100% / var(--hours)) 100%, calc(100% / var(--hours) / 2) 100%;
-  }
-  .schedule-track.is-editable { cursor: copy; }
+  /* Free space drags the hours sideways (touch keeps scrolling up and down); with
+     Add on, it draws a session and sessions let the pointer through. */
+  .schedule-track { position: relative; min-width: 0; cursor: grab; touch-action: pan-y; }
+  .schedule-grid.is-panning, .schedule-grid.is-panning .schedule-track { cursor: grabbing; }
+  .schedule-grid.is-adding .schedule-track { cursor: crosshair; }
+  .schedule-grid.is-adding .schedule-event { pointer-events: none; }
   .schedule-row.is-today .schedule-track { background-color: color-mix(in srgb, var(--color-destructive) 3%, transparent); }
   .schedule-now { position: absolute; top: 0; bottom: 0; z-index: 4; width: 2px; margin-left: -1px; background: var(--color-destructive); pointer-events: none; }
-  /* Tablets in portrait fit the working day too. */
+  /* Hour and half-hour lines down every row; a long dashed line where the zone's day turns. */
+  .schedule-grid { --schedule-midnight: color-mix(in srgb, var(--color-primary) 75%, transparent); }
+  .schedule-lines { position: absolute; top: 0; right: 0; bottom: 0; left: var(--schedule-label); z-index: 0; pointer-events: none; }
+  .schedule-line { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--color-border); }
+  .schedule-line.is-half { border-left-color: color-mix(in srgb, var(--color-border) 45%, transparent); }
+  .schedule-line.is-midnight { margin-left: -0.5px; border-left: 2px dashed var(--schedule-midnight); }
+  /* Sessions of a row's day beyond an edge of the window. */
+  .schedule-more {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    height: 1.25rem;
+    padding-inline: 0.125rem 0.3125rem;
+    transform: translateY(-50%);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-background) 92%, transparent);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+  .schedule-more:hover { background: var(--color-accent); color: var(--color-foreground); }
+  .schedule-more.is-before { left: 2px; }
+  .schedule-more.is-after { right: 2px; padding-inline: 0.3125rem 0.125rem; }
+  .schedule-more svg { width: 0.875rem; height: 0.875rem; }
+  .schedule-adding { box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-ring); }
   @media (max-width: 1023px) {
-    .schedule-grid { --schedule-label: 4.5rem; --schedule-hour: 2.75rem; }
+    .schedule-grid { --schedule-label: 4.5rem; }
   }
 
   .schedule-event {

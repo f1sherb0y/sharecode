@@ -1,5 +1,5 @@
 import type { Appointment, User } from '@/types'
-import { addDays, addMonths, dayStart, daysBetween, minuteOfDay, startOfMonth, startOfWeek } from '@/lib/zoned-time'
+import { addDays, addMonths, atMinute, dayStart, daysBetween, startOfMonth, startOfWeek } from '@/lib/zoned-time'
 
 export type ScheduleView = 'day' | 'week' | 'month' | 'list'
 export const SCHEDULE_VIEWS: ScheduleView[] = ['day', 'week', 'month', 'list']
@@ -18,9 +18,13 @@ export function zoneName(timeZone: string, locale: string): string {
 }
 export const DEFAULT_DURATION = 60
 export const DURATION_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240]
-/** The hours the timeline always spans; sessions outside them widen it. */
-export const FIRST_VISIBLE_HOUR = 8
-export const LAST_VISIBLE_HOUR = 22
+/**
+ * Week and day timelines show a window of hours that is dragged sideways: 08:00–22:00
+ * at first, fewer hours when the screen is too narrow for 14.
+ */
+export const WINDOW_START_HOUR = 8
+export const MAX_WINDOW_HOURS = 14
+export const MIN_WINDOW_HOURS = 4
 
 export interface ViewRange {
   /** Calendar days shown, as date keys. */
@@ -63,12 +67,12 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-/** The part of a session on one calendar day, in wall-clock minutes. */
-export interface DaySegment {
+/** A session laid out on a timeline row, as instants cut to the stretch laid out. */
+export interface Segment {
   appointment: Appointment
   start: number
   end: number
-  /** The session continues from the day before / into the next day. */
+  /** The session continues before / after that stretch. */
   continuesBefore: boolean
   continuesAfter: boolean
   column: number
@@ -81,23 +85,19 @@ export interface DaySegment {
  */
 export type LaneRank = (appointment: Appointment) => number
 
-/** Splits sessions into per-day pieces and lays out overlapping pieces side by side. */
-export function daySegments(appointments: Appointment[], day: string, timeZone: string, rank?: LaneRank): DaySegment[] {
-  const start = dayStart(day, timeZone).getTime()
-  const end = dayStart(addDays(day, 1), timeZone).getTime()
-  const pieces: DaySegment[] = []
+/** Cuts sessions to the stretch from–to (instants) and lays out overlapping ones in lanes. */
+export function layoutSpans(appointments: Appointment[], from: number, to: number, rank?: LaneRank): Segment[] {
+  const pieces: Segment[] = []
   for (const appointment of appointments) {
-    const from = Date.parse(appointment.startsAt)
-    const to = Date.parse(appointment.endsAt)
-    if (to <= start || from >= end) continue
-    const continuesBefore = from < start
-    const continuesAfter = to > end
+    const start = Date.parse(appointment.startsAt)
+    const end = Date.parse(appointment.endsAt)
+    if (end <= from || start >= to) continue
     pieces.push({
       appointment,
-      start: continuesBefore ? 0 : minuteOfDay(from, timeZone),
-      end: continuesAfter ? 1440 : minuteOfDay(to, timeZone) || 1440,
-      continuesBefore,
-      continuesAfter,
+      start: Math.max(start, from),
+      end: Math.min(end, to),
+      continuesBefore: start < from,
+      continuesAfter: end > to,
       column: 0,
       columns: 1,
     })
@@ -105,16 +105,37 @@ export function daySegments(appointments: Appointment[], day: string, timeZone: 
   return layoutOverlaps(pieces, rank)
 }
 
-function layoutOverlaps(pieces: DaySegment[], rank: LaneRank = () => 0): DaySegment[] {
+/**
+ * Where a row's window of hours starts: `phase` minutes after the day's midnight in
+ * timeZone (negative: the evening before). Every row of a week starts at the same time
+ * of day, so midnight lines up down the rows.
+ */
+export function windowStart(day: string, phase: number, timeZone: string): number {
+  const whole = Math.floor(phase)
+  return atMinute(day, whole, timeZone).getTime() + (phase - whole) * 60000
+}
+
+/**
+ * Dragging keeps most of each row's window on the row's own day, so a row never shows
+ * more of the day before or after than of its own.
+ */
+export function clampPhase(phase: number, span: number, current = phase): number {
+  const lowest = -span / 2
+  const highest = 1440 - span / 2 - 1
+  // A zone switch can leave the window further out; it may come back but not go further.
+  return clamp(phase, Math.min(lowest, current), Math.max(highest, current))
+}
+
+function layoutOverlaps(pieces: Segment[], rank: LaneRank = () => 0): Segment[] {
   pieces.sort((a, b) => a.start - b.start || b.end - a.end || a.appointment.id.localeCompare(b.appointment.id))
-  let cluster: DaySegment[] = []
+  let cluster: Segment[] = []
   let clusterEnd = -1
   // Pieces that overlap, directly or through others, share their lanes. Lanes go
   // in rank order; a lane takes every later piece that fits beside the ones in it.
   const place = () => {
     const ordered = [...cluster].sort((a, b) =>
       rank(a.appointment) - rank(b.appointment) || a.start - b.start || a.appointment.id.localeCompare(b.appointment.id))
-    const lanes: DaySegment[][] = []
+    const lanes: Segment[][] = []
     for (const piece of ordered) {
       let lane = lanes.findIndex(taken => taken.every(other => other.end <= piece.start || other.start >= piece.end))
       if (lane === -1) lane = lanes.push([]) - 1
@@ -131,17 +152,6 @@ function layoutOverlaps(pieces: DaySegment[], rank: LaneRank = () => 0): DaySegm
   }
   if (cluster.length > 0) place()
   return pieces
-}
-
-/** The timeline's span in minutes of the day: the working day, widened to whole hours around every session. */
-export function visibleRange(segments: DaySegment[]): { from: number; to: number } {
-  let from = FIRST_VISIBLE_HOUR * 60
-  let to = LAST_VISIBLE_HOUR * 60
-  for (const segment of segments) {
-    from = Math.min(from, Math.floor(segment.start / 60) * 60)
-    to = Math.max(to, Math.ceil(segment.end / 60) * 60)
-  }
-  return { from, to }
 }
 
 /** Sessions that overlap in time, as groups in start order: a list shows each group as one row. */

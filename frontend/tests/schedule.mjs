@@ -319,12 +319,12 @@ assert.deepEqual(await request('/api/tours', 'GET', undefined, as('agent_b')), {
 await request('/api/tours/schedule', 'PUT', undefined, as('agent_b'))
 console.log('PASS tours: once per account, unknown tours rejected')
 
-// The calendar in three browsers: timelines with hours across (a row per weekday,
-// or per tech on one day), as wide as the room list. Agents see their own by
-// default, plan by clicking free time, confirm overlaps, drag between techs and
-// stretch sessions, and keep customers and their sessions in the 场次 tab; techs
-// read their own and open the room; phones get the list. The device clock is set
-// far from Shanghai on purpose.
+// The calendar in three browsers: timelines with a window of hours across (a row
+// per weekday, or per tech on one day) that is dragged sideways. Agents see their
+// own by default, plan with Add, confirm overlaps, drag between techs, stretch
+// sessions, look at one tech's week, and keep customers and their sessions in the
+// 场次 tab; techs read their own and open the room; phones get the list. The device
+// clock is set far from Shanghai on purpose.
 const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
 const WEB = 'http://127.0.0.1:55461'
@@ -387,12 +387,12 @@ try {
       const pageWidth = () => page.locator('main > div').evaluate(el => el.getBoundingClientRect().width)
       await page.goto(`${WEB}/schedule?view=day&date=${day}`)
       const column = name => page.locator(`[data-schedule-row][data-tech="${name ? id(name) : ''}"]`)
-      // Where a time of day is on a tech's row: rows span data-from to data-to minutes.
-      const pointAt = async (name, hour, minute = 0) => {
-        const row = column(name)
+      // Where a Shanghai time on the day shown is on a row: rows span data-span minutes from the instant data-start.
+      const pointAt = async (row, hour, minute = 0) => {
+        if (typeof row === 'string') row = column(row)
         const box = await row.boundingBox()
-        const from = Number(await row.getAttribute('data-from')), to = Number(await row.getAttribute('data-to'))
-        return { x: box.x + ((hour * 60 + minute - from) / (to - from)) * box.width, y: box.y + box.height / 2, minuteWidth: box.width / (to - from) }
+        const start = Number(await row.getAttribute('data-start')), span = Number(await row.getAttribute('data-span'))
+        return { x: box.x + ((Date.parse(at(uiDay, hour, minute)) - start) / (span * 60000)) * box.width, y: box.y + box.height / 2, minuteWidth: box.width / span }
       }
       await column('tech_a').waitFor()
       assert.equal(await pageWidth(), 1440)
@@ -410,7 +410,10 @@ try {
       await column('').locator(`[data-appointment="${others.id}"]`).waitFor()
       await onlyMine.click()
       await page.locator(`[data-appointment="${others.id}"]`).waitFor({ state: 'detached' })
+      // With Add on, a click plans an hour from the half hour.
       let point = await pointAt('tech_a', 10, 15)
+      const add = page.getByRole('button', { name: 'Add', exact: true })
+      await add.click()
       await page.mouse.click(point.x, point.y)
       let dialog = page.getByRole('dialog', { name: 'New session' })
       await dialog.waitFor()
@@ -434,6 +437,7 @@ try {
       assert.doesNotMatch(await column('tech_a').locator(`[data-appointment="${first.id}"]`).innerText(), /\d:\d\d/)
 
       point = await pointAt('tech_a', 11, 15)
+      await add.click()
       await page.mouse.click(point.x, point.y)
       dialog = page.getByRole('dialog', { name: 'New session' })
       await dialog.getByRole('combobox', { name: 'Customer' }).fill(customerName)
@@ -531,6 +535,14 @@ try {
       assert(await fits(), 'no scrollbar under the timeline')
       assert(await fitsWidth(page), 'no sideways scrolling of the page')
       await page.setViewportSize({ width: 1440, height: 900 })
+      // Dragging free space moves the hours; past midnight a dashed line marks the day's turn.
+      const lastBox = await rows.nth(6).boundingBox()
+      const free = await rows.nth(6).evaluate(row => {
+        const rect = row.getBoundingClientRect()
+        for (let x = rect.right - 20; x > rect.left; x -= 10) if (document.elementFromPoint(x, rect.top + 6) === row) return x
+      })
+      await drag(page, { x: free, y: lastBox.y + 6 }, { x: free - lastBox.width * 0.6, y: lastBox.y + 6 })
+      assert.equal(await page.locator('.schedule-line.is-midnight').count(), 1)
 
       // 场次: customers on the left, the chosen customer's sessions on the right.
       await page.getByRole('tab', { name: 'Sessions' }).click()
@@ -586,14 +598,14 @@ try {
       const eastern = inZone(abroad.startsAt, 'America/New_York')
       const easternDay = `${eastern.year}-${eastern.month}-${eastern.day}`
       await page.goto(`${WEB}/schedule?view=day&date=${easternDay}`)
-      await column('tech_a').waitFor()
-      await page.getByRole('combobox', { name: 'Time zone' }).click()
-      await page.getByRole('option', { name: 'Eastern Time' }).click()
-      await page.waitForURL(url => new URL(url).searchParams.get('tz') === 'America/New_York')
       const abroadCard = column('tech_a').locator(`[data-appointment="${abroad.id}"]`)
       await abroadCard.waitFor()
-      const expectedX = (await pointAt('tech_a', Number(eastern.hour), Number(eastern.minute))).x
-      assert(Math.abs((await abroadCard.boundingBox()).x - expectedX) < 4, 'placed at the Eastern wall-clock time')
+      // Switching the zone keeps every session in place; only the hours above change.
+      const cardBefore = await abroadCard.boundingBox()
+      await page.getByRole('combobox', { name: 'Time zone' }).click()
+      await page.getByRole('option', { name: 'Eastern Time' }).click()
+      await page.locator('.schedule-hour').filter({ hasText: new RegExp(`^${eastern.hour}:00$`) }).waitFor()
+      assert(Math.abs((await abroadCard.boundingBox()).x - cardBefore.x) < 1, 'the session stays in place')
       // The legend names the agents whose customers have sessions in view (one color each); the day view keeps a row for every tech.
       const legendNames = (await page.locator('.schedule-legend-item').allInnerTexts()).map(text => text.trim())
       assert(legendNames.includes('audit_admin') && legendNames.every(name => ['agent_a', 'agent_b', 'audit_admin'].includes(name)), legendNames.join())
@@ -699,7 +711,7 @@ try {
         assert.equal(await page.locator('.schedule-agenda-item').count(), actor === 'tech_b' ? 2 : [first, second, waiting, shown, ...booked].length)
         assert(await fitsWidth(page), 'no sideways scrolling')
         if (actor === 'agent_a') {
-          await page.getByRole('button', { name: '新建场次', exact: true }).click()
+          await page.getByRole('button', { name: '添加', exact: true }).click()
           const form = page.getByRole('dialog', { name: '新建场次' })
           await form.waitFor()
           assert(await form.evaluate(el => el.scrollWidth <= el.clientWidth + 1))
@@ -748,7 +760,7 @@ try {
           await spotlit('customer-list')
           await card.getByRole('button', { name: 'Back' }).click()
           await progress('1 / 7')
-          for (const [step, target] of [[2, 'customer-list'], [3, 'session-add'], [4, 'new-session'], [5, 'calendar'], [6, 'view-day'], [7, 'only-mine']]) {
+          for (const [step, target] of [[2, 'customer-list'], [3, 'session-add'], [4, 'new-session'], [5, 'calendar'], [6, 'tech-filter'], [7, 'only-mine']]) {
             await card.getByRole('button', { name: 'Next' }).click()
             await progress(`${step} / 7`)
             await spotlit(target)
@@ -782,7 +794,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time while 场次 keeps Shanghai; session form zone switch; room form time row; legend of techs in view; EN/ZH')
+      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, dragging the hours with a dashed midnight, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }

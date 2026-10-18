@@ -381,8 +381,14 @@ yesterday's and tomorrow's say so.
   Standard, Eastern, Pacific, United Kingdom or Central European Time. Only the
   calendar changes; the 场次 tab and the rest of the app keep China time. The
   session form opens in the calendar's zone and has its own switch, so a time can
-  be entered in the customer's zone. New rooms and new sessions share the same
-  date, start and length fields. The legend above the calendar lists only the techs with sessions in view.
+  be entered in the customer's zone. Switching keeps the calendar where it is:
+  only the hours above it change. New rooms and new sessions share the same
+  date, start and length fields. The legend above the calendar lists the agents
+  whose customers have sessions in view, one color each.
+- The tech picker in the toolbar shows one tech's sessions, every agent's, so
+  their free time is right; what is drawn or dropped on it is theirs, and the
+  **Unassigned** strip above then lists every session waiting for a tech. In the
+  day view a tech's name opens their calendar.
 
 - On their first visit, agents get a short guided tour of the page, on any
   device: adding a customer, planning a session, and moving and assigning
@@ -393,9 +399,12 @@ yesterday's and tomorrow's say so.
   list. Week and day are timelines with the hours across: the week has a row per
   weekday, Monday first, and the day a row per tech plus one for unassigned
   sessions. Sessions at the same time in a row sit in lanes one under another,
-  in the techs' legend order. The timeline spans 08:00–22:00, widened to fit
-  earlier or later sessions, and scrolls sideways once the page is too narrow
-  for it; week, day and month fit the window's height.
+  in tech order. The timeline shows 14 hours (fewer on narrow screens),
+  08:00–22:00 at first; dragging free space (or swiping, Shift+wheel, the arrow
+  keys) moves it to other hours, up to half a window into the day before or
+  after, with a long dashed line where the day turns. A marker at a row's edge
+  counts the sessions beyond it and brings them in. Week, day and month fit the
+  window's height.
 - Session cards show the customer, the tech (week view) and the company and
   position, never the time: the hours above the rows give it. The list views
   print each time once per row of simultaneous sessions, which sit side by side
@@ -404,8 +413,9 @@ yesterday's and tomorrow's say so.
   to 24 hours), the company and position, and notes. Whoever plans it is its
   creator; there is no agent in charge to pick. It has no status to set: one
   planned by mistake or called off is deleted, and it reads as completed once
-  its room has ended. Agents and admins plan any tech's sessions: click or drag
-  on free time, drag a session to move it (to another weekday in the week view,
+  its room has ended. Agents and admins plan any tech's sessions: press **Add**
+  and click or drag on the timeline (in the month and list it opens the form),
+  drag a session to move it (to another weekday in the week view,
   another tech's row in the day view), drag its right edge to change its length,
   or drop one from the **Unassigned** strip above the calendar, which lists
   sessions waiting for a tech that the calendar does not already show (and is

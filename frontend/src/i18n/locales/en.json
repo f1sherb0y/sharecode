@@ -727,6 +727,10 @@
     "title": "Schedule",
     "entry": "Schedule",
     "newSession": "New session",
+    "add": "Add",
+    "allTechs": "All techs",
+    "earlier": "{{count}} earlier",
+    "later": "{{count}} later",
     "unassigned": "Unassigned",
     "today": "Today",
     "previous": "Previous",
@@ -883,15 +887,15 @@
       },
       "newSession": {
         "title": "New from the calendar",
-        "body": "Or press here, or click or drag across free time on the calendar."
+        "body": "Press Add, then click or drag across the calendar."
       },
       "arrange": {
         "title": "Move sessions",
-        "body": "Drag a session to another time or day; drag its right edge to change the length."
+        "body": "Drag empty space sideways to see other hours; drag a session to another time or day, or its right edge to change the length."
       },
       "assign": {
         "title": "Assign a tech",
-        "body": "The day view has a row per tech: drag a session onto a row to give it to them. Unassigned sessions wait above the calendar; drag them in too."
+        "body": "Pick a tech to see only their sessions and free time, then drag an unassigned session from above onto free time to give it to them. The day view has a row per tech to drop on too."
       },
       "onlyMine": {
         "title": "Only mine",

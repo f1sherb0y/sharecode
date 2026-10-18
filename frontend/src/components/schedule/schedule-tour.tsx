@@ -15,7 +15,7 @@ const STEPS: { key: string; target: string; params: Params }[] = [
   { key: 'sessionAdd', target: 'session-add', params: { tab: 'sessions', customer: 'all' } },
   { key: 'newSession', target: 'new-session', params: { tab: null, customer: null } },
   { key: 'arrange', target: 'calendar', params: { tab: null, view: 'week' } },
-  { key: 'assign', target: 'view-day', params: { tab: null, view: 'week' } },
+  { key: 'assign', target: 'tech-filter', params: { tab: null, view: 'week' } },
   { key: 'onlyMine', target: 'only-mine', params: { tab: null } },
 ]
 const RESTORED = ['tab', 'view', 'customer'] as const
