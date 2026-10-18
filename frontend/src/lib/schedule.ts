@@ -142,16 +142,19 @@ export interface DayLayout {
   lanes: number
 }
 
+/** Sessions overlapping from–to, cut to it and laid out in lanes. */
+export function layoutRange(index: SessionIndex, from: number, to: number, keep: (appointment: Appointment) => boolean, rank?: LaneRank): DayLayout {
+  const segments = layoutSpans(sessionsIn(index, from, to).filter(keep), from, to, rank)
+  return { segments, lanes: segments.reduce((most, segment) => Math.max(most, segment.columns), 1) }
+}
+
 /**
  * Lays out what a row of `day` can show: the day and `reach` milliseconds either side,
  * as far as its window of hours goes while most of the window is on that day. The
  * layout does not change while the window moves within it.
  */
 export function layoutDay(index: SessionIndex, day: string, timeZone: string, reach: number, keep: (appointment: Appointment) => boolean, rank?: LaneRank): DayLayout {
-  const from = dayStart(day, timeZone).getTime() - reach
-  const to = dayStart(addDays(day, 1), timeZone).getTime() + reach
-  const segments = layoutSpans(sessionsIn(index, from, to).filter(keep), from, to, rank)
-  return { segments, lanes: segments.reduce((most, segment) => Math.max(most, segment.columns), 1) }
+  return layoutRange(index, dayStart(day, timeZone).getTime() - reach, dayStart(addDays(day, 1), timeZone).getTime() + reach, keep, rank)
 }
 
 /** The day a window of hours mostly shows. */
@@ -172,14 +175,6 @@ export function windowPhase(start: number, span: number, timeZone: string): numb
 export function windowStart(day: string, phase: number, timeZone: string): number {
   const whole = Math.floor(phase)
   return atMinute(day, whole, timeZone).getTime() + (phase - whole) * 60000
-}
-
-/**
- * Dragging keeps most of each day's window of hours on that day, so a day never shows
- * more of the day before or after than of its own.
- */
-export function clampPhase(phase: number, span: number): number {
-  return clamp(phase, -span / 2, 1440 - span / 2 - 1)
 }
 
 function layoutOverlaps(pieces: Segment[], rank: LaneRank = () => 0): Segment[] {

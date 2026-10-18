@@ -381,8 +381,8 @@ yesterday's and tomorrow's say so.
   Standard, Eastern, Pacific, United Kingdom or Central European Time. Only the
   calendar changes; the 场次 tab and the rest of the app keep China time. The
   session form opens in the calendar's zone and has its own switch, so a time can
-  be entered in the customer's zone. Switching keeps the calendar where it is:
-  only the hours above it change. New rooms and new sessions share the same
+  be entered in the customer's zone. Switching keeps the day view where it is
+  (only the hours above it change) and shows the week in that zone's days. New rooms and new sessions share the same
   date, start and length fields. The legend above the calendar lists the agents
   whose customers have sessions in view, one color each.
 - The tech picker in the toolbar shows one tech's sessions, every agent's, so
@@ -399,20 +399,22 @@ yesterday's and tomorrow's say so.
   list. Week and day are timelines with the hours across: the week is days down
   the page without end and without a scrollbar (the wheel, dragging, a flick or
   the arrow keys move it; only the days in view are drawn), opening on the
-  current week; the day has a row per tech plus one for unassigned sessions.
-  Sessions at the same time in a row sit in lanes one under another, in tech
-  order. The timeline shows 14 hours (fewer on narrow screens), 08:00–22:00 at
-  first; dragging free space (or swiping, Shift+wheel, the arrow keys) moves it
-  to other hours: in the day view on through the days without end, in the week
-  up to half a window into the day before or after. A long dashed line marks
-  where a day turns, with that day's date, and a red line for now runs down the
-  whole calendar. A marker at a row's edge counts the sessions beyond it and
-  brings them in, and **Reset** at the bottom right brings back today and the
-  usual hours. The timelines load a week of sessions at a time around what is in
-  view. Week, day and month fit the window's height.
+  current week, each day whole from 00:00 to 24:00 (Ctrl and the wheel, or a
+  pinch, zoom in on some hours; markers at the edges then count the sessions
+  outside and bring them in); the day has a row per tech plus one for
+  unassigned sessions. Sessions at the same time in a row sit in
+  lanes one under another, in tech order. The day view shows 14 hours (fewer on
+  narrow screens), 08:00–22:00 at first; dragging free space (or swiping,
+  Shift+wheel, the arrow keys) moves them on through the days without end, a
+  long dashed line marks where a day turns, with that day's date, and a marker
+  at a row's edge brings in the sessions beyond it. A red line for now runs
+  down the whole calendar, and **Reset** at the bottom right brings back today
+  (and the whole day, or the usual hours in the day view). The timelines load a week of sessions
+  at a time around what is in view. Week, day and month fit the window's height.
 - Sessions still waiting for a tech are striped wherever they appear.
-- Session cards show the customer, the tech (week view) and the company and
-  position, never the time: the hours above the rows give it. Month entries
+- Session cards are four lines: the customer's 管理, the customer, the tech
+  (week view) and the company and position, never the time: the hours above
+  the rows give it. Month entries
   show the time, the customer and the tech (not on one tech's calendar). The list views
   print each time once per row of simultaneous sessions, which sit side by side
   where there is room. The UI does not repeat information shown nearby.

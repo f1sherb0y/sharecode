@@ -5,19 +5,17 @@ import type { Appointment } from '@/types'
 import { getLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { HOUR_MS, MAX_WINDOW_HOURS, MINUTE_MS, MIN_WINDOW_HOURS, clamp, formatDayKey, type DayLayout, type Segment } from '@/lib/schedule'
-import { addDays, dateKeyOf, dayStart, timeInputValue, zonedParts } from '@/lib/zoned-time'
-import { SessionPeople } from './session-people'
+import { dateKeyOf, timeInputValue, zonedParts } from '@/lib/zoned-time'
 import { pointerInstant, type DragPreview, type GridDrop } from './use-schedule-drag'
 
-/** Matches .schedule-event's line-height and padding: a lane holds whole lines. */
+/** Matches .schedule-event's line-height and padding: a card holds whole lines. */
 const EVENT_LINE = 15
 const EVENT_CHROME = 6
 export const LANE_GAP = 2
 export const ROW_PADDING = 3
-/** A lane fits the customer, the tech and 管理, and the company and position, and grows
- *  with the window's height up to MAX_LINES lines. */
-export const LINES = 3
-export const MAX_LINES = 7
+/** A card's lines: 管理, the customer, the tech (unless the row or the whole calendar is
+ *  theirs) and the company and position. A lane is one card high. */
+export const cardLines = (showTech: boolean) => (showTech ? 4 : 3)
 export const lanePitch = (lines: number) => lines * EVENT_LINE + EVENT_CHROME + LANE_GAP
 export const rowSize = (lanes: number, lines: number) => lanes * lanePitch(lines) - LANE_GAP + 2 * ROW_PADDING
 // Lanes share the track's height, whatever the row has grown to.
@@ -101,11 +99,11 @@ export function HoursHeader({ ticks, first, span, labeled, hoursRef, headRef }: 
 }
 
 /** Hour and half-hour lines down the rows, and a long dashed line where the zone's day turns. */
-export function HourLines({ ticks, first, span, style }: { ticks: Tick[]; first: number; span: number; style?: CSSProperties }) {
+export function HourLines({ ticks, first, span, halves: withHalves = true, style }: { ticks: Tick[]; first: number; span: number; halves?: boolean; style?: CSSProperties }) {
   const length = span * MINUTE_MS
   const pct = (at: number) => `${((at - first) / length) * 100}%`
   const half = 30 * MINUTE_MS
-  const halves = [...(ticks[0] && ticks[0].at - half > first ? [ticks[0].at - half] : []), ...ticks.map(tick => tick.at + half).filter(at => at < first + length)]
+  const halves = !withHalves ? [] : [...(ticks[0] && ticks[0].at - half > first ? [ticks[0].at - half] : []), ...ticks.map(tick => tick.at + half).filter(at => at < first + length)]
   return (
     <div className="schedule-lines" style={style} aria-hidden="true">
       {ticks.map(tick => <span key={tick.at} className={cn('schedule-line', tick.midnight && 'is-midnight')} style={{ left: pct(tick.at) }} />)}
@@ -159,7 +157,7 @@ export function useWheelPan(scroller: RefObject<HTMLDivElement | null>, width: n
  * window, so rows moving away under it do not end the drag; a flick by touch keeps going
  * for a moment, slowing down.
  */
-export function usePan({ span, width, onPanX, onPanY }: { span: number; width: number; onPanX: (minutes: number) => void; onPanY?: (pixels: number) => void }) {
+export function usePan({ span, width, onPanX, onPanY }: { span: number; width: number; onPanX?: (minutes: number) => void; onPanY?: (pixels: number) => void }) {
   const [panning, setPanning] = useState(false)
   const latest = useRef({ span, width, onPanX, onPanY })
   latest.current = { span, width, onPanX, onPanY }
@@ -170,7 +168,7 @@ export function usePan({ span, width, onPanX, onPanY }: { span: number; width: n
   const handlers = useMemo(() => {
     const moveBy = (dx: number, dy: number) => {
       const { span, width, onPanX, onPanY } = latest.current
-      if (dx && width) onPanX((-dx / width) * span)
+      if (dx && width) onPanX?.((-dx / width) * span)
       if (dy) onPanY?.(dy)
     }
     const glide = (vx: number, vy: number) => {
@@ -269,11 +267,10 @@ interface TrackProps {
   colorOf: (appointment: Appointment) => string
   onOpen: (appointment: Appointment) => void
   onDrop: (drop: GridDrop) => void
-  onPan: (minutes: number) => void
+  /** Brings in a session beyond an edge of a window that moves; markers at the edges count them. */
+  onReach?: (segment: Segment) => void
   drag: DragApi
   pan: PanHandlers
-  /** Days down the page name the day that begins inside them; the day view's hours do. */
-  dateAtMidnight: boolean
   label?: string
 }
 
@@ -284,9 +281,8 @@ function landingTech(preview: DragPreview): string | null {
 }
 
 /** One row's window of hours: its sessions in lanes, what is being dragged, and markers for what lies beyond. */
-export function Track({ row, span, layout, timezone, editable, adding, showTech, colorOf, onOpen, onDrop, onPan, drag, pan, dateAtMidnight, label }: TrackProps) {
+export function Track({ row, span, layout, timezone, editable, adding, showTech, colorOf, onOpen, onDrop, onReach, drag, pan, label }: TrackProps) {
   const { t } = useTranslation()
-  const locale = getLocale()
   const length = span * MINUTE_MS
   const end = row.start + length
   const pct = (duration: number) => `${(duration / length) * 100}%`
@@ -306,7 +302,6 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
     endsAt: new Date(preview.startsAt.getTime() + preview.durationMinutes * MINUTE_MS).toISOString(),
     durationMinutes: preview.durationMinutes,
   } : null
-  const midnight = dateAtMidnight ? dayStart(addDays(dateKeyOf(row.start, timezone), 1), timezone).getTime() : 0
 
   const timeRange = (start: number, stop: number) => `${timeInputValue(start, timezone)}–${timeInputValue(stop, timezone)}`
   const describe = (appointment: Appointment) => [
@@ -355,12 +350,13 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
           if (!endsDrag()) onOpen(appointment)
         }}
       >
+        {/* No time on the card: the hours above the grid show it. */}
+        <span className="schedule-event-meta">{appointment.customer.owner.username}</span>
         <span className="schedule-event-title">
           {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-hidden="true" />}
           <span className="truncate">{appointment.customer.name}</span>
         </span>
-        {/* No time on the card: the hours above the grid show it. */}
-        <SessionPeople appointment={appointment} showTech={showTech} compact className="schedule-event-meta" />
+        {showTech && <span className="schedule-event-meta">{appointment.tech?.username ?? t('schedule.unassigned')}</span>}
         {role && <span className="schedule-event-meta">{role}</span>}
         {editable && !segment.continuesAfter && Date.parse(appointment.endsAt) <= end && (
           <span
@@ -395,9 +391,6 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
     )
   }
 
-  // Brings the nearest session beyond an edge to the middle of the window.
-  const bringIn = (segment: Segment) => onPan(((segment.start + segment.end) / 2 - (row.start + length / 2)) / MINUTE_MS)
-
   return (
     <div
       className={cn('schedule-track', editable && 'is-editable')}
@@ -426,29 +419,24 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
         'new', preview.startsAt.getTime(), preview.startsAt.getTime() + preview.durationMinutes * MINUTE_MS,
         `${timeRange(preview.startsAt.getTime(), preview.startsAt.getTime() + preview.durationMinutes * MINUTE_MS)} ${t('schedule.newSession')}`,
       )}
-      {midnight > row.start && midnight < end && (
-        <span className="schedule-midnight-date" style={{ left: pct(midnight - row.start) }} aria-hidden="true">
-          {formatDayKey(dateKeyOf(midnight, timezone), locale, DATE_FORMAT)}
-        </span>
-      )}
-      {before.length > 0 && (
+      {onReach && before.length > 0 && (
         <button
           type="button"
           className="schedule-more is-before"
           aria-label={t('schedule.earlier', { count: before.length })}
           title={t('schedule.earlier', { count: before.length })}
-          onClick={() => { if (!endsDrag()) bringIn(before.reduce((last, segment) => (segment.end > last.end ? segment : last))) }}
+          onClick={() => { if (!endsDrag()) onReach(before.reduce((last, segment) => (segment.end > last.end ? segment : last))) }}
         >
           <ChevronLeft aria-hidden="true" />{before.length}
         </button>
       )}
-      {after.length > 0 && (
+      {onReach && after.length > 0 && (
         <button
           type="button"
           className="schedule-more is-after"
           aria-label={t('schedule.later', { count: after.length })}
           title={t('schedule.later', { count: after.length })}
-          onClick={() => { if (!endsDrag()) bringIn(after[0]!) }}
+          onClick={() => { if (!endsDrag()) onReach(after.reduce((next, segment) => (segment.start < next.start ? segment : next))) }}
         >
           {after.length}<ChevronRight aria-hidden="true" />
         </button>

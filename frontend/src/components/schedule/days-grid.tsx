@@ -2,44 +2,53 @@ import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, use
 import type { Appointment } from '@/types'
 import { getLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { clamp, formatDayKey, windowStart, type DayLayout } from '@/lib/schedule'
-import { addDays, minuteOfDay, startOfWeek } from '@/lib/zoned-time'
+import { HOUR_MS, MINUTE_MS, clamp, formatDayKey, type DayLayout, type Segment } from '@/lib/schedule'
+import { addDays, dayStart, minuteOfDay, startOfWeek } from '@/lib/zoned-time'
 import {
   EMPTY_LAYOUT,
   HourLines,
   HoursHeader,
-  LANE_GAP,
-  LINES,
-  MAX_LINES,
   NowLine,
-  ROW_PADDING,
   ResetButton,
   Track,
-  lanePitch,
+  cardLines,
+  rowSize,
   usePan,
-  useTicks,
   useTrackWidth,
   type DragApi,
   type PanHandlers,
+  type Tick,
 } from './timeline-parts'
 import type { GridDrop } from './use-schedule-drag'
 
-/** A week of days with a lane each fills the window. */
-const DAYS_IN_VIEW = 7
 /** How long a focus keeps its day in view while days load around it. */
 const SETTLE_MS = 3000
+const DAY_MINUTES = 24 * 60
+/** The hours across, in minutes from midnight: the whole day until zoomed in. */
+interface Zoom {
+  start: number
+  span: number
+}
+const WHOLE_DAY: Zoom = { start: 0, span: DAY_MINUTES }
+/** Zoomed in as far as two hours. */
+const MIN_ZOOM = 2 * 60
+/** Hours from one label to the next: the fewest that leave each label LABEL_WIDTH pixels. */
+const LABEL_STEPS = [1, 2, 3, 4, 6]
+const LABEL_WIDTH = 40
 
 export interface DaysFocus {
   day: string
   /** Changes to go to `day` again. */
   seq: number
-  /** week: from its Monday if the day still shows; start: the day at the top; keep: at
-   *  the top, as far into it as the top day was. */
-  align: 'week' | 'start' | 'keep'
+  /** week: from its Monday if the day still shows; start: the day at the top. */
+  align: 'week' | 'start'
 }
 
 export interface DaysGridHandle {
   scrollBy: (pixels: number) => void
+  /** Moves zoomed-in hours later (or earlier, when negative) by so many minutes. */
+  panBy: (minutes: number) => void
+  resetZoom: () => void
 }
 
 /** The day at the top of the view and how far into it the view starts. */
@@ -65,10 +74,6 @@ function moveBy(spot: Spot, pixels: number, height: (day: string) => number): Sp
 interface DaysGridProps {
   ref?: Ref<DaysGridHandle>
   focus: DaysFocus
-  /** Where every day's window of hours starts, in minutes from its midnight. */
-  phase: number
-  /** Minutes the window spans. */
-  span: number
   /** The days' sessions in lanes, for the days loaded. */
   layouts: Map<string, DayLayout>
   /** One tech's days: what is drawn or dropped on them is theirs. */
@@ -82,7 +87,6 @@ interface DaysGridProps {
   colorOf: (appointment: Appointment) => string
   onOpen: (appointment: Appointment) => void
   onDrop: (drop: GridDrop) => void
-  onPan: (minutes: number) => void
   onFit: (hours: number) => void
   onReset: () => void
   drag: DragApi
@@ -93,8 +97,8 @@ interface DaysGridProps {
 
 interface DayContentProps {
   day: string
-  phase: number
-  span: number
+  zoomStart: number
+  zoomSpan: number
   layout: DayLayout
   techId?: string
   timezone: string
@@ -105,13 +109,17 @@ interface DayContentProps {
   colorOf: (appointment: Appointment) => string
   onOpen: (appointment: Appointment) => void
   onDrop: (drop: GridDrop) => void
-  onPan: (minutes: number) => void
+  onReach: (segment: Segment) => void
   drag: DragApi
   pan: PanHandlers
 }
 
-// A day's label and hours; drawn again only when something about that day changes, not as the days move.
-const DayContent = memo(function DayContent({ day, phase, techId, timezone, locale, ...track }: DayContentProps) {
+// A day's label and the hours shown of it (a day of 23 or 25 hours, where the clocks
+// change, takes the same width); drawn again only when something about that day
+// changes, not as the days move.
+const DayContent = memo(function DayContent({ day, zoomStart, zoomSpan, techId, timezone, locale, ...track }: DayContentProps) {
+  const midnight = dayStart(day, timezone).getTime()
+  const scale = (dayStart(addDays(day, 1), timezone).getTime() - midnight) / MINUTE_MS / DAY_MINUTES
   return (
     <>
       <div className="schedule-row-label">
@@ -120,9 +128,9 @@ const DayContent = memo(function DayContent({ day, phase, techId, timezone, loca
       </div>
       <Track
         {...track}
-        row={{ key: day, start: windowStart(day, phase, timezone), day, ...(techId ? { techId } : {}) }}
+        row={{ key: day, start: midnight + zoomStart * scale * MINUTE_MS, day, ...(techId ? { techId } : {}) }}
+        span={zoomSpan * scale}
         timezone={timezone}
-        dateAtMidnight
         label={formatDayKey(day, locale, { weekday: 'short', month: 'numeric', day: 'numeric' })}
       />
     </>
@@ -130,27 +138,29 @@ const DayContent = memo(function DayContent({ day, phase, techId, timezone, loca
 })
 
 /**
- * The week view: days down the page without end, a window of hours across. The days
- * move by wheel, dragging, flicking, keys or a drag at the edge, without a scrollbar;
- * only the days in view are drawn. Days with simultaneous sessions are taller, and the
- * day at the top stays put when days load.
+ * The week view: days down the page without end, each whole from midnight to midnight
+ * until Ctrl and the wheel (or a pinch) zoom in on some hours; markers at the edges then
+ * count the sessions outside and bring them in. The days move up and down by wheel,
+ * dragging, flicking, keys or a drag at the edge, without a scrollbar. Only the days in
+ * view are drawn; days with simultaneous sessions are taller, and the day at the top
+ * stays put when days load.
  */
-export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, timezone, now, editable, adding, showTech, colorOf, onOpen, onDrop, onPan, onFit, onReset, drag, label, onVisible }: DaysGridProps) {
+export function DaysGrid({ ref, focus, layouts, techId, today, timezone, now, editable, adding, showTech, colorOf, onOpen, onDrop, onFit, onReset, drag, label, onVisible }: DaysGridProps) {
   const locale = getLocale()
   const root = useRef<HTMLDivElement>(null)
   const days = useRef<HTMLDivElement>(null)
   const hoursRef = useRef<HTMLDivElement>(null)
   const width = useTrackWidth(hoursRef, onFit)
   const [view, setView] = useState(0)
-  // A lane is as tall as a seventh of the view allows, three to seven lines.
-  const lane = clamp(Math.floor(view / DAYS_IN_VIEW) + LANE_GAP - 2 * ROW_PADDING - 1, lanePitch(LINES), lanePitch(MAX_LINES))
-  const heightOf = useCallback((day: string) => (layouts.get(day)?.lanes ?? 1) * lane - LANE_GAP + 2 * ROW_PADDING + 1, [layouts, lane])
+  // A lane is one card high (+1px for the row border).
+  const lines = cardLines(showTech)
+  const heightOf = useCallback((day: string) => rowSize(layouts.get(day)?.lanes ?? 1, lines) + 1, [layouts, lines])
   const heights = useRef(heightOf)
   heights.current = heightOf
   const [spot, setSpot] = useState<Spot>({ day: focus.day, delta: 0 })
 
   // Moving the days by hand lets a focus go; the rows follow once a frame.
-  const intent = useRef<{ day: string; align: 'week' | 'start'; at: number } | null>(null)
+  const intent = useRef<{ day: string; align: DaysFocus['align']; at: number } | null>(null)
   const queued = useRef(0)
   const frame = useRef(0)
   const scrollBy = useCallback((pixels: number) => {
@@ -165,8 +175,39 @@ export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, time
     })
   }, [])
   useEffect(() => () => cancelAnimationFrame(frame.current), [])
-  useImperativeHandle(ref, () => ({ scrollBy }), [scrollBy])
-  const pan = usePan({ span, width, onPanX: onPan, onPanY: pixels => scrollBy(-pixels) })
+
+  // Zooming keeps the time under the pointer where it is, and applies once a frame.
+  const [zoom, setZoom] = useState<Zoom>(WHOLE_DAY)
+  const pendingZoom = useRef({ factor: 1, at: 0.5, frame: 0 })
+  const zoomBy = useCallback((at: number, factor: number) => {
+    const pending = pendingZoom.current
+    pending.factor *= factor
+    pending.at = at
+    if (pending.frame) return
+    pending.frame = requestAnimationFrame(() => {
+      const { factor, at } = pending
+      pending.frame = 0
+      pending.factor = 1
+      setZoom(current => {
+        const span = clamp(current.span * factor, MIN_ZOOM, DAY_MINUTES)
+        const start = clamp(current.start + at * (current.span - span), 0, DAY_MINUTES - span)
+        return span === current.span && start === current.start ? current : { start, span }
+      })
+    })
+  }, [])
+  useEffect(() => () => cancelAnimationFrame(pendingZoom.current.frame), [])
+  const panBy = useCallback((minutes: number) => setZoom(current => {
+    const start = clamp(current.start + minutes, 0, DAY_MINUTES - current.span)
+    return start === current.start ? current : { ...current, start }
+  }), [])
+  // A marker at an edge brings the nearest session beyond it to the middle of the hours.
+  const bringIn = useCallback((segment: Segment) => setZoom(current => {
+    const from = minuteOfDay(segment.start, timezone)
+    const middle = (from + Math.min(from + (segment.end - segment.start) / MINUTE_MS, from + current.span)) / 2
+    return { ...current, start: clamp(middle - current.span / 2, 0, DAY_MINUTES - current.span) }
+  }), [timezone])
+  useImperativeHandle(ref, () => ({ scrollBy, panBy, resetZoom: () => setZoom(WHOLE_DAY) }), [scrollBy, panBy])
+  const pan = usePan({ span: DAY_MINUTES, width, onPanY: pixels => scrollBy(-pixels) })
 
   useLayoutEffect(() => {
     const element = days.current
@@ -178,25 +219,23 @@ export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, time
     return () => observer.disconnect()
   }, [])
 
-  // The wheel moves the days; sideways (or with Shift) it moves the hours.
-  const latest = useRef({ width, span, onPan, stopGlide: pan.handlers.stopGlide })
-  latest.current = { width, span, onPan, stopGlide: pan.handlers.stopGlide }
+  // The wheel moves the days; with Ctrl held (or in a pinch) it zooms the hours.
+  const stopGlide = pan.handlers.stopGlide
   useEffect(() => {
     const element = root.current
     if (!element) return
     const wheel = (event: WheelEvent) => {
       event.preventDefault()
-      const { width, span, onPan, stopGlide } = latest.current
       stopGlide()
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? element.clientHeight : 1
-      const sideways = event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX
-      if (sideways && (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY))) {
-        if (width) onPan(((sideways * unit) / width) * span)
-      } else if (event.deltaY) scrollBy(event.deltaY * unit)
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? element.clientHeight : 1)
+      if (event.ctrlKey && hoursRef.current) {
+        const box = hoursRef.current.getBoundingClientRect()
+        zoomBy(clamp((event.clientX - box.left) / box.width, 0, 1), Math.exp(delta * 0.002))
+      } else if (delta) scrollBy(delta)
     }
     element.addEventListener('wheel', wheel, { passive: false })
     return () => element.removeEventListener('wheel', wheel)
-  }, [scrollBy])
+  }, [scrollBy, zoomBy, stopGlide])
 
   // A focus puts its day in view, and keeps it there while the days around it load.
   const focused = useRef(-1)
@@ -205,8 +244,7 @@ export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, time
     let next = spot
     if (focused.current !== focus.seq) {
       focused.current = focus.seq
-      intent.current = focus.align === 'keep' ? null : { day: focus.day, align: focus.align, at: Date.now() }
-      if (focus.align === 'keep') next = { day: focus.day, delta: spot.delta }
+      intent.current = { day: focus.day, align: focus.align, at: Date.now() }
     }
     if (intent.current && Date.now() - intent.current.at > SETTLE_MS) intent.current = null
     if (intent.current) {
@@ -238,15 +276,25 @@ export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, time
       break
     }
   }
-  const lastDay = rows[rows.length - 2]!.day
+  // A day is in view when its middle is: a sliver at an edge does not count.
+  const middles = rows.filter(row => row.top + row.height / 2 >= 0 && row.top + row.height / 2 <= view)
+  const firstDay = middles[0]?.day ?? spot.day
+  const lastDay = middles[middles.length - 1]?.day ?? spot.day
   useEffect(() => {
-    onVisible(spot.day, lastDay)
-  }, [spot.day, lastDay]) // eslint-disable-line react-hooks/exhaustive-deps
+    onVisible(firstDay, lastDay)
+  }, [firstDay, lastDay]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const first = windowStart(spot.day, phase, timezone)
-  const ticks = useTicks(first, span, timezone, false, width)
-  // Now, at its time of day on every day.
-  const nowAt = useMemo(() => ((((minuteOfDay(now, timezone) - phase) % 1440) + 1440) % 1440) / span, [now, timezone, phase, span])
+  // The hours shown; labels, and half hours, only where they have room.
+  const hourWidth = width / (zoom.span / 60)
+  const step = LABEL_STEPS.find(hours => !width || hourWidth * hours >= LABEL_WIDTH) ?? 12
+  const ticks = useMemo<Tick[]>(() => {
+    const list: Tick[] = []
+    for (let hour = Math.ceil(zoom.start / 60); hour * 60 < zoom.start + zoom.span; hour++) {
+      list.push({ at: hour * HOUR_MS, label: hour % step ? '' : `${String(hour).padStart(2, '0')}:00`, midnight: false })
+    }
+    return list
+  }, [zoom.start, zoom.span, step])
+  const first = zoom.start * MINUTE_MS
   const plain = heightOf('')
 
   return (
@@ -259,14 +307,13 @@ export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, time
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return
         const move = { ArrowUp: -plain, ArrowDown: plain, PageUp: -view, PageDown: view }[event.key]
-        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') onPan(event.key === 'ArrowLeft' ? -60 : 60)
-        else if (move) scrollBy(move)
-        else return
+        if (!move) return
         event.preventDefault()
+        scrollBy(move)
       }}
       data-tour="calendar"
     >
-      <HoursHeader ticks={ticks} first={first} span={span} labeled hoursRef={hoursRef} />
+      <HoursHeader ticks={ticks} first={first} span={zoom.span} labeled hoursRef={hoursRef} />
       <div
         ref={days}
         className="schedule-days"
@@ -278,8 +325,8 @@ export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, time
           <div key={row.day} className={cn('schedule-row', row.day === today && 'is-today')} style={{ top: row.top, height: row.height }}>
             <DayContent
               day={row.day}
-              phase={phase}
-              span={span}
+              zoomStart={zoom.start}
+              zoomSpan={zoom.span}
               layout={layouts.get(row.day) ?? EMPTY_LAYOUT}
               techId={techId}
               timezone={timezone}
@@ -290,15 +337,16 @@ export function DaysGrid({ ref, focus, phase, span, layouts, techId, today, time
               colorOf={colorOf}
               onOpen={onOpen}
               onDrop={onDrop}
-              onPan={onPan}
+              onReach={bringIn}
               drag={drag}
               pan={pan.handlers}
             />
           </div>
         ))}
-        <HourLines ticks={ticks} first={first} span={span} />
+        <HourLines ticks={ticks} first={first} span={zoom.span} halves={!width || hourWidth >= LABEL_WIDTH} />
       </div>
-      <NowLine position={nowAt} />
+      {/* Now, at its time of day on every day. */}
+      <NowLine position={(minuteOfDay(now, timezone) - zoom.start) / zoom.span} />
       <ResetButton onReset={onReset} />
     </div>
   )

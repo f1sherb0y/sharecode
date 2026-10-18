@@ -65,11 +65,12 @@
   .schedule-page.is-fit .schedule-container > div { flex: 1; min-height: 0; }
   .schedule-page.is-fit .schedule-body, .schedule-page.is-fit .schedule-main { flex: 1; min-height: 0; }
 
-  /* Week and day: days down the page without end (week) or a row per tech (day), a
-     window of hours across that is dragged sideways (14 hours, fewer where they
-     would be narrower than 44px), through the days without end in the day view.
-     Day view rows share the window's height (each lane three to seven lines tall,
-     set inline) and scroll when their lanes need more. */
+  /* Week and day: days down the page without end, each from midnight to midnight
+     (week), or a row per tech (day) with a window of hours across that is dragged
+     through the days without end (14 hours, fewer where they would be narrower
+     than 44px).
+     A lane is one card high (set inline); day view rows scroll when they need
+     more than the window's height. */
   .schedule-grid {
     --schedule-label: 5.5rem;
     position: relative;
@@ -166,23 +167,6 @@
   .schedule-line { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--color-border); }
   .schedule-line.is-half { border-left-color: color-mix(in srgb, var(--color-border) 45%, transparent); }
   .schedule-line.is-midnight { margin-left: -0.5px; border-left: 2px dashed var(--schedule-midnight); }
-  /* The date of the day that begins at a week row's dashed line. */
-  .schedule-midnight-date {
-    position: absolute;
-    top: 1px;
-    z-index: 2;
-    margin-left: 3px;
-    padding-inline: 0.25rem;
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-background) 85%, transparent);
-    color: var(--schedule-midnight);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    line-height: 15px;
-    white-space: nowrap;
-    pointer-events: none;
-  }
   /* Sessions of a row's day beyond an edge of the window. */
   .schedule-more {
     position: absolute;

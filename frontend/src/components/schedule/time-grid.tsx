@@ -1,16 +1,15 @@
-import { useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Appointment } from '@/types'
 import { cn } from '@/lib/utils'
-import { MINUTE_MS, type DayLayout } from '@/lib/schedule'
+import { MINUTE_MS, type DayLayout, type Segment } from '@/lib/schedule'
 import {
   EMPTY_LAYOUT,
   HourLines,
   HoursHeader,
-  LINES,
-  MAX_LINES,
   NowLine,
   ResetButton,
   Track,
+  cardLines,
   rowSize,
   usePan,
   useTicks,
@@ -67,14 +66,20 @@ export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding,
   const pan = usePan({ span, width, onPanX: onPan })
   const first = rows[0]?.start ?? 0
   const ticks = useTicks(first, span, timezone, true, width)
+  // A marker at an edge brings the nearest session beyond it to the middle of the window.
+  const reach = useCallback((segment: Segment) => {
+    const end = Math.min(segment.end, segment.start + span * MINUTE_MS)
+    onPan(((segment.start + end) / 2 - first) / MINUTE_MS - span / 2)
+  }, [onPan, first, span])
   const labeled = rows.some(row => row.label)
+  const lines = cardLines(showTech)
   const lanesOf = (index: number) => (layouts[index] ?? EMPTY_LAYOUT).lanes
 
   return (
     <div
       className={cn('schedule-grid', !labeled && 'is-unlabeled', adding && editable && 'is-adding', pan.panning && 'is-panning')}
-      // Ends below the last row once every lane has reached its full height (hours row + borders).
-      style={{ maxHeight: `calc(1.75rem + 3px + ${rows.reduce((sum, _, index) => sum + rowSize(lanesOf(index), MAX_LINES) + 1, 0)}px)` }}
+      // Ends below the last row (hours row + borders).
+      style={{ maxHeight: `calc(1.75rem + 3px + ${rows.reduce((sum, _, index) => sum + rowSize(lanesOf(index), lines) + 1, 0)}px)` }}
       role="region"
       aria-label={label}
       tabIndex={0}
@@ -92,8 +97,8 @@ export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding,
             <div
               key={row.key}
               className="schedule-row"
-              // Each lane gets an equal share of the spare height, up to MAX_LINES lines (+1px for the row border).
-              style={{ flex: `${lanesOf(index)} 0 ${rowSize(lanesOf(index), LINES) + 1}px`, maxHeight: rowSize(lanesOf(index), MAX_LINES) + 1 }}
+              // A card's height per lane (+1px for the row border).
+              style={{ flex: 'none', height: rowSize(lanesOf(index), lines) + 1 }}
             >
               {labeled && (
                 <div className="schedule-row-label">
@@ -113,10 +118,9 @@ export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding,
                 colorOf={colorOf}
                 onOpen={onOpen}
                 onDrop={onDrop}
-                onPan={onPan}
+                onReach={reach}
                 drag={drag}
                 pan={pan.handlers}
-                dateAtMidnight={false}
                 label={row.label || undefined}
               />
             </div>

@@ -359,6 +359,11 @@ const pickTime = async (page, trigger, time) => {
 }
 const appointment = async appointmentId => (await request('/api/appointments/' + appointmentId, 'GET', undefined, as('agent_a'))).appointment
 const fitsWidth = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
+// Free space on a row, away from its sessions.
+const freeX = row => {
+  const rect = row.getBoundingClientRect()
+  for (let x = rect.right - 20; x > rect.left; x -= 10) if (document.elementFromPoint(x, rect.top + 6) === row) return x
+}
 const drag = async (page, from, to, steps = 8) => {
   await page.mouse.move(from.x, from.y)
   await page.mouse.down()
@@ -538,21 +543,26 @@ try {
       assert(await fits(), 'no scrollbar under the timeline')
       assert(await fitsWidth(page), 'no sideways scrolling of the page')
       await page.setViewportSize({ width: 1440, height: 900 })
-      // Dragging free space moves the hours; past midnight a dashed line marks the day's turn.
+      // The week shows whole days: dragging free space sideways moves nothing.
       const shownRow = rows.and(page.locator(`[data-day="${(await inView())[1]}"]`))
-      const lastBox = await shownRow.boundingBox()
-      const free = await shownRow.evaluate(row => {
-        const rect = row.getBoundingClientRect()
-        for (let x = rect.right - 20; x > rect.left; x -= 10) if (document.elementFromPoint(x, rect.top + 6) === row) return x
-      })
-      await drag(page, { x: free, y: lastBox.y + 6 }, { x: free - lastBox.width * 0.6, y: lastBox.y + 6 })
-      assert.equal(await page.locator('.schedule-line.is-midnight').count(), 1)
-      // Each day names the day that begins at the dashed line.
-      const nextDay = new Date(Date.parse(await shownRow.getAttribute('data-day')) + 864e5)
-      assert.match(await shownRow.locator('.schedule-midnight-date').innerText(), new RegExp(`\\b${nextDay.getUTCMonth() + 1}/${nextDay.getUTCDate()}\\b`))
-      // The days move on without end and without a scrollbar; Reset brings back today's week and the usual hours.
+      const rowBox = await shownRow.boundingBox()
+      const free = await shownRow.evaluate(freeX)
+      await drag(page, { x: free, y: rowBox.y + 6 }, { x: free - rowBox.width * 0.6, y: rowBox.y + 6 })
+      assert.equal(await page.locator('.schedule-hour').first().innerText(), '00:00')
+      assert.equal(await page.locator('.schedule-more').count(), 0, 'nothing hidden at the edges')
+      // Ctrl and the wheel zoom the hours about the pointer; a marker then counts the sessions outside and brings them in.
+      const dayRow = rows.and(page.locator(`[data-day="${day}"]`))
+      const dayRowBox = await dayRow.boundingBox()
+      await page.mouse.move(dayRowBox.x + dayRowBox.width - 2, dayRowBox.y + 6)
+      await page.keyboard.down('Control')
+      await page.mouse.wheel(0, -2000)
+      await page.keyboard.up('Control')
+      await dayRow.locator('.schedule-more.is-before').click()
+      await dayRow.locator(`[data-appointment="${shown.id}"]`).waitFor()
+      assert.notEqual(await page.locator('.schedule-hour').first().innerText(), '00:00')
+      // The days move on without end and without a scrollbar; Reset brings back today's week.
       const top = days[0]
-      await page.mouse.move(free, lastBox.y + 6)
+      await page.mouse.move(free, rowBox.y + 6)
       for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 500)
       await page.waitForFunction(top => {
         const view = document.querySelector('.schedule-days').getBoundingClientRect()
@@ -561,7 +571,19 @@ try {
       }, top)
       assert.equal(await scroller.evaluate(el => getComputedStyle(el).overflowY), 'clip')
       await page.getByRole('button', { name: 'Reset', exact: true }).click()
-      await page.locator('.schedule-hour').first().filter({ hasText: /^08:00$/ }).waitFor()
+      const todayKey = shanghaiToday.toISOString().slice(0, 10)
+      await rows.and(page.locator(`[data-day="${todayKey}"]`)).waitFor()
+      assert((await inView()).includes(todayKey), 'Reset shows today')
+      assert.equal(await page.locator('.schedule-hour').first().innerText(), '00:00', 'and the whole day')
+      // The day view's hours are dragged on through the days; where one begins, the hours above name it.
+      await page.getByRole('button', { name: 'Day', exact: true }).click()
+      const waitingRow = column('')
+      await waitingRow.waitFor()
+      const dayBox = await waitingRow.boundingBox()
+      const blank = await waitingRow.evaluate(freeX)
+      await drag(page, { x: blank, y: dayBox.y + 6 }, { x: blank - dayBox.width * 0.6, y: dayBox.y + 6 })
+      const nextDay = new Date(Date.parse(await waitingRow.getAttribute('data-day')) + 864e5)
+      assert.match(await page.locator('.schedule-hour.is-midnight').innerText(), new RegExp(`\\b${nextDay.getUTCMonth() + 1}/${nextDay.getUTCDate()}\\b`))
 
       // 场次: customers on the left, the chosen customer's sessions on the right.
       await page.getByRole('tab', { name: 'Sessions' }).click()
@@ -702,7 +724,7 @@ try {
         const card = page.getByRole('region', { name: /Today's sessions/ })
         await card.getByText('Today ' + engine).waitFor()
         await page.locator('[data-sonner-toast]').filter({ hasText: /schedule update|New session/ }).first().waitFor()
-        await page.goto(`${WEB}/schedule?view=week&date=${at(uiDay + 1, 0).slice(0, 10)}`)
+        await page.goto(`${WEB}/schedule?view=week&date=${day}`)
         await page.locator(`[data-appointment="${waiting.id}"]`).waitFor()
         assert.equal(await page.locator(`[data-appointment="${first.id}"]`).count(), 0, "another tech's session")
         assert.equal(await page.locator('.ui-tour').count(), 0, 'techs get no tour')
@@ -813,7 +835,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, the day dragged through the days and the week scrolled without end, dates at the dashed midnight, Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; EN/ZH')
+      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, the week scrolled without end with whole days and Ctrl+wheel zoom, the day dragged through the days with dates at midnight, Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }

@@ -75,10 +75,11 @@ export function pointerInstant(event: { clientX: number; currentTarget: Element 
 /**
  * Mouse and pen drags on the timeline: draw a new session, move one (to another
  * day in the week view, another tech in the day view) or stretch its end. At the
- * left or right edge the window of hours moves along, at the top or bottom the rows
- * (`onScrollBy` for days drawn without a scrollbar). Touch uses taps instead.
+ * left or right edge the window of hours moves along (where it moves: `onPan`), at the
+ * top or bottom the rows (`onScrollBy` for days drawn without a scrollbar). Touch uses
+ * taps instead.
  */
-export function useScheduleDrag({ onDrop, onPan, onScrollBy }: { onDrop: (drop: GridDrop) => void; onPan: (minutes: number) => void; onScrollBy?: (pixels: number) => void }) {
+export function useScheduleDrag({ onDrop, onPan, onScrollBy }: { onDrop: (drop: GridDrop) => void; onPan?: (minutes: number) => void; onScrollBy?: (pixels: number) => void }) {
   const [preview, setPreview] = useState<DragPreview | null>(null)
   const session = useRef<Session | null>(null)
   const suppressClick = useRef(false)
@@ -163,13 +164,13 @@ export function useScheduleDrag({ onDrop, onPan, onScrollBy }: { onDrop: (drop: 
     const near = { left: x < rows.left + EDGE, right: x > rows.right - EDGE, top: y < rect.top + EDGE, bottom: y > rect.bottom - EDGE }
     for (const edge of ['left', 'right', 'top', 'bottom'] as const) if (!inside || !near[edge]) current.armed.add(edge)
     const at = (edge: keyof typeof near) => inside && near[edge] && current.armed.has(edge)
-    const stepX = at('left') ? -1 : at('right') ? 1 : 0
+    const stepX = !onPanRef.current ? 0 : at('left') ? -1 : at('right') ? 1 : 0
     const stepY = at('top') ? -12 : at('bottom') ? 12 : 0
     const scrollBy = onScrollByRef.current
     const canScroll = !!stepY && (!!scrollBy || (stepY < 0 && scroller.scrollTop > 0)
       || (stepY > 0 && scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight))
     if (!stepX && !canScroll) return stopScrolling()
-    if (stepX) onPanRef.current(stepX * EDGE_PAN)
+    if (stepX) onPanRef.current?.(stepX * EDGE_PAN)
     if (canScroll) {
       if (scrollBy) scrollBy(stepY)
       else scroller.scrollTop += stepY

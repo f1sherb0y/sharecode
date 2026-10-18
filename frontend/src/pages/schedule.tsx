@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -43,6 +43,7 @@ import { translateError } from '@/i18n/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { isStaff } from '@/lib/room-permissions'
 import {
+  DAY_MS,
   MAX_WINDOW_HOURS,
   MINUTE_MS,
   MIN_WINDOW_HOURS,
@@ -50,10 +51,10 @@ import {
   UNASSIGNED_COLOR,
   WINDOW_START_HOUR,
   clamp,
-  clampPhase,
   formatDayKey,
   indexSessions,
   layoutDay,
+  layoutRange,
   sessionsIn,
   sessionsOnDay,
   stepAnchor,
@@ -127,15 +128,11 @@ export function SchedulePage() {
   // "Add" is on: clicking or drawing on the timeline plans a session.
   const [adding, setAdding] = useState(false)
 
-  // The week's window of hours starts at the same time of every day (minutes from its
-  // midnight); the day view's window is an instant that moves through the days without
-  // end. As many hours as fit the screen.
-  const [phase, setPhase] = useState(WINDOW_START_HOUR * 60)
+  // The week shows whole days; the day view's window of hours starts at an instant that
+  // moves through the days without end, as many hours as fit the screen.
   const [fitHours, setFitHours] = useState(() => clamp(Math.floor((window.innerWidth - 120) / 44), MIN_WINDOW_HOURS, MAX_WINDOW_HOURS))
   const span = fitHours * 60
-  const weekPhase = clampPhase(phase, span)
   const [origin, setOrigin] = useState(() => windowStart(anchor, WINDOW_START_HOUR * 60, timezone))
-  const panWeek = useCallback((minutes: number) => setPhase(current => clampPhase(clampPhase(current, span) + minutes, span)), [span])
   const panDay = useCallback((minutes: number) => setOrigin(current => current + minutes * MINUTE_MS), [])
   // A row lays out its day and as far either side as its window reaches.
   const reach = span * MINUTE_MS / 2
@@ -171,8 +168,8 @@ export function SchedulePage() {
   const loadKey = useDebounced(loadNow, 150) || loadNow
   const [loadFirst, loadLast] = loadKey ? loadKey.split('/') as [string, string] : [null, null]
   const weeks = useScheduleWeeks({
-    from: loadFirst ? dayStart(loadFirst, timezone).getTime() - reach : 0,
-    to: loadLast ? dayStart(addDays(loadLast, 1), timezone).getTime() + reach : 0,
+    from: loadFirst ? dayStart(loadFirst, timezone).getTime() - DAY_MS : 0,
+    to: loadLast ? dayStart(addDays(loadLast, 1), timezone).getTime() + DAY_MS : 0,
     mine: mine && !techFilter,
     techId: techFilter,
     enabled: !!user && timeline && !!loadKey,
@@ -185,16 +182,20 @@ export function SchedulePage() {
     queryFn: async () => (await api.getRoomOwners()).users,
     enabled: staff,
   })
+  // The next 90 days from the start of the UTC day, whatever zone is shown: the strip
+  // stays as it is when the zone changes.
+  const utcDay = Math.floor(now / DAY_MS) * DAY_MS
   const unassignedParams = useMemo(() => ({
-    from: dayStart(today, timezone).toISOString(),
-    to: dayStart(addDays(today, 90), timezone).toISOString(),
+    from: new Date(utcDay).toISOString(),
+    to: new Date(utcDay + 90 * DAY_MS).toISOString(),
     unassigned: true,
     mine,
-  }), [today, timezone, mine])
+  }), [utcDay, mine])
   const unassignedQuery = useQuery({
     queryKey: queryKeys.appointments(unassignedParams),
     queryFn: async ({ signal }) => (await api.listAppointments(unassignedParams, signal)).appointments,
     enabled: staff,
+    placeholderData: keepPreviousData,
     refetchInterval: 60_000,
   })
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
@@ -310,6 +311,9 @@ export function SchedulePage() {
 
   const daysRef = useRef<DaysGridHandle>(null)
   const scrollDays = useCallback((pixels: number) => daysRef.current?.scrollBy(pixels), [])
+  const panWeek = useCallback((minutes: number) => daysRef.current?.panBy(minutes), [])
+  // A drag at the left or right edge moves the hours (in the week, once zoomed in); at its
+  // top or bottom, the week's days.
   const drag = useScheduleDrag({ onDrop: handleDrop, onPan: view === 'day' ? panDay : panWeek, onScrollBy: view === 'week' ? scrollDays : undefined })
 
   // Escape leaves "Add".
@@ -355,8 +359,6 @@ export function SchedulePage() {
       if (end <= origin || start >= origin + length) setOrigin(middle - length / 2)
       return {}
     }
-    const from = windowStart(day, weekPhase, timezone)
-    if (end <= from || start >= from + length) setPhase(clampPhase((middle - dayStart(day, timezone).getTime()) / MINUTE_MS - span / 2, span))
     if (!inWeek(day)) setFocus(current => ({ day, seq: current.seq + 1, align: 'week' }))
     return {}
   }
@@ -404,9 +406,11 @@ export function SchedulePage() {
 
   // Back to today and the usual hours.
   const reset = () => {
-    setPhase(WINDOW_START_HOUR * 60)
     if (view === 'day') setOrigin(windowStart(today, WINDOW_START_HOUR * 60, timezone))
-    else setFocus(current => ({ day: today, seq: current.seq + 1, align: 'week' }))
+    else {
+      daysRef.current?.resetZoom()
+      setFocus(current => ({ day: today, seq: current.seq + 1, align: 'week' }))
+    }
   }
   const goToday = () => {
     if (timeline && view === 'day') setOrigin(windowStart(today, windowPhase(origin, span, timezone), timezone))
@@ -418,28 +422,23 @@ export function SchedulePage() {
     else if (timeline) setFocus(current => ({ day: addDays(visibleDays?.first ?? startOfWeek(anchor), 7 * direction), seq: current.seq + 1, align: 'start' }))
     else setParams({ date: stepAnchor(view, anchor, direction) })
   }
-  const switchView = (value: ScheduleView, extra: Record<string, string | null> = {}) => {
+  // The router applies address changes as transitions: changes to the page's own state
+  // that go with one are made in the same transition, so they show in the same frame.
+  const switchView = (value: ScheduleView, extra: Record<string, string | null> = {}) => startTransition(() => {
     setAdding(false)
-    // The day view opens on today if the week shows it, else on the first day it shows.
+    // The day view opens on today if the week shows it, else on the first day it shows,
+    // at the hours it showed last.
     const date = value === 'day' && timeline && view === 'week' && visibleDays ? (inWeek(today) ? today : visibleDays.first) : currentDay
-    if (value === 'day' && view !== 'day') setOrigin(windowStart(date, view === 'week' ? weekPhase : windowPhase(origin, span, timezone), timezone))
-    if (value === 'week' && timeline && view === 'day') setPhase(clampPhase(windowPhase(origin, span, timezone), span))
+    if (value === 'day' && view !== 'day') setOrigin(windowStart(date, windowPhase(origin, span, timezone), timezone))
     setParams({ view: value, date, ...extra })
-  }
-  // The calendar stays on the same instants in another zone: only the hours above change,
-  // and a day of the week may take the name of the day before or after.
-  const switchZone = (zone: string) => {
-    let date = anchor
-    if (timeline && view === 'day') date = windowDay(origin, span, zone)
-    else if (timeline && visibleDays) {
-      const start = windowStart(visibleDays.first, weekPhase, timezone)
-      date = windowDay(start, span, zone)
-      setPhase(windowPhase(start, span, zone))
-      setFocus(current => ({ day: date, seq: current.seq + 1, align: 'keep' }))
-    }
+  })
+  // In another zone the day view stays on the same instants (only the hours above change)
+  // and the week's rows become that zone's days.
+  const switchZone = (zone: string) => startTransition(() => {
+    const date = timeline && view === 'day' ? windowDay(origin, span, zone) : anchor
     written.current = date
     setParams({ tz: zone === DEFAULT_ZONE ? null : zone, date })
-  }
+  })
 
   const techName = (id: string) => users.find(account => account.id === id)?.username ?? people.find(person => person.id === id)?.username ?? ''
   // Every tech, and whoever is chosen even if they are not a tech.
@@ -473,13 +472,15 @@ export function SchedulePage() {
     day: shownDay,
     ...(row.techId && !techFilter ? { onPick: () => switchView('week', { tech: row.techId!, session: null }) } : {}),
   }))
-  // The week: every day loaded, laid out once.
+  // The week: every day loaded, laid out once, from midnight to midnight.
   const weekLayouts = useMemo(() => {
     const layouts = new Map<string, DayLayout>()
     if (!timeline || view !== 'week' || !loadFirst || !loadLast) return layouts
-    for (let day = loadFirst; day <= loadLast; day = addDays(day, 1)) layouts.set(day, layoutDay(index, day, timezone, reach, everyone, laneRank))
+    for (let day = loadFirst; day <= loadLast; day = addDays(day, 1)) {
+      layouts.set(day, layoutRange(index, dayStart(day, timezone).getTime(), dayStart(addDays(day, 1), timezone).getTime(), everyone, laneRank))
+    }
     return layouts
-  }, [timeline, view, loadFirst, loadLast, index, timezone, reach, laneRank])
+  }, [timeline, view, loadFirst, loadLast, index, timezone, laneRank])
 
   const rangeLabel = (() => {
     const format = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' })
@@ -502,11 +503,11 @@ export function SchedulePage() {
   const listEmpty = staff ? t('schedule.noSessions') : t('schedule.noSessionsTech')
   const dayCount = sessionsOnDay(visible, timeline ? shownDay : anchor, timezone).length
   // Unassigned sessions the calendar shows are not listed again above it: on the timelines,
-  // the days in view as far as their rows reach (one tech's calendar shows none); the
-  // month and the list, whatever they hold.
+  // what the rows in view hold, in their window or counted at its edge (one tech's
+  // calendar shows none); the month and the list, whatever they hold.
   const calendarSpan = !timeline || techFilter ? null
     : view === 'day' ? [dayStart(shownDay, timezone).getTime() - reach, dayStart(addDays(shownDay, 1), timezone).getTime() + reach]
-      : visibleDays ? [dayStart(visibleDays.first, timezone).getTime() - reach, dayStart(addDays(visibleDays.last, 1), timezone).getTime() + reach] : null
+      : visibleDays ? [dayStart(visibleDays.first, timezone).getTime(), dayStart(addDays(visibleDays.last, 1), timezone).getTime()] : null
   const onCalendar = new Set((calendarSpan ? sessionsIn(index, calendarSpan[0]!, calendarSpan[1]!) : timeline ? [] : visible).map(a => a.id))
   const waiting = (unassignedQuery.data ?? []).filter(a => Date.parse(a.endsAt) > now && !onCalendar.has(a.id))
   const fit = tab === 'sessions' || view !== 'list'
@@ -682,8 +683,6 @@ export function SchedulePage() {
                   <DaysGrid
                     ref={daysRef}
                     focus={focus}
-                    phase={weekPhase}
-                    span={span}
                     layouts={weekLayouts}
                     techId={techFilter ?? undefined}
                     today={today}
@@ -695,7 +694,6 @@ export function SchedulePage() {
                     colorOf={colorOf}
                     onOpen={openSession}
                     onDrop={handleDrop}
-                    onPan={panWeek}
                     onFit={setFitHours}
                     onReset={reset}
                     drag={drag}
