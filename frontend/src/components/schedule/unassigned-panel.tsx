@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getLocale } from '@/i18n'
 import { formatDayKey } from '@/lib/schedule'
@@ -10,6 +10,7 @@ interface UnassignedPanelProps {
   /** Upcoming sessions without a tech that the calendar below does not show. */
   appointments: Appointment[]
   timezone: string
+  colorOf: (appointment: Appointment) => string
   onOpen: (appointment: Appointment) => void
   drag: {
     preview: DragPreview | null
@@ -19,7 +20,7 @@ interface UnassignedPanelProps {
 }
 
 /** Upcoming sessions without a tech, in a strip above the calendar, ready to be dragged onto it. */
-export function UnassignedPanel({ appointments, timezone, onOpen, drag }: UnassignedPanelProps) {
+export function UnassignedPanel({ appointments, timezone, colorOf, onOpen, drag }: UnassignedPanelProps) {
   const { t } = useTranslation()
   const locale = getLocale()
   return (
@@ -34,6 +35,7 @@ export function UnassignedPanel({ appointments, timezone, onOpen, drag }: Unassi
             <button
               type="button"
               className={drag.preview?.appointment?.id === appointment.id ? 'is-dragging' : undefined}
+              style={{ '--event-color': colorOf(appointment) } as CSSProperties}
               onPointerDown={(event) => drag.begin(event, { kind: 'move', appointment })}
               onClick={() => { if (!drag.endsDrag()) onOpen(appointment) }}
             >

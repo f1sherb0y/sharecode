@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,10 +27,14 @@ import { MonthGrid } from '@/components/schedule/month-grid'
 import { SessionRoomActions } from '@/components/schedule/session-room-actions'
 import { ScheduleTour } from '@/components/schedule/schedule-tour'
 import { SessionsPanel } from '@/components/schedule/sessions-panel'
-import { TimeGrid, type GridRow } from '@/components/schedule/time-grid'
+import { DaysGrid, type DaysFocus, type DaysGridHandle } from '@/components/schedule/days-grid'
+import { inRow } from '@/components/schedule/timeline-parts'
+import { TimeGrid, type DayRow } from '@/components/schedule/time-grid'
 import { UnassignedPanel } from '@/components/schedule/unassigned-panel'
 import { useOnlyMine } from '@/components/schedule/use-only-mine'
 import { useScheduleDrag, type GridDrop } from '@/components/schedule/use-schedule-drag'
+import { useScheduleWeeks } from '@/components/schedule/use-schedule-weeks'
+import { useDebounced } from '@/components/schedule/customer-picker'
 import { useCompactViewport } from '@/hooks/use-compact-viewport'
 import { useNow } from '@/hooks/use-now'
 import { api } from '@/api'
@@ -40,6 +44,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { isStaff } from '@/lib/room-permissions'
 import {
   MAX_WINDOW_HOURS,
+  MINUTE_MS,
   MIN_WINDOW_HOURS,
   SCHEDULE_VIEWS,
   UNASSIGNED_COLOR,
@@ -47,17 +52,23 @@ import {
   clamp,
   clampPhase,
   formatDayKey,
+  indexSessions,
+  layoutDay,
+  sessionsIn,
   sessionsOnDay,
   stepAnchor,
   techColors,
   viewRange,
+  windowDay,
+  windowPhase,
   windowStart,
   DEFAULT_ZONE,
   SCHEDULE_ZONES,
   zoneName,
+  type DayLayout,
   type ScheduleView,
 } from '@/lib/schedule'
-import { addDays, dateKeyOf, dayStart, minuteOfDay, parseDateKey, timeInputValue, todayKey, toZonedIso } from '@/lib/zoned-time'
+import { addDays, dateKeyOf, dayStart, minuteOfDay, parseDateKey, startOfWeek, timeInputValue, todayKey, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores'
 import type { Appointment, AppointmentInput, ScheduleConflict, User } from '@/types'
@@ -65,6 +76,8 @@ import '@/styles/schedule.css'
 
 type Tab = 'calendar' | 'sessions'
 const ALL_TECHS = 'all'
+const NO_SESSIONS: Appointment[] = []
+const everyone = () => true
 
 /** 排班: agents and admins plan every tech's sessions and keep the customer list; techs see their own sessions. */
 export function SchedulePage() {
@@ -114,37 +127,59 @@ export function SchedulePage() {
   // "Add" is on: clicking or drawing on the timeline plans a session.
   const [adding, setAdding] = useState(false)
 
-  // The timelines' window of hours: where it starts on each row's day (minutes from
-  // midnight, negative for the evening before) and how many hours fit the screen.
+  // The week's window of hours starts at the same time of every day (minutes from its
+  // midnight); the day view's window is an instant that moves through the days without
+  // end. As many hours as fit the screen.
   const [phase, setPhase] = useState(WINDOW_START_HOUR * 60)
   const [fitHours, setFitHours] = useState(() => clamp(Math.floor((window.innerWidth - 120) / 44), MIN_WINDOW_HOURS, MAX_WINDOW_HOURS))
   const span = fitHours * 60
-  const pan = useCallback((minutes: number) => setPhase(current => clampPhase(current + minutes, span, current)), [span])
+  const weekPhase = clampPhase(phase, span)
+  const [origin, setOrigin] = useState(() => windowStart(anchor, WINDOW_START_HOUR * 60, timezone))
+  const panWeek = useCallback((minutes: number) => setPhase(current => clampPhase(clampPhase(current, span) + minutes, span)), [span])
+  const panDay = useCallback((minutes: number) => setOrigin(current => current + minutes * MINUTE_MS), [])
+  // A row lays out its day and as far either side as its window reaches.
+  const reach = span * MINUTE_MS / 2
+  const shownDay = windowDay(origin, span, timezone)
+  // The days the week shows, as it scrolls, and where it is asked to go.
+  const [visibleDays, setVisibleDays] = useState<{ first: string; last: string } | null>(null)
+  const onVisible = useCallback((first: string, last: string) => setVisibleDays(current => (current?.first === first && current.last === last ? current : { first, last })), [])
+  const [focus, setFocus] = useState<DaysFocus>(() => ({ day: anchor, seq: 0, align: 'week' }))
+  const inWeek = (day: string) => !!visibleDays && day >= visibleDays.first && day <= visibleDays.last
+  // The day the calendar is on: the day view's, today or the first day the week shows, else the address's.
+  const currentDay = !timeline ? anchor : view === 'day' ? shownDay : visibleDays ? (inWeek(today) ? today : visibleDays.first) : anchor
+  // The date the page last wrote to the address itself.
+  const written = useRef<string | null>(null)
 
   const range = useMemo(() => viewRange(view, anchor), [view, anchor])
-  const rangeParams = useMemo(() => {
-    // Timelines load whole UTC days with a margin around their rows, so moving the
-    // window or switching the zone needs nothing new.
-    const utc = (key: string) => {
-      const day = parseDateKey(key)!
-      return new Date(Date.UTC(day.year, day.month - 1, day.day)).toISOString()
-    }
-    return {
-      from: timeline ? utc(addDays(range.from, -3)) : dayStart(range.from, timezone).toISOString(),
-      to: timeline ? utc(addDays(range.to, 3)) : dayStart(range.to, timezone).toISOString(),
-      // A tech's calendar shows every session they have, whoever's customer it is.
-      mine: mine && !techFilter,
-      ...(techFilter ? { techId: techFilter } : {}),
-    }
-  }, [timeline, range.from, range.to, timezone, mine, techFilter])
-  const appointmentsQuery = useQuery({
-    queryKey: queryKeys.appointments(rangeParams),
-    queryFn: async ({ signal }) => (await api.listAppointments(rangeParams, signal)).appointments,
-    enabled: !!user,
+  const listParams = useMemo(() => ({
+    from: dayStart(range.from, timezone).toISOString(),
+    to: dayStart(range.to, timezone).toISOString(),
+    // A tech's calendar shows every session they have, whoever's customer it is.
+    mine: mine && !techFilter,
+    ...(techFilter ? { techId: techFilter } : {}),
+  }), [range.from, range.to, timezone, mine, techFilter])
+  const listQuery = useQuery({
+    queryKey: queryKeys.appointments(listParams),
+    queryFn: async ({ signal }) => (await api.listAppointments(listParams, signal)).appointments,
+    enabled: !!user && !timeline,
     placeholderData: keepPreviousData,
     // Several agents plan at once; pick up their changes.
     refetchInterval: 60_000,
   })
+  // Timelines load a week at a time around the days in view, a little after they stop moving.
+  const loadNow = !timeline ? '' : view === 'day' ? `${addDays(shownDay, -2)}/${addDays(shownDay, 2)}` : visibleDays ? `${addDays(visibleDays.first, -7)}/${addDays(visibleDays.last, 7)}` : ''
+  const loadKey = useDebounced(loadNow, 150) || loadNow
+  const [loadFirst, loadLast] = loadKey ? loadKey.split('/') as [string, string] : [null, null]
+  const weeks = useScheduleWeeks({
+    from: loadFirst ? dayStart(loadFirst, timezone).getTime() - reach : 0,
+    to: loadLast ? dayStart(addDays(loadLast, 1), timezone).getTime() + reach : 0,
+    mine: mine && !techFilter,
+    techId: techFilter,
+    enabled: !!user && timeline && !!loadKey,
+  })
+  const appointments = timeline ? weeks.appointments : listQuery.data ?? NO_SESSIONS
+  const fetching = timeline ? weeks.fetching : listQuery.isFetching
+  const loadError = timeline ? weeks.error : listQuery.error
   const usersQuery = useQuery({
     queryKey: queryKeys.roomCreationUsers,
     queryFn: async () => (await api.getRoomOwners()).users,
@@ -162,14 +197,13 @@ export function SchedulePage() {
     enabled: staff,
     refetchInterval: 60_000,
   })
-  const appointments = useMemo(() => appointmentsQuery.data ?? [], [appointmentsQuery.data])
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
 
   // A linked session (from a notice or the customer history) may lie outside the range.
   const linkedQuery = useQuery({
     queryKey: queryKeys.appointment(sessionId ?? ''),
     queryFn: async () => (await api.getAppointment(sessionId!)).appointment,
-    enabled: !!sessionId && !appointments.some(a => a.id === sessionId) && !appointmentsQuery.isFetching,
+    enabled: !!sessionId && !appointments.some(a => a.id === sessionId) && !fetching,
     retry: false,
   })
   const openAppointment = (sessionId && (appointments.find(a => a.id === sessionId) ?? linkedQuery.data)) || null
@@ -245,6 +279,8 @@ export function SchedulePage() {
     },
   })
 
+  // Stable, so the days drawn do not redraw for every change on the page.
+  const moveSession = moveMutation.mutate
   const handleDrop = useCallback((drop: GridDrop) => {
     if (!staff) return
     if (drop.kind === 'create') {
@@ -269,10 +305,12 @@ export function SchedulePage() {
       durationMinutes: drop.durationMinutes,
       tech: !techChanged ? appointment.tech : newTech ? { id: newTech.id, username: newTech.username, color: newTech.color, role: newTech.role, isDeleted: false } : null,
     })
-    moveMutation.mutate({ appointment, input })
-  }, [staff, timezone, users, moveMutation])
+    moveSession({ appointment, input })
+  }, [staff, timezone, users, moveSession])
 
-  const drag = useScheduleDrag({ onDrop: handleDrop, onPan: pan })
+  const daysRef = useRef<DaysGridHandle>(null)
+  const scrollDays = useCallback((pixels: number) => daysRef.current?.scrollBy(pixels), [])
+  const drag = useScheduleDrag({ onDrop: handleDrop, onPan: view === 'day' ? panDay : panWeek, onScrollBy: view === 'week' ? scrollDays : undefined })
 
   // Escape leaves "Add".
   useEffect(() => {
@@ -282,7 +320,7 @@ export function SchedulePage() {
     return () => window.removeEventListener('keydown', key)
   }, [adding])
 
-  const openSession = (appointment: Appointment) => setParams({ session: appointment.id })
+  const openSession = useCallback((appointment: Appointment) => setParams({ session: appointment.id }), [setParams])
   const closeDialog = () => {
     setDraft(null)
     setParams({ session: null })
@@ -296,7 +334,7 @@ export function SchedulePage() {
 
   const newSession = (preset?: Partial<SessionDraft>) => {
     // The next half hour on the day in view (or today), an hour long.
-    const on = tab === 'calendar' ? anchor : today
+    const on = tab === 'calendar' ? currentDay : today
     const base = on === today ? Math.ceil((minuteOfDay(now, timezone) + 1) / 30) * 30 : 10 * 60
     const day = base >= 1440 ? addDays(on, 1) : on
     const startsAt = dayStart(day, timezone)
@@ -305,23 +343,22 @@ export function SchedulePage() {
     setParams({ session: null })
   }
 
-  // Each row's window starts at the same time of its day; a row is named after the day
-  // most of its window shows.
-  const starts = useMemo(() => (timeline ? range.days.map(day => windowStart(day, phase, timezone)) : []), [timeline, range.days, phase, timezone])
-  const shownDays = useMemo(() => starts.map(start => dateKeyOf(start + span * 30000, timezone)), [starts, span, timezone])
-
-  /** Moves the window onto a session's hours; returns the date that shows its day, if another. */
+  /** Moves the calendar onto a session; returns the date for the address in the month and the list. */
   const bringIntoView = (appointment: Appointment): Record<string, string> => {
     const start = Date.parse(appointment.startsAt)
     const end = Date.parse(appointment.endsAt)
     const day = dateKeyOf(start, timezone)
     if (!timeline) return { date: day }
-    const from = windowStart(day, phase, timezone)
-    if (end <= from || start >= from + span * 60000) {
-      const middle = (start + Math.min(end, start + span * 60000)) / 2
-      setPhase(clampPhase((middle - dayStart(day, timezone).getTime()) / 60000 - span / 2, span))
+    const length = span * MINUTE_MS
+    const middle = (start + Math.min(end, start + length)) / 2
+    if (view === 'day') {
+      if (end <= origin || start >= origin + length) setOrigin(middle - length / 2)
+      return {}
     }
-    return range.days.includes(day) ? {} : { date: day }
+    const from = windowStart(day, weekPhase, timezone)
+    if (end <= from || start >= from + length) setPhase(clampPhase((middle - dayStart(day, timezone).getTime()) / MINUTE_MS - span / 2, span))
+    if (!inWeek(day)) setFocus(current => ({ day, seq: current.seq + 1, align: 'week' }))
+    return {}
   }
   // A session opened from a link comes into view.
   const revealed = useRef<string | null>(null)
@@ -337,10 +374,71 @@ export function SchedulePage() {
     if (update.date) setParams(update)
   }, [openAppointment?.id, tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The window stays on the same instants in another zone: only the hours above it change.
+  // The day view goes to the day the address names when it changes from elsewhere (a
+  // link, a day picked in the month); its own moves are written there.
+  useLayoutEffect(() => {
+    if (!timeline || view !== 'day' || anchor === written.current || anchor === windowDay(origin, span, timezone)) return
+    setOrigin(windowStart(anchor, windowPhase(origin, span, timezone), timezone))
+  }, [timeline, view, anchor]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The week opens on the address's week, and goes there when it changes from elsewhere.
+  const weekOpen = useRef(false)
+  useLayoutEffect(() => {
+    if (!timeline || view !== 'week') {
+      weekOpen.current = false
+      return
+    }
+    if (weekOpen.current && (anchor === written.current || inWeek(anchor))) return
+    weekOpen.current = true
+    setFocus(current => ({ day: anchor, seq: current.seq + 1, align: 'week' }))
+  }, [timeline, view, anchor]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The address keeps the day in view, for a reload or a link: in the week, once its date has scrolled away.
+  const dayToWrite = !timeline ? null : view === 'day' ? shownDay : visibleDays && !inWeek(anchor) ? visibleDays.first : null
+  useEffect(() => {
+    if (!dayToWrite || dayToWrite === anchor) return
+    const timer = setTimeout(() => {
+      written.current = dayToWrite
+      setParams({ date: dayToWrite })
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [dayToWrite, anchor, setParams])
+
+  // Back to today and the usual hours.
+  const reset = () => {
+    setPhase(WINDOW_START_HOUR * 60)
+    if (view === 'day') setOrigin(windowStart(today, WINDOW_START_HOUR * 60, timezone))
+    else setFocus(current => ({ day: today, seq: current.seq + 1, align: 'week' }))
+  }
+  const goToday = () => {
+    if (timeline && view === 'day') setOrigin(windowStart(today, windowPhase(origin, span, timezone), timezone))
+    else if (timeline) setFocus(current => ({ day: today, seq: current.seq + 1, align: 'week' }))
+    else setParams({ date: today })
+  }
+  const step = (direction: 1 | -1) => {
+    if (timeline && view === 'day') setOrigin(windowStart(addDays(shownDay, direction), windowPhase(origin, span, timezone), timezone))
+    else if (timeline) setFocus(current => ({ day: addDays(visibleDays?.first ?? startOfWeek(anchor), 7 * direction), seq: current.seq + 1, align: 'start' }))
+    else setParams({ date: stepAnchor(view, anchor, direction) })
+  }
+  const switchView = (value: ScheduleView, extra: Record<string, string | null> = {}) => {
+    setAdding(false)
+    // The day view opens on today if the week shows it, else on the first day it shows.
+    const date = value === 'day' && timeline && view === 'week' && visibleDays ? (inWeek(today) ? today : visibleDays.first) : currentDay
+    if (value === 'day' && view !== 'day') setOrigin(windowStart(date, view === 'week' ? weekPhase : windowPhase(origin, span, timezone), timezone))
+    if (value === 'week' && timeline && view === 'day') setPhase(clampPhase(windowPhase(origin, span, timezone), span))
+    setParams({ view: value, date, ...extra })
+  }
+  // The calendar stays on the same instants in another zone: only the hours above change,
+  // and a day of the week may take the name of the day before or after.
   const switchZone = (zone: string) => {
-    if (timeline && starts[0] !== undefined) setPhase((starts[0] - dayStart(range.days[0]!, zone).getTime()) / 60000)
-    setParams({ tz: zone === DEFAULT_ZONE ? null : zone, date: anchor })
+    let date = anchor
+    if (timeline && view === 'day') date = windowDay(origin, span, zone)
+    else if (timeline && visibleDays) {
+      const start = windowStart(visibleDays.first, weekPhase, timezone)
+      date = windowDay(start, span, zone)
+      setPhase(windowPhase(start, span, zone))
+      setFocus(current => ({ day: date, seq: current.seq + 1, align: 'keep' }))
+    }
+    written.current = date
+    setParams({ tz: zone === DEFAULT_ZONE ? null : zone, date })
   }
 
   const techName = (id: string) => users.find(account => account.id === id)?.username ?? people.find(person => person.id === id)?.username ?? ''
@@ -350,41 +448,48 @@ export function SchedulePage() {
     return [...techs, ...extra]
   }, [techs, techFilter, users])
 
-  const rows: GridRow[] = (() => {
-    if (!timeline) return []
-    if (view === 'day') {
-      const row = (key: string, techId: string | null | undefined, label: string, onPick?: () => void): GridRow =>
-        ({ key, start: starts[0]!, day: shownDays[0]!, techId, label, isToday: shownDays[0] === today, onPick })
-      // A tech's day is a single row; the title above names it.
-      if (!staff) return [row(anchor, undefined, '')]
-      if (techFilter) return [row(techFilter, techFilter, techName(techFilter))]
-      // A row for every tech to plan on (a name opens their own calendar); colors belong to agents.
-      return [
-        ...people.map(person => row(person.id, person.id, person.username, () => setParams({ tech: person.id, view: 'week', session: null }))),
-        row('unassigned', null, t('schedule.unassigned')),
-      ]
-    }
-    return range.days.map((key, index) => ({
-      key,
-      start: starts[index]!,
-      day: shownDays[index]!,
-      // One tech's week: what is drawn or dropped on it is theirs.
-      ...(techFilter ? { techId: techFilter } : {}),
-      label: formatDayKey(shownDays[index]!, locale, { weekday: 'short' }),
-      sublabel: formatDayKey(shownDays[index]!, locale, { month: 'numeric', day: 'numeric' }),
-      isToday: shownDays[index] === today,
-    }))
-  })()
+  // Sessions by time, so each day finds its own without going through them all.
+  const index = useMemo(() => indexSessions(visible), [visible])
+  // The day view: a row per tech to plan on and one for sessions waiting for a tech; a tech
+  // sees a single row, and one tech's calendar is theirs alone.
+  const filterName = techFilter ? techName(techFilter) : ''
+  const dayRows = useMemo<Pick<DayRow, 'key' | 'techId' | 'label'>[]>(() => {
+    if (!timeline || view !== 'day') return []
+    if (!staff) return [{ key: 'self', label: '' }]
+    if (techFilter) return [{ key: techFilter, techId: techFilter, label: filterName }]
+    return [
+      ...people.map(person => ({ key: person.id, techId: person.id, label: person.username })),
+      { key: 'unassigned', techId: null, label: t('schedule.unassigned') },
+    ]
+  }, [timeline, view, staff, techFilter, filterName, people, t])
+  const dayLayouts = useMemo(
+    () => dayRows.map(row => layoutDay(index, shownDay, timezone, reach, appointment => inRow(appointment.tech?.id ?? null, row), laneRank)),
+    [dayRows, index, shownDay, timezone, reach, laneRank],
+  )
+  // A name opens that tech's own calendar; colors belong to agents.
+  const rows: DayRow[] = dayRows.map(row => ({
+    ...row,
+    start: origin,
+    day: shownDay,
+    ...(row.techId && !techFilter ? { onPick: () => switchView('week', { tech: row.techId!, session: null }) } : {}),
+  }))
+  // The week: every day loaded, laid out once.
+  const weekLayouts = useMemo(() => {
+    const layouts = new Map<string, DayLayout>()
+    if (!timeline || view !== 'week' || !loadFirst || !loadLast) return layouts
+    for (let day = loadFirst; day <= loadLast; day = addDays(day, 1)) layouts.set(day, layoutDay(index, day, timezone, reach, everyone, laneRank))
+    return layouts
+  }, [timeline, view, loadFirst, loadLast, index, timezone, reach, laneRank])
 
   const rangeLabel = (() => {
     const format = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' })
     const utc = (key: string) => { const p = parseDateKey(key)!; return Date.UTC(p.year, p.month - 1, p.day) }
-    const days = timeline ? shownDays : range.days
-    if (view === 'day') return format({ weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }).format(utc(days[0] ?? anchor))
+    if (view === 'day') return format({ weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }).format(utc(timeline ? shownDay : anchor))
     if (view === 'month') return format({ year: 'numeric', month: 'long' }).format(utc(anchor))
+    const [from, to] = !timeline ? [range.from, addDays(range.to, -1)] : visibleDays ? [visibleDays.first, visibleDays.last] : [startOfWeek(anchor), addDays(startOfWeek(anchor), 6)]
     // formatRange is typed in the ES2021 lib; every supported browser has it.
     const week = format({ year: 'numeric', month: 'short', day: 'numeric' }) as Intl.DateTimeFormat & { formatRange: (start: number, end: number) => string }
-    return week.formatRange(utc(days[0]!), utc(days[days.length - 1]!))
+    return week.formatRange(utc(from), utc(to))
   })()
 
   const toggle = (id: string) => setHidden(current => {
@@ -395,12 +500,14 @@ export function SchedulePage() {
   })
 
   const listEmpty = staff ? t('schedule.noSessions') : t('schedule.noSessionsTech')
-  const dayCount = sessionsOnDay(visible, anchor, timezone).length
-  // Unassigned sessions the calendar already shows are not listed again above it: the
-  // rows' windows and the days around them, which a marker at the edge brings in.
-  const shownFrom = starts.length ? starts[0]! + span * 30000 - 12 * 3600e3 : -Infinity
-  const shownTo = starts.length ? starts[starts.length - 1]! + span * 30000 + 12 * 3600e3 : Infinity
-  const onCalendar = new Set(visible.filter(a => Date.parse(a.endsAt) > shownFrom && Date.parse(a.startsAt) < shownTo).map(a => a.id))
+  const dayCount = sessionsOnDay(visible, timeline ? shownDay : anchor, timezone).length
+  // Unassigned sessions the calendar shows are not listed again above it: on the timelines,
+  // the days in view as far as their rows reach (one tech's calendar shows none); the
+  // month and the list, whatever they hold.
+  const calendarSpan = !timeline || techFilter ? null
+    : view === 'day' ? [dayStart(shownDay, timezone).getTime() - reach, dayStart(addDays(shownDay, 1), timezone).getTime() + reach]
+      : visibleDays ? [dayStart(visibleDays.first, timezone).getTime() - reach, dayStart(addDays(visibleDays.last, 1), timezone).getTime() + reach] : null
+  const onCalendar = new Set((calendarSpan ? sessionsIn(index, calendarSpan[0]!, calendarSpan[1]!) : timeline ? [] : visible).map(a => a.id))
   const waiting = (unassignedQuery.data ?? []).filter(a => Date.parse(a.endsAt) > now && !onCalendar.has(a.id))
   const fit = tab === 'sessions' || view !== 'list'
 
@@ -458,15 +565,15 @@ export function SchedulePage() {
           <>
             <div className="schedule-toolbar">
               <div className="flex items-center gap-1">
-                <Button variant="outline" onClick={() => setParams({ date: today })}>{t('schedule.today')}</Button>
-                <Button variant="ghost" size="icon" aria-label={t('schedule.previous')} onClick={() => setParams({ date: stepAnchor(view, anchor, -1) })}>
+                <Button variant="outline" onClick={goToday}>{t('schedule.today')}</Button>
+                <Button variant="ghost" size="icon" aria-label={t('schedule.previous')} onClick={() => step(-1)}>
                   <ChevronLeft />
                 </Button>
-                <Button variant="ghost" size="icon" aria-label={t('schedule.next')} onClick={() => setParams({ date: stepAnchor(view, anchor, 1) })}>
+                <Button variant="ghost" size="icon" aria-label={t('schedule.next')} onClick={() => step(1)}>
                   <ChevronRight />
                 </Button>
                 <h1 className="ui-page-title schedule-range" aria-live="polite">{rangeLabel}</h1>
-                {appointmentsQuery.isFetching && <Spinner size="sm" />}
+                {fetching && <Spinner size="sm" />}
               </div>
               <div className="flex flex-wrap items-center gap-1">
                 {staff && (
@@ -496,10 +603,7 @@ export function SchedulePage() {
                       aria-pressed={view === value}
                       data-tour={`view-${value}`}
                       className={cn('schedule-view', view === value && 'is-active')}
-                      onClick={() => {
-                        setAdding(false)
-                        setParams({ view: value })
-                      }}
+                      onClick={() => switchView(value)}
                     >
                       {t(`schedule.views.${value}`)}
                     </button>
@@ -542,37 +646,62 @@ export function SchedulePage() {
               </div>
             )}
 
-            {appointmentsQuery.error && (
-              <p role="alert" className="mb-1 text-sm text-destructive">{t('schedule.loadFailed')} {translateError(appointmentsQuery.error.message)}</p>
+            {loadError && (
+              <p role="alert" className="mb-1 text-sm text-destructive">{t('schedule.loadFailed')} {translateError(loadError.message)}</p>
             )}
 
             <div className="schedule-body">
               {staff && view !== 'month' && waiting.length > 0 && (
-                <UnassignedPanel appointments={waiting} timezone={timezone} onOpen={openSession} drag={drag} />
+                <UnassignedPanel appointments={waiting} timezone={timezone} colorOf={colorOf} onOpen={openSession} drag={drag} />
               )}
               <div className="schedule-main">
-                {(view === 'week' || view === 'day') && (
+                {view === 'day' && (
                   <>
-                    {view === 'day' && !staff && dayCount === 0 && <p className="schedule-empty">{t('schedule.noSessionsDay')}</p>}
+                    {!staff && dayCount === 0 && <p className="schedule-empty">{t('schedule.noSessionsDay')}</p>}
                     <TimeGrid
                       rows={rows}
+                      layouts={dayLayouts}
                       span={span}
-                      appointments={visible}
                       timezone={timezone}
                       now={now}
                       editable={staff}
                       adding={adding}
-                      showTech={staff && view === 'week' && !techFilter}
+                      showTech={false}
                       colorOf={colorOf}
-                      laneRank={laneRank}
                       onOpen={openSession}
                       onDrop={handleDrop}
-                      onPan={pan}
+                      onPan={panDay}
                       onFit={setFitHours}
+                      onReset={reset}
                       drag={drag}
                       label={rangeLabel}
                     />
                   </>
+                )}
+                {view === 'week' && (
+                  <DaysGrid
+                    ref={daysRef}
+                    focus={focus}
+                    phase={weekPhase}
+                    span={span}
+                    layouts={weekLayouts}
+                    techId={techFilter ?? undefined}
+                    today={today}
+                    timezone={timezone}
+                    now={now}
+                    editable={staff}
+                    adding={adding}
+                    showTech={staff && !techFilter}
+                    colorOf={colorOf}
+                    onOpen={openSession}
+                    onDrop={handleDrop}
+                    onPan={panWeek}
+                    onFit={setFitHours}
+                    onReset={reset}
+                    drag={drag}
+                    label={rangeLabel}
+                    onVisible={onVisible}
+                  />
                 )}
                 {view === 'month' && (
                   <MonthGrid

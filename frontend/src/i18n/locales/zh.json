@@ -733,6 +733,7 @@
     "later": "更晚 {{count}} 场",
     "unassigned": "未分配",
     "today": "今天",
+    "reset": "重置",
     "previous": "上一段",
     "next": "下一段",
     "conflictBadge": "与该技术的其他场次时间重叠",

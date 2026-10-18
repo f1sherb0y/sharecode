@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Appointment } from '@/types'
 import { SNAP_MINUTES, clamp } from '@/lib/schedule'
 
@@ -38,6 +38,8 @@ interface Session {
   row: HTMLElement | null
   active: boolean
   preview: DragPreview | null
+  /** Edges the pointer has been away from since the drag began: only those scroll. */
+  armed: Set<'top' | 'bottom' | 'left' | 'right'>
 }
 
 const MINUTE = 60000
@@ -73,9 +75,10 @@ export function pointerInstant(event: { clientX: number; currentTarget: Element 
 /**
  * Mouse and pen drags on the timeline: draw a new session, move one (to another
  * day in the week view, another tech in the day view) or stretch its end. At the
- * left or right edge the window of hours moves along. Touch uses taps instead.
+ * left or right edge the window of hours moves along, at the top or bottom the rows
+ * (`onScrollBy` for days drawn without a scrollbar). Touch uses taps instead.
  */
-export function useScheduleDrag({ onDrop, onPan }: { onDrop: (drop: GridDrop) => void; onPan: (minutes: number) => void }) {
+export function useScheduleDrag({ onDrop, onPan, onScrollBy }: { onDrop: (drop: GridDrop) => void; onPan: (minutes: number) => void; onScrollBy?: (pixels: number) => void }) {
   const [preview, setPreview] = useState<DragPreview | null>(null)
   const session = useRef<Session | null>(null)
   const suppressClick = useRef(false)
@@ -83,8 +86,12 @@ export function useScheduleDrag({ onDrop, onPan }: { onDrop: (drop: GridDrop) =>
   onDropRef.current = onDrop
   const onPanRef = useRef(onPan)
   onPanRef.current = onPan
+  const onScrollByRef = useRef(onScrollBy)
+  onScrollByRef.current = onScrollBy
   const scrollFrame = useRef(0)
   const lastPointer = useRef({ x: 0, y: 0 })
+  // A drag called off with Escape: releasing that pointer opens nothing either.
+  const cancelled = useRef<number | null>(null)
 
   const compute = useCallback((current: Session, hit: Hit): DragPreview | null => {
     if (current.kind === 'create') {
@@ -142,7 +149,8 @@ export function useScheduleDrag({ onDrop, onPan }: { onDrop: (drop: GridDrop) =>
   }, [compute])
 
   // Near the top or bottom of the grid, keep scrolling it under a still pointer; near
-  // the left or right of its rows, move the window of hours.
+  // the left or right of its rows, move the window of hours. A session picked up near
+  // an edge stays put until the pointer has been away from that edge.
   const autoScroll = useCallback(() => {
     const scroller = document.querySelector<HTMLElement>('[data-schedule-scroll]')
     const track = scroller?.querySelector<HTMLElement>('[data-schedule-row]')
@@ -152,13 +160,20 @@ export function useScheduleDrag({ onDrop, onPan }: { onDrop: (drop: GridDrop) =>
     const rows = track.getBoundingClientRect()
     const { x, y } = lastPointer.current
     const inside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
-    const stepX = !inside ? 0 : x < rows.left + EDGE ? -1 : x > rows.right - EDGE ? 1 : 0
-    const stepY = !inside ? 0 : y < rect.top + EDGE ? -12 : y > rect.bottom - EDGE ? 12 : 0
-    const canScroll = (stepY < 0 && scroller.scrollTop > 0)
-      || (stepY > 0 && scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight)
+    const near = { left: x < rows.left + EDGE, right: x > rows.right - EDGE, top: y < rect.top + EDGE, bottom: y > rect.bottom - EDGE }
+    for (const edge of ['left', 'right', 'top', 'bottom'] as const) if (!inside || !near[edge]) current.armed.add(edge)
+    const at = (edge: keyof typeof near) => inside && near[edge] && current.armed.has(edge)
+    const stepX = at('left') ? -1 : at('right') ? 1 : 0
+    const stepY = at('top') ? -12 : at('bottom') ? 12 : 0
+    const scrollBy = onScrollByRef.current
+    const canScroll = !!stepY && (!!scrollBy || (stepY < 0 && scroller.scrollTop > 0)
+      || (stepY > 0 && scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight))
     if (!stepX && !canScroll) return stopScrolling()
     if (stepX) onPanRef.current(stepX * EDGE_PAN)
-    if (canScroll) scroller.scrollTop += stepY
+    if (canScroll) {
+      if (scrollBy) scrollBy(stepY)
+      else scroller.scrollTop += stepY
+    }
     // The rows show the new hours after React renders; hit-test them on the next frame.
     scrollFrame.current = requestAnimationFrame(() => {
       update(x, y)
@@ -199,12 +214,19 @@ export function useScheduleDrag({ onDrop, onPan }: { onDrop: (drop: GridDrop) =>
     }
     const up = (event: PointerEvent) => {
       if (event.pointerId === session.current?.pointerId) finish(true)
+      else if (event.pointerId === cancelled.current) {
+        cancelled.current = null
+        suppressClick.current = true
+        setTimeout(() => { suppressClick.current = false }, 0)
+      }
     }
     const cancel = (event: PointerEvent) => {
       if (event.pointerId === session.current?.pointerId) finish(false)
     }
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && session.current) finish(false)
+      if (event.key !== 'Escape' || !session.current) return
+      if (session.current.active) cancelled.current = session.current.pointerId
+      finish(false)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -243,6 +265,7 @@ export function useScheduleDrag({ onDrop, onPan }: { onDrop: (drop: GridDrop) =>
       row: init.row ?? null,
       active: false,
       preview: null,
+      armed: new Set(),
     }
     lastPointer.current = { x: event.clientX, y: event.clientY }
   }, [])
@@ -250,5 +273,5 @@ export function useScheduleDrag({ onDrop, onPan }: { onDrop: (drop: GridDrop) =>
   /** Whether the click being handled ends a drag, and should do nothing else. */
   const endsDrag = useCallback(() => suppressClick.current, [])
 
-  return { preview, begin, endsDrag }
+  return useMemo(() => ({ preview, begin, endsDrag }), [preview, begin, endsDrag])
 }

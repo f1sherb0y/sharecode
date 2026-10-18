@@ -396,15 +396,21 @@ yesterday's and tomorrow's say so.
   account.
 
 - The calendar shows a week, a day, a month or a two-week list; phones open the
-  list. Week and day are timelines with the hours across: the week has a row per
-  weekday, Monday first, and the day a row per tech plus one for unassigned
-  sessions. Sessions at the same time in a row sit in lanes one under another,
-  in tech order. The timeline shows 14 hours (fewer on narrow screens),
-  08:00–22:00 at first; dragging free space (or swiping, Shift+wheel, the arrow
-  keys) moves it to other hours, up to half a window into the day before or
-  after, with a long dashed line where the day turns. A marker at a row's edge
-  counts the sessions beyond it and brings them in. Week, day and month fit the
-  window's height.
+  list. Week and day are timelines with the hours across: the week is days down
+  the page without end and without a scrollbar (the wheel, dragging, a flick or
+  the arrow keys move it; only the days in view are drawn), opening on the
+  current week; the day has a row per tech plus one for unassigned sessions.
+  Sessions at the same time in a row sit in lanes one under another, in tech
+  order. The timeline shows 14 hours (fewer on narrow screens), 08:00–22:00 at
+  first; dragging free space (or swiping, Shift+wheel, the arrow keys) moves it
+  to other hours: in the day view on through the days without end, in the week
+  up to half a window into the day before or after. A long dashed line marks
+  where a day turns, with that day's date, and a red line for now runs down the
+  whole calendar. A marker at a row's edge counts the sessions beyond it and
+  brings them in, and **Reset** at the bottom right brings back today and the
+  usual hours. The timelines load a week of sessions at a time around what is in
+  view. Week, day and month fit the window's height.
+- Sessions still waiting for a tech are striped wherever they appear.
 - Session cards show the customer, the tech (week view) and the company and
   position, never the time: the hours above the rows give it. Month entries
   show the time, the customer and the tech (not on one tech's calendar). The list views
@@ -416,7 +422,7 @@ yesterday's and tomorrow's say so.
   planned by mistake or called off is deleted, and it reads as completed once
   its room has ended. Agents and admins plan any tech's sessions: press **Add**
   and click or drag on the timeline (in the month and list it opens the form),
-  drag a session to move it (to another weekday in the week view,
+  drag a session to move it (to another day in the week view,
   another tech's row in the day view), drag its right edge to change its length,
   or drop one from the **Unassigned** strip above the calendar, which lists
   sessions waiting for a tech that the calendar does not already show (and is

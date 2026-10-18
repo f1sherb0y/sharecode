@@ -65,12 +65,14 @@
   .schedule-page.is-fit .schedule-container > div { flex: 1; min-height: 0; }
   .schedule-page.is-fit .schedule-body, .schedule-page.is-fit .schedule-main { flex: 1; min-height: 0; }
 
-  /* Week and day: a timeline per weekday or per tech, a window of hours across
-     that is dragged sideways (14 hours, fewer where they would be narrower than
-     44px). Rows share the window's height (each lane three to seven lines tall,
+  /* Week and day: days down the page without end (week) or a row per tech (day), a
+     window of hours across that is dragged sideways (14 hours, fewer where they
+     would be narrower than 44px), through the days without end in the day view.
+     Day view rows share the window's height (each lane three to seven lines tall,
      set inline) and scroll when their lanes need more. */
   .schedule-grid {
     --schedule-label: 5.5rem;
+    position: relative;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
@@ -81,7 +83,8 @@
   }
   .schedule-grid.is-unlabeled { --schedule-label: 0px; }
   .schedule-grid:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 1px; }
-  .schedule-grid-scroll { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; }
+  .schedule-grid-scroll { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; scrollbar-width: none; }
+  .schedule-grid-scroll::-webkit-scrollbar { display: none; }
   .schedule-grid-inner { position: relative; display: flex; flex: 1 0 auto; flex-direction: column; }
   .schedule-grid-head, .schedule-row { display: grid; grid-template-columns: var(--schedule-label) minmax(0, 1fr); }
   .schedule-grid.is-unlabeled :is(.schedule-grid-head, .schedule-row) { grid-template-columns: minmax(0, 1fr); }
@@ -102,6 +105,11 @@
   }
   .schedule-hour.is-midnight { border-left: 2px dashed var(--schedule-midnight); color: var(--color-foreground); font-weight: 600; }
   .schedule-row + .schedule-row { border-top: 1px solid var(--color-border); }
+  /* The week draws only the days in view, placed from the day at the top; they move by
+     wheel, dragging and flicking rather than a scrollbar. */
+  .schedule-days { position: relative; flex: 1 1 auto; min-height: 0; overflow: clip; touch-action: none; overscroll-behavior: contain; }
+  .schedule-days > .schedule-row { position: absolute; right: 0; left: 0; overflow: clip; border-bottom: 1px solid var(--color-border); }
+  .schedule-days > .schedule-row + .schedule-row { border-top: 0; }
   /* The weekday over its date (or a tech's name), so narrow label columns keep both. */
   .schedule-row-label {
     position: sticky;
@@ -131,13 +139,50 @@
   .schedule-grid.is-adding .schedule-track { cursor: crosshair; }
   .schedule-grid.is-adding .schedule-event { pointer-events: none; }
   .schedule-row.is-today .schedule-track { background-color: color-mix(in srgb, var(--color-destructive) 3%, transparent); }
-  .schedule-now { position: absolute; top: 0; bottom: 0; z-index: 4; width: 2px; margin-left: -1px; background: var(--color-destructive); pointer-events: none; }
+  /* Now, down the whole calendar from the hours. */
+  .schedule-now-line { position: absolute; top: 0; bottom: 0; z-index: 7; width: 2px; margin-left: -1px; background: var(--color-destructive); pointer-events: none; }
+  .schedule-now-line::before { content: ''; position: absolute; top: 0; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--color-destructive); }
+  .schedule-reset {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 8;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    height: 2rem;
+    padding-inline: 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-background) 92%, transparent);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+    font-size: var(--text-xs);
+  }
+  .schedule-reset:hover { background: var(--color-accent); }
+  .schedule-reset svg { width: 0.875rem; height: 0.875rem; }
   /* Hour and half-hour lines down every row; a long dashed line where the zone's day turns. */
   .schedule-grid { --schedule-midnight: color-mix(in srgb, var(--color-primary) 75%, transparent); }
   .schedule-lines { position: absolute; top: 0; right: 0; bottom: 0; left: var(--schedule-label); z-index: 0; pointer-events: none; }
   .schedule-line { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--color-border); }
   .schedule-line.is-half { border-left-color: color-mix(in srgb, var(--color-border) 45%, transparent); }
   .schedule-line.is-midnight { margin-left: -0.5px; border-left: 2px dashed var(--schedule-midnight); }
+  /* The date of the day that begins at a week row's dashed line. */
+  .schedule-midnight-date {
+    position: absolute;
+    top: 1px;
+    z-index: 2;
+    margin-left: 3px;
+    padding-inline: 0.25rem;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-background) 85%, transparent);
+    color: var(--schedule-midnight);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 15px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
   /* Sessions of a row's day beyond an edge of the window. */
   .schedule-more {
     position: absolute;
@@ -195,7 +240,7 @@
   .schedule-people svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; opacity: 0.7; }
   .schedule-event-time { font-variant-numeric: tabular-nums; font-weight: 500; }
   .schedule-event-alert { width: 0.75rem; height: 0.75rem; flex-shrink: 0; color: var(--color-destructive); }
-  .schedule-event-unassigned { border-style: dashed; background: color-mix(in srgb, var(--event-color) 10%, var(--color-background)); }
+  .schedule-event-unassigned { border-style: dashed; }
   .schedule-event-completed { opacity: 0.75; }
   .schedule-event-conflict { outline: 1.5px solid var(--color-destructive); outline-offset: -1px; }
   .schedule-event-moving { opacity: 0.35; }
@@ -320,13 +365,13 @@
     display: grid;
     width: 12.5rem;
     padding: 0.25rem 0.5rem;
-    border: 1px dashed var(--color-border);
+    border: 1px dashed color-mix(in srgb, var(--event-color) 55%, transparent);
+    border-left: 3px solid var(--event-color);
     border-radius: var(--radius-sm);
     text-align: left;
     cursor: grab;
     user-select: none;
   }
-  .schedule-unassigned-list button:hover { background: var(--color-accent); }
   .schedule-unassigned-list button.is-dragging { opacity: 0.4; }
   .schedule-unassigned-when { color: var(--color-muted-foreground); font-size: var(--text-xs); }
 
@@ -437,6 +482,14 @@
     .today-session-main { flex-direction: column; align-items: stretch; }
     .today-session-main > :first-child { max-width: none; }
   }
+
+  /* Sessions without a tech stand out with stripes, wherever they are shown. */
+  :is(.schedule-event.schedule-event-unassigned, .schedule-chip.schedule-chip-unassigned, .schedule-agenda-item.schedule-agenda-unassigned, .schedule-unassigned-list button) {
+    --stripe-strong: color-mix(in srgb, var(--event-color) 30%, var(--color-background));
+    --stripe-light: color-mix(in srgb, var(--event-color) 9%, var(--color-background));
+    background: repeating-linear-gradient(135deg, var(--stripe-strong) 0 6px, var(--stripe-light) 6px 12px);
+  }
+  :is(.schedule-chip.schedule-chip-unassigned, .schedule-unassigned-list button):hover { --stripe-light: color-mix(in srgb, var(--event-color) 22%, var(--color-background)); }
 
   @media (pointer: coarse) {
     .schedule-tab, .schedule-view, .schedule-legend-item { min-height: var(--spacing-control); font-size: 15px; }

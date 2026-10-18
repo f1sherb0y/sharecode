@@ -68,7 +68,7 @@ export function AgendaList({ days, today, appointments, timezone, showTech, show
                       return (
                         <li
                           key={appointment.id}
-                          className={cn('schedule-agenda-item', `schedule-agenda-${appointment.status}`)}
+                          className={cn('schedule-agenda-item', `schedule-agenda-${appointment.status}`, !appointment.tech && 'schedule-agenda-unassigned')}
                           style={{ '--event-color': colorOf(appointment) } as CSSProperties}
                         >
                           <button type="button" className="schedule-agenda-main" onClick={() => onOpen(appointment)}>

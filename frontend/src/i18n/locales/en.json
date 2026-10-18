@@ -733,6 +733,7 @@
     "later": "{{count}} later",
     "unassigned": "Unassigned",
     "today": "Today",
+    "reset": "Reset",
     "previous": "Previous",
     "next": "Next",
     "conflictBadge": "Overlaps another session of this tech",

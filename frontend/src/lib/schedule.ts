@@ -1,5 +1,5 @@
 import type { Appointment, User } from '@/types'
-import { addDays, addMonths, atMinute, dayStart, daysBetween, startOfMonth, startOfWeek } from '@/lib/zoned-time'
+import { addDays, addMonths, atMinute, dateKeyOf, dayStart, daysBetween, startOfMonth, startOfWeek } from '@/lib/zoned-time'
 
 export type ScheduleView = 'day' | 'week' | 'month' | 'list'
 export const SCHEDULE_VIEWS: ScheduleView[] = ['day', 'week', 'month', 'list']
@@ -105,6 +105,65 @@ export function layoutSpans(appointments: Appointment[], from: number, to: numbe
   return layoutOverlaps(pieces, rank)
 }
 
+export const MINUTE_MS = 60000
+export const HOUR_MS = 60 * MINUTE_MS
+export const DAY_MS = 24 * HOUR_MS
+
+/** Sessions by start time, so the ones in a stretch are found without scanning them all. */
+export interface SessionIndex {
+  list: Appointment[]
+  starts: number[]
+}
+
+export function indexSessions(appointments: Appointment[]): SessionIndex {
+  const list = [...appointments].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt) || a.id.localeCompare(b.id))
+  return { list, starts: list.map(appointment => Date.parse(appointment.startsAt)) }
+}
+
+/** Sessions overlapping from–to; none lasts over a day, so the search starts a day early. */
+export function sessionsIn(index: SessionIndex, from: number, to: number): Appointment[] {
+  let low = 0
+  let high = index.starts.length
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (index.starts[middle]! < from - DAY_MS) low = middle + 1
+    else high = middle
+  }
+  const found: Appointment[] = []
+  for (let i = low; i < index.list.length && index.starts[i]! < to; i++) {
+    if (Date.parse(index.list[i]!.endsAt) > from) found.push(index.list[i]!)
+  }
+  return found
+}
+
+/** A row's sessions laid out in lanes, and how many lanes it needs. */
+export interface DayLayout {
+  segments: Segment[]
+  lanes: number
+}
+
+/**
+ * Lays out what a row of `day` can show: the day and `reach` milliseconds either side,
+ * as far as its window of hours goes while most of the window is on that day. The
+ * layout does not change while the window moves within it.
+ */
+export function layoutDay(index: SessionIndex, day: string, timeZone: string, reach: number, keep: (appointment: Appointment) => boolean, rank?: LaneRank): DayLayout {
+  const from = dayStart(day, timeZone).getTime() - reach
+  const to = dayStart(addDays(day, 1), timeZone).getTime() + reach
+  const segments = layoutSpans(sessionsIn(index, from, to).filter(keep), from, to, rank)
+  return { segments, lanes: segments.reduce((most, segment) => Math.max(most, segment.columns), 1) }
+}
+
+/** The day a window of hours mostly shows. */
+export function windowDay(start: number, span: number, timeZone: string): string {
+  return dateKeyOf(start + (span * MINUTE_MS) / 2, timeZone)
+}
+
+/** Where a window starts on the day it mostly shows, as windowStart's phase. */
+export function windowPhase(start: number, span: number, timeZone: string): number {
+  return (start - dayStart(windowDay(start, span, timeZone), timeZone).getTime()) / MINUTE_MS
+}
+
 /**
  * Where a row's window of hours starts: `phase` minutes after the day's midnight in
  * timeZone (negative: the evening before). Every row of a week starts at the same time
@@ -116,14 +175,11 @@ export function windowStart(day: string, phase: number, timeZone: string): numbe
 }
 
 /**
- * Dragging keeps most of each row's window on the row's own day, so a row never shows
+ * Dragging keeps most of each day's window of hours on that day, so a day never shows
  * more of the day before or after than of its own.
  */
-export function clampPhase(phase: number, span: number, current = phase): number {
-  const lowest = -span / 2
-  const highest = 1440 - span / 2 - 1
-  // A zone switch can leave the window further out; it may come back but not go further.
-  return clamp(phase, Math.min(lowest, current), Math.max(highest, current))
+export function clampPhase(phase: number, span: number): number {
+  return clamp(phase, -span / 2, 1440 - span / 2 - 1)
 }
 
 function layoutOverlaps(pieces: Segment[], rank: LaneRank = () => 0): Segment[] {
@@ -207,8 +263,13 @@ export function techColors(techs: Pick<User, 'id' | 'color' | 'username'>[]): Ma
 /** A calendar day in the UI language, e.g. "Tue 10/20" or "10月20日周二". */
 export function formatDayKey(key: string, locale: string, options: Intl.DateTimeFormatOptions): string {
   const [year, month, day] = key.split('-').map(Number)
-  return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(Date.UTC(year!, month! - 1, day!))
+  // Timelines label every day they draw: formatters are made once.
+  const id = `${locale} ${JSON.stringify(options)}`
+  let format = dayFormats.get(id)
+  if (!format) dayFormats.set(id, format = new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }))
+  return format.format(Date.UTC(year!, month! - 1, day!))
 }
+const dayFormats = new Map<string, Intl.DateTimeFormat>()
 
 /** A whole number of minutes as "1 h 30 min" style text. */
 export function formatDuration(minutes: number, units: { hours: string; minutes: string }): string {
