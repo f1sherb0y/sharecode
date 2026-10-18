@@ -92,10 +92,13 @@
 - **Auto-updates ready**: Infrastructure for seamless app updates
 
 ### 9. Scheduling (排班)
-- **Calendar page** (`/schedule`): week (default), day with one column per tech, month, and a two-week list (default on phones); entry on the room list plus a "Today's sessions" card above it
-- **Agents plan every tech's sessions**: click or drag free time, drag to move or reassign (day view), stretch the lower edge, drop from the unassigned list; overlaps per tech need "Save anyway", and saves per tech are serialized with advisory locks
+- **Calendar page** (`/schedule`): week (default) and day are timelines with hours across, a row per weekday (week) or per tech plus unassigned (day); simultaneous sessions take lanes in legend order; also month and a two-week list (default on phones). Week/day/month fit the window; entry on the room list plus a "Today's sessions" card above it
+- **No repeated information**: cards on the timelines show no time (the hour scale gives it); lists print the time once per row of simultaneous sessions, shown side by side when wide enough
+- **Agents plan every tech's sessions**: click or drag free time, drag to move (another weekday or another tech's row), stretch the right edge, drop from the unassigned strip above the calendar (it skips sessions the calendar shows); overlaps per tech need "Save anyway", and saves per tech are serialized with advisory locks
+- **场次 tab** (staff): customers on the left with "All sessions" first and **+** to add; the right side lists the chosen customer's (or everyone's) sessions with edit/delete for the customer and **New session**; phones show one side at a time
+- **Book another** (再约一场): from a session's dialog or the "created" toast, prefills the same customer, tech, agent, company, position and length the next day at the same time
 - **Techs**: their own sessions only, read-only; personal notices when a session still to come is assigned, changed, reassigned away or cancelled; no confirmation or availability
-- **Session rooms**: created on first "Open room"/"Customer link", owned by the tech, synced with the session while live (time, company/position, owner on reassignment); customer links carry the name and last until the session ends; ending the room completes the session
+- **Session rooms**: created on first "Open room"/"Customer link", owned by the tech, synced with the session while live (time, company/position, owner on reassignment; the previous tech stays a member with edit and replay); never ended for inactivity, only by hand; customer links carry the name and last until the session ends; ending the room completes the session
 - **Customers**: one shared list for agents and admins (contact and notes never reach techs); removal waits for upcoming sessions
 - **Privacy**: audit events for `customer.*`/`appointment.*` hold IDs, times and changed field names only
 
@@ -130,7 +133,7 @@ Room
 ├── isPrivate, isPinned, isEnded, endedAt, isDeleted
 └── Relations: owner, participants
 
-RoomParticipant (share-link memberships)
+RoomParticipant (share-link and reassignment memberships)
 ├── roomId, userId
 └── canEdit, shareLinkId (last link joined through), canReplay
 

@@ -14,7 +14,7 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 - 🔒 Room-based access control (including strict session locking for ended rooms)
 - 🔑 Role-based access: admin (管理员), agent (中介) and tech (技术) accounts; customers join through share links
 - 🔗 Guest share links with configurable view/edit permissions
-- 📅 Scheduling (排班): a shared customer list and a calendar where agents plan every tech's sessions; techs are notified and open the session's room from it
+- 📅 Scheduling (排班): a calendar where agents plan every tech's sessions and a 场次 page of customers and their sessions; techs are notified and open the session's room from it
 
 ## Tech Stack
 
@@ -157,10 +157,11 @@ just db-stop             # Stop PostgreSQL and keep its data
 
 Stop the API and frontend with Ctrl+C in their terminals. UI test screenshots
 are written to `/tmp/sharecode-ui-review/<browser>/`. For the full disposable
-database integration suite, use `just test-integration`; it requires local
-PostgreSQL server binaries (`initdb`, `pg_ctl`, and `createdb`) and cached Rust
-dependencies from `just install`. Set `PG_BIN` if the PostgreSQL binaries are
-outside the paths detected by the script.
+database integration suite, use `just test-integration`; it needs the `psql`
+client, cached Rust dependencies from `just install`, and either local
+PostgreSQL server binaries (`initdb`, `pg_ctl`, and `createdb`; set `PG_BIN` if
+they are outside the paths the script detects) or Docker with the
+`postgres:17-alpine` image, which it uses for a throwaway database otherwise.
 
 Alternatively, start each service manually:
 
@@ -363,16 +364,41 @@ Notes:
 
 ### Scheduling (排班)
 
-The **Schedule** page (button on the room list, and the account menu) shows a
-week, day, month or two-week list calendar; phones open the list. Above the room
-list, **Today's sessions** shows the day's sessions with their room buttons.
+The **Schedule** page (button on the room list, and the account menu) has two
+tabs for agents and admins: **Calendar** and **场次 (Sessions)**. Techs see only
+the calendar. Above the room list, **Today's sessions** shows the day's sessions
+with their room buttons.
 
+- The calendar shows a week, a day, a month or a two-week list; phones open the
+  list. Week and day are timelines with the hours across: the week has a row per
+  weekday, Monday first, and the day a row per tech plus one for unassigned
+  sessions. Sessions at the same time in a row sit in lanes one under another,
+  in the techs' legend order. The timeline spans 08:00–22:00, widened to fit
+  earlier or later sessions, and scrolls sideways once the window is too narrow
+  for it; week, day and month fit the window's height.
+- Session cards show the customer, the tech (week view) and the company and
+  position, never the time: the hours above the rows give it. The list views
+  print each time once per row of simultaneous sessions, which sit side by side
+  where there is room. The UI does not repeat information shown nearby.
 - A session has a customer, a tech (or none yet), the agent in charge, a start,
   a duration (5 minutes to 24 hours), the company and position, notes for the
   tech and a status. Agents and admins plan any tech's sessions: click or drag
-  on free time, drag a session to move it or onto another tech's column in the
-  day view, drag its lower edge to change its length, or drop one from the
-  **Unassigned** list. Techs do not confirm sessions or give availability.
+  on free time, drag a session to move it (to another weekday in the week view,
+  another tech's row in the day view), drag its right edge to change its length,
+  or drop one from the **Unassigned** strip above the calendar, which lists
+  sessions waiting for a tech that the calendar does not already show. Techs do
+  not confirm sessions or give availability.
+- **场次** lists customers on the left (search, **+** to add one) with a count of
+  their upcoming sessions, and **All sessions** at the top. The right side shows
+  the chosen customer's sessions, upcoming then past, or everyone's (the next
+  100 days, and earlier ones a month at a time). From there agents edit or delete
+  the customer and add a session for them with **New session**; phones show one
+  side at a time.
+- Customers often book several sessions. **Book another** (再约一场) in a
+  session's dialog, and on the toast after creating one, opens a new session for
+  the same customer with the same tech, agent, company, position and length, the
+  next day at the same time (or tomorrow, if that has passed). The customer
+  search in the session form shows each customer's upcoming count.
 - Overlapping a tech's other session (cancelled ones aside) needs a second
   click, **Save anyway**; back-to-back sessions are fine. Saves for the same tech
   are serialized, so two planners cannot double-book them unnoticed.
@@ -383,10 +409,12 @@ list, **Today's sessions** shows the day's sessions with their room buttons.
   owned by its tech (or by the agent opening it while it is unassigned) and
   carrying its time, company and position. While the room is live it follows the
   session: new times sync, and reassigning the session hands the room to the new
-  tech and removes the previous one. Customer links fill in the customer's name
-  and stay valid until the session ends (at least 6 hours), and the room is not
-  ended for inactivity before the session is over. Once the room ends, the
-  session reads as completed with replay and download; **New room** starts over.
+  tech, while the previous tech stays a member who can still edit it and replay
+  it after it ends. Customer links fill in the customer's name and stay valid
+  until the session ends (at least 6 hours). A session's room is never ended for
+  inactivity, even after the session: it is ended by hand. Once the room ends,
+  the session reads as completed with replay and download; **New room** starts
+  over.
 - Customers are one list shared by agents and admins. Techs see a session's
   customer name, never the contact or profile notes. A customer with sessions
   still to come cannot be removed; past sessions keep the name. Removing a tech's
