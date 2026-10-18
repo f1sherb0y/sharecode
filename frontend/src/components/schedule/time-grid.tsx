@@ -47,6 +47,14 @@ const EVENT_LINE = 15
 const EVENT_CHROME = 6
 const LANE_GAP = 2
 const ROW_PADDING = 3
+/** A lane fits the customer, the tech and agent, and the company and position; rows
+ *  grow to fill the window's height, a lane up to MAX_LINES lines tall. */
+const LINES = 3
+const MAX_LINES = 7
+const lanePitch = (lines: number) => lines * EVENT_LINE + EVENT_CHROME + LANE_GAP
+const rowSize = (lanes: number, lines: number) => lanes * lanePitch(lines) - LANE_GAP + 2 * ROW_PADDING
+// Lanes share the track's height, whatever the row has grown to.
+const laneSpace = `(100% - ${2 * ROW_PADDING - LANE_GAP}px)`
 
 function belongs(appointment: Appointment, row: GridRow): boolean {
   return row.techId === undefined || (appointment.tech?.id ?? null) === row.techId
@@ -78,10 +86,6 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
   const hours = Array.from({ length: span / 60 }, (_, index) => from / 60 + index)
   const x = (minute: number) => `${((Math.min(to, Math.max(from, minute)) - from) / span) * 100}%`
   const width = (start: number, end: number) => `${((Math.min(to, end) - Math.max(from, start)) / span) * 100}%`
-  // The customer, then the tech (week view for agents) and the customer's agent.
-  const lines = 2
-  const laneHeight = lines * EVENT_LINE + EVENT_CHROME + LANE_GAP
-  const rowHeight = (lanes: number) => lanes * laneHeight - LANE_GAP + 2 * ROW_PADDING
 
   // Sessions before the working day (common in another zone) are where the timeline opens.
   const earliest = Math.min(FIRST_VISIBLE_HOUR * 60, ...laidOut.flatMap(({ segments }) => segments.map(segment => Math.floor(segment.start / 60) * 60)))
@@ -119,13 +123,14 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
     appointment.hasConflict ? t('schedule.conflictBadge') : '',
   ].filter(Boolean).join(', ')
 
-  const renderSegment = (segment: DaySegment, row: GridRow) => {
+  const renderSegment = (segment: DaySegment, row: GridRow, lanes: number) => {
     const { appointment } = segment
+    const role = [appointment.company, appointment.position].filter(Boolean).join(' · ')
     const style = {
       left: `calc(${x(segment.start)} + 1px)`,
       width: `calc(${width(segment.start, segment.end)} - 2px)`,
-      top: ROW_PADDING + segment.column * laneHeight,
-      height: laneHeight - LANE_GAP,
+      top: `calc(${ROW_PADDING}px + ${segment.column} * ${laneSpace} / ${lanes})`,
+      height: `calc(${laneSpace} / ${lanes} - ${LANE_GAP}px)`,
       '--event-color': colorOf(appointment),
     } as CSSProperties
     return (
@@ -158,6 +163,7 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
         </span>
         {/* No time on the card: the hours above the grid show it. */}
         <SessionPeople appointment={appointment} showTech={showTech} compact className="schedule-event-meta" />
+        {role && <span className="schedule-event-meta">{role}</span>}
         {editable && !segment.continuesAfter && (
           <span
             className="schedule-event-resize"
@@ -175,7 +181,7 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
   }
 
   // While dragging, the landing time is shown: the hours above mark only whole hours.
-  const renderGhost = (key: string, start: number, end: number, title: string, lanes: number, color?: string) => (
+  const renderGhost = (key: string, start: number, end: number, title: string, color?: string) => (
     <div
       key={key}
       className={cn('schedule-event schedule-event-ghost', !color && 'schedule-event-new')}
@@ -183,7 +189,7 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
         left: `calc(${x(start)} + 1px)`,
         width: `calc(${width(start, end)} - 2px)`,
         top: ROW_PADDING,
-        height: rowHeight(lanes) - 2 * ROW_PADDING,
+        bottom: ROW_PADDING,
         ...(color ? { '--event-color': color } : {}),
       } as CSSProperties}
       aria-hidden="true"
@@ -198,7 +204,14 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
   const labeled = rows.some(row => row.label)
 
   return (
-    <div className={cn('schedule-grid', !labeled && 'is-unlabeled')} style={{ '--hours': hours.length } as CSSProperties} role="region" aria-label={label} data-tour="calendar">
+    <div
+      className={cn('schedule-grid', !labeled && 'is-unlabeled')}
+      // Ends below the last row once every lane has reached its full height (hours row + borders).
+      style={{ '--hours': hours.length, maxHeight: `calc(1.75rem + 3px + ${laidOut.reduce((sum, { lanes }) => sum + rowSize(lanes, MAX_LINES) + 1, 0)}px)` } as CSSProperties}
+      role="region"
+      aria-label={label}
+      data-tour="calendar"
+    >
       <div className="schedule-grid-scroll" ref={scroller} data-schedule-scroll>
         <div className="schedule-grid-inner">
           <div className="schedule-grid-head" aria-hidden="true">
@@ -214,7 +227,12 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
             const creating = preview?.kind === 'create' && preview.day === row.day && preview.techId === row.techId
             const createStart = creating && preview ? minuteOfDay(preview.startsAt, timezone) : 0
             return (
-              <div key={row.key} className={cn('schedule-row', marksToday && row.isToday && 'is-today')}>
+              <div
+                key={row.key}
+                className={cn('schedule-row', marksToday && row.isToday && 'is-today')}
+                // Each lane gets an equal share of the spare height, up to MAX_LINES lines (+1px for the row border).
+                style={{ flex: `${lanes} 0 ${rowSize(lanes, LINES) + 1}px`, maxHeight: rowSize(lanes, MAX_LINES) + 1 }}
+              >
                 {labeled && (
                   <div className="schedule-row-label">
                     {row.color && <span className="schedule-dot" style={{ background: row.color }} aria-hidden="true" />}
@@ -224,7 +242,6 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
                 )}
                 <div
                   className={cn('schedule-track', editable && 'is-editable')}
-                  style={{ height: rowHeight(lanes) }}
                   data-schedule-row
                   data-day={row.day}
                   data-tech={row.techId === undefined ? undefined : row.techId ?? ''}
@@ -242,14 +259,14 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
                     onDrop({ kind: 'create', startsAt: atMinute(row.day, minute, timezone), durationMinutes: 60, techId: row.techId })
                   } : undefined}
                 >
-                  {segments.map(segment => renderSegment(segment, row))}
+                  {segments.map(segment => renderSegment(segment, row, lanes))}
                   {ghost && ghostSegments.map(segment => renderGhost(
                     `ghost-${segment.start}`, segment.start, segment.end,
-                    `${timeRange(Date.parse(ghost.startsAt), Date.parse(ghost.endsAt))} ${ghost.customer.name}`, lanes, colorOf(ghost),
+                    `${timeRange(Date.parse(ghost.startsAt), Date.parse(ghost.endsAt))} ${ghost.customer.name}`, colorOf(ghost),
                   ))}
                   {creating && preview && renderGhost(
                     'new', createStart, createStart + preview.durationMinutes,
-                    `${timeRange(preview.startsAt.getTime(), preview.startsAt.getTime() + preview.durationMinutes * 60000)} ${t('schedule.newSession')}`, lanes,
+                    `${timeRange(preview.startsAt.getTime(), preview.startsAt.getTime() + preview.durationMinutes * 60000)} ${t('schedule.newSession')}`,
                   )}
                   {row.isToday && nowMinute >= from && nowMinute <= to && (
                     <div className="schedule-now" style={{ left: x(nowMinute) }} aria-hidden="true" />
