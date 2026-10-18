@@ -581,6 +581,7 @@ export function SchedulePage() {
                     today={today}
                     appointments={visible}
                     timezone={timezone}
+                    showTech={staff && !techFilter}
                     colorOf={colorOf}
                     onOpen={openSession}
                     onPickDay={day => setParams({ view: 'day', date: day })}

@@ -14,6 +14,8 @@ interface MonthGridProps {
   today: string
   appointments: Appointment[]
   timezone: string
+  /** Each session names its tech, unless the calendar is one tech's. */
+  showTech: boolean
   colorOf: (appointment: Appointment) => string
   onOpen: (appointment: Appointment) => void
   onPickDay: (day: string) => void
@@ -29,7 +31,7 @@ function sessionsThatFit(dayHeight: number): number {
   return Math.max(1, Math.floor((dayHeight - DAY_CHROME + CHIP_GAP) / (CHIP_HEIGHT + CHIP_GAP)))
 }
 
-export function MonthGrid({ days, month, today, appointments, timezone, colorOf, onOpen, onPickDay }: MonthGridProps) {
+export function MonthGrid({ days, month, today, appointments, timezone, showTech, colorOf, onOpen, onPickDay }: MonthGridProps) {
   const { t } = useTranslation()
   const locale = getLocale()
   // Weeks share the height of the window, so a taller window shows more of each day.
@@ -84,6 +86,7 @@ export function MonthGrid({ days, month, today, appointments, timezone, colorOf,
                       {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-label={t('schedule.conflictBadge')} />}
                       <span className="schedule-chip-time">{timeInputValue(Date.parse(appointment.startsAt), timezone)}</span>
                       <span className="truncate">{appointment.customer.name}</span>
+                      {showTech && <span className="schedule-chip-tech">{appointment.tech?.username ?? t('schedule.unassigned')}</span>}
                     </button>
                   ))}
                   {hidden > 0 && (

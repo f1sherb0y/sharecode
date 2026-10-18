@@ -406,7 +406,8 @@ yesterday's and tomorrow's say so.
   counts the sessions beyond it and brings them in. Week, day and month fit the
   window's height.
 - Session cards show the customer, the tech (week view) and the company and
-  position, never the time: the hours above the rows give it. The list views
+  position, never the time: the hours above the rows give it. Month entries
+  show the time, the customer and the tech (not on one tech's calendar). The list views
   print each time once per row of simultaneous sessions, which sit side by side
   where there is room. The UI does not repeat information shown nearby.
 - A session has a customer, a tech (or none yet), a start, a duration (5 minutes
