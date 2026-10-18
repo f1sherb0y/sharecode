@@ -97,7 +97,7 @@ assert.equal(techB.createdBy.username, 'audit_admin')
 // Techs see only their own sessions, without the customer's profile: no contact, no private notes.
 const techView = await list('tech_a')
 assert.deepEqual(techView.map(a => a.id), [first.id])
-assert.deepEqual(Object.keys(techView[0].customer).sort(), ['id', 'isDeleted', 'name']); assert.equal(techView[0].notes, 'Bring the take-home')
+assert.deepEqual(Object.keys(techView[0].customer).sort(), ['id', 'isDeleted', 'name', 'owner']); assert.equal(techView[0].notes, 'Bring the take-home')
 assert.equal((await list('agent_b')).find(a => a.id === first.id).customer.contact, 'wx: zhang_100%')
 assert.deepEqual((await list('tech_a', range(-30, 60) + '&techId=' + id('tech_b'))).map(a => a.id), [first.id], 'techs cannot ask for other techs')
 await request('/api/appointments/' + techB.id, 'GET', undefined, as('tech_a'), 404)
@@ -352,7 +352,9 @@ const pickDate = async (page, trigger, key) => {
 }
 const pickTime = async (page, trigger, time) => {
   await trigger.click()
-  await page.getByRole('option', { name: time, exact: true }).click()
+  await page.locator(`.ui-time-picker [data-hour="${time.slice(0, 2)}"]`).click()
+  await page.locator(`.ui-time-picker [data-minute="${time.slice(3)}"]`).click()
+  await page.locator('.ui-time-picker').waitFor({ state: 'detached' })
   assert.equal(await trigger.getAttribute('data-value'), time)
 }
 const appointment = async appointmentId => (await request('/api/appointments/' + appointmentId, 'GET', undefined, as('agent_a'))).appointment
@@ -381,10 +383,8 @@ try {
     try {
       // Agents: click free time, add the customer in place, confirm an overlap.
       const { context, page, errors } = await openPage(browser, as('agent_a'))
-      // The schedule is as wide as the room list.
-      await page.goto(`${WEB}/rooms`)
-      const pageWidth = () => page.locator('main > .app-container').evaluate(el => el.getBoundingClientRect().width)
-      const roomsWidth = await pageWidth()
+      // The schedule uses the full window width.
+      const pageWidth = () => page.locator('main > div').evaluate(el => el.getBoundingClientRect().width)
       await page.goto(`${WEB}/schedule?view=day&date=${day}`)
       const column = name => page.locator(`[data-schedule-row][data-tech="${name ? id(name) : ''}"]`)
       // Where a time of day is on a tech's row: rows span data-from to data-to minutes.
@@ -395,8 +395,7 @@ try {
         return { x: box.x + ((hour * 60 + minute - from) / (to - from)) * box.width, y: box.y + box.height / 2, minuteWidth: box.width / (to - from) }
       }
       await column('tech_a').waitFor()
-      assert.equal(await pageWidth(), roomsWidth)
-      assert.equal(roomsWidth, 1200)
+      assert.equal(await pageWidth(), 1440)
       assert.equal(await column('').count(), 1, 'the day view has an unassigned row')
       await column('').locator(`[data-appointment="${shown.id}"]`).waitFor()
       const strip = page.locator('.schedule-unassigned')
@@ -525,8 +524,8 @@ try {
       const fits = () => scroller.evaluate(el => el.scrollWidth <= el.clientWidth + 1)
       assert(await fits(), 'the week fits the page')
       await page.setViewportSize({ width: 1280, height: 800 })
-      assert.equal(await pageWidth(), 1200)
-      assert(await fits(), 'which is as wide on a smaller screen')
+      assert.equal(await pageWidth(), 1280)
+      assert(await fits(), 'and on a smaller screen')
       // Narrower, an hour keeps room for a half-hour session's name: the timeline scrolls, not the page.
       await page.setViewportSize({ width: 1024, height: 768 })
       await page.waitForFunction(() => { const el = document.querySelector('[data-schedule-scroll]'); return el.scrollWidth > el.clientWidth + 1 })
@@ -597,12 +596,11 @@ try {
       await abroadCard.waitFor()
       const expectedX = (await pointAt('tech_a', Number(eastern.hour), Number(eastern.minute))).x
       assert(Math.abs((await abroadCard.boundingBox()).x - expectedX) < 4, 'placed at the Eastern wall-clock time')
-      // The legend names only the techs with sessions in view; the day view keeps a row for every tech.
-      const rowsWithSessions = await page.locator('[data-schedule-row]').evaluateAll(rows => rows.filter(row => row.querySelector('[data-appointment]')).map(row => row.dataset.tech))
-      const names = Object.fromEntries(Object.keys(actors).map(name => [id(name), name]))
-      const legendNames = await page.locator('.schedule-legend-item').allInnerTexts()
-      assert.deepEqual(legendNames.map(text => text.trim()).sort(), rowsWithSessions.map(tech => tech ? names[tech] : 'Unassigned').sort())
-      assert(await column('tech_b').count() === 1 && !legendNames.some(text => text.includes('tech_gone')))
+      // The legend names the agents whose customers have sessions in view (one color each); the day view keeps a row for every tech.
+      const legendNames = (await page.locator('.schedule-legend-item').allInnerTexts()).map(text => text.trim())
+      assert(legendNames.includes('audit_admin') && legendNames.every(name => ['agent_a', 'agent_b', 'audit_admin'].includes(name)), legendNames.join())
+      assert.equal(await column('tech_b').count(), 1)
+      assert.match(await abroadCard.innerText(), /tech_a[\s\S]*audit_admin|audit_admin/)
       await abroadCard.click()
       let form = page.getByRole('dialog', { name: 'Edit session' })
       await form.waitFor()
@@ -786,7 +784,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'timelines as wide as the room list: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time while 场次 keeps Shanghai; session form zone switch; room form time row; legend of techs in view; EN/ZH')
+      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, click to plan, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time while 场次 keeps Shanghai; session form zone switch; room form time row; legend of techs in view; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }
