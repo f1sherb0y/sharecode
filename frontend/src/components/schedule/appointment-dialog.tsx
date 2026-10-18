@@ -279,7 +279,6 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
               zone={zone}
               zones={scheduleZones(homeZone)}
               onZone={switchZone}
-              required
             />
 
             <div className="grid gap-2 sm:grid-cols-2">

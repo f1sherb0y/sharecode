@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui'
+import { DatePicker, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, TimePicker } from '@/components/ui'
 import { getLocale } from '@/i18n'
 import { DURATION_PRESETS, formatDuration, zoneName } from '@/lib/schedule'
 import { cn } from '@/lib/utils'
+import { todayKey } from '@/lib/zoned-time'
+import { useSettingsStore } from '@/stores'
 
 interface TimeFieldsProps {
   /** Prefix for the field ids, e.g. `session` gives `session-date` and `session-time`. */
@@ -18,26 +20,27 @@ interface TimeFieldsProps {
   zone?: string
   zones?: string[]
   onZone?: (zone: string) => void
-  required?: boolean
 }
 
 /** Date, start time, (zone) and length: one row shared by new sessions and new rooms. */
-export function TimeFields({ id, date, time, duration, onDate, onTime, onDuration, zone, zones, onZone, required }: TimeFieldsProps) {
+export function TimeFields({ id, date, time, duration, onDate, onTime, onDuration, zone, zones, onZone }: TimeFieldsProps) {
   const { t } = useTranslation()
   const locale = getLocale()
   const units = { hours: t('schedule.hoursUnit'), minutes: t('schedule.minutesUnit') }
   const durations = useMemo(() => [...new Set([...DURATION_PRESETS, duration])].sort((a, b) => a - b), [duration])
   const withZone = !!zone && !!zones && !!onZone
+  const homeZone = useSettingsStore(state => state.timezone)
+  const today = todayKey(zone ?? homeZone)
 
   return (
     <div className={cn('grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-2', withZone ? 'sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]' : 'sm:grid-cols-3')}>
       <div className="space-y-1">
         <Label htmlFor={`${id}-date`}>{t('schedule.dialog.date')}</Label>
-        <Input id={`${id}-date`} type="date" value={date} required={required} onChange={e => onDate(e.target.value)} />
+        <DatePicker id={`${id}-date`} value={date} onChange={onDate} today={today} />
       </div>
       <div className="space-y-1">
         <Label htmlFor={`${id}-time`}>{t('schedule.dialog.start')}</Label>
-        <Input id={`${id}-time`} type="time" step={300} value={time} required={required} onChange={e => onTime(e.target.value)} />
+        <TimePicker id={`${id}-time`} value={time} onChange={onTime} />
       </div>
       {withZone && (
         <div className="space-y-1">

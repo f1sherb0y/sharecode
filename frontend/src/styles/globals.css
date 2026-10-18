@@ -196,6 +196,22 @@
     padding-right: max(0.5rem, env(safe-area-inset-right));
   }
 
+  /* Date picker: a month of days, Monday first, in the menu style. */
+  .ui-date-picker { width: 16.5rem; }
+  .ui-date-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+  .ui-date-weekday { padding-block: 0.25rem; color: var(--color-muted-foreground); font-size: var(--text-xs); text-align: center; }
+  .ui-date-day {
+    height: 2rem;
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  .ui-date-day:hover { background: var(--color-accent); }
+  .ui-date-day:focus-visible { outline: 2px solid var(--color-ring); outline-offset: -2px; }
+  .ui-date-day.is-outside { color: var(--color-muted-foreground); opacity: 0.6; }
+  .ui-date-day.is-today { color: var(--color-destructive); font-weight: 600; }
+  .ui-date-day.is-selected { background: var(--color-primary); color: var(--color-primary-foreground); }
+
   /* Guided tour: the page is dimmed and blocked except for a cut-out around the target. */
   .ui-tour { position: fixed; inset: 0; z-index: 50; }
   .ui-tour-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.4); }

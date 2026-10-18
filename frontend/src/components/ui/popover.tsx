@@ -1,125 +1,29 @@
 import * as React from 'react'
-import { createPortal } from 'react-dom'
+import * as PopoverPrimitive from '@radix-ui/react-popover'
 import { cn } from '@/lib/utils'
 
-interface PopoverProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  children: React.ReactNode
-}
+const Popover = PopoverPrimitive.Root
+const PopoverTrigger = PopoverPrimitive.Trigger
 
-interface PopoverTriggerProps {
-  asChild?: boolean
-  children: React.ReactNode
-}
-
-interface PopoverContentProps extends React.HTMLAttributes<HTMLDivElement> {
-  align?: 'start' | 'center' | 'end'
-}
-
-const PopoverContext = React.createContext<{
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  triggerRef: React.RefObject<HTMLSpanElement | null>
-}>({
-  open: false,
-  onOpenChange: () => {},
-  triggerRef: { current: null },
-})
-
-function Popover({ open, onOpenChange, children }: PopoverProps) {
-  const triggerRef = React.useRef<HTMLSpanElement>(null)
-  return (
-    <PopoverContext.Provider value={{ open, onOpenChange, triggerRef }}>
-      <div className="relative">{children}</div>
-    </PopoverContext.Provider>
-  )
-}
-
-function PopoverTrigger({ children }: PopoverTriggerProps) {
-  const { open, onOpenChange, triggerRef } = React.useContext(PopoverContext)
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    onOpenChange(!open)
-  }
-
-  return (
-    <span ref={triggerRef} onClick={handleClick} className="inline-block cursor-pointer">
-      {children}
-    </span>
-  )
-}
-
-function PopoverContent({ className, align = 'center', children, ...props }: PopoverContentProps) {
-  const { open, onOpenChange, triggerRef } = React.useContext(PopoverContext)
-  const contentRef = React.useRef<HTMLDivElement>(null)
-  const [position, setPosition] = React.useState({ top: 0, left: 0 })
-
-  React.useEffect(() => {
-    if (!open || !triggerRef.current) return
-
-    const trigger = triggerRef.current
-    const rect = trigger.getBoundingClientRect()
-
-    let left = rect.left
-    if (align === 'center') {
-      left = rect.left + rect.width / 2
-    } else if (align === 'end') {
-      left = rect.right
-    }
-
-    setPosition({
-      top: rect.bottom + 4,
-      left,
-    })
-  }, [open, align, triggerRef])
-
-  React.useEffect(() => {
-    if (!open) return
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        contentRef.current &&
-        !contentRef.current.contains(event.target as Node) &&
-        triggerRef.current &&
-        !triggerRef.current.contains(event.target as Node)
-      ) {
-        onOpenChange(false)
-      }
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onOpenChange(false)
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [open, onOpenChange, triggerRef])
-
-  if (!open) return null
-
-  return createPortal(
-    <div
-      ref={contentRef}
-      className={cn('fixed z-50', className)}
-      style={{
-        top: position.top,
-        left: position.left,
-        transform: align === 'center' ? 'translateX(-50%)' : align === 'end' ? 'translateX(-100%)' : undefined,
-      }}
+/** A floating panel styled like the select and menu lists; works inside dialogs. */
+const PopoverContent = React.forwardRef<
+  React.ComponentRef<typeof PopoverPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
+>(({ className, align = 'start', sideOffset = 4, ...props }, ref) => (
+  <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Content
+      ref={ref}
+      align={align}
+      sideOffset={sideOffset}
+      collisionPadding={8}
+      className={cn(
+        'z-50 rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        className
+      )}
       {...props}
-    >
-      {children}
-    </div>,
-    document.body
-  )
-}
+    />
+  </PopoverPrimitive.Portal>
+))
+PopoverContent.displayName = PopoverPrimitive.Content.displayName
 
 export { Popover, PopoverTrigger, PopoverContent }
