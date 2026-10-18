@@ -291,6 +291,8 @@ VITE_WS_URL=ws://localhost:3001/api/ws
 - `POST /api/invites` - Create a single-use registration code for a tech (valid 7 days, optional note)
 - `GET /api/invites` - List invites (agents see their own; admins see all)
 - `DELETE /api/invites/:id` - Withdraw an unused invite (its issuer or an admin)
+- `GET /api/tours` - Guided tours the caller has seen (`{ seen: [...] }`)
+- `PUT /api/tours/:id` - Mark a tour seen (`schedule`); unknown tours answer 404
 
 ### Scheduling
 Techs get their own sessions only and every other scheduling endpoint answers
@@ -374,6 +376,11 @@ yesterday's and tomorrow's say so.
   beside the tabs and on by default for agents, keeps the sessions of their own
   customers and the sessions they planned, in the calendar, the 场次 tab and
   Today's sessions. Admins see everything.
+
+- On their first visit, agents get a short guided tour of the page, on any
+  device: adding a customer, planning a session, and moving and assigning
+  sessions on the calendar, with Back, Next and Skip. It is shown once per
+  account.
 
 - The calendar shows a week, a day, a month or a two-week list; phones open the
   list. Week and day are timelines with the hours across: the week has a row per

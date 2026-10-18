@@ -98,6 +98,7 @@
 - **Agents plan every tech's sessions**: click or drag free time, drag to move (another weekday or another tech's row), stretch the right edge, drop from the unassigned strip above the calendar (it skips sessions the calendar shows and hides when empty); overlaps per tech need "Save anyway", and saves per tech are serialized with advisory locks
 - **Sessions have no status or agent to set**: the planner is the creator; a session planned by mistake or called off is deleted; it reads as completed once its room has ended
 - **场次 tab** (staff): customers on the left with "All sessions" first and **+** to add; the right side lists the chosen customer's (or everyone's) sessions with edit/delete for the customer and **New session** (which then asks for no customer); phones show one side at a time
+- **Agent tour**: on the first visit, agents get a guided tour (add a customer, plan a session, move and assign sessions; Back/Next/Skip); shown once per account (`User.seenTours`, `/api/tours`), never to techs or admins
 - **Techs**: their own sessions only, read-only; personal notices when a session still to come is assigned, changed, reassigned away or deleted (shown as cancelled); no confirmation or availability
 - **Session rooms**: created on first "Open room"/"Customer link", owned by the tech, named "company position" (场次 without either, never the customer's name), synced with the session while live (time, company/position and the name unless renamed by hand, owner on reassignment; the previous tech stays a member with edit and replay); never ended for inactivity, only by hand; customer links carry the name and last until the session ends; ending the room completes the session; a past session without a room shows no room buttons
 - **Customers**: one shared list for agents and admins, each owned by its creator (contact and notes never reach techs); removal waits for upcoming sessions
@@ -124,7 +125,7 @@ Single HTTP Server (Port 3001)
 ```
 User
 ├── id, username, email? (legacy, no longer set or shown), password, color, role (admin | agent | tech)
-├── isDeleted (soft delete), lastSeen
+├── isDeleted (soft delete), lastSeen, seenTours (guided tours shown once)
 └── Relations: ownedRooms, rooms (participants)
 
 Room
@@ -423,7 +424,7 @@ monacoModelRef.current?.setValue(ytext.toString())
   and DPI layouts), admin/agent/tech role permissions, invite-only registration and
   share-link membership rules,
   notes read/write permissions and reader/manager exports, scheduling (customer
-  and session API rules, notices, session rooms, and the three-browser calendar
+  and session API rules, notices, session rooms, the agent tour, and the three-browser calendar
   on desktop and phone), three-browser
   follow opt-out pause/resume and reload persistence across code/Markdown/Canvas rooms,
   Sarasa font/CDN fallback checks, and standalone replay export.
