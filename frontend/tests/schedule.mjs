@@ -335,6 +335,26 @@ const openPage = async (browser, token, { mobile = false, lng = 'en' } = {}) => 
   page.on('pageerror', e => errors.push(e.message))
   return { context, page, errors }
 }
+// The app's own date and time pickers (not the browser's): a month of days and a list of times.
+const pickDate = async (page, trigger, key) => {
+  assert.equal(await trigger.evaluate(el => el.tagName), 'BUTTON')
+  await trigger.click()
+  const picker = page.locator('.ui-date-picker')
+  await picker.waitFor()
+  for (let i = 0; i < 24; i++) {
+    const shown = await picker.locator('[data-month]').getAttribute('data-month')
+    if (shown === key.slice(0, 7)) break
+    await picker.getByRole('button', { name: shown < key.slice(0, 7) ? 'Next' : 'Previous' }).click()
+  }
+  await picker.locator(`[data-date="${key}"]`).click()
+  await picker.waitFor({ state: 'detached' })
+  assert.equal(await trigger.getAttribute('data-value'), key)
+}
+const pickTime = async (page, trigger, time) => {
+  await trigger.click()
+  await page.getByRole('option', { name: time, exact: true }).click()
+  assert.equal(await trigger.getAttribute('data-value'), time)
+}
 const appointment = async appointmentId => (await request('/api/appointments/' + appointmentId, 'GET', undefined, as('agent_a'))).appointment
 const fitsWidth = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
 const drag = async (page, from, to, steps = 8) => {
@@ -395,7 +415,7 @@ try {
       await page.mouse.click(point.x, point.y)
       let dialog = page.getByRole('dialog', { name: 'New session' })
       await dialog.waitFor()
-      assert.deepEqual([await dialog.getByLabel('Date').inputValue(), await dialog.getByLabel('Start').inputValue()], [day, '10:00'])
+      assert.deepEqual([await dialog.locator('#session-date').getAttribute('data-value'), await dialog.locator('#session-time').getAttribute('data-value')], [day, '10:00'])
       assert.match(await dialog.getByRole('combobox', { name: 'Tech' }).innerText(), /tech_a/)
       await dialog.getByRole('combobox', { name: 'Customer' }).fill(customerName)
       await dialog.getByRole('option', { name: `New customer “${customerName}”` }).click()
@@ -417,9 +437,9 @@ try {
       point = await pointAt('tech_a', 11, 15)
       await page.mouse.click(point.x, point.y)
       dialog = page.getByRole('dialog', { name: 'New session' })
-      await dialog.getByLabel('Start').fill('10:30')
       await dialog.getByRole('combobox', { name: 'Customer' }).fill(customerName)
       await dialog.getByRole('option', { name: new RegExp('^' + customerName) }).click()
+      await pickTime(page, dialog.locator('#session-time'), '10:30')
       saved = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST')
       await dialog.getByRole('button', { name: 'Create session' }).click()
       assert.equal((await saved).status(), 409)
@@ -427,9 +447,9 @@ try {
       await conflictBox.getByText('This tech is already booked').waitFor()
       assert.match(await conflictBox.innerText(), new RegExp(`10:00–11:00 · ${customerName}`))
       // Changing the time drops the warning until the next save.
-      await dialog.getByLabel('Start').fill('10:45')
+      await pickTime(page, dialog.locator('#session-time'), '10:45')
       await conflictBox.waitFor({ state: 'detached' })
-      await dialog.getByLabel('Start').fill('10:30')
+      await pickTime(page, dialog.locator('#session-time'), '10:30')
       await dialog.getByRole('button', { name: 'Create session' }).click()
       await conflictBox.getByRole('button', { name: 'Save anyway' }).waitFor()
       saved = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST')
@@ -539,8 +559,8 @@ try {
       const another = page.getByRole('dialog', { name: `New session for ${customerName}` })
       await another.waitFor()
       assert.equal(await another.getByRole('combobox', { name: 'Customer' }).count(), 0, 'no customer field')
-      await another.getByLabel('Date').fill(at(uiDay + 1, 0).slice(0, 10))
-      await another.getByLabel('Start').fill('10:00')
+      await pickDate(page, another.locator('#session-date'), at(uiDay + 1, 0).slice(0, 10))
+      await pickTime(page, another.locator('#session-time'), '10:00')
       await another.getByLabel('Company').fill('Initech')
       await another.getByRole('combobox', { name: 'Tech' }).click()
       await page.getByRole('option', { name: 'tech_a', exact: true }).click()
@@ -587,20 +607,20 @@ try {
       let form = page.getByRole('dialog', { name: 'Edit session' })
       await form.waitFor()
       const zoneField = form.getByRole('combobox', { name: 'Time zone' })
-      assert.equal(await form.locator('#session-time').inputValue(), `${eastern.hour}:${eastern.minute}`)
+      assert.equal(await form.locator('#session-time').getAttribute('data-value'), `${eastern.hour}:${eastern.minute}`)
       assert.equal((await zoneField.innerText()).trim(), 'Eastern Time', 'the form opens in the calendar zone')
       // Switching the form's zone shows the same moment in that zone.
       await zoneField.click()
       await page.getByRole('option', { name: 'United Kingdom Time' }).click()
       const british = inZone(abroad.startsAt, 'Europe/London')
-      assert.deepEqual([await form.locator('#session-date').inputValue(), await form.locator('#session-time').inputValue()], [`${british.year}-${british.month}-${british.day}`, `${british.hour}:${british.minute}`])
+      assert.deepEqual([await form.locator('#session-date').getAttribute('data-value'), await form.locator('#session-time').getAttribute('data-value')], [`${british.year}-${british.month}-${british.day}`, `${british.hour}:${british.minute}`])
       await page.keyboard.press('Escape')
       await form.waitFor({ state: 'hidden' })
       // The 场次 tab shows the same session in Shanghai time.
       await page.goto(`${WEB}/schedule?tab=sessions&tz=America/New_York&session=${abroad.id}`)
       form = page.getByRole('dialog', { name: 'Edit session' })
       await form.waitFor()
-      assert.equal(await form.locator('#session-time').inputValue(), '21:00')
+      assert.equal(await form.locator('#session-time').getAttribute('data-value'), '21:00')
       assert.equal((await form.getByRole('combobox', { name: 'Time zone' }).innerText()).trim(), 'China Standard Time')
       await page.keyboard.press('Escape')
       await form.waitFor({ state: 'hidden' })
@@ -613,8 +633,16 @@ try {
       await form.getByRole('combobox', { name: 'Time zone' }).click()
       await page.getByRole('option', { name: 'Pacific Time' }).click()
       const pacificDay = at(uiDay + 4, 0).slice(0, 10)
-      await form.locator('#session-date').fill(pacificDay)
-      await form.locator('#session-time').fill('09:30')
+      // Arrow keys move through the days; Enter picks one.
+      await form.locator('#session-date').click()
+      const startDay = await form.locator('#session-date').getAttribute('data-value')
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('ArrowRight')
+      await page.keyboard.press('Enter')
+      const plusEight = new Date(Date.parse(startDay + 'T00:00:00Z') + 8 * 864e5).toISOString().slice(0, 10)
+      assert.equal(await form.locator('#session-date').getAttribute('data-value'), plusEight)
+      await pickDate(page, form.locator('#session-date'), pacificDay)
+      await pickTime(page, form.locator('#session-time'), '09:30')
       const pacificSaved = page.waitForResponse(response => response.url().endsWith('/api/appointments') && response.request().method() === 'POST')
       await form.getByRole('button', { name: 'Create session' }).click()
       const pacific = (await (await pacificSaved).json()).appointment
@@ -627,8 +655,8 @@ try {
       await page.getByRole('button', { name: 'Create New Room' }).first().click()
       const roomForm = page.getByRole('dialog')
       await roomForm.locator('#roomName').fill('Fields ' + engine)
-      await roomForm.locator('#room-date').fill(pacificDay)
-      await roomForm.locator('#room-time').fill('14:00')
+      await pickDate(page, roomForm.locator('#room-date'), pacificDay)
+      await pickTime(page, roomForm.locator('#room-time'), '14:00')
       await roomForm.getByRole('combobox', { name: 'Duration' }).click()
       await page.getByRole('option', { name: '1 h 30 min' }).click()
       await roomForm.locator('button[type=submit]').click()
