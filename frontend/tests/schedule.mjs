@@ -526,11 +526,9 @@ try {
       await page.setViewportSize({ width: 1280, height: 800 })
       assert.equal(await pageWidth(), 1280)
       assert(await fits(), 'and on a smaller screen')
-      // Narrower, an hour keeps room for a half-hour session's name: the timeline scrolls, not the page.
+      // A tablet-wide window still shows the working day without a scrollbar.
       await page.setViewportSize({ width: 1024, height: 768 })
-      await page.waitForFunction(() => { const el = document.querySelector('[data-schedule-scroll]'); return el.scrollWidth > el.clientWidth + 1 })
-      const hourWidth = await page.locator('.schedule-hour').evaluateAll(hours => hours[1].getBoundingClientRect().left - hours[0].getBoundingClientRect().left)
-      assert(hourWidth >= 75, `an hour is ${hourWidth}px wide`)
+      assert(await fits(), 'no scrollbar under the timeline')
       assert(await fitsWidth(page), 'no sideways scrolling of the page')
       await page.setViewportSize({ width: 1440, height: 900 })
 

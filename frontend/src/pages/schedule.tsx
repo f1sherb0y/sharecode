@@ -46,13 +46,14 @@ import {
   stepAnchor,
   techColors,
   viewRange,
-  scheduleZones,
+  DEFAULT_ZONE,
+  SCHEDULE_ZONES,
   zoneName,
   type ScheduleView,
 } from '@/lib/schedule'
 import { addDays, dateKeyOf, dayStart, minuteOfDay, parseDateKey, timeInputValue, todayKey, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
-import { useAuthStore, useSettingsStore } from '@/stores'
+import { useAuthStore } from '@/stores'
 import type { Appointment, AppointmentInput, ScheduleConflict, User } from '@/types'
 import '@/styles/schedule.css'
 
@@ -64,7 +65,6 @@ export function SchedulePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore(state => state.user)
-  const homeZone = useSettingsStore(state => state.timezone)
   const staff = isStaff(user)
   const onlyMine = useOnlyMine()
   const { mine } = onlyMine
@@ -74,10 +74,9 @@ export function SchedulePage() {
   const locale = getLocale()
   const tab: Tab = staff && searchParams.get('tab') === 'sessions' ? 'sessions' : 'calendar'
   // The calendar can be viewed in a customer's zone; everything else keeps the usual one.
-  const zones = scheduleZones(homeZone)
   const zoneParam = searchParams.get('tz')
-  const calendarZone = zoneParam && zones.includes(zoneParam) ? zoneParam : homeZone
-  const timezone = tab === 'calendar' ? calendarZone : homeZone
+  const calendarZone = zoneParam && SCHEDULE_ZONES.includes(zoneParam) ? zoneParam : DEFAULT_ZONE
+  const timezone = tab === 'calendar' ? calendarZone : DEFAULT_ZONE
   const today = todayKey(timezone)
 
   const viewParam = searchParams.get('view') as ScheduleView | null
@@ -387,12 +386,12 @@ export function SchedulePage() {
                 {appointmentsQuery.isFetching && <Spinner size="sm" />}
               </div>
               <div className="flex items-center gap-1">
-              <Select value={calendarZone} onValueChange={zone => setParams({ tz: zone === homeZone ? null : zone })}>
+              <Select value={calendarZone} onValueChange={zone => setParams({ tz: zone === DEFAULT_ZONE ? null : zone })}>
                 <SelectTrigger className="h-control-sm w-auto gap-1 text-sm" aria-label={t('schedule.zone')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {zones.map(zone => <SelectItem key={zone} value={zone}>{zoneName(zone, locale)}</SelectItem>)}
+                  {SCHEDULE_ZONES.map(zone => <SelectItem key={zone} value={zone}>{zoneName(zone, locale)}</SelectItem>)}
                 </SelectContent>
               </Select>
               <div className="schedule-views" role="group" aria-label={t('schedule.views.label')}>

@@ -27,10 +27,9 @@ import {
 import { api } from '@/api'
 import { getLocale } from '@/i18n'
 import { translateError } from '@/i18n/errors'
-import { DEFAULT_DURATION, formatDayKey, scheduleZones } from '@/lib/schedule'
+import { DEFAULT_DURATION, SCHEDULE_ZONES, formatDayKey } from '@/lib/schedule'
 import { atMinute, dateKeyOf, parseTimeInput, timeInputValue, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
-import { useSettingsStore } from '@/stores'
 import type { Appointment, AppointmentInput, AppointmentStatus, ScheduleConflict, User } from '@/types'
 import { CustomerPicker, type PickedCustomer } from './customer-picker'
 import { SessionRoomActions, hasRoomActions } from './session-room-actions'
@@ -75,7 +74,6 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
   const [time, setTime] = useState('')
   const [duration, setDuration] = useState(DEFAULT_DURATION)
   const [zone, setZone] = useState(timezone)
-  const homeZone = useSettingsStore(state => state.timezone)
   const [company, setCompany] = useState('')
   const [position, setPosition] = useState('')
   const [notes, setNotes] = useState('')
@@ -277,7 +275,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
               onTime={setTime}
               onDuration={setDuration}
               zone={zone}
-              zones={scheduleZones(homeZone)}
+              zones={SCHEDULE_ZONES}
               onZone={switchZone}
             />
 
