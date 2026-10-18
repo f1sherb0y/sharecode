@@ -24,7 +24,7 @@ interface AuthState {
   isLoading: boolean
   isInitialized: boolean
   login: (username: string, password: string) => Promise<void>
-  register: (username: string, password: string, email: string | undefined, inviteCode: string) => Promise<void>
+  register: (username: string, password: string, inviteCode: string) => Promise<void>
   replaceToken: (token: string, browserSessionId?: string) => void
   renewToken: (previous: string, next: string, browserSessionId?: string) => void
   logout: () => Promise<void>
@@ -53,8 +53,8 @@ export const useAuthStore = create<AuthState>()(
         set({ user, token, browserSessionId: browserSessionId ?? null, sessionId: crypto.randomUUID(), actorType: 'user', guestProfile: null, isLoading: false, isInitialized: true })
       },
 
-      register: async (username, password, email, inviteCode) => {
-        const { user, token, browserSessionId } = await api.register(username, password, email, inviteCode)
+      register: async (username, password, inviteCode) => {
+        const { user, token, browserSessionId } = await api.register(username, password, inviteCode)
         sessionRevision++
         queryClient.clear()
         set({ user, token, browserSessionId: browserSessionId ?? null, sessionId: crypto.randomUUID(), actorType: 'user', guestProfile: null, isLoading: false, isInitialized: true })

@@ -98,10 +98,10 @@ class ApiClient {
   }
 
   // Auth
-  async register(username: string, password: string, email: string | undefined, inviteCode: string): Promise<AuthResponse> {
+  async register(username: string, password: string, inviteCode: string): Promise<AuthResponse> {
     return this.request<AuthResponse>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password, email, inviteCode }),
+      body: JSON.stringify({ username, password, inviteCode }),
     })
   }
 
@@ -264,9 +264,10 @@ class ApiClient {
 
   // Registration invites (agents and admins)
   // Scheduling (排班)
-  async listCustomers(params: { q?: string; page?: number; pageSize?: number }, signal?: AbortSignal): Promise<{ customers: Customer[]; pagination: PaginationMeta }> {
+  async listCustomers(params: { q?: string; page?: number; pageSize?: number; mine?: boolean }, signal?: AbortSignal): Promise<{ customers: Customer[]; pagination: PaginationMeta }> {
     const search = new URLSearchParams()
     if (params.q) search.set('q', params.q)
+    if (params.mine) search.set('mine', 'true')
     if (params.page) search.set('page', String(params.page))
     if (params.pageSize) search.set('pageSize', String(params.pageSize))
     return this.request<{ customers: Customer[]; pagination: PaginationMeta }>(`/api/customers?${search}`, { signal })
@@ -288,11 +289,13 @@ class ApiClient {
     return this.request<{ message: string }>(`/api/customers/${customerId}`, { method: 'DELETE' })
   }
 
-  async listAppointments(params: { from: string; to: string; techId?: string; customerId?: string; unassigned?: boolean }, signal?: AbortSignal): Promise<{ appointments: Appointment[] }> {
+  /** `mine`: an agent's own, i.e. sessions of customers they created or that they planned. */
+  async listAppointments(params: { from: string; to: string; techId?: string; customerId?: string; unassigned?: boolean; mine?: boolean }, signal?: AbortSignal): Promise<{ appointments: Appointment[] }> {
     const search = new URLSearchParams({ from: params.from, to: params.to })
     if (params.techId) search.set('techId', params.techId)
     if (params.customerId) search.set('customerId', params.customerId)
     if (params.unassigned) search.set('unassigned', 'true')
+    if (params.mine) search.set('mine', 'true')
     return this.request<{ appointments: Appointment[] }>(`/api/appointments?${search}`, { signal })
   }
 
@@ -349,7 +352,6 @@ class ApiClient {
   async createUser(payload: {
     username: string
     password: string
-    email?: string
     role?: Role
   }): Promise<{ user: User }> {
     return this.request<{ user: User }>('/api/admin/users', {
@@ -458,7 +460,7 @@ export const api = new ApiClient()
 // Share API (unauthenticated endpoints)
 export async function joinShare(
   shareToken: string,
-  payload: { username: string; email?: string }
+  payload: { username: string }
 ): Promise<{ token: string; redirectUrl: string | null; guest: ShareGuest; room: ShareRoomDetails }> {
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/share/${shareToken}/join`, {

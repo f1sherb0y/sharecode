@@ -25,7 +25,6 @@ export function RegisterPage() {
     const fields = new FormData(e.currentTarget)
     const username = String(fields.get('username') ?? '')
     const password = String(fields.get('password') ?? '')
-    const email = String(fields.get('email') ?? '')
     const inviteCode = String(fields.get('inviteCode') ?? '').trim()
     setError('')
 
@@ -37,7 +36,7 @@ export function RegisterPage() {
     setIsLoading(true)
 
     try {
-      await register(username, password, email || undefined, inviteCode)
+      await register(username, password, inviteCode)
       navigate('/rooms')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
@@ -76,10 +75,8 @@ export function RegisterPage() {
                   type="text"
                   className="font-mono"
                   defaultValue={invitedCode}
-                  placeholder={t('auth.register.inviteCodePlaceholder')}
                   required
                 />
-                <p className="text-xs text-muted-foreground">{t('auth.register.inviteHint')}</p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="username">{t('auth.register.username')}</Label>
@@ -91,21 +88,7 @@ export function RegisterPage() {
                   autoCorrect="off"
                   spellCheck={false}
                   type="text"
-                  placeholder={t('auth.register.usernamePlaceholder')}
                   required
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="email">{t('auth.register.email')}</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  type="email"
-                  placeholder={t('auth.register.emailPlaceholder')}
                 />
               </div>
               <div className="space-y-1">
@@ -115,7 +98,6 @@ export function RegisterPage() {
                   name="password"
                   autoComplete="new-password"
                   type="password"
-                  placeholder={t('auth.register.passwordPlaceholder')}
                   minLength={10}
                   required
                 />

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
-import { Check, X, Keyboard, Sun, Moon } from 'lucide-react'
+import { Check, X, Keyboard } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Button,
@@ -11,13 +11,12 @@ import {
   Label,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui'
 import { Navbar, NavbarBack, PageContainer } from '@/components/layout'
 import { api } from '@/api'
-import { useAuthStore, useThemeStore, useSettingsStore } from '@/stores'
+import { useAuthStore, useSettingsStore } from '@/stores'
 import { validatePasswordPolicy } from '@/lib/password-policy'
 import {
   isTauriApp,
@@ -54,10 +53,9 @@ const TIMEZONE_OPTIONS = [
 ]
 
 export function SettingsPage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user, actorType } = useAuthStore()
-  const { theme, setTheme } = useThemeStore()
   const { timezone, setTimezone } = useSettingsStore()
 
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL)
@@ -207,89 +205,31 @@ export function SettingsPage() {
       />
 
       <PageContainer className="max-w-4xl mx-auto">
-        {/* User preferences — always visible */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          {/* Appearance */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.appearance.title')}</CardTitle>
-              <CardDescription>{t('settings.appearance.description')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-1">
-                <Button
-                  variant={theme === 'light' ? 'default' : 'outline'}
-                  className="flex-1"
-                  onClick={() => setTheme('light')}
-                >
-                  <Sun className="h-4 w-4 mr-1.5" />
-                  {t('settings.appearance.light')}
-                </Button>
-                <Button
-                  variant={theme === 'dark' ? 'default' : 'outline'}
-                  className="flex-1"
-                  onClick={() => setTheme('dark')}
-                >
-                  <Moon className="h-4 w-4 mr-1.5" />
-                  {t('settings.appearance.dark')}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Language */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.language.title')}</CardTitle>
-              <CardDescription>{t('settings.language.description')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-1">
-                <Button
-                  variant={i18n.language === 'en' ? 'default' : 'outline'}
-                  className="flex-1"
-                  onClick={() => i18n.changeLanguage('en')}
-                >
-                  English
-                </Button>
-                <Button
-                  variant={i18n.language === 'zh' ? 'default' : 'outline'}
-                  className="flex-1"
-                  onClick={() => i18n.changeLanguage('zh')}
-                >
-                  中文
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Timezone */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.timezone.title')}</CardTitle>
-              <CardDescription>{t('settings.timezone.description')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <select
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="ui-field"
-              >
-                {TIMEZONE_OPTIONS.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </CardContent>
-          </Card>
-        </div>
+        {/* User preferences — always visible. Theme and language switch in the top bar. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('settings.timezone.title')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              aria-label={t('settings.timezone.title')}
+              className="ui-field sm:max-w-xs"
+            >
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+          </CardContent>
+        </Card>
 
         {canChangePassword && (
           <Card className="mt-2">
             <CardHeader>
               <CardTitle>{t('settings.password.title')}</CardTitle>
-              <CardDescription>{t('settings.password.description')}</CardDescription>
             </CardHeader>
             <CardContent>
               <form id="change-password-form" method="post" autoComplete="on" onSubmit={handleChangePassword} className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -300,7 +240,6 @@ export function SettingsPage() {
                     id="currentPassword"
                     name="currentPassword"
                     type="password"
-                    placeholder={t('settings.password.currentPlaceholder')}
                     autoComplete="current-password"
                     required
                   />
@@ -311,7 +250,6 @@ export function SettingsPage() {
                     id="newPassword"
                     name="newPassword"
                     type="password"
-                    placeholder={t('settings.password.newPlaceholder')}
                     autoComplete="new-password"
                     minLength={10}
                     required
@@ -323,7 +261,6 @@ export function SettingsPage() {
                     id="confirmPassword"
                     name="confirmPassword"
                     type="password"
-                    placeholder={t('settings.password.confirmPlaceholder')}
                     autoComplete="new-password"
                     minLength={10}
                     required
@@ -352,7 +289,6 @@ export function SettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>{t('settings.server.title')}</CardTitle>
-                  <CardDescription>{t('settings.server.description')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="space-y-1">
@@ -361,9 +297,7 @@ export function SettingsPage() {
                       id="serverUrl"
                       value={serverUrl}
                       onChange={(e) => setServerUrl(e.target.value)}
-                      placeholder={t('settings.serverUrl.placeholder')}
                     />
-                    <p className="text-xs text-muted-foreground">{t('settings.serverUrl.hint')}</p>
                   </div>
 
                   <div className="space-y-1">
@@ -372,9 +306,7 @@ export function SettingsPage() {
                       id="wsUrl"
                       value={wsUrl}
                       onChange={(e) => setWsUrl(e.target.value)}
-                      placeholder={t('settings.websocketUrl.placeholder')}
                     />
-                    <p className="text-xs text-muted-foreground">{t('settings.websocketUrl.hint')}</p>
                   </div>
 
                   {testResult && (
@@ -397,33 +329,24 @@ export function SettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>{t('settings.privacy.title')}</CardTitle>
-                  <CardDescription>{t('settings.privacy.description')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <label className="flex items-start gap-1.5 cursor-pointer">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={stealthSettings.screenCaptureProtection}
                       onChange={(e) => updateStealthSetting('screenCaptureProtection', e.target.checked)}
-                      className="mt-1"
                     />
-                    <div>
-                      <p className="font-medium text-sm">{t('settings.privacy.hideFromCapture.label')}</p>
-                      <p className="text-xs text-muted-foreground">{t('settings.privacy.hideFromCapture.hint')}</p>
-                    </div>
+                    <span className="font-medium text-sm">{t('settings.privacy.hideFromCapture.label')}</span>
                   </label>
 
-                  <label className="flex items-start gap-1.5 cursor-pointer">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={stealthSettings.hideFromTaskbar}
                       onChange={(e) => updateStealthSetting('hideFromTaskbar', e.target.checked)}
-                      className="mt-1"
                     />
-                    <div>
-                      <p className="font-medium text-sm">{t('settings.privacy.hideFromTaskbar.label')}</p>
-                      <p className="text-xs text-muted-foreground">{t('settings.privacy.hideFromTaskbar.hint')}</p>
-                    </div>
+                    <span className="font-medium text-sm">{t('settings.privacy.hideFromTaskbar.label')}</span>
                   </label>
 
                   <div className="bg-muted p-2 rounded-md space-y-1">

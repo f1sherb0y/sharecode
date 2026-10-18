@@ -23,8 +23,10 @@ import { SessionRoomActions } from '@/components/schedule/session-room-actions'
 import { SessionsPanel } from '@/components/schedule/sessions-panel'
 import { TimeGrid, type GridRow } from '@/components/schedule/time-grid'
 import { UnassignedPanel } from '@/components/schedule/unassigned-panel'
+import { useOnlyMine } from '@/components/schedule/use-only-mine'
 import { useScheduleDrag, type GridDrop } from '@/components/schedule/use-schedule-drag'
 import { useCompactViewport } from '@/hooks/use-compact-viewport'
+import { useNow } from '@/hooks/use-now'
 import { api } from '@/api'
 import { getLocale } from '@/i18n'
 import { translateError } from '@/i18n/errors'
@@ -40,22 +42,13 @@ import {
   viewRange,
   type ScheduleView,
 } from '@/lib/schedule'
-import { addDays, atMinute, dateKeyOf, dayStart, minuteOfDay, parseDateKey, timeInputValue, todayKey, toZonedIso } from '@/lib/zoned-time'
+import { addDays, dateKeyOf, dayStart, minuteOfDay, parseDateKey, timeInputValue, todayKey, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import type { Appointment, AppointmentInput, ScheduleConflict, User } from '@/types'
 import '@/styles/schedule.css'
 
 type Tab = 'calendar' | 'sessions'
-
-function useNow(interval = 60_000) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), interval)
-    return () => clearInterval(timer)
-  }, [interval])
-  return now
-}
 
 /** 排班: agents and admins plan every tech's sessions and keep the customer list; techs see their own sessions. */
 export function SchedulePage() {
@@ -65,6 +58,8 @@ export function SchedulePage() {
   const user = useAuthStore(state => state.user)
   const timezone = useSettingsStore(state => state.timezone)
   const staff = isStaff(user)
+  const onlyMine = useOnlyMine()
+  const { mine } = onlyMine
   const narrow = useCompactViewport('(max-width: 767px)')
   const [searchParams, setSearchParams] = useSearchParams()
   const now = useNow()
@@ -90,7 +85,6 @@ export function SchedulePage() {
   }, [setSearchParams])
 
   const [hidden, setHidden] = useState<Set<string>>(() => new Set())
-  const [showCancelled, setShowCancelled] = useState(false)
   const [draft, setDraft] = useState<SessionDraft | null>(null)
   const [pending, setPending] = useState<Appointment | null>(null)
   const [moveConflict, setMoveConflict] = useState<{ appointment: Appointment; input: AppointmentInput; conflicts: ScheduleConflict[] } | null>(null)
@@ -99,7 +93,8 @@ export function SchedulePage() {
   const rangeParams = useMemo(() => ({
     from: dayStart(range.from, timezone).toISOString(),
     to: dayStart(range.to, timezone).toISOString(),
-  }), [range.from, range.to, timezone])
+    mine,
+  }), [range.from, range.to, timezone, mine])
   const appointmentsQuery = useQuery({
     queryKey: queryKeys.appointments(rangeParams),
     queryFn: async ({ signal }) => (await api.listAppointments(rangeParams, signal)).appointments,
@@ -117,7 +112,8 @@ export function SchedulePage() {
     from: dayStart(today, timezone).toISOString(),
     to: dayStart(addDays(today, 90), timezone).toISOString(),
     unassigned: true,
-  }), [today, timezone])
+    mine,
+  }), [today, timezone, mine])
   const unassignedQuery = useQuery({
     queryKey: queryKeys.appointments(unassignedParams),
     queryFn: async ({ signal }) => (await api.listAppointments(unassignedParams, signal)).appointments,
@@ -162,8 +158,8 @@ export function SchedulePage() {
 
   const visible = useMemo(() => appointments
     .map(appointment => (pending?.id === appointment.id ? pending : appointment))
-    .filter(appointment => (showCancelled || appointment.status !== 'cancelled') && !hidden.has(appointment.tech?.id ?? '')),
-  [appointments, pending, showCancelled, hidden])
+    .filter(appointment => !hidden.has(appointment.tech?.id ?? '')),
+  [appointments, pending, hidden])
 
   const techs = useMemo(() => users.filter(account => account.role === 'tech').sort((a, b) => a.username.localeCompare(b.username)), [users])
   const legend = useMemo(() => {
@@ -254,26 +250,6 @@ export function SchedulePage() {
     setParams({ session: null })
   }
 
-  // Another session for the same customer, like this one: by default the next day at the same time.
-  const bookAnother = (source: Appointment) => {
-    const start = Date.parse(source.startsAt)
-    const minute = minuteOfDay(start, timezone)
-    let day = addDays(dateKeyOf(start, timezone), 1)
-    if (atMinute(day, minute, timezone).getTime() <= Date.now()) day = addDays(today, 1)
-    const known = (id: string | undefined, staffOnly: boolean) =>
-      !!id && users.some(account => account.id === id && (!staffOnly || account.role !== 'tech'))
-    setDraft({
-      startsAt: atMinute(day, minute, timezone),
-      durationMinutes: source.durationMinutes,
-      customer: source.customer,
-      techId: known(source.tech?.id, false) ? source.tech!.id : null,
-      ...(known(source.agent?.id, true) ? { agentId: source.agent!.id } : {}),
-      company: source.company,
-      position: source.position,
-    })
-    setParams({ session: null })
-  }
-
   const rows: GridRow[] = useMemo(() => {
     if (view === 'day' && staff) {
       const people = legend.filter(person => !hidden.has(person.id)).map(person => ({
@@ -320,8 +296,8 @@ export function SchedulePage() {
   const listEmpty = staff ? t('schedule.noSessions') : t('schedule.noSessionsTech')
   const dayCount = sessionsOnDay(visible, anchor, timezone).length
   // Unassigned sessions the calendar already shows are not listed again above it.
-  const waiting = (unassignedQuery.data ?? []).filter(a => a.status !== 'cancelled' && Date.parse(a.endsAt) > now)
   const onCalendar = new Set(visible.map(appointment => appointment.id))
+  const waiting = (unassignedQuery.data ?? []).filter(a => Date.parse(a.endsAt) > now && !onCalendar.has(a.id))
   const fit = tab === 'sessions' || view !== 'list'
 
   return (
@@ -337,21 +313,29 @@ export function SchedulePage() {
         ) : undefined}
       />
 
-      <PageContainer fullWidth className="schedule-container">
+      <PageContainer className="schedule-container">
         {staff && (
-          <div className="schedule-tabs" role="tablist" aria-label={t('schedule.tabs.label')}>
-            {(['calendar', 'sessions'] as Tab[]).map(value => (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={tab === value}
-                className={cn('schedule-tab', tab === value && 'is-active')}
-                onClick={() => setParams({ tab: value === 'calendar' ? null : value, session: null })}
-              >
-                {t(`schedule.tabs.${value}`)}
-              </button>
-            ))}
+          <div className="schedule-tabs">
+            <div className="flex gap-1" role="tablist" aria-label={t('schedule.tabs.label')}>
+              {(['calendar', 'sessions'] as Tab[]).map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === value}
+                  className={cn('schedule-tab', tab === value && 'is-active')}
+                  onClick={() => setParams({ tab: value === 'calendar' ? null : value, session: null })}
+                >
+                  {t(`schedule.tabs.${value}`)}
+                </button>
+              ))}
+            </div>
+            {onlyMine.available && (
+              <label className="ui-check-row ml-auto flex cursor-pointer items-center gap-1.5 text-sm">
+                <Checkbox checked={mine} onCheckedChange={value => onlyMine.setOnlyMine(value === true)} aria-label={t('schedule.onlyMine')} />
+                <span aria-hidden="true">{t('schedule.onlyMine')}</span>
+              </label>
+            )}
           </div>
         )}
 
@@ -365,6 +349,7 @@ export function SchedulePage() {
             onSelectCustomer={customerId => setParams({ customer: customerId })}
             onOpenSession={openSession}
             onNewSession={customer => newSession(customer ? { customer } : undefined)}
+            mine={mine}
           />
         ) : (
           <>
@@ -395,8 +380,8 @@ export function SchedulePage() {
               </div>
             </div>
 
-            <div className="schedule-filters">
-              {staff && legend.length > 0 && (
+            {staff && legend.length > 0 && (
+              <div className="schedule-filters">
                 <div className="schedule-legend" role="group" aria-label={t('schedule.legend.label')}>
                   {legend.map(person => (
                     <button
@@ -418,29 +403,16 @@ export function SchedulePage() {
                     <button type="button" className="schedule-legend-reset" onClick={() => setHidden(new Set())}>{t('schedule.legend.showAll')}</button>
                   )}
                 </div>
-              )}
-              {!staff && <p className="text-xs text-muted-foreground">{t('schedule.techHint')}</p>}
-              <label className="ui-check-row ml-auto flex cursor-pointer items-center gap-1.5 text-sm">
-                <Checkbox checked={showCancelled} onCheckedChange={value => setShowCancelled(value === true)} aria-label={t('schedule.legend.showCancelled')} />
-                <span aria-hidden="true">{t('schedule.legend.showCancelled')}</span>
-              </label>
-            </div>
+              </div>
+            )}
 
             {appointmentsQuery.error && (
               <p role="alert" className="mb-1 text-sm text-destructive">{t('schedule.loadFailed')} {translateError(appointmentsQuery.error.message)}</p>
             )}
 
             <div className="schedule-body">
-              {staff && view !== 'month' && (
-                <UnassignedPanel
-                  appointments={waiting.filter(appointment => !onCalendar.has(appointment.id))}
-                  onCalendar={waiting.filter(appointment => onCalendar.has(appointment.id)).length}
-                  isLoading={unassignedQuery.isLoading}
-                  timezone={timezone}
-                  canDropOnTech={view === 'day'}
-                  onOpen={openSession}
-                  drag={drag}
-                />
+              {staff && view !== 'month' && waiting.length > 0 && (
+                <UnassignedPanel appointments={waiting} timezone={timezone} onOpen={openSession} drag={drag} />
               )}
               <div className="schedule-main">
                 {(view === 'week' || view === 'day') && (
@@ -501,7 +473,6 @@ export function SchedulePage() {
         appointment={draft ? null : openAppointment}
         draft={draft}
         staff={staff}
-        viewer={user}
         users={users}
         colors={colors}
         timezone={timezone}
@@ -514,7 +485,6 @@ export function SchedulePage() {
           await refresh()
           closeDialog()
         }}
-        onBookAnother={bookAnother}
       />
 
       <Dialog open={!!moveConflict} onOpenChange={open => { if (!open) { setMoveConflict(null); setPending(null) } }}>

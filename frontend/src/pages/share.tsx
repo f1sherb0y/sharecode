@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   Input,
@@ -27,7 +26,6 @@ export function SharePage() {
   // Links made for a scheduled session carry the customer's name.
   const [searchParams] = useSearchParams()
   const [name, setName] = useState(() => (searchParams.get('name') ?? '').slice(0, 100))
-  const [email, setEmail] = useState('')
   const [isJoining, setIsJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
   const active = useRef(true)
@@ -61,10 +59,7 @@ export function SharePage() {
     setJoinError('')
     setIsJoining(true)
     try {
-      const result = await joinShare(shareToken, {
-        username: name.trim(),
-        email: email.trim() || undefined,
-      })
+      const result = await joinShare(shareToken, { username: name.trim() })
       if (!active.current) return
       setGuestSession(result.token, result.guest, result.room, shareToken)
       navigate(`/room/${result.room.id}`, { replace: true })
@@ -104,7 +99,6 @@ export function SharePage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>{t('share.join.title')}</CardTitle>
-          <CardDescription>{t('share.join.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleJoin} className="space-y-2">
@@ -114,22 +108,9 @@ export function SharePage() {
                 id="displayName"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={t('share.join.namePlaceholder')}
                 required
                 autoFocus
               />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="email">{t('share.join.emailLabel')}</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={t('share.join.emailPlaceholder')}
-              />
-              <p className="text-xs text-muted-foreground">{t('share.join.emailHint')}</p>
             </div>
 
             {joinError && <p className="text-sm text-destructive">{translateError(joinError)}</p>}

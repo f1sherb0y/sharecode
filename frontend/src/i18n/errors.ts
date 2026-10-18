@@ -9,7 +9,6 @@ const errorKeys: Record<string, string> = {
   "Username and password are required": "errors.credentialsRequired",
   "Invalid credentials": "errors.invalidCredentials",
   "Username already taken": "errors.usernameTaken",
-  "Email already in use": "errors.emailTaken",
   "Current password is incorrect": "errors.currentPassword",
   "Invalid token": "errors.sessionExpired",
   "No token provided": "errors.sessionExpired",

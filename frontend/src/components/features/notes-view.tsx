@@ -309,7 +309,7 @@ export function NotesView({ roomId, readOnly = false }: NotesViewProps) {
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
             onKeyDown={handleNewKeyDown}
-            placeholder={t('notes.placeholder')}
+            aria-label={t('notes.new')}
             className="text-xs min-h-[2rem] resize-none"
             rows={Math.min(5, Math.max(2, newText.split('\n').length))}
           />

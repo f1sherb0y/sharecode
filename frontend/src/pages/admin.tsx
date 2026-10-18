@@ -17,8 +17,6 @@ import {
   SelectValue,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   Badge,
   Spinner,
   Dialog,
@@ -103,7 +101,6 @@ function CreateUserDialog({
     mutationFn: (payload: {
       username: string
       password: string
-      email?: string
       role?: Role
     }) => api.createUser(payload),
     onSuccess: async () => {
@@ -123,7 +120,6 @@ function CreateUserDialog({
     const fields = new FormData(e.currentTarget)
     const username = String(fields.get('username') ?? '')
     const password = String(fields.get('password') ?? '')
-    const email = String(fields.get('email') ?? '')
     setError('')
 
     if (!validatePasswordPolicy(password)) {
@@ -135,7 +131,6 @@ function CreateUserDialog({
       await createUserMutation.mutateAsync({
         username,
         password,
-        email: email || undefined,
         role,
       })
     } catch (err) {
@@ -145,7 +140,7 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <form id="create-user-form" method="post" autoComplete="on" onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t('admin.users.createForm.title')}</DialogTitle>
@@ -160,7 +155,6 @@ function CreateUserDialog({
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder={t('admin.users.createForm.usernamePlaceholder')}
                 required
               />
             </div>
@@ -171,26 +165,12 @@ function CreateUserDialog({
                 id="create-user-password"
                 name="password"
                 autoComplete="new-password"
-                placeholder={t('admin.users.createForm.passwordPlaceholder')}
                 minLength={10}
                 required
               />
               <p className="text-xs text-muted-foreground">
                 {t('common.passwordPolicyHint')}
               </p>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="create-user-email">{t('admin.users.createForm.email')}</Label>
-              <Input
-                type="email"
-                id="create-user-email"
-                name="email"
-                autoComplete="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder={t('admin.users.createForm.emailPlaceholder')}
-              />
             </div>
             <div className="space-y-1">
               <Label>{t('admin.users.createForm.role')}</Label>
@@ -558,12 +538,9 @@ export function AdminPage() {
 
         {/* Compress Playback Dialog */}
         <Dialog open={!!roomToCompress} onOpenChange={(open) => !open && setRoomToCompress(null)}>
-          <DialogContent>
+          <DialogContent aria-describedby={undefined}>
             <DialogHeader>
-              <DialogTitle>{t('admin.storage.compressTitle')}</DialogTitle>
-              <DialogDescription>
-                {t('admin.storage.compressConfirm', { name: roomToCompress?.name })}
-              </DialogDescription>
+              <DialogTitle>{t('admin.storage.compressConfirm', { name: roomToCompress?.name })}</DialogTitle>
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" onClick={() => setRoomToCompress(null)}>
@@ -637,22 +614,24 @@ export function AdminPage() {
             <SelectTrigger className="w-32 sm:ml-auto" aria-label={t('rooms.pagination.pageSize')}><SelectValue /></SelectTrigger>
             <SelectContent>{PAGE_SIZES.map(size => <SelectItem key={size} value={String(size)}>{t('rooms.pagination.perPage', { count: size })}</SelectItem>)}</SelectContent>
           </Select>
+          {showUsersSection ? (
+            <Button type="button" onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              {t('admin.users.createButton')}
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" onClick={refreshStorage} disabled={isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              {t('admin.storage.refresh')}
+            </Button>
+          )}
         </form>
+        <CreateUserDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
 
         {/* Users Section */}
         {showUsersSection && (
         <Card className="mb-3">
-          <CardHeader className="py-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{t('admin.users.title')}</CardTitle>
-              <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" />
-                {t('admin.users.createButton')}
-              </Button>
-              <CreateUserDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0 px-1.5 sm:px-3">
+          <CardContent className="pt-1 px-1.5 sm:px-3">
             {isLoadingUsers ? (
               <div className="flex justify-center py-3">
                 <Spinner />
@@ -663,7 +642,6 @@ export function AdminPage() {
                   <thead>
                     <tr className="border-b text-left">
                       <th className="px-1.5 py-1 font-medium">{t('admin.users.table.username')}</th>
-                      <th className="px-1.5 py-1 font-medium hidden sm:table-cell">{t('admin.users.table.email')}</th>
                       <th className="px-1.5 py-1 font-medium">{t('admin.users.table.role')}</th>
                       <th className="px-1.5 py-1 font-medium hidden md:table-cell">{t('admin.users.table.created')}</th>
                       <th className="px-1.5 py-1 font-medium">{t('admin.users.table.actions')}</th>
@@ -677,11 +655,7 @@ export function AdminPage() {
 
                       return (
                         <tr key={u.id} className="border-b">
-                          <td className="px-1.5 py-1">
-                            <div>{u.username}</div>
-                            <div className="text-xs text-muted-foreground sm:hidden">{u.email ?? '-'}</div>
-                          </td>
-                          <td className="px-1.5 py-1 text-muted-foreground hidden sm:table-cell">{u.email ?? '-'}</td>
+                          <td className="px-1.5 py-1">{u.username}</td>
                           <td className="px-1.5 py-1">
                             {u.id !== user?.id ? (
                               <Select
@@ -734,7 +708,7 @@ export function AdminPage() {
                     })}
                     {users.length === 0 && (
                       <tr>
-                        <td className="px-1.5 py-2 text-center text-muted-foreground" colSpan={5}>
+                        <td className="px-1.5 py-2 text-center text-muted-foreground" colSpan={4}>
                           {t('rooms.list.empty')}
                         </td>
                       </tr>
@@ -750,21 +724,7 @@ export function AdminPage() {
         {/* Rooms + Storage Section */}
         {showRoomsSection && (
           <Card>
-            <CardHeader className="py-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">{t('admin.rooms.title')}</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={refreshStorage}
-                  disabled={isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes}
-                >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  {t('admin.storage.refresh')}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0 px-1.5 sm:px-3">
+            <CardContent className="pt-1 px-1.5 sm:px-3">
               {isLoadingRooms || isLoadingStorage || isLoadingPlaybackSizes ? (
                 <div className="flex justify-center py-3">
                   <Spinner />
@@ -775,9 +735,6 @@ export function AdminPage() {
                     <div className="rounded-md border p-2">
                       <div className="text-xs text-muted-foreground">{t('admin.storage.dbSize')}</div>
                       <div className="text-lg font-semibold">{dbSize?.pretty ?? '--'}</div>
-                      {dbSize && (
-                        <div className="text-xs text-muted-foreground">{formatBytes(dbSize.bytes)}</div>
-                      )}
                     </div>
                     <div className="rounded-md border p-2">
                       <div className="text-xs text-muted-foreground">{t('admin.storage.pagePlayback')}</div>

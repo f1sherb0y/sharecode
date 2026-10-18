@@ -109,7 +109,7 @@ export function TimeGrid({ rows, appointments, timezone, now, editable, showTech
     timeRange(Date.parse(appointment.startsAt), Date.parse(appointment.endsAt)),
     appointment.customer.name,
     appointment.tech?.username ?? t('schedule.unassigned'),
-    t(`schedule.status.${appointment.status}`),
+    appointment.status === 'completed' ? t('schedule.status.completed') : '',
     appointment.hasConflict ? t('schedule.conflictBadge') : '',
   ].filter(Boolean).join(', ')
 

@@ -75,9 +75,6 @@ export function NotificationPopup() {
             <BellRing className="h-5 w-5" />
             {t('notifications.popup.title', { count: unreadNotifications.length })}
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t('notifications.popup.description')}
-          </p>
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto px-3 py-2 space-y-1.5">
@@ -176,7 +173,7 @@ function useScheduleToasts(notices: NotificationItem[], enabled: boolean) {
     const single = fresh.length === 1 ? describeScheduleNotice(fresh[0]!, t, timezone) : null
     toast(single ? single.title : t('schedule.notice.many', { count: fresh.length }), {
       id: `schedule-${fresh.map(notice => notice.id).join('-')}`,
-      description: single ? single.description : t('schedule.notice.manyDescription'),
+      description: single?.description,
       duration: Infinity,
       closeButton: true,
       action: {

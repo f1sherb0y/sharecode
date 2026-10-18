@@ -7,7 +7,6 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -36,6 +35,8 @@ interface SessionsPanelProps {
   onSelectCustomer: (customerId: string | null) => void
   onOpenSession: (appointment: Appointment) => void
   onNewSession: (customer: Customer | null) => void
+  /** 只看我的: the agent's own customers and sessions. */
+  mine: boolean
 }
 
 const PAGE_SIZE = 50
@@ -49,7 +50,7 @@ const ALL = 'all'
  * 场次: customers on the left, the chosen customer's sessions (or everyone's) on
  * the right, each with its own add button. Phones show one side at a time.
  */
-export function SessionsPanel({ timezone, now, colorOf, laneRank, customerId, onSelectCustomer, onOpenSession, onNewSession }: SessionsPanelProps) {
+export function SessionsPanel({ timezone, now, colorOf, laneRank, customerId, onSelectCustomer, onOpenSession, onNewSession, mine }: SessionsPanelProps) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState<Customer | 'new' | null>(null)
@@ -58,8 +59,8 @@ export function SessionsPanel({ timezone, now, colorOf, laneRank, customerId, on
   const selected = customerId && customerId !== ALL ? customerId : null
 
   const customersQuery = useInfiniteQuery({
-    queryKey: ['customers', 'pages', search],
-    queryFn: ({ pageParam, signal }) => api.listCustomers({ q: search, page: pageParam, pageSize: PAGE_SIZE }, signal),
+    queryKey: ['customers', 'pages', search, mine],
+    queryFn: ({ pageParam, signal }) => api.listCustomers({ q: search, page: pageParam, pageSize: PAGE_SIZE, mine }, signal),
     initialPageParam: 1,
     getNextPageParam: last => (last.pagination.hasNext ? last.pagination.page + 1 : undefined),
   })
@@ -87,7 +88,6 @@ export function SessionsPanel({ timezone, now, colorOf, laneRank, customerId, on
               aria-label={t('schedule.customers.search')}
               value={query}
               className="pl-7"
-              placeholder={t('schedule.customers.searchPlaceholder')}
               onChange={e => setQuery(e.target.value)}
             />
           </div>
@@ -183,7 +183,7 @@ export function SessionsPanel({ timezone, now, colorOf, laneRank, customerId, on
               />
             )
           ) : (
-            <AllSessions timezone={timezone} now={now} colorOf={colorOf} laneRank={laneRank} onOpen={onOpenSession} />
+            <AllSessions timezone={timezone} now={now} colorOf={colorOf} laneRank={laneRank} onOpen={onOpenSession} mine={mine} />
           )}
         </div>
       </div>
@@ -243,23 +243,25 @@ function SessionSections({ sessions, timezone, now, showCustomer, colorOf, laneR
   )
 }
 
-/** Everyone's sessions: the next hundred days, and the past a month at a time. */
-function AllSessions({ timezone, now, colorOf, laneRank, onOpen }: Omit<SectionsProps, 'sessions' | 'showCustomer'>) {
+/** Everyone's sessions (or the agent's own): the next hundred days, and the past a month at a time. */
+function AllSessions({ timezone, now, colorOf, laneRank, onOpen, mine }: Omit<SectionsProps, 'sessions' | 'showCustomer'> & { mine: boolean }) {
   const { t } = useTranslation()
   const today = todayKey(timezone)
   const upcoming = useQuery({
-    queryKey: ['appointments', 'sessions-ahead', today, timezone],
+    queryKey: ['appointments', 'sessions-ahead', today, timezone, mine],
     queryFn: async ({ signal }) => (await api.listAppointments({
       from: dayStart(today, timezone).toISOString(),
       to: dayStart(addDays(today, AHEAD_DAYS), timezone).toISOString(),
+      mine,
     }, signal)).appointments,
     refetchInterval: 60_000,
   })
   const past = useInfiniteQuery({
-    queryKey: ['appointments', 'sessions-back', today, timezone],
+    queryKey: ['appointments', 'sessions-back', today, timezone, mine],
     queryFn: async ({ pageParam, signal }) => (await api.listAppointments({
       from: dayStart(addDays(today, -BACK_DAYS * (pageParam + 1)), timezone).toISOString(),
       to: dayStart(addDays(today, -BACK_DAYS * pageParam), timezone).toISOString(),
+      mine,
     }, signal)).appointments,
     initialPageParam: 0,
     getNextPageParam: (_last, pages) => pages.length,
@@ -333,11 +335,10 @@ function CustomerDialog({ customer, open, onOpenChange, onSaved }: CustomerDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
         <form onSubmit={submit} className="grid gap-2">
           <DialogHeader>
             <DialogTitle>{customer ? t('schedule.customers.editTitle') : t('schedule.customers.createTitle')}</DialogTitle>
-            <DialogDescription>{t('schedule.customers.privacy')}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
@@ -346,12 +347,12 @@ function CustomerDialog({ customer, open, onOpenChange, onSaved }: CustomerDialo
             </div>
             <div className="space-y-1">
               <Label htmlFor="customer-contact">{t('schedule.customers.contact')}</Label>
-              <Input id="customer-contact" value={contact} maxLength={200} placeholder={t('schedule.customers.contactPlaceholder')} onChange={e => setContact(e.target.value)} />
+              <Input id="customer-contact" value={contact} maxLength={200} onChange={e => setContact(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
             <Label htmlFor="customer-notes">{t('schedule.customers.notes')}</Label>
-            <Textarea id="customer-notes" value={notes} rows={3} maxLength={2000} placeholder={t('schedule.customers.notesPlaceholder')} onChange={e => setNotes(e.target.value)} />
+            <Textarea id="customer-notes" value={notes} rows={3} maxLength={2000} onChange={e => setNotes(e.target.value)} />
           </div>
           {saveMutation.error && <p role="alert" className="text-sm text-destructive">{translateError(saveMutation.error.message)}</p>}
           <DialogFooter>
@@ -383,10 +384,9 @@ function DeleteCustomerDialog({ customer, onOpenChange, onDeleted }: { customer:
   useEffect(() => { if (customer) deleteMutation.reset() }, [customer]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Dialog open={!!customer} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{t('schedule.customers.deleteTitle', { name: customer?.name ?? '' })}</DialogTitle>
-          <DialogDescription>{t('schedule.customers.deleteConfirm')}</DialogDescription>
         </DialogHeader>
         {deleteMutation.error && <p role="alert" className="text-sm text-destructive">{translateError(deleteMutation.error.message)}</p>}
         <DialogFooter>

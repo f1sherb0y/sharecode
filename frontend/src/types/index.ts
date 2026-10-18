@@ -21,7 +21,6 @@ export type RoomActiveness = 'all' | 'active' | 'ended'
 
 export interface User {
   id: string
-  email: string | null
   username: string
   color: string
   role: Role
@@ -115,7 +114,6 @@ export interface RegistrationInvite {
 export interface ShareGuest {
   id: string
   displayName: string
-  email: string | null
   color: string
   canEdit: boolean
 }
@@ -221,10 +219,9 @@ export interface NotificationItem {
   }
 }
 
-export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled'
-export const APPOINTMENT_STATUSES: AppointmentStatus[] = ['scheduled', 'completed', 'cancelled']
+export type AppointmentStatus = 'scheduled' | 'completed'
 
-/** A 排班 customer profile, shared by every agent and admin. */
+/** A 排班 customer profile in the list agents and admins share; it belongs to the agent who created it. */
 export interface Customer {
   id: string
   name: string
@@ -248,12 +245,11 @@ export interface Appointment {
   company: string | null
   position: string | null
   notes: string | null
-  /** Scheduled sessions read as completed once their room has ended. */
+  /** Completed once its room has ended. */
   status: AppointmentStatus
   /** Techs get the name only; contact and notes are for agents and admins. */
   customer: { id: string; name: string; contact?: string | null; notes?: string | null; isDeleted: boolean }
   tech: { id: string; username: string; color: string; role: Role; isDeleted: boolean } | null
-  agent: { id: string; username: string; color: string } | null
   room: { id: string; name: string; language: Language; isEnded: boolean; endedAt: string | null } | null
   hasConflict: boolean
   createdBy: { id: string; username: string }
@@ -264,13 +260,11 @@ export interface Appointment {
 export interface AppointmentInput {
   customerId?: string
   techId?: string | null
-  agentId?: string | null
   startsAt?: string
   durationMinutes?: number
   company?: string | null
   position?: string | null
   notes?: string | null
-  status?: AppointmentStatus
   allowConflicts?: boolean
 }
 

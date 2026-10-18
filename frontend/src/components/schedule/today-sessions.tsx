@@ -4,29 +4,43 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { CalendarDays } from 'lucide-react'
 import { api } from '@/api'
+import { useNow } from '@/hooks/use-now'
+import { getLocale } from '@/i18n'
 import { queryKeys } from '@/lib/query-keys'
 import { isStaff } from '@/lib/room-permissions'
 import { UNASSIGNED_COLOR, groupSpan, overlapGroups } from '@/lib/schedule'
-import { addDays, dayStart, timeInputValue, todayKey } from '@/lib/zoned-time'
+import { dateKeyOf, daysBetween, timeInputValue, todayKey } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 import { useAuthStore, useSettingsStore } from '@/stores'
 import { StatusBadge } from './appointment-dialog'
 import { SessionRoomActions } from './session-room-actions'
+import { useOnlyMine } from './use-only-mine'
 import '@/styles/schedule.css'
 
 const SHOWN = 5
+const HOUR = 3_600_000
+/** The card covers sessions from two hours ago to ten hours ahead. */
+const BEFORE = 2 * HOUR
+const AHEAD = 10 * HOUR
+/** The range asked of the server moves in steps, so it is not fetched anew every minute. */
+const STEP = HOUR / 4
 
-/** Today's sessions above the room list: a tech's own, or everyone's for staff. */
+/** Sessions around now above the room list: a tech's own, or everyone's (an agent's own) for staff. */
 export function TodaySessions() {
   const { t } = useTranslation()
   const user = useAuthStore(state => state.user)
   const timezone = useSettingsStore(state => state.timezone)
+  const { mine } = useOnlyMine()
+  const now = useNow()
   const today = todayKey(timezone)
   const staff = isStaff(user)
+  const from = Math.floor((now - BEFORE) / STEP) * STEP
+  const to = Math.ceil((now + AHEAD) / STEP) * STEP
   const params = useMemo(() => ({
-    from: dayStart(today, timezone).toISOString(),
-    to: dayStart(addDays(today, 1), timezone).toISOString(),
-  }), [today, timezone])
+    from: new Date(from).toISOString(),
+    to: new Date(to).toISOString(),
+    mine,
+  }), [from, to, mine])
   const { data } = useQuery({
     queryKey: queryKeys.appointments(params),
     queryFn: async ({ signal }) => (await api.listAppointments(params, signal)).appointments,
@@ -34,10 +48,15 @@ export function TodaySessions() {
     refetchInterval: 60_000,
   })
 
-  const sessions = (data ?? []).filter(appointment => appointment.status !== 'cancelled')
+  const sessions = (data ?? []).filter(a => Date.parse(a.endsAt) > now - BEFORE && Date.parse(a.startsAt) < now + AHEAD)
   if (sessions.length === 0) return null
-  const now = Date.now()
-  const range = (from: number, to: number) => `${timeInputValue(from, timezone)}–${timeInputValue(to, timezone)}`
+  const range = (start: number, end: number) => `${timeInputValue(start, timezone)}–${timeInputValue(end, timezone)}`
+  // Yesterday's or tomorrow's sessions say so; today's need not.
+  const relativeDay = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto' })
+  const dayOf = (instant: number) => {
+    const offset = daysBetween(today, dateKeyOf(instant, timezone))
+    return offset === 0 ? null : relativeDay.format(offset, 'day')
+  }
   // Simultaneous sessions share a row. Finished rows drop to the end so the next one is on top.
   const finished = (group: typeof sessions) => group.every(appointment => Date.parse(appointment.endsAt) <= now)
   const rows = overlapGroups(sessions).sort((a, b) => Number(finished(a)) - Number(finished(b)))
@@ -57,30 +76,33 @@ export function TodaySessions() {
           {t('schedule.todayCard.title')}
           <span className="schedule-count">{sessions.length}</span>
         </h2>
-        <Link to={staff ? '/schedule?view=day' : '/schedule'} className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-          {t('schedule.todayCard.open')}
-        </Link>
       </div>
       <ul className="today-sessions-list">
         {shownRows.map(row => {
           const span = groupSpan(row)
+          const day = dayOf(span.from)
           return (
             <li key={row[0]!.id} className="today-slot">
-              <span className="today-session-time tabular-nums" aria-hidden="true">{range(span.from, span.to)}</span>
+              <span className="today-session-time tabular-nums" aria-hidden="true">
+                {day && <span className="today-session-day">{day}</span>}
+                {range(span.from, span.to)}
+              </span>
               <ul className="today-slot-cards">
                 {row.map(appointment => {
-                  const from = Date.parse(appointment.startsAt)
-                  const to = Date.parse(appointment.endsAt)
-                  const ownTime = from !== span.from || to !== span.to
+                  const start = Date.parse(appointment.startsAt)
+                  const end = Date.parse(appointment.endsAt)
+                  const ownTime = start !== span.from || end !== span.to
                   return (
                     <li
                       key={appointment.id}
-                      className={cn('today-session', to <= now && 'is-past')}
+                      className={cn('today-session', end <= now && 'is-past')}
                       style={{ '--event-color': appointment.tech?.color ?? UNASSIGNED_COLOR } as CSSProperties}
                     >
-                      <Link to={`/schedule?view=day&date=${today}&session=${appointment.id}`} className="today-session-main">
+                      <Link to={`/schedule?view=day&date=${dateKeyOf(start, timezone)}&session=${appointment.id}`} className="today-session-main">
                         <span className="truncate">
-                          <span className={cn('today-session-own-time tabular-nums', !ownTime && 'sr-only')}>{range(from, to)} </span>
+                          <span className={cn('today-session-own-time tabular-nums', !ownTime && 'sr-only')}>
+                            {dayOf(start) && <span className="sr-only">{dayOf(start)} </span>}{range(start, end)}{' '}
+                          </span>
                           <span className="font-medium">{appointment.customer.name}</span>
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
@@ -98,7 +120,7 @@ export function TodaySessions() {
       </ul>
       {sessions.length > shownCount && (
         <Link to={staff ? '/schedule?view=day' : '/schedule?view=list'} className="today-sessions-more">
-          {t('schedule.todayCard.more', { count: sessions.length - shownCount })}
+          {t('schedule.more', { count: sessions.length - shownCount })}
         </Link>
       )}
     </section>

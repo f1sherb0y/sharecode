@@ -72,10 +72,9 @@ export function InvitesDialog({ open, onOpenChange }: InvitesDialogProps) {
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('invites.title')}</DialogTitle>
-            <DialogDescription>{t('invites.description')}</DialogDescription>
           </DialogHeader>
 
           <form
@@ -91,7 +90,6 @@ export function InvitesDialog({ open, onOpenChange }: InvitesDialogProps) {
                 id="invite-note"
                 value={note}
                 maxLength={100}
-                placeholder={t('invites.notePlaceholder')}
                 onChange={(e) => setNote(e.target.value)}
               />
             </div>

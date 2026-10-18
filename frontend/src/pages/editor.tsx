@@ -42,7 +42,6 @@ import {
   TooltipProvider,
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -453,7 +452,6 @@ export function EditorPage() {
       <div className="flex flex-col items-center justify-center min-h-screen gap-2 p-2 text-center">
         <h2 className="text-2xl font-semibold">{t('editor.ended.title')}</h2>
         <p className="text-muted-foreground">{t('editor.ended.subtitle')}</p>
-        <p className="text-sm text-muted-foreground max-w-md">{t('editor.ended.description')}</p>
         {roomEndedAt && (
           <p className="text-xs text-muted-foreground">
             {t('editor.ended.endedAt', { time: formatDateTime(roomEndedAt) })}
@@ -594,12 +592,9 @@ export function EditorPage() {
 
         {/* End Room Confirmation Dialog */}
         <Dialog open={isEndRoomDialogOpen} onOpenChange={setIsEndRoomDialogOpen}>
-          <DialogContent>
+          <DialogContent aria-describedby={undefined}>
             <DialogHeader>
-              <DialogTitle>{t('editor.toolbar.endRoom')}</DialogTitle>
-              <DialogDescription>
-                {t('editor.toolbar.endConfirm')}
-              </DialogDescription>
+              <DialogTitle>{t('editor.toolbar.endConfirm')}</DialogTitle>
             </DialogHeader>
             {endSaveError && <p role="alert" className="text-xs text-destructive">{endSaveError}</p>}
             <DialogFooter>
@@ -715,7 +710,7 @@ export function EditorPage() {
               {storageFailed ? <WifiOff className="h-3 w-3" /> : isSaved ? <Check className="h-3 w-3" /> : isConnected ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
               <span>{storageFailed ? t('editor.status.saveFailed') : isSaved ? t('editor.status.saved') : isConnected ? t('editor.status.saving') : t('editor.status.pending')}</span>
             </span>
-            <span className="hidden lg:inline">{canEdit ? t('share.editor.permissionEdit') : t('share.editor.permissionView')}</span>
+            {!canEdit && <span className="hidden lg:inline">{t('share.editor.permissionView')}</span>}
           </div>
           <div className="editor-statusbar-controls flex min-w-0 items-center justify-end gap-0 min-[401px]:gap-1">
             {canChangeLanguage ? (
@@ -802,10 +797,7 @@ export function EditorPage() {
             </DropdownMenu>
 
             {!isGuestMode && (
-              <label
-                className="flex h-control-sm shrink-0 cursor-pointer items-center gap-1.5 px-1.5 select-none"
-                title={t('editor.toolbar.allowFollowHint')}
-              >
+              <label className="flex h-control-sm shrink-0 cursor-pointer items-center gap-1.5 px-1.5 select-none">
                 <Checkbox
                   checked={allowFollow}
                   onCheckedChange={checked => setAllowFollow(checked === true)}

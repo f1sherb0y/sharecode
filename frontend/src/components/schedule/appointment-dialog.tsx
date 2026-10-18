@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
-import { CalendarPlus, TriangleAlert } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge,
@@ -30,19 +30,17 @@ import { translateError } from '@/i18n/errors'
 import { DEFAULT_DURATION, DURATION_PRESETS, formatDayKey, formatDuration } from '@/lib/schedule'
 import { atMinute, dateKeyOf, parseTimeInput, timeInputValue, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
-import { APPOINTMENT_STATUSES, type Appointment, type AppointmentInput, type AppointmentStatus, type ScheduleConflict, type User } from '@/types'
+import type { Appointment, AppointmentInput, AppointmentStatus, ScheduleConflict, User } from '@/types'
 import { CustomerPicker, type PickedCustomer } from './customer-picker'
-import { SessionRoomActions } from './session-room-actions'
+import { SessionRoomActions, hasRoomActions } from './session-room-actions'
 
-/** Defaults for a new session, e.g. from a click on the calendar or another session of the customer. */
+/** Defaults for a new session, e.g. from a click on the calendar or the customer it is for. */
 export interface SessionDraft {
   startsAt: Date
   durationMinutes: number
   techId?: string | null
+  /** Chosen already, e.g. on the customer's page: the form then does not ask for one. */
   customer?: PickedCustomer | null
-  agentId?: string | null
-  company?: string | null
-  position?: string | null
 }
 
 interface AppointmentDialogProps {
@@ -52,14 +50,11 @@ interface AppointmentDialogProps {
   draft: SessionDraft | null
   /** Agents and admins plan sessions; techs read their own. */
   staff: boolean
-  viewer: User | null
   users: User[]
   colors: Map<string, string>
   timezone: string
   onSaved: (appointment: Appointment) => void
   onDeleted: (appointmentId: string) => void
-  /** Starts another session for the same customer, like this one. */
-  onBookAnother?: (appointment: Appointment) => void
 }
 
 const NONE = 'none'
@@ -69,18 +64,16 @@ function conflictsOf(error: unknown): ScheduleConflict[] | null {
   return data?.status === 409 && Array.isArray(data.data?.conflicts) ? data.data.conflicts : null
 }
 
-export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, viewer, users, colors, timezone, onSaved, onDeleted, onBookAnother }: AppointmentDialogProps) {
+export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, users, colors, timezone, onSaved, onDeleted }: AppointmentDialogProps) {
   const { t } = useTranslation()
   const [customer, setCustomer] = useState<PickedCustomer | null>(null)
   const [techId, setTechId] = useState(NONE)
-  const [agentId, setAgentId] = useState(NONE)
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [duration, setDuration] = useState(DEFAULT_DURATION)
   const [company, setCompany] = useState('')
   const [position, setPosition] = useState('')
   const [notes, setNotes] = useState('')
-  const [status, setStatus] = useState<AppointmentStatus>('scheduled')
   const [conflicts, setConflicts] = useState<ScheduleConflict[] | null>(null)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -92,14 +85,12 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
     const start = appointment ? Date.parse(appointment.startsAt) : (draft?.startsAt.getTime() ?? Date.now())
     setCustomer(appointment ? appointment.customer : (draft?.customer ?? null))
     setTechId((appointment ? appointment.tech?.id : draft?.techId) ?? NONE)
-    setAgentId(appointment ? appointment.agent?.id ?? NONE : draft?.agentId ?? (staff && viewer ? viewer.id : NONE))
     setDate(dateKeyOf(start, timezone))
     setTime(timeInputValue(start, timezone))
     setDuration(appointment?.durationMinutes ?? draft?.durationMinutes ?? DEFAULT_DURATION)
-    setCompany((appointment ? appointment.company : draft?.company) ?? '')
-    setPosition((appointment ? appointment.position : draft?.position) ?? '')
+    setCompany(appointment?.company ?? '')
+    setPosition(appointment?.position ?? '')
     setNotes(appointment?.notes ?? '')
-    setStatus(appointment?.status ?? 'scheduled')
     setConflicts(null)
     setError('')
     setConfirmDelete(false)
@@ -122,13 +113,11 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
       const input: AppointmentInput = {
         customerId: customer.id,
         techId: techId === NONE ? null : techId,
-        agentId: agentId === NONE ? null : agentId,
         startsAt: toZonedIso(atMinute(date, minute, timezone), timezone),
         durationMinutes: duration,
         company: company.trim() || null,
         position: position.trim() || null,
         notes: notes.trim() || null,
-        status,
         allowConflicts,
       }
       return appointment
@@ -136,13 +125,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
         : (await api.createAppointment(input)).appointment
     },
     onSuccess: (saved) => {
-      if (appointment) toast.success(t('schedule.dialog.saved'))
-      else {
-        // Customers often book several sessions: the next one is a click away.
-        toast.success(t('schedule.dialog.created'), onBookAnother
-          ? { action: { label: t('schedule.dialog.bookAnother'), onClick: () => onBookAnother(saved) } }
-          : undefined)
-      }
+      toast.success(appointment ? t('schedule.dialog.saved') : t('schedule.dialog.created'))
       onSaved(saved)
     },
     onError: (err) => {
@@ -200,21 +183,21 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
                   {dayLabel(appointment.startsAt)} · {range(appointment.startsAt, appointment.endsAt)}
                 </DialogDescription>
               </DialogHeader>
-              <dl className="schedule-details">
-                <dt>{t('schedule.dialog.status')}</dt>
-                <dd><StatusBadge status={appointment.status} /></dd>
-                {appointment.customer.contact && <><dt>{t('schedule.dialog.contact')}</dt><dd>{appointment.customer.contact}</dd></>}
-                {(appointment.company || appointment.position) && (
-                  <><dt>{t('schedule.dialog.role')}</dt><dd>{[appointment.company, appointment.position].filter(Boolean).join(' · ')}</dd></>
-                )}
-                <dt>{t('schedule.dialog.agent')}</dt>
-                <dd>{appointment.agent?.username ?? '—'}</dd>
-                {appointment.notes && <><dt>{t('schedule.dialog.notes')}</dt><dd className="whitespace-pre-wrap break-words">{appointment.notes}</dd></>}
-              </dl>
-              <div className="schedule-room-section">
-                <h3>{t('schedule.room.title')}</h3>
-                <SessionRoomActions appointment={appointment} />
-              </div>
+              {(appointment.customer.contact || appointment.company || appointment.position || appointment.notes) && (
+                <dl className="schedule-details">
+                  {appointment.customer.contact && <><dt>{t('schedule.dialog.contact')}</dt><dd>{appointment.customer.contact}</dd></>}
+                  {(appointment.company || appointment.position) && (
+                    <><dt>{t('schedule.dialog.role')}</dt><dd>{[appointment.company, appointment.position].filter(Boolean).join(' · ')}</dd></>
+                  )}
+                  {appointment.notes && <><dt>{t('schedule.dialog.notes')}</dt><dd className="whitespace-pre-wrap break-words">{appointment.notes}</dd></>}
+                </dl>
+              )}
+              {hasRoomActions(appointment) && (
+                <div className="schedule-room-section">
+                  <h3>{t('schedule.room.title')}</h3>
+                  <SessionRoomActions appointment={appointment} />
+                </div>
+              )}
             </>
           )}
         </DialogContent>
@@ -222,68 +205,57 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
     )
   }
 
+  // Picked before the form opened, e.g. on the customer's page: the form need not ask.
+  const presetCustomer = !appointment && draft?.customer ? draft.customer : null
+  const title = appointment
+    ? t('schedule.dialog.editTitle')
+    : presetCustomer ? t('schedule.dialog.createTitleFor', { customer: presetCustomer.name }) : t('schedule.dialog.createTitle')
+  const techSelect = (
+    <div className="space-y-1">
+      <Label>{t('schedule.dialog.tech')}</Label>
+      <Select value={techId} onValueChange={setTechId}>
+        <SelectTrigger aria-label={t('schedule.dialog.tech')}><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>{t('schedule.unassigned')}</SelectItem>
+          {missingTech && <SelectItem value={missingTech.id}>{t('schedule.dialog.deletedAccount', { username: missingTech.username })}</SelectItem>}
+          {techs.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>{t('schedule.dialog.techsGroup')}</SelectLabel>
+              {techs.map(techOption)}
+            </SelectGroup>
+          )}
+          {staffUsers.length > 0 && (
+            <>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>{t('schedule.dialog.staffGroup')}</SelectLabel>
+                {staffUsers.map(techOption)}
+              </SelectGroup>
+            </>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
           <form onSubmit={submit} className="grid gap-2" noValidate>
             <DialogHeader>
-              <DialogTitle>{appointment ? t('schedule.dialog.editTitle') : t('schedule.dialog.createTitle')}</DialogTitle>
-              <DialogDescription>{t('schedule.dialog.description')}</DialogDescription>
+              <DialogTitle>{title}</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-1">
-                <Label htmlFor="session-customer">{t('schedule.dialog.customer')}</Label>
-                {appointment && onBookAnother && !appointment.customer.isDeleted && (
-                  <Button type="button" size="sm" variant="ghost" className="-my-1" onClick={() => onBookAnother(appointment)}>
-                    <CalendarPlus />{t('schedule.dialog.bookAnother')}
-                  </Button>
-                )}
+            {presetCustomer ? techSelect : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="session-customer">{t('schedule.dialog.customer')}</Label>
+                  <CustomerPicker id="session-customer" value={customer} onChange={setCustomer} />
+                </div>
+                {techSelect}
               </div>
-              <CustomerPicker id="session-customer" value={customer} onChange={setCustomer} />
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label>{t('schedule.dialog.tech')}</Label>
-                <Select value={techId} onValueChange={setTechId}>
-                  <SelectTrigger aria-label={t('schedule.dialog.tech')}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>{t('schedule.unassigned')}</SelectItem>
-                    {missingTech && <SelectItem value={missingTech.id}>{t('schedule.dialog.deletedAccount', { username: missingTech.username })}</SelectItem>}
-                    {techs.length > 0 && (
-                      <SelectGroup>
-                        <SelectLabel>{t('schedule.dialog.techsGroup')}</SelectLabel>
-                        {techs.map(techOption)}
-                      </SelectGroup>
-                    )}
-                    {staffUsers.length > 0 && (
-                      <>
-                        <SelectSeparator />
-                        <SelectGroup>
-                          <SelectLabel>{t('schedule.dialog.staffGroup')}</SelectLabel>
-                          {staffUsers.map(techOption)}
-                        </SelectGroup>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>{t('schedule.dialog.agent')}</Label>
-                <Select value={agentId} onValueChange={setAgentId}>
-                  <SelectTrigger aria-label={t('schedule.dialog.agent')}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>{t('schedule.dialog.noAgent')}</SelectItem>
-                    {appointment?.agent && !staffUsers.some(user => user.id === appointment.agent!.id) && (
-                      <SelectItem value={appointment.agent.id}>{t('schedule.dialog.deletedAccount', { username: appointment.agent.username })}</SelectItem>
-                    )}
-                    {staffUsers.map(user => <SelectItem key={user.id} value={user.id}>{user.username}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-2 sm:grid-cols-3">
               <div className="space-y-1">
@@ -310,30 +282,18 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="session-company">{t('schedule.dialog.company')}</Label>
-                <Input id="session-company" value={company} maxLength={100} placeholder={t('schedule.dialog.companyPlaceholder')} onChange={e => setCompany(e.target.value)} />
+                <Input id="session-company" value={company} maxLength={100} onChange={e => setCompany(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="session-position">{t('schedule.dialog.position')}</Label>
-                <Input id="session-position" value={position} maxLength={100} placeholder={t('schedule.dialog.positionPlaceholder')} onChange={e => setPosition(e.target.value)} />
+                <Input id="session-position" value={position} maxLength={100} onChange={e => setPosition(e.target.value)} />
               </div>
             </div>
 
             <div className="space-y-1">
               <Label htmlFor="session-notes">{t('schedule.dialog.notes')}</Label>
-              <Textarea id="session-notes" value={notes} rows={3} maxLength={2000} placeholder={t('schedule.dialog.notesPlaceholder')} onChange={e => setNotes(e.target.value)} />
+              <Textarea id="session-notes" value={notes} rows={3} maxLength={2000} onChange={e => setNotes(e.target.value)} />
             </div>
-
-            {appointment && (
-              <div className="space-y-1">
-                <Label>{t('schedule.dialog.status')}</Label>
-                <Select value={status} onValueChange={value => setStatus(value as AppointmentStatus)}>
-                  <SelectTrigger aria-label={t('schedule.dialog.status')} className="sm:w-1/2"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {APPOINTMENT_STATUSES.map(value => <SelectItem key={value} value={value}>{t(`schedule.status.${value}`)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             {appointment?.customer.notes && (
               <p className="rounded-md bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
@@ -362,10 +322,9 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
             )}
             {error && <p role="alert" className="text-sm text-destructive">{translateError(error)}</p>}
 
-            {appointment && (
+            {appointment && hasRoomActions(appointment) && (
               <div className="schedule-room-section">
                 <h3>{t('schedule.room.title')}</h3>
-                {!appointment.room && <p className="text-xs text-muted-foreground">{t('schedule.room.none')}</p>}
                 <SessionRoomActions appointment={appointment} />
               </div>
             )}
@@ -385,18 +344,14 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
                 </Button>
               </div>
             </DialogFooter>
-            {appointment && (
-              <p className="text-xs text-muted-foreground">{t('schedule.dialog.createdBy', { username: appointment.createdBy.username })}</p>
-            )}
           </form>
         </DialogContent>
       </Dialog>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{t('schedule.dialog.deleteTitle')}</DialogTitle>
-            <DialogDescription>{t('schedule.dialog.deleteConfirm', { customer: appointment?.customer.name ?? '' })}</DialogDescription>
+            <DialogTitle>{t('schedule.dialog.deleteTitle', { customer: appointment?.customer.name ?? '' })}</DialogTitle>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(false)}>{t('common.cancel')}</Button>
@@ -413,7 +368,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
 export function StatusBadge({ status }: { status: AppointmentStatus }) {
   const { t } = useTranslation()
   return (
-    <Badge variant={status === 'cancelled' ? 'destructive' : status === 'completed' ? 'secondary' : 'outline'}>
+    <Badge variant={status === 'completed' ? 'secondary' : 'outline'}>
       {t(`schedule.status.${status}`)}
     </Badge>
   )

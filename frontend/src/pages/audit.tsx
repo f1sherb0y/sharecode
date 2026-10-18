@@ -1,4 +1,4 @@
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTimeSeconds } from '@/lib/utils'
 import { translateError } from '@/i18n/errors'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -40,9 +40,8 @@ export function AuditPage() {
     <Navbar title={null} centerContent={<strong>{t('audit.title')}</strong>}
       leftContent={<NavbarBack label={t('common.back')} onClick={() => navigate('/admin')} />} />
     <PageContainer>
-      <p className="text-xs text-muted-foreground mb-2">{t('audit.description')}</p>
       <form className="audit-filters mb-2" onSubmit={event => { event.preventDefault(); if (!invalidRange) setFilters({ ...filters, page: 1, snapshot: undefined, username: username.trim(), action: action === 'all' ? undefined : action, start: start?.toISOString(), end: end?.toISOString() }) }}>
-        <label>{t('audit.account')}<Input placeholder={t('audit.account')} value={username} onChange={e => setUsername(e.target.value)} /></label>
+        <label>{t('audit.account')}<Input value={username} onChange={e => setUsername(e.target.value)} /></label>
         <label>{t('audit.action')}<Select value={action} onValueChange={setAction}><SelectTrigger aria-label={t('audit.action')}><SelectValue /></SelectTrigger><SelectContent>
           <SelectItem value="all">{t('audit.allActions')}</SelectItem>
           {AUDIT_ACTIONS.map(value => <SelectItem key={value} value={value}>{t(`audit.actions.${value}`)}</SelectItem>)}
@@ -53,7 +52,7 @@ export function AuditPage() {
             open={openDate === field.id} onFocus={() => setOpenDate(field.id)} onInputClick={() => setOpenDate(field.id)}
             onClickOutside={() => setOpenDate(null)} onCalendarClose={() => setOpenDate(current => current === field.id ? null : current)}
             onKeyDown={event => { if (event.key === 'Escape') setOpenDate(null) }}
-            dateFormat="yyyy-MM-dd HH:mm" locale={locale} strictParsing isClearable autoComplete="off" placeholderText="YYYY-MM-DD HH:mm"
+            dateFormat="yyyy-MM-dd HH:mm" locale={locale} strictParsing isClearable autoComplete="off"
             className="ui-field" calendarClassName="audit-calendar" popperClassName="audit-datepicker" popperPlacement="bottom-start"
             previousMonthAriaLabel={t('audit.previousMonth')} nextMonthAriaLabel={t('audit.nextMonth')} clearButtonTitle={t('audit.clear')}
             ariaInvalid={invalidRange ? 'true' : undefined} />
@@ -77,7 +76,7 @@ export function AuditPage() {
       <div className="overflow-x-auto"><table className="audit-table w-full text-xs text-left">
         <thead><tr>{['time','action','account','result','device','ip','details'].map(key => <th key={key}>{t(`audit.${key}`)}</th>)}</tr></thead>
         <tbody>{query.data?.events.map(event => <tr key={event.id}>
-          <td className="whitespace-nowrap">{formatDateTime(event.createdAt)}</td>
+          <td className="whitespace-nowrap">{formatDateTimeSeconds(event.createdAt)}</td>
           <td>{t(`audit.actions.${event.action}`, { defaultValue: event.action })}</td>
           <td>{event.username || '—'}</td>
           <td>{event.success ? t('audit.success') : t('audit.failure')}{event.reason && <div className="text-muted-foreground">{t(`audit.reasons.${event.reason}`, { defaultValue: event.reason })}</div>}</td>

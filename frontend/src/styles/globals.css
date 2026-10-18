@@ -197,7 +197,7 @@
   }
 
   /* Keep a dense list within a comfortable horizontal reading distance. */
-  .rooms-page .app-container { max-width: 1200px; }
+  :is(.rooms-page, .schedule-page) .app-container { max-width: 1200px; }
   .rooms-list-toolbar { margin-block: 0.375rem 0.75rem; }
   .room-list { --room-columns: minmax(10rem, 1fr) 6rem minmax(7rem, 0.6fr) 4rem 3rem 10rem 4rem; }
   .room-list-columns {
@@ -236,7 +236,6 @@
     white-space: nowrap;
   }
   .room-row-language { overflow: hidden; text-overflow: ellipsis; }
-  .room-row-owned { font-size: var(--text-xs); }
   .room-row-status { display: flex; align-items: center; gap: 0.375rem; font-size: var(--text-xs); }
   .room-row-status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.5; }
   .room-row-status-active .room-row-status-dot { background: var(--color-success); opacity: 1; }

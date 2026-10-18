@@ -77,10 +77,8 @@ export function AgendaList({ days, today, appointments, timezone, showTech, show
                               <span className="truncate">{title}</span>
                             </span>
                             <span className="schedule-agenda-meta">{meta}</span>
-                            {appointment.status !== 'scheduled' && (
-                              <Badge variant={appointment.status === 'cancelled' ? 'destructive' : 'secondary'} className="schedule-agenda-status">
-                                {t(`schedule.status.${appointment.status}`)}
-                              </Badge>
+                            {appointment.status === 'completed' && (
+                              <Badge variant="secondary" className="schedule-agenda-status">{t('schedule.status.completed')}</Badge>
                             )}
                           </button>
                           {actions && <div className="schedule-agenda-actions">{actions(appointment)}</div>}

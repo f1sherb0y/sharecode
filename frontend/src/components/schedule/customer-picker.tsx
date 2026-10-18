@@ -111,14 +111,14 @@ export function CustomerPicker({ id, value, onChange }: CustomerPickerProps) {
   if (adding) {
     return (
       <div className="grid gap-1.5 rounded-md border border-dashed p-2" role="group" aria-label={t('schedule.dialog.newCustomerTitle')}>
-        <div className="grid gap-1.5 sm:grid-cols-2">
+        <div className="grid gap-1.5">
           <div className="space-y-1">
             <Label htmlFor={`${id}-name`}>{t('schedule.dialog.customerName')}</Label>
             <Input id={`${id}-name`} value={newName} maxLength={100} autoFocus onChange={e => setNewName(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label htmlFor={`${id}-contact`}>{t('schedule.dialog.customerContact')}</Label>
-            <Input id={`${id}-contact`} value={newContact} maxLength={200} placeholder={t('schedule.dialog.customerContactPlaceholder')} onChange={e => setNewContact(e.target.value)} />
+            <Input id={`${id}-contact`} value={newContact} maxLength={200} onChange={e => setNewContact(e.target.value)} />
           </div>
         </div>
         {createMutation.error && <p className="text-xs text-destructive">{translateError(createMutation.error.message)}</p>}
@@ -143,7 +143,6 @@ export function CustomerPicker({ id, value, onChange }: CustomerPickerProps) {
         aria-activedescendant={open ? `${listId}-${highlight}` : undefined}
         autoComplete="off"
         value={query}
-        placeholder={t('schedule.dialog.customerPlaceholder')}
         onChange={e => { setQuery(e.target.value); setOpen(true); setHighlight(0) }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}

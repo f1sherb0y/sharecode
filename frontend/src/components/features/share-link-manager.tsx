@@ -146,7 +146,6 @@ export function ShareLinkManager({ roomId, guestName, showDescription = true }: 
           {t('share.manager.createEdit')}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground mb-2">{t('share.manager.activeOnlyHint')}</p>
 
       {error && <p className="text-xs text-destructive mb-1.5">{translateError(error)}</p>}
 
@@ -165,17 +164,11 @@ export function ShareLinkManager({ roomId, guestName, showDescription = true }: 
                   <Badge variant={link.canEdit ? 'default' : 'secondary'} className="text-xs px-1 py-0">
                     {link.canEdit ? t('share.manager.editLabel') : t('share.manager.viewLabel')}
                   </Badge>
-                  <Badge
-                    variant={link.isExpired ? 'destructive' : 'success'}
-                    className="text-xs px-1 py-0"
-                  >
-                    {link.isConsumed ? t('share.manager.statusConsumed') : link.isExpired
-                      ? t('share.manager.statusExpired')
-                      : t('share.manager.statusActive')}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs px-1 py-0">
-                    {t('share.manager.singleUse')}
-                  </Badge>
+                  {(link.isConsumed || link.isExpired) && (
+                    <Badge variant="destructive" className="text-xs px-1 py-0">
+                      {link.isConsumed ? t('share.manager.statusConsumed') : t('share.manager.statusExpired')}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -193,7 +186,6 @@ export function ShareLinkManager({ roomId, guestName, showDescription = true }: 
                 </div>
               </div>
               <p className="text-xs text-muted-foreground break-all font-mono">{link.shareUrl}</p>
-              <p className="text-xs text-muted-foreground mt-1">{t('share.manager.singleUseHint')}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {t('share.manager.expiresAt', { time: formatLocalDateTime(link.expiresAt) })}
               </p>

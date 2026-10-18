@@ -398,11 +398,10 @@ export function RoomsPage() {
                   <span className="hidden sm:inline">{t('rooms.createButton')}</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
                 <form onSubmit={handleCreateRoom}>
                   <DialogHeader>
                     <DialogTitle>{t('rooms.create.title')}</DialogTitle>
-                    <DialogDescription>{t('rooms.create.hint')}</DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-2 py-2">
                     <div className="space-y-1">
@@ -411,7 +410,6 @@ export function RoomsPage() {
                         id="roomName"
                         value={newRoomName}
                         onChange={(e) => setNewRoomName(e.target.value)}
-                        placeholder={t('rooms.create.namePlaceholder')}
                         required
                       />
                     </div>
@@ -437,7 +435,6 @@ export function RoomsPage() {
                           id="roomCompany"
                           value={newRoomCompany}
                           onChange={(e) => setNewRoomCompany(e.target.value)}
-                          placeholder={t('rooms.create.companyPlaceholder')}
                         />
                       </div>
                     </div>
@@ -448,7 +445,6 @@ export function RoomsPage() {
                           id="roomPosition"
                           value={newRoomPosition}
                           onChange={(e) => setNewRoomPosition(e.target.value)}
-                          placeholder={t('rooms.create.positionPlaceholder')}
                         />
                       </div>
                       <div className="space-y-1">
@@ -458,7 +454,6 @@ export function RoomsPage() {
                           type="number"
                           value={duration}
                           onChange={(e) => setDuration(e.target.value)}
-                          placeholder={t('rooms.create.durationPlaceholder')}
                           min="1"
                         />
                       </div>
@@ -472,12 +467,9 @@ export function RoomsPage() {
                         onChange={(e) => setScheduledTime(e.target.value)}
                       />
                     </div>
-                    {isAdmin(user) && <label className="ui-check-row flex cursor-pointer items-start gap-1.5">
-                      <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-labelledby="privateRoomLabel" aria-describedby="privateRoomHint" />
-                      <span className="grid gap-1">
-                        <span id="privateRoomLabel" className="text-sm font-medium leading-none">{t('rooms.create.private')}</span>
-                        <span id="privateRoomHint" className="text-xs text-muted-foreground">{t('rooms.create.privateHint')}</span>
-                      </span>
+                    {isAdmin(user) && <label className="ui-check-row flex cursor-pointer items-center gap-1.5">
+                      <Checkbox id="privateRoom" checked={newRoomPrivate} onCheckedChange={value => setNewRoomPrivate(value === true)} aria-labelledby="privateRoomLabel" />
+                      <span id="privateRoomLabel" className="text-sm font-medium leading-none">{t('rooms.create.private')}</span>
                     </label>}
                   </div>
                   <DialogFooter>
@@ -536,7 +528,6 @@ export function RoomsPage() {
               id="renameRoomName"
               value={renameRoomName}
               onChange={(e) => setRenameRoomName(e.target.value)}
-              placeholder={t('rooms.list.renamePlaceholder')}
               maxLength={120}
             />
           </div>
@@ -776,9 +767,7 @@ function RoomRow({
         </div>
         <span className="room-row-language">{room.language}</span>
         <div className="room-row-owner flex min-w-0 items-center gap-1">
-          <span className="truncate" title={room.owner.username}>{room.owner.username}</span>
-          {isOwner && <span className="room-row-owned shrink-0">{t('rooms.list.owned')}</span>}
-          {(room.company || room.position) && <span className="truncate" title={[room.company, room.position].filter(Boolean).join(' / ')}>· {[room.company, room.position].filter(Boolean).join(' / ')}</span>}
+          <span className="truncate" title={room.owner.username}>{isOwner ? t('rooms.list.me') : room.owner.username}</span>
         </div>
         <span className={cn('room-row-status', !room.isEnded && 'room-row-status-active')}>
           <span className="room-row-status-dot" aria-hidden="true" />

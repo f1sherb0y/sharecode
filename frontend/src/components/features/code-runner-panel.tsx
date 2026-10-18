@@ -458,7 +458,6 @@ export const CodeRunnerPanel = forwardRef<CodeRunnerPanelRef, CodeRunnerPanelPro
                 <Textarea
                   value={stdin}
                   onChange={(e) => handleStdinChange(e.target.value)}
-                  placeholder={t('codeRunner.inputPlaceholder')}
                   className="flex-1 font-mono text-sm resize-none min-h-0"
                   readOnly={!canEdit}
                 />

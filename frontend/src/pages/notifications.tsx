@@ -10,7 +10,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   Input,
@@ -122,7 +121,6 @@ export function NotificationsPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t('notifications.publish.title')}</CardTitle>
-              <CardDescription>{t('notifications.publish.description')}</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handlePublish} className="space-y-2">
@@ -133,7 +131,6 @@ export function NotificationsPage() {
                       id="notificationTitle"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      placeholder={t('notifications.publish.fields.titlePlaceholder')}
                       required
                     />
                   </div>
@@ -161,7 +158,6 @@ export function NotificationsPage() {
                     id="notificationContent"
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    placeholder={t('notifications.publish.fields.contentPlaceholder')}
                     rows={6}
                     required
                   />
@@ -183,7 +179,6 @@ export function NotificationsPage() {
               <BellRing className="h-5 w-5" />
               {t('notifications.history.title')}
             </CardTitle>
-            <CardDescription>{t('notifications.history.description')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {notificationsQuery.isLoading ? (

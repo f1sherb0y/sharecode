@@ -8,7 +8,6 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
@@ -25,6 +24,11 @@ interface SessionRoomActionsProps {
   onChanged?: (appointment: Appointment) => void
 }
 
+/** A session that is over and never had a room has nothing left to open. */
+export function hasRoomActions(appointment: Appointment): boolean {
+  return !!appointment.room || Date.parse(appointment.endsAt) > Date.now()
+}
+
 /**
  * A session's room: the tech owns it and the customer joins through a share link
  * that already carries their name. The first "Open room" creates it.
@@ -36,7 +40,6 @@ export function SessionRoomActions({ appointment, compact = false, onChanged }: 
   const [busy, setBusy] = useState<'open' | 'link' | 'replace' | 'download' | null>(null)
   const [linkRoomId, setLinkRoomId] = useState<string | null>(null)
   const room = appointment.room
-  const cancelled = appointment.status === 'cancelled'
 
   const ensureRoom = async (replace = false) => {
     const result = await api.openAppointmentRoom(appointment.id, { replace })
@@ -73,6 +76,7 @@ export function SessionRoomActions({ appointment, compact = false, onChanged }: 
 
   const size = compact ? 'icon-sm' : 'sm'
   const label = (text: string) => (compact ? <span className="sr-only">{text}</span> : text)
+  if (!hasRoomActions(appointment)) return null
 
   return (
     <>
@@ -87,31 +91,28 @@ export function SessionRoomActions({ appointment, compact = false, onChanged }: 
                 <Download />{t('schedule.room.download')}
               </Button>
             )}
-            {!compact && !cancelled && (
+            {!compact && (
               <Button type="button" size="sm" variant="ghost" disabled={!!busy} onClick={replace}>
                 <RotateCcw />{t('schedule.room.replace')}
               </Button>
             )}
           </>
-        ) : !cancelled || room ? (
+        ) : (
           <>
             <Button type="button" size={size} variant={compact ? 'outline' : 'default'} disabled={!!busy} title={room ? t('schedule.room.open') : t('schedule.room.create')} onClick={open}>
               <DoorOpen />{label(busy === 'open' ? t('schedule.room.opening') : room ? t('schedule.room.open') : t('schedule.room.create'))}
             </Button>
-            {!cancelled && (
-              <Button type="button" size={size} variant="outline" disabled={!!busy} title={t('schedule.room.customerLink')} onClick={share}>
-                <Link2 />{label(t('schedule.room.customerLink'))}
-              </Button>
-            )}
+            <Button type="button" size={size} variant="outline" disabled={!!busy} title={t('schedule.room.customerLink')} onClick={share}>
+              <Link2 />{label(t('schedule.room.customerLink'))}
+            </Button>
           </>
-        ) : null}
+        )}
       </div>
 
       <Dialog open={!!linkRoomId} onOpenChange={(next) => !next && setLinkRoomId(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('schedule.room.customerLinkTitle', { customer: appointment.customer.name })}</DialogTitle>
-            <DialogDescription>{t('schedule.room.customerLinkHint')}</DialogDescription>
           </DialogHeader>
           {linkRoomId && <ShareLinkManager roomId={linkRoomId} guestName={appointment.customer.name} showDescription={false} />}
         </DialogContent>

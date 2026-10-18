@@ -7,6 +7,9 @@ interface SettingsState {
   /** Whether other participants may follow this browser's cursor and view. */
   allowFollow: boolean
   setAllowFollow: (allow: boolean) => void
+  /** Agents see only their own customers' sessions (只看我的). */
+  onlyMine: boolean
+  setOnlyMine: (onlyMine: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -22,6 +25,12 @@ export const useSettingsStore = create<SettingsState>()(
 
       setAllowFollow: (allowFollow: boolean) => {
         set({ allowFollow })
+      },
+
+      onlyMine: true,
+
+      setOnlyMine: (onlyMine: boolean) => {
+        set({ onlyMine })
       },
     }),
     {

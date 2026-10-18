@@ -50,7 +50,12 @@ export function formatDateMinutes(date: string | Date): string {
   })
 }
 
+/** Date and time to the minute; the audit log keeps the seconds. */
 export function formatDateTime(date: string | Date): string {
+  return formatDateMinutes(date)
+}
+
+export function formatDateTimeSeconds(date: string | Date): string {
   return new Date(date).toLocaleString(getLocale(), { timeZone: getTimezone() })
 }
 

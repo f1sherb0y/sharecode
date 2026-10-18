@@ -107,7 +107,6 @@ export function LoginPage() {
                   autoCorrect="off"
                   spellCheck={false}
                   type="text"
-                  placeholder={t('auth.login.usernamePlaceholder')}
                   required
                 />
               </div>
@@ -118,7 +117,6 @@ export function LoginPage() {
                   name="password"
                   autoComplete="current-password"
                   type="password"
-                  placeholder={t('auth.login.passwordPlaceholder')}
                   required
                 />
               </div>
@@ -162,7 +160,6 @@ export function LoginPage() {
                     <Input
                       id="joinLink"
                       type="text"
-                      placeholder={t('auth.login.joinLink.placeholder')}
                       value={joinLink}
                       onChange={(e) => {
                         setJoinLink(e.target.value)

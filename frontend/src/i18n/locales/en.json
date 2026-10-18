@@ -3,9 +3,7 @@
     "login": {
       "title": "Login",
       "username": "Username",
-      "usernamePlaceholder": "Enter your username",
       "password": "Password",
-      "passwordPlaceholder": "Enter your password",
       "button": "Login",
       "loggingIn": "Logging in...",
       "noAccount": "Have an invite code?",
@@ -13,7 +11,6 @@
       "joinLink": {
         "title": "Or join a shared room",
         "label": "Share Link",
-        "placeholder": "Paste share link here...",
         "button": "Join Room",
         "joining": "Joining...",
         "invalid": "Invalid share link format"
@@ -25,14 +22,8 @@
     "register": {
       "title": "Register",
       "inviteCode": "Invite code",
-      "inviteCodePlaceholder": "XXXX-XXXX-XXXX",
-      "inviteHint": "Ask an agent or admin for a code. Accounts created here are tech accounts.",
       "username": "Username",
-      "usernamePlaceholder": "Choose a username",
-      "email": "Email (optional)",
-      "emailPlaceholder": "Enter your email",
       "password": "Password",
-      "passwordPlaceholder": "Choose a password",
       "button": "Register",
       "registering": "Creating account...",
       "hasAccount": "Already have an account?",
@@ -45,7 +36,6 @@
     "title": "Join a Room",
     "tagline": "Real-time collaborative code editing with live cursors, syntax highlighting, and session playback.",
     "label": "Share Link or Code",
-    "placeholder": "Paste link or enter code...",
     "button": "Join Room",
     "joining": "Joining...",
     "invalid": "Invalid share link or code. Please check and try again.",
@@ -66,19 +56,12 @@
       "title": "Create New Room",
       "name": "Room Name",
       "private": "Make room private",
-      "privateHint": "Hidden from agents and techs. Only you and people you invite can open it; invited techs lose access when the room ends.",
-      "namePlaceholder": "Enter room name",
       "language": "Language",
-      "company": "Company (optional)",
-      "companyPlaceholder": "e.g., OpenAI",
-      "position": "Position (optional)",
-      "positionPlaceholder": "e.g., Frontend Engineer",
-      "scheduledTime": "Scheduled Time (optional)",
-      "scheduledTimePlaceholder": "YYYY-MM-DD HH:MM",
+      "company": "Company",
+      "position": "Position",
+      "scheduledTime": "Scheduled Time",
       "scheduledTimeHint": "Format: YYYY-MM-DD HH:MM (e.g., 2024-12-31 14:30)",
-      "duration": "Duration (minutes, optional)",
-      "durationPlaceholder": "e.g., 60",
-      "hint": "Invite others with a share link once the room is created.",
+      "duration": "Duration (minutes)",
       "addUser": "Add user",
       "noAllowedUsers": "No additional users selected. Only you can access this room.",
       "removeUser": "Remove",
@@ -111,7 +94,7 @@
       "duration": "Duration",
       "durationUnit": "min",
       "participants": "participants",
-      "owned": "Owned",
+      "me": "Me",
       "manage": "Manage room",
       "ended": "Ended",
       "expired": "Expired",
@@ -121,7 +104,6 @@
       "renaming": "Renaming...",
       "renameTitle": "Rename Room",
       "renameConfirm": "Rename room \"{{name}}\"",
-      "renamePlaceholder": "Enter new room name",
       "pinned": "Pinned",
       "pin": "Pin room",
       "unpin": "Unpin room",
@@ -151,7 +133,7 @@
   },
   "editor": {
     "toolbar": {
-      "endConfirm": "End this session? All participants will be disconnected.",
+      "endConfirm": "End this session?",
       "noOtherUsers": "No other users connected",
       "more": "More actions",
       "inlineMath": "Insert inline math",
@@ -161,7 +143,6 @@
       "followOff": "Follow off",
       "followPaused": "Paused",
       "allowFollow": "Allow follow",
-      "allowFollowHint": "When off, others cannot follow your cursor or view",
       "endRoom": "End Room",
       "users": "Users",
       "share": "Share",
@@ -203,7 +184,6 @@
     "ended": {
       "title": "This room has ended",
       "subtitle": "Live editing is no longer available",
-      "description": "The session is finished. You can reach out to the room owner if you need the playback recording or access to the next session.",
       "endedAt": "Ended at {{time}}",
       "back": "Back to rooms"
     },
@@ -234,18 +214,13 @@
       "createForm": {
         "title": "Create New User",
         "username": "Username",
-        "usernamePlaceholder": "Enter username",
         "password": "Password",
-        "passwordPlaceholder": "Enter password",
-        "email": "Email (optional)",
-        "emailPlaceholder": "Enter email",
         "role": "Role",
         "creating": "Creating...",
         "createButton": "Create User"
       },
       "table": {
         "username": "Username",
-        "email": "Email",
         "role": "Role",
         "created": "Created",
         "actions": "Actions",
@@ -282,8 +257,7 @@
       "roomsTracked": "{{count}} rooms tracked",
       "endedRooms": "Ended Rooms",
       "totalUpdates": "{{count}} updates",
-      "compressTitle": "Compress Playback",
-      "compressConfirm": "Compress playback for \"{{name}}\" to 1s resolution? This reduces storage but makes playback less granular.",
+      "compressConfirm": "Compress the replay of \"{{name}}\"?",
       "compressButton": "Compress",
       "compressing": "Compressing...",
       "compressResult": "Compressed \"{{name}}\": {{original}} -> {{compressed}} updates, saved {{saved}}.",
@@ -300,7 +274,7 @@
     },
     "filters": {
       "view": "View",
-      "searchUsers": "Search username or email",
+      "searchUsers": "Search usernames",
       "searchRooms": "Search room name",
       "owner": "Owner username",
       "allRoles": "All roles",
@@ -343,29 +317,14 @@
   "settings": {
     "title": "Settings",
     "backToLogin": "Back to Login",
-    "appearance": {
-      "title": "Appearance",
-      "description": "Switch between light and dark mode",
-      "light": "Light",
-      "dark": "Dark"
-    },
-    "language": {
-      "title": "Language",
-      "description": "App language changes immediately; reload to update built-in editor menus."
-    },
     "timezone": {
-      "title": "Timezone",
-      "description": "Set the timezone for displaying dates and times"
+      "title": "Timezone"
     },
     "password": {
       "title": "Change Password",
-      "description": "Enter your current password and choose a new secure password.",
       "current": "Current password",
-      "currentPlaceholder": "Enter current password",
       "new": "New password",
-      "newPlaceholder": "Enter new password",
       "confirm": "Confirm new password",
-      "confirmPlaceholder": "Re-enter new password",
       "required": "Please complete the password form.",
       "mismatch": "The new password confirmation does not match.",
       "update": "Update password",
@@ -374,18 +333,13 @@
       "failed": "Failed to change password. Please try again."
     },
     "server": {
-      "title": "Server Connection",
-      "description": "Configure your server connection settings"
+      "title": "Server Connection"
     },
     "serverUrl": {
-      "label": "Server URL (HTTP)",
-      "placeholder": "http://localhost:3000",
-      "hint": "The HTTP endpoint for API requests"
+      "label": "Server URL (HTTP)"
     },
     "websocketUrl": {
-      "label": "WebSocket URL",
-      "placeholder": "ws://localhost:3000",
-      "hint": "The WebSocket endpoint for real-time collaboration"
+      "label": "WebSocket URL"
     },
     "testConnection": "Test Connection",
     "testing": "Testing...",
@@ -404,15 +358,12 @@
     "privacy": {
       "title": "Privacy Settings",
       "hideFromCapture": {
-        "label": "Hide from screen capture",
-        "hint": "Prevent this window from appearing in screen recordings and screenshots (Windows/macOS only)"
+        "label": "Hide from screen capture"
       },
       "hideFromTaskbar": {
-        "label": "Hide from taskbar/dock",
-        "hint": "Hide the application from taskbar (Windows) or dock (macOS)"
+        "label": "Hide from taskbar/dock"
       },
-      "note": "Note: These settings are only available on Windows and macOS. Changes will take effect immediately.",
-      "description": "Privacy and window controls"
+      "note": "Note: These settings are only available on Windows and macOS. Changes will take effect immediately."
     },
     "shortcuts": {
       "title": "Keyboard shortcuts",
@@ -424,8 +375,7 @@
   "share": {
     "manager": {
       "title": "Guest Share Links",
-      "description": "Generate single-use invite links that let one guest join this room without an account. Unused links expire after 6 hours.",
-      "activeOnlyHint": "Only unused invitations are listed.",
+      "description": "Single-use links, valid for 6 hours",
       "createView": "Create view-only link",
       "createEdit": "Create edit link",
       "loading": "Loading share links...",
@@ -440,11 +390,8 @@
       "deleteFailed": "Failed to delete share link.",
       "editLabel": "Can edit",
       "viewLabel": "View only",
-      "statusActive": "Active",
       "statusUsed": "Used",
       "statusExpired": "Expired",
-      "singleUse": "Single use",
-      "singleUseHint": "The first guest who opens this link claims it. Later attempts will be rejected.",
       "expiresAt": "Expires at: {{time}}",
       "usedAt": "Used at: {{time}}",
       "guests": "Active guests: {{count}}",
@@ -469,20 +416,14 @@
       "resumeButton": "Resume",
       "resetButton": "Join with another name",
       "nameLabel": "Display name",
-      "namePlaceholder": "Your name",
-      "emailLabel": "Email (optional)",
-      "emailPlaceholder": "you@example.com",
-      "emailHint": "Email is only used for identification within this session.",
       "validationName": "Please enter a display name.",
       "joining": "Joining...",
       "joinButton": "Join room",
-      "joinFailed": "Failed to join room.",
-      "description": "Enter your details to join this shared room."
+      "joinFailed": "Failed to join room."
     },
     "editor": {
       "loading": "Loading shared session...",
       "sessionExpired": "Your guest session expired. Please rejoin with the link.",
-      "permissionEdit": "Can edit",
       "permissionView": "View only",
       "permissionLabel": "Permission",
       "connectedAs": "Connected as {{name}}",
@@ -499,9 +440,7 @@
   "invites": {
     "menu": "Invite techs",
     "title": "Invite techs",
-    "description": "Each code registers one tech account and expires after 7 days. Send the link or the code to the tech.",
-    "noteLabel": "Note (optional)",
-    "notePlaceholder": "e.g. who it is for",
+    "noteLabel": "Note",
     "create": "Create invite",
     "creating": "Creating...",
     "created": "Invite created",
@@ -540,7 +479,6 @@
     },
     "popup": {
       "title": "You have {{count}} unread notification(s)",
-      "description": "Unread notifications will continue to pop up when you enter the site until they are read.",
       "more": "{{count}} more unread notification(s) in the notification center.",
       "later": "Later",
       "openCenter": "Open center",
@@ -553,12 +491,10 @@
     },
     "history": {
       "title": "Notification History",
-      "description": "All past notifications are listed here. Opening this page marks current unread notifications as read.",
       "empty": "No notifications yet."
     },
     "publish": {
       "title": "Publish Notification",
-      "description": "Admins can publish site-wide notifications here.",
       "required": "Title and content are required.",
       "submit": "Publish",
       "submitting": "Publishing...",
@@ -566,9 +502,7 @@
       "failed": "Failed to publish notification.",
       "fields": {
         "title": "Title",
-        "titlePlaceholder": "Enter notification title",
         "content": "Content",
-        "contentPlaceholder": "Enter notification content",
         "severity": "Severity"
       }
     }
@@ -589,7 +523,7 @@
     "loading": "Loading...",
     "error": "Error",
     "success": "Success",
-    "passwordPolicyHint": "Password must be at least 10 characters and include uppercase, lowercase, a number, and a special character, with no spaces, and it must not be a common password.",
+    "passwordPolicyHint": "At least 10 characters, with upper- and lowercase letters, a number and a symbol",
     "passwordPolicyError": "Password does not meet the security requirements. It must be at least 10 characters and include uppercase, lowercase, a number, and a special character, with no spaces, and it must not be a common password.",
     "all": "All",
     "toggleLanguage": "Switch language",
@@ -610,9 +544,8 @@
     "running": "Running...",
     "executing": "Executing code...",
     "input": "Input (stdin)",
-    "inputPlaceholder": "Enter input for your program...",
     "output": "Output",
-    "noOutput": "No output yet. Run your code to see results.",
+    "noOutput": "No output yet",
     "unsupportedLanguage": "Language \"{{language}}\" is not supported for execution.",
     "emptyCode": "Please write some code before running.",
     "executionFailed": "Code execution failed. Please try again.",
@@ -622,7 +555,7 @@
     "tabNotes": "Notes"
   },
   "notes": {
-    "placeholder": "Type a note...",
+    "new": "New note",
     "empty": "No notes yet.",
     "add": "Add",
     "editPlaceholder": "Click to edit",
@@ -633,7 +566,6 @@
   },
   "audit": {
     "title": "Audit log",
-    "description": "Account and room activity, newest first. The first page checks for new events every 15 seconds.",
     "denied": "Administrator access required.",
     "account": "Account (exact match)",
     "filter": "Filter",
@@ -666,13 +598,13 @@
     "ipSource": "IP source",
     "changes": "Changes",
     "userDevices": "Devices · {{username}}",
-    "deviceHint": "Browser environments reported at successful sign-in. New devices may also mean another browser, private browsing or cleared storage. Fingerprints are advisory and can change or be spoofed.",
+    "deviceHint": "Fingerprints are only a guide: they can change or be forged.",
     "events": "Events",
     "firstSeen": "First login",
     "lastSeen": "Latest login",
     "lastIp": "Latest IP",
     "loginCount": "{{count}} logins",
-    "noDevices": "No device information yet. Devices appear after the next sign-in.",
+    "noDevices": "No device information",
     "actions": {
       "login": "Sign in",
       "password": {
@@ -739,7 +671,6 @@
     "credentialsRequired": "Username and password are required.",
     "invalidCredentials": "Incorrect username or password.",
     "usernameTaken": "This username is already taken.",
-    "emailTaken": "This email is already in use.",
     "currentPassword": "The current password is incorrect.",
     "sessionExpired": "Your session has expired. Please sign in again.",
     "roomNotFound": "This room is unavailable or you do not have access.",
@@ -809,8 +740,8 @@
     "noSessionsTech": "No sessions for you in this period.",
     "noSessionsDay": "No sessions this day.",
     "loadFailed": "Could not load the schedule.",
-    "techHint": "Agents plan your sessions. You get a notice when one is assigned to you or changes.",
     "hoursUnit": "h",
+    "onlyMine": "Only mine",
     "minutesUnit": "min",
     "tabs": {
       "label": "Schedule sections",
@@ -826,20 +757,14 @@
     },
     "status": {
       "scheduled": "Scheduled",
-      "completed": "Completed",
-      "cancelled": "Cancelled"
+      "completed": "Completed"
     },
     "legend": {
       "label": "People shown",
-      "showAll": "Show all",
-      "showCancelled": "Show cancelled"
+      "showAll": "Show all"
     },
     "unassignedPanel": {
-      "title": "Unassigned",
-      "hint": "Open a session to choose its tech, or drag it onto a tech's row in the day view.",
-      "hintDay": "Drag a session onto a tech's row to assign it.",
-      "empty": "Every upcoming session has a tech.",
-      "onCalendar": "Also on the calendar below: {{count}}."
+      "title": "Unassigned"
     },
     "drag": {
       "moved": "Session moved.",
@@ -849,15 +774,13 @@
     },
     "dialog": {
       "createTitle": "New session",
+      "createTitleFor": "New session for {{customer}}",
       "editTitle": "Edit session",
-      "description": "The tech is notified of new sessions and of changes to their sessions.",
       "customer": "Customer",
-      "customerPlaceholder": "Search by name or contact",
       "newCustomer": "New customer “{{name}}”",
       "newCustomerTitle": "New customer",
       "customerName": "Name",
       "customerContact": "Contact",
-      "customerContactPlaceholder": "Phone, WeChat or email",
       "addCustomer": "Add customer",
       "changeCustomer": "Change",
       "noCustomers": "No matching customers.",
@@ -865,27 +788,20 @@
       "techsGroup": "Techs",
       "staffGroup": "Agents and admins",
       "deletedAccount": "{{username}} (removed)",
-      "agent": "Agent in charge",
-      "noAgent": "None",
       "date": "Date",
       "start": "Start",
       "duration": "Duration",
       "company": "Company",
-      "companyPlaceholder": "Company",
       "position": "Position",
-      "positionPlaceholder": "Role or position",
       "role": "Company and position",
-      "notes": "Notes for the tech",
-      "notesPlaceholder": "What the tech should know before the session",
-      "status": "Status",
+      "notes": "Notes",
       "contact": "Contact",
       "customerNotes": "Customer notes",
       "save": "Save",
       "saving": "Saving...",
       "create": "Create session",
       "delete": "Delete session",
-      "deleteTitle": "Delete this session?",
-      "deleteConfirm": "Delete the session with {{customer}}? Its tech is notified. To keep it on the calendar, set its status to cancelled instead.",
+      "deleteTitle": "Delete the session with {{customer}}?",
       "deleted": "Session deleted.",
       "saved": "Session saved.",
       "created": "Session created.",
@@ -894,13 +810,10 @@
       "saveAnyway": "Save anyway",
       "customerRequired": "Choose a customer.",
       "timeRequired": "Enter a date and a start time.",
-      "createdBy": "Planned by {{username}}",
-      "customerUpcoming": "{{count}} upcoming",
-      "bookAnother": "Book another"
+      "customerUpcoming": "{{count}} upcoming"
     },
     "room": {
       "title": "Room",
-      "none": "The room belongs to the session's tech; the customer joins through a share link.",
       "create": "Create room",
       "opening": "Opening...",
       "open": "Open room",
@@ -909,38 +822,30 @@
       "replace": "New room",
       "customerLink": "Customer link",
       "customerLinkTitle": "Customer link for {{customer}}",
-      "customerLinkHint": "The link fills in the customer's name and lets them join without an account. Each link works once; an unused link stays valid until the session ends, and for at least 6 hours.",
       "failed": "Could not open the room."
     },
     "customers": {
       "title": "Customers",
       "search": "Search customers",
-      "searchPlaceholder": "Name or contact",
       "new": "New customer",
       "empty": "No customers yet.",
       "noMatches": "No customers match.",
       "createTitle": "New customer",
       "name": "Name",
       "contact": "Contact",
-      "contactPlaceholder": "Phone, WeChat or email",
       "notes": "Notes",
-      "notesPlaceholder": "For example, preferred times or background",
       "save": "Save",
       "saving": "Saving...",
       "saved": "Customer saved.",
       "created": "Customer added.",
       "delete": "Delete customer",
       "deleteTitle": "Delete {{name}}?",
-      "deleteConfirm": "The customer leaves the list. Past sessions keep their name.",
       "deleted": "Customer deleted.",
       "edit": "Edit customer",
-      "editTitle": "Edit customer",
-      "privacy": "Techs see only the customer's name; contact and notes stay with agents and admins."
+      "editTitle": "Edit customer"
     },
     "todayCard": {
-      "title": "Today's sessions",
-      "open": "Open schedule",
-      "more": "{{count}} more today"
+      "title": "Today's sessions"
     },
     "notice": {
       "assigned": "New session: {{customer}}",
@@ -953,8 +858,7 @@
       "open": "Open in schedule",
       "many": "{{count}} schedule updates",
       "many_one": "{{count}} schedule update",
-      "many_other": "{{count}} schedule updates",
-      "manyDescription": "Your sessions changed. Open the notifications to see what changed."
+      "many_other": "{{count}} schedule updates"
     },
     "sessions": {
       "all": "All sessions",

@@ -183,10 +183,6 @@ export function techColors(techs: Pick<User, 'id' | 'color' | 'username'>[]): Ma
   return colors
 }
 
-export function isLive(appointment: Appointment): boolean {
-  return appointment.status === 'scheduled' && Date.parse(appointment.endsAt) > Date.now()
-}
-
 /** A calendar day in the UI language, e.g. "Tue 10/20" or "10月20日周二". */
 export function formatDayKey(key: string, locale: string, options: Intl.DateTimeFormatOptions): string {
   const [year, month, day] = key.split('-').map(Number)

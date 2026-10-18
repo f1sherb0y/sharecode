@@ -67,7 +67,6 @@ export function JoinPage() {
                     id="shareInput"
                     type="text"
                     className="pl-9"
-                    placeholder={t('join.placeholder')}
                     value={input}
                     onChange={(e) => {
                       setInput(e.target.value)
