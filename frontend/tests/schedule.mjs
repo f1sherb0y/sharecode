@@ -75,7 +75,12 @@ await plan('tech_a', { customerId: zhang.id, startsAt: at(1, 10), durationMinute
 await plan('agent_a', { customerId: zhang.id }, 400)
 // A customer is optional: work tables book by company and position.
 const bare = (await plan('agent_a', { startsAt: at(1, 10), company: 'Initech' })).appointment
-assert.deepEqual([bare.customer, bare.isBlock, bare.createdBy.username], [null, false, 'agent_a'])
+assert.deepEqual([bare.customer, bare.isBlock, bare.createdBy.username, bare.manager.username], [null, false, 'agent_a', 'agent_a'])
+// A session can belong to another 管理, who then counts it as theirs; techs cannot be one.
+await plan('agent_a', { startsAt: at(1, 10), managerId: id('tech_a') }, 400)
+const handed = (await request('/api/appointments/' + bare.id, 'PUT', { managerId: id('agent_b') }, as('agent_a'))).appointment
+assert.deepEqual([handed.manager.username, handed.createdBy.username], ['agent_b', 'agent_a'])
+assert((await list('agent_b', range(-30, 60) + '&mine=true')).some(a => a.id === bare.id))
 await request('/api/appointments/' + bare.id, 'DELETE', undefined, as('agent_a'))
 await plan('agent_a', { customerId: zhang.id, startsAt: '2026-10-20T10:00' }, 400)
 await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), durationMinutes: 4 }, 400)

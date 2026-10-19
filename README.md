@@ -371,8 +371,8 @@ table per tech with a week of their sessions, hours running down the page.
 Phones show one day at a time under a week strip; wider screens show the week.
 
 - 管理 and 超级管理员 pick a tech's table from the chip at the top, click free
-  time (or **+**) and book it: date, start, end, company, position, and if they
-  like a customer and notes. A time already taken on that table is refused, with
+  time (or **+**) and book it: date, start, end, company, position, the 管理 it
+  belongs to (whoever books, unless they pick another) and notes. A time already taken on that table is refused, with
   who booked it. Cards show the 管理 who booked, the time, company and position.
 - A tech sees only their own table and cannot book on it. With the 标记占用
   button at the top right turned on, clicks on free time mark busy time (占用),

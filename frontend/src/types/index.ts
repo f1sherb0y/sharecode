@@ -254,6 +254,8 @@ export interface Appointment {
   tech: { id: string; username: string; color: string; role: Role; isDeleted: boolean } | null
   room: { id: string; name: string; language: Language; isEnded: boolean; endedAt: string | null } | null
   hasConflict: boolean
+  /** The 管理 it belongs to: the one chosen, else its customer's agent, else its planner. None for busy time. */
+  manager: { id: string; username: string; color: string } | null
   createdBy: { id: string; username: string; color: string }
   createdAt: string
   updatedAt: string
@@ -261,6 +263,7 @@ export interface Appointment {
 
 export interface AppointmentInput {
   customerId?: string | null
+  managerId?: string | null
   isBlock?: boolean
   techId?: string | null
   startsAt?: string
@@ -278,6 +281,7 @@ export interface ScheduleConflict {
   endsAt: string
   durationMinutes: number
   customer: { name: string } | null
+  manager: { username: string }
   createdBy: { username: string }
   isBlock: boolean
 }

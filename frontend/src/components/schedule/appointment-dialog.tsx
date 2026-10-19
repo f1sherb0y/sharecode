@@ -27,6 +27,7 @@ import { translateError } from '@/i18n/errors'
 import { DEFAULT_DURATION, formatDayKey, SCHEDULE_ZONES, sessionTitle } from '@/lib/schedule'
 import { atMinute, dateKeyOf, parseTimeInput, timeInputValue, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores'
 import type { Appointment, AppointmentInput, AppointmentStatus, ScheduleConflict, User } from '@/types'
 import { CustomerPicker, type PickedCustomer } from './customer-picker'
 import { SessionRoomActions, hasRoomActions } from './session-room-actions'
@@ -66,6 +67,10 @@ function conflictsOf(error: unknown): ScheduleConflict[] | null {
 export function AppointmentDialog({ open, onOpenChange, appointment, draft, staff, users, colors, timezone, onSaved, onDeleted }: AppointmentDialogProps) {
   const { t } = useTranslation()
   const [customer, setCustomer] = useState<PickedCustomer | null>(null)
+  const meId = useAuthStore(state => state.user?.id ?? '')
+  // The 管理 it belongs to: the customer's agent unless picked by hand, else whoever plans it.
+  const [managerId, setManagerId] = useState('')
+  const [managerPicked, setManagerPicked] = useState(false)
   const [techId, setTechId] = useState(NONE)
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
@@ -84,6 +89,8 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
     if (!open) return
     const start = appointment ? Date.parse(appointment.startsAt) : (draft?.startsAt.getTime() ?? Date.now())
     setCustomer(appointment ? appointment.customer : (draft?.customer ?? null))
+    setManagerId(appointment ? appointment.manager?.id ?? '' : draft?.customer?.createdBy?.id ?? meId)
+    setManagerPicked(false)
     setTechId((appointment ? appointment.tech?.id : draft?.techId) ?? NONE)
     setZone(timezone)
     setDate(dateKeyOf(start, timezone))
@@ -100,6 +107,11 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
 
   // Anyone can take a session: techs, 管理 and 超级管理员, in one list by name.
   const people = useMemo(() => [...users].sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' })), [users])
+  const managers = useMemo(() => people.filter(person => person.role !== 'tech'), [people])
+  const pickCustomer = (next: PickedCustomer | null) => {
+    setCustomer(next)
+    if (!managerPicked && next?.createdBy) setManagerId(next.createdBy.id)
+  }
 
   const saveMutation = useMutation({
     mutationFn: async (allowConflicts: boolean) => {
@@ -108,6 +120,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
       const input: AppointmentInput = {
         customerId: customer?.id ?? null,
         techId: techId === NONE ? null : techId,
+        ...(managerId && managerId !== appointment?.manager?.id ? { managerId } : {}),
         startsAt: toZonedIso(atMinute(date, minute, zone), zone),
         durationMinutes: duration,
         company: company.trim() || null,
@@ -243,7 +256,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="session-customer">{t('schedule.dialog.customer')}</Label>
-                  <CustomerPicker id="session-customer" value={customer} onChange={setCustomer} />
+                  <CustomerPicker id="session-customer" value={customer} onChange={pickCustomer} />
                 </div>
                 {techSelect}
               </div>
@@ -271,6 +284,18 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
                 <Label htmlFor="session-position">{t('schedule.dialog.position')}</Label>
                 <Input id="session-position" value={position} maxLength={100} onChange={e => setPosition(e.target.value)} />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>{t('schedule.dialog.manager')}</Label>
+              <Select value={managerId} onValueChange={value => { setManagerId(value); setManagerPicked(true) }}>
+                <SelectTrigger aria-label={t('schedule.dialog.manager')}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {managers.map(manager => (
+                    <SelectItem key={manager.id} value={manager.id}>{manager.username}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1">

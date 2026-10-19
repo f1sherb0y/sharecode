@@ -69,7 +69,7 @@ export function SessionDetails({ appointment, onClose, editable, meId, color, ti
             <div className="wt-details-who">
               <span className="wt-swatch" style={{ background: color }} aria-hidden="true" />
               <span>{who}</span>
-              {!block && a.createdBy.id === meId && <span className="wt-badge">{t('workTable.mine')}</span>}
+              {!block && sessionAgent(a).id === meId && <span className="wt-badge">{t('workTable.mine')}</span>}
               {a.hasConflict && <span className="wt-badge is-clash">{t('workTable.clash')}</span>}
             </div>
             <div className="wt-details-row">

@@ -47,6 +47,7 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
     t.id as tech_id, t.username as tech_username, t.color as tech_color, t.role as tech_role,
     t."isDeleted" as tech_is_deleted,
     cb.id as created_by_id, cb.username as created_by_username, cb.color as created_by_color,
+    mg.id as manager_id, mg.username as manager_username, mg.color as manager_color,
     r.id as room_id, r.name as room_name, r.language as room_language, r."isEnded" as room_is_ended,
     r."endedAt" as room_ended_at,
     (a."techId" IS NOT NULL AND EXISTS (
@@ -59,6 +60,8 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
     LEFT JOIN "Customer" c ON c.id = a."customerId"
     LEFT JOIN "User" ow ON ow.id = c."createdBy"
     JOIN "User" cb ON cb.id = a."createdBy"
+    -- The 管理 a session belongs to: the one chosen, else its customer's agent, else its planner.
+    JOIN "User" mg ON mg.id = COALESCE(a."managerId", c."createdBy", a."createdBy")
     LEFT JOIN "User" t ON t.id = a."techId"
     LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted""#;
 
@@ -90,6 +93,9 @@ pub(super) struct AppointmentRow {
     created_by_id: String,
     created_by_username: String,
     created_by_color: String,
+    manager_id: String,
+    manager_username: String,
+    manager_color: String,
     room_id: Option<String>,
     room_name: Option<String>,
     room_language: Option<String>,
@@ -102,6 +108,7 @@ pub(super) struct AppointmentRow {
 #[derive(sqlx::FromRow)]
 struct StoredAppointment {
     customer_id: Option<String>,
+    manager_id: Option<String>,
     customer_name: Option<String>,
     is_block: bool,
     tech_id: Option<String>,
@@ -121,7 +128,7 @@ struct ConflictRow {
     starts_at: DateTime<Utc>,
     duration_minutes: i32,
     customer_name: Option<String>,
-    created_by_username: String,
+    manager_username: String,
     is_block: bool,
 }
 
@@ -144,6 +151,9 @@ pub struct AppointmentPayload {
     customer_id: Option<Option<String>>,
     #[serde(deserialize_with = "double_option")]
     tech_id: Option<Option<String>>,
+    /// The 管理 the session belongs to (staff only); none falls back to the customer's agent.
+    #[serde(deserialize_with = "double_option")]
+    manager_id: Option<Option<String>>,
     starts_at: Option<String>,
     duration_minutes: Option<i32>,
     #[serde(deserialize_with = "double_option")]
@@ -191,7 +201,7 @@ pub async fn list_appointments(
           AND ($3::text IS NULL OR a."techId" = $3)
           AND ($4::text IS NULL OR a."customerId" = $4)
           AND (NOT $5 OR a."techId" IS NULL)
-          AND (NOT $6 OR c."createdBy" = $7 OR a."createdBy" = $7)
+          AND (NOT $6 OR COALESCE(a."managerId", c."createdBy") = $7 OR a."createdBy" = $7)
         ORDER BY a."startsAt", a.id LIMIT 2000"#
     ))
     .bind(from)
@@ -238,6 +248,7 @@ pub async fn create_appointment(
     }
     let customer_id = payload.customer_id.flatten().filter(|id| !id.is_empty());
     let tech_id = if staff { payload.tech_id.flatten() } else { Some(auth_user.id.clone()) };
+    let manager_id = payload.manager_id.flatten().filter(|id| !id.is_empty() && !is_block);
     if is_block && (tech_id.is_none() || customer_id.is_some()) {
         return Err(ApiError::bad_request("Busy time belongs to a tech and has no customer"));
     }
@@ -264,6 +275,9 @@ pub async fn create_appointment(
         Some(id) => Some(active_customer(&mut tx, id).await?),
         None => None,
     };
+    if let Some(manager) = manager_id.as_deref() {
+        check_manager(&mut tx, manager).await?;
+    }
     if let Some(tech) = tech_id.as_deref() {
         check_assignee(&mut tx, tech).await?;
         lock_tech_schedule(&mut tx, tech).await?;
@@ -278,8 +292,8 @@ pub async fn create_appointment(
     let appointment_id = Uuid::new_v4().to_string();
     sqlx::query(
         r#"INSERT INTO "Appointment" (id, "customerId", "techId", "startsAt", "durationMinutes",
-            company, position, notes, "createdBy", "isBlock")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"#,
+            company, position, notes, "createdBy", "isBlock", "managerId")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
     )
     .bind(&appointment_id)
     .bind(&customer_id)
@@ -291,6 +305,7 @@ pub async fn create_appointment(
     .bind(&notes)
     .bind(&auth_user.id)
     .bind(is_block)
+    .bind(&manager_id)
     .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create session"))?;
@@ -320,7 +335,7 @@ pub async fn create_appointment(
         None,
         None,
         json!({
-            "customerId": customer_id, "techId": tech_id, "isBlock": is_block,
+            "customerId": customer_id, "techId": tech_id, "managerId": manager_id, "isBlock": is_block,
             "startsAt": to_iso_string(starts_at), "durationMinutes": duration,
         }),
     )
@@ -351,7 +366,7 @@ pub async fn update_appointment(
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let current = sqlx::query_as::<_, StoredAppointment>(
-        r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."isBlock" as is_block,
+        r#"SELECT a."customerId" as customer_id, a."managerId" as manager_id, c.name as customer_name, a."isBlock" as is_block,
             a."techId" as tech_id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
             a.company, a.position, a.notes, r.id as room_id, r."ownerId" as room_owner_id,
             NOT r."isEnded" as room_is_live
@@ -374,6 +389,10 @@ pub async fn update_appointment(
         payload.tech_id.unwrap_or_else(|| current.tech_id.clone())
     } else {
         current.tech_id.clone()
+    };
+    let manager_id = match payload.manager_id.filter(|_| staff && !current.is_block) {
+        Some(value) => value.filter(|id| !id.is_empty()),
+        None => current.manager_id.clone(),
     };
     if current.is_block && (tech_id.is_none() || customer_id.is_some()) {
         return Err(ApiError::bad_request("Busy time belongs to a tech and has no customer"));
@@ -405,10 +424,15 @@ pub async fn update_appointment(
     if let Some(tech) = tech_id.as_deref().filter(|_| tech_changed) {
         check_assignee(&mut tx, tech).await?;
     }
+    let manager_changed = manager_id != current.manager_id;
+    if let Some(manager) = manager_id.as_deref().filter(|_| manager_changed) {
+        check_manager(&mut tx, manager).await?;
+    }
     let time_changed = starts_at != current.starts_at || duration != current.duration_minutes;
     let changes: Vec<&str> = [
         ("customer", customer_id != current.customer_id),
         ("tech", tech_changed),
+        ("manager", manager_changed),
         ("time", starts_at != current.starts_at),
         ("duration", duration != current.duration_minutes),
         ("company", company != current.company),
@@ -439,7 +463,8 @@ pub async fn update_appointment(
 
     sqlx::query(
         r#"UPDATE "Appointment" SET "customerId" = $2, "techId" = $3, "startsAt" = $4,
-            "durationMinutes" = $5, company = $6, position = $7, notes = $8, "updatedAt" = NOW()
+            "durationMinutes" = $5, company = $6, position = $7, notes = $8, "managerId" = $9,
+            "updatedAt" = NOW()
         WHERE id = $1"#,
     )
     .bind(&appointment_id)
@@ -450,6 +475,7 @@ pub async fn update_appointment(
     .bind(&company)
     .bind(&position)
     .bind(&notes)
+    .bind(&manager_id)
     .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to update session"))?;
@@ -527,7 +553,8 @@ pub async fn update_appointment(
             }
         }
     } else if let Some(tech) = tech_id.as_deref().filter(|t| !mine(t)) {
-        if after.is_ahead() || before.is_ahead() {
+        // A new 管理 alone is nothing the tech needs to hear about.
+        if (after.is_ahead() || before.is_ahead()) && changes.iter().any(|change| *change != "manager") {
             let previous = json!({
                 "previousStartsAt": to_iso_string(current.starts_at),
                 "previousDurationMinutes": current.duration_minutes,
@@ -586,7 +613,7 @@ pub async fn delete_appointment(
     let current = sqlx::query_as::<_, StoredAppointment>(
         r#"DELETE FROM "Appointment" a
         WHERE a.id = $1 AND ($2 OR (a."isBlock" AND a."techId" = $3))
-        RETURNING a."customerId" as customer_id,
+        RETURNING a."customerId" as customer_id, a."managerId" as manager_id,
             (SELECT c.name FROM "Customer" c WHERE c.id = a."customerId") as customer_name,
             a."isBlock" as is_block, a."techId" as tech_id,
             a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
@@ -658,7 +685,7 @@ pub async fn open_appointment_room(
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let current = sqlx::query_as::<_, StoredAppointment>(
-        r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."isBlock" as is_block,
+        r#"SELECT a."customerId" as customer_id, a."managerId" as manager_id, c.name as customer_name, a."isBlock" as is_block,
             a."techId" as tech_id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
             a.company, a.position, a.notes, r.id as room_id, r."ownerId" as room_owner_id,
             NOT r."isEnded" as room_is_live
@@ -783,11 +810,7 @@ pub(super) async fn table_link_sessions(
     Ok(rows
         .iter()
         .map(|row| {
-            // The 管理 a session belongs to: its customer's agent, else whoever planned it.
-            let agent = match (&row.owner_id, &row.owner_username, &row.owner_color) {
-                (Some(id), Some(username), Some(color)) => json!({ "id": id, "username": username, "color": color }),
-                _ => json!({ "id": row.created_by_id, "username": row.created_by_username, "color": row.created_by_color }),
-            };
+            let agent = (!row.is_block).then(|| manager_json(row));
             json!({
                 "id": row.id,
                 "startsAt": to_iso_string(row.starts_at),
@@ -805,6 +828,7 @@ pub(super) async fn table_link_sessions(
                 })),
                 "room": null,
                 "hasConflict": row.has_conflict,
+                "manager": agent,
                 "createdBy": agent,
                 "createdAt": to_iso_string(row.created_at),
                 "updatedAt": to_iso_string(row.updated_at),
@@ -856,10 +880,16 @@ pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
             "endedAt": to_iso_string_opt(row.room_ended_at),
         })),
         "hasConflict": row.has_conflict,
+        "manager": (!row.is_block).then(|| manager_json(row)),
         "createdBy": { "id": row.created_by_id, "username": row.created_by_username, "color": row.created_by_color },
         "createdAt": to_iso_string(row.created_at),
         "updatedAt": to_iso_string(row.updated_at),
     })
+}
+
+/// The 管理 a session belongs to: the one chosen, else its customer's agent, else its planner.
+fn manager_json(row: &AppointmentRow) -> Value {
+    json!({ "id": row.manager_id, "username": row.manager_username, "color": row.manager_color })
 }
 
 async fn load_appointment(db: &sqlx::PgPool, appointment_id: &str) -> Result<AppointmentRow, ApiError> {
@@ -902,6 +932,14 @@ async fn check_assignee(tx: &mut sqlx::PgConnection, user_id: &str) -> Result<()
     }
 }
 
+/// A session's 管理 is an agent or admin with an account.
+async fn check_manager(tx: &mut sqlx::PgConnection, user_id: &str) -> Result<(), ApiError> {
+    match account_role(tx, user_id).await?.as_deref() {
+        Some(role) if is_staff(role) => Ok(()),
+        _ => Err(ApiError::bad_request("Invalid manager")),
+    }
+}
+
 /// Serializes changes to one tech's sessions so two planners cannot double-book them.
 async fn lock_tech_schedule(tx: &mut sqlx::PgConnection, tech_id: &str) -> Result<(), ApiError> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
@@ -921,9 +959,9 @@ async fn find_conflicts(
 ) -> Result<Vec<ConflictRow>, ApiError> {
     sqlx::query_as::<_, ConflictRow>(
         r#"SELECT a.id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
-            c.name as customer_name, cb.username as created_by_username, a."isBlock" as is_block
+            c.name as customer_name, mg.username as manager_username, a."isBlock" as is_block
         FROM "Appointment" a LEFT JOIN "Customer" c ON c.id = a."customerId"
-        JOIN "User" cb ON cb.id = a."createdBy"
+        JOIN "User" mg ON mg.id = COALESCE(a."managerId", c."createdBy", a."createdBy")
         WHERE a."techId" = $1 AND ($4::text IS NULL OR a.id <> $4)
           AND a."startsAt" < $3 AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > $2
         ORDER BY a."startsAt", a.id LIMIT 20"#,
@@ -947,7 +985,8 @@ fn conflict_response(conflicts: &[ConflictRow]) -> Response {
                 "endsAt": to_iso_string(ends_at(conflict.starts_at, conflict.duration_minutes)),
                 "durationMinutes": conflict.duration_minutes,
                 "customer": conflict.customer_name.as_ref().map(|name| json!({ "name": name })),
-                "createdBy": { "username": conflict.created_by_username },
+                "manager": { "username": conflict.manager_username },
+                "createdBy": { "username": conflict.manager_username },
                 "isBlock": conflict.is_block,
             })
         })

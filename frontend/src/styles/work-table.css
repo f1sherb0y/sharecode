@@ -17,29 +17,37 @@
 
   .wt-gone { align-items: center; justify-content: center; color: var(--color-muted-foreground); }
 
-  .wt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem 0.25rem; }
-  .wt-head-main { display: grid; gap: 0.25rem; min-width: 0; }
-  .wt-title-row { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
-  .wt-month { display: inline-flex; align-items: center; gap: 0.125rem; font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+  /* Month, then the table and zone, then the actions; on phones the table and zone get a row of their own. */
+  .wt-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "month sub actions";
+    align-items: center;
+    column-gap: 0.75rem;
+    row-gap: 0.25rem;
+    padding: 0.75rem 1rem 0.25rem;
+  }
+  .wt-sub { grid-area: sub; display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+  .wt-actions { grid-area: actions; }
+  .wt-month { grid-area: month; justify-self: start; display: inline-flex; align-items: center; gap: 0.125rem; font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
   .wt-month svg { width: 1rem; height: 1rem; opacity: 0.6; }
   .wt-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.125rem;
     min-width: 0;
-    max-width: 14rem;
     padding: 0.25rem 0.625rem;
     border-radius: 0.5rem;
     background: var(--color-secondary);
     font-size: var(--text-base);
     font-weight: 600;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
+  .wt-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .wt-chip svg { width: 0.875rem; height: 0.875rem; flex: none; opacity: 0.6; }
   .wt-chip.is-static { cursor: default; }
   .wt-zone.wt-zone {
+    flex: none;
     width: auto;
     height: auto;
     min-height: 0;
@@ -244,7 +252,7 @@
 
   @media (max-width: 767px) {
     .wt-page { --wt-hour: 60px; --wt-gutter: 3.25rem; }
-    .wt-head { padding-inline: 0.75rem; }
+    .wt-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "month actions" "sub sub"; padding-inline: 0.75rem; }
     .wt-sheet {
       top: auto;
       bottom: 0;

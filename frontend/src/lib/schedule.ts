@@ -3,7 +3,8 @@ import type { Appointment, User } from '@/types'
 import { addDays, addMonths, atMinute, dateKeyOf, dayStart, daysBetween, startOfMonth, startOfWeek } from '@/lib/zoned-time'
 
 /** The 管理 a session belongs to: its customer's agent, or whoever planned it. */
-export const sessionAgent = (appointment: Pick<Appointment, 'customer' | 'createdBy'>) => appointment.customer?.owner ?? appointment.createdBy
+export const sessionAgent = (appointment: Pick<Appointment, 'customer' | 'createdBy'> & { manager?: Appointment['manager'] }) =>
+  appointment.manager ?? appointment.customer?.owner ?? appointment.createdBy
 
 /** What a session is called: its customer, else its company and position. */
 export function sessionTitle(appointment: Pick<Appointment, 'customer' | 'company' | 'position' | 'isBlock'>, t: TFunction) {

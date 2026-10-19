@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button, DatePicker, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea, TimePicker } from '@/components/ui'
-import { CustomerPicker, type PickedCustomer } from '@/components/schedule/customer-picker'
 import { api } from '@/api'
 import { translateError } from '@/i18n/errors'
+import { queryKeys } from '@/lib/query-keys'
 import { DAY_MINUTES } from '@/lib/schedule'
+import { useAuthStore } from '@/stores'
 import { atMinute, dateKeyOf, minuteOfDay, parseTimeInput, timeInputValue, toZonedIso, todayKey } from '@/lib/zoned-time'
 import type { Appointment, AppointmentInput, ScheduleConflict, WorkTable } from '@/types'
 import { Sheet } from './sheet'
@@ -56,10 +57,21 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
   const [techId, setTechId] = useState('')
   const [company, setCompany] = useState('')
   const [position, setPosition] = useState('')
-  const [customer, setCustomer] = useState<PickedCustomer | null>(null)
+  const [managerId, setManagerId] = useState('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState<ScheduleConflict[] | null>(null)
+  const meId = useAuthStore(state => state.user?.id ?? '')
+  // A session belongs to a 管理: an agent or admin, by name.
+  const usersQuery = useQuery({
+    queryKey: queryKeys.roomCreationUsers,
+    queryFn: async () => (await api.getRoomOwners()).users,
+    enabled: staff && !!target && !block,
+    staleTime: 60_000,
+  })
+  const managers = (usersQuery.data ?? [])
+    .filter(user => user.role !== 'tech')
+    .sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }))
 
   useEffect(() => {
     if (!target) return
@@ -72,7 +84,7 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
       setTechId(a.tech?.id ?? '')
       setCompany(a.company ?? '')
       setPosition(a.position ?? '')
-      setCustomer(a.customer ? { id: a.customer.id, name: a.customer.name } : null)
+      setManagerId(a.manager?.id ?? '')
       setNotes(a.notes ?? '')
     } else {
       setDate(target.day)
@@ -81,12 +93,12 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
       setTechId(target.techId)
       setCompany('')
       setPosition('')
-      setCustomer(null)
+      setManagerId(meId)
       setNotes('')
     }
     setError('')
     setConflicts(null)
-  }, [target, timezone])
+  }, [target, timezone, meId])
 
   const save = useMutation({
     mutationFn: async () => {
@@ -105,7 +117,8 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
             durationMinutes: duration,
             company: company.trim() || null,
             position: position.trim() || null,
-            customerId: customer?.id ?? null,
+            // The customer stays as it was; the 管理 is sent when chosen.
+            ...(managerId && managerId !== editing?.manager?.id ? { managerId } : {}),
             notes: notes.trim() || null,
           }
       return editing ? actions.update(editing.id, input) : actions.create(input)
@@ -193,8 +206,20 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
         )}
         {!block && staff && (
           <div className="wt-field">
-            <Label htmlFor="wt-customer">{t('workTable.customer')}</Label>
-            <CustomerPicker id="wt-customer" value={customer} onChange={setCustomer} />
+            <Label>{t('workTable.manager')}</Label>
+            <Select value={managerId} onValueChange={setManagerId}>
+              <SelectTrigger aria-label={t('workTable.manager')}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {managers.map(manager => (
+                  <SelectItem key={manager.id} value={manager.id}>
+                    <span className="flex items-center gap-1.5">
+                      <span className="wt-dot" style={{ background: manager.color }} aria-hidden="true" />
+                      {manager.username}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
         <div className="wt-field">

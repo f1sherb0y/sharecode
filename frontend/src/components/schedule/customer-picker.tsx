@@ -9,7 +9,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import type { Customer } from '@/types'
 
-export type PickedCustomer = Pick<Customer, 'id' | 'name'> & { contact?: string | null }
+export type PickedCustomer = Pick<Customer, 'id' | 'name'> & { contact?: string | null; createdBy?: { id: string } }
 
 interface CustomerPickerProps {
   id: string

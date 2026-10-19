@@ -201,7 +201,7 @@ function WorkTable({ token }: { token?: string }) {
   }
   const describeConflict = (conflict: ScheduleConflict) => {
     const start = Date.parse(conflict.startsAt)
-    return `${conflict.isBlock ? t('schedule.busy') : conflict.createdBy.username} · ${formatDayKey(dateKeyOf(start, timezone), locale, { weekday: 'short', month: 'numeric', day: 'numeric' })} ${timeInputValue(start, timezone)}–${timeInputValue(Date.parse(conflict.endsAt), timezone)}`
+    return `${conflict.isBlock ? t('schedule.busy') : (conflict.manager ?? conflict.createdBy).username} · ${formatDayKey(dateKeyOf(start, timezone), locale, { weekday: 'short', month: 'numeric', day: 'numeric' })} ${timeInputValue(start, timezone)}–${timeInputValue(Date.parse(conflict.endsAt), timezone)}`
   }
 
   // The note pinned above the table, hidden until it changes once closed.
@@ -319,61 +319,59 @@ function WorkTable({ token }: { token?: string }) {
   return (
     <div className="wt-page">
       <header className="wt-head">
-        <div className="wt-head-main">
-          <div className="wt-title-row">
-            <Popover open={monthOpen} onOpenChange={open => { setMonthOpen(open); if (open) setShownMonth(startOfMonth(date)) }}>
-              <PopoverTrigger asChild>
-                <button type="button" className="wt-month">
-                  {formatDayKey(date, locale, { month: locale.startsWith('zh') ? 'short' : 'long' })}
+        <Popover open={monthOpen} onOpenChange={open => { setMonthOpen(open); if (open) setShownMonth(startOfMonth(date)) }}>
+          <PopoverTrigger asChild>
+            <button type="button" className="wt-month">
+              {formatDayKey(date, locale, { month: locale.startsWith('zh') ? 'short' : 'long' })}
+              <ChevronDown aria-hidden="true" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto p-2">
+            <MonthCalendar
+              month={shownMonth}
+              value={date}
+              today={today}
+              onMonth={setShownMonth}
+              onPick={day => { update({ date: day }); setMonthOpen(false) }}
+            />
+          </PopoverContent>
+        </Popover>
+        <div className="wt-sub">
+          {staff ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="wt-chip" aria-label={t('workTable.switchTable')}>
+                  <span className="wt-chip-name">{tableId === UNASSIGNED ? t('schedule.unassigned') : table?.username ?? '…'}</span>
                   <ChevronDown aria-hidden="true" />
                 </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-auto p-2">
-                <MonthCalendar
-                  month={shownMonth}
-                  value={date}
-                  today={today}
-                  onMonth={setShownMonth}
-                  onPick={day => { update({ date: day }); setMonthOpen(false) }}
-                />
-              </PopoverContent>
-            </Popover>
-            {staff ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className="wt-chip" aria-label={t('workTable.switchTable')}>
-                    {tableId === UNASSIGNED ? t('schedule.unassigned') : table?.username ?? '…'}
-                    <ChevronDown aria-hidden="true" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="wt-tables">
-                  {tables.map(item => (
-                    <DropdownMenuItem key={item.id} onSelect={() => pickTable(item.id)} className={cn('wt-table-item', item.id === tableId && 'is-active')}>
-                      <span className="wt-dot" style={{ background: item.color }} aria-hidden="true" />
-                      <span className="wt-table-name">{item.username}</span>
-                      <span className="wt-table-count">{t('workTable.sessionCount', { count: item.upcoming })}</span>
-                      <Check className={cn('wt-table-check', item.id !== tableId && 'invisible')} aria-hidden="true" />
-                    </DropdownMenuItem>
-                  ))}
-                  {unassignedCount > 0 && (
-                    <DropdownMenuItem onSelect={() => pickTable(UNASSIGNED)} className={cn('wt-table-item', tableId === UNASSIGNED && 'is-active')}>
-                      <span className="wt-dot is-striped" aria-hidden="true" />
-                      <span className="wt-table-name">{t('schedule.unassigned')}</span>
-                      <span className="wt-table-count">{t('workTable.sessionCount', { count: unassignedCount })}</span>
-                      <Check className={cn('wt-table-check', tableId !== UNASSIGNED && 'invisible')} aria-hidden="true" />
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => setNaming('')} className="wt-table-item">
-                    <Plus className="wt-table-check" aria-hidden="true" />
-                    <span className="wt-table-name">{t('workTable.newTable')}</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="wt-tables">
+                {tables.map(item => (
+                  <DropdownMenuItem key={item.id} onSelect={() => pickTable(item.id)} className={cn('wt-table-item', item.id === tableId && 'is-active')}>
+                    <span className="wt-dot" style={{ background: item.color }} aria-hidden="true" />
+                    <span className="wt-table-name">{item.username}</span>
+                    <span className="wt-table-count">{t('workTable.sessionCount', { count: item.upcoming })}</span>
+                    <Check className={cn('wt-table-check', item.id !== tableId && 'invisible')} aria-hidden="true" />
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <span className="wt-chip is-static">{table?.username ?? user?.username ?? '…'}</span>
-            )}
-          </div>
+                ))}
+                {unassignedCount > 0 && (
+                  <DropdownMenuItem onSelect={() => pickTable(UNASSIGNED)} className={cn('wt-table-item', tableId === UNASSIGNED && 'is-active')}>
+                    <span className="wt-dot is-striped" aria-hidden="true" />
+                    <span className="wt-table-name">{t('schedule.unassigned')}</span>
+                    <span className="wt-table-count">{t('workTable.sessionCount', { count: unassignedCount })}</span>
+                    <Check className={cn('wt-table-check', tableId !== UNASSIGNED && 'invisible')} aria-hidden="true" />
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setNaming('')} className="wt-table-item">
+                  <Plus className="wt-table-check" aria-hidden="true" />
+                  <span className="wt-table-name">{t('workTable.newTable')}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <span className="wt-chip is-static"><span className="wt-chip-name">{table?.username ?? user?.username ?? '…'}</span></span>
+          )}
           <Select value={timezone} onValueChange={zone => update({ tz: zone === homeZone ? null : zone })}>
             <SelectTrigger className="wt-zone" aria-label={t('schedule.zone')}><SelectValue /></SelectTrigger>
             <SelectContent>
