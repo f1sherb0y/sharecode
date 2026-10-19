@@ -23,6 +23,7 @@ import type {
   Customer,
   Appointment,
   AppointmentInput,
+  WorkTable,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
 import { useAuthStore } from '@/stores'
@@ -321,6 +322,52 @@ class ApiClient {
 
   async deleteAppointment(appointmentId: string): Promise<{ message: string }> {
     return this.request<{ message: string }>(`/api/appointments/${appointmentId}`, { method: 'DELETE' })
+  }
+
+  /** Every tech's table for staff; a tech gets their own. */
+  async listWorkTables(): Promise<{ tables: WorkTable[]; unassigned: number }> {
+    return this.request<{ tables: WorkTable[]; unassigned: number }>('/api/work-tables')
+  }
+
+  /** The note pinned above the caller's own table; empty removes it. */
+  async updateWorkTableNote(note: string | null): Promise<{ note: string | null }> {
+    return this.request<{ note: string | null }>('/api/work-tables/note', { method: 'PUT', body: JSON.stringify({ note }) })
+  }
+
+  /** A table for a tech without an account, with its link. */
+  async createWorkTable(name: string): Promise<{ table: { id: string; username: string; link: string } }> {
+    return this.request('/api/work-tables', { method: 'POST', body: JSON.stringify({ name }) })
+  }
+
+  /** A new link for a table; the old one stops working. */
+  async resetWorkTableLink(tableId: string): Promise<{ link: string }> {
+    return this.request(`/api/work-tables/${tableId}/link`, { method: 'POST' })
+  }
+
+  /** Moves a placeholder's table into a real account. */
+  async mergeWorkTable(tableId: string, into: string): Promise<{ merged: number }> {
+    return this.request(`/api/work-tables/${tableId}/merge`, { method: 'POST', body: JSON.stringify({ into }) })
+  }
+
+  /** A table opened through its link, without signing in. */
+  async openTableLink(token: string, range: { from: string; to: string }, signal?: AbortSignal): Promise<{ table: Pick<WorkTable, 'id' | 'username' | 'color' | 'note'>; appointments: Appointment[] }> {
+    return this.request(`/api/table-links/${encodeURIComponent(token)}?${new URLSearchParams(range)}`, { signal })
+  }
+
+  async updateTableLinkNote(token: string, note: string | null): Promise<{ note: string | null }> {
+    return this.request(`/api/table-links/${encodeURIComponent(token)}/note`, { method: 'PUT', body: JSON.stringify({ note }) })
+  }
+
+  async createTableLinkBusy(token: string, data: AppointmentInput): Promise<{ appointment: Appointment }> {
+    return this.request(`/api/table-links/${encodeURIComponent(token)}/busy`, { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async updateTableLinkBusy(token: string, appointmentId: string, data: AppointmentInput): Promise<{ appointment: Appointment }> {
+    return this.request(`/api/table-links/${encodeURIComponent(token)}/busy/${appointmentId}`, { method: 'PUT', body: JSON.stringify(data) })
+  }
+
+  async deleteTableLinkBusy(token: string, appointmentId: string): Promise<{ message: string }> {
+    return this.request(`/api/table-links/${encodeURIComponent(token)}/busy/${appointmentId}`, { method: 'DELETE' })
   }
 
   /** Opens the session's room, creating it for the tech on first use. */

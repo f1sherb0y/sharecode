@@ -1,5 +1,15 @@
+import type { TFunction } from 'i18next'
 import type { Appointment, User } from '@/types'
 import { addDays, addMonths, atMinute, dateKeyOf, dayStart, daysBetween, startOfMonth, startOfWeek } from '@/lib/zoned-time'
+
+/** The 管理 a session belongs to: its customer's agent, or whoever planned it. */
+export const sessionAgent = (appointment: Pick<Appointment, 'customer' | 'createdBy'>) => appointment.customer?.owner ?? appointment.createdBy
+
+/** What a session is called: its customer, else its company and position. */
+export function sessionTitle(appointment: Pick<Appointment, 'customer' | 'company' | 'position' | 'isBlock'>, t: TFunction) {
+  if (appointment.isBlock) return t('schedule.busy')
+  return appointment.customer?.name ?? ([appointment.company, appointment.position].filter(Boolean).join(' ') || t('schedule.session'))
+}
 
 export type ScheduleView = 'day' | 'week' | 'month' | 'list'
 export const SCHEDULE_VIEWS: ScheduleView[] = ['day', 'week', 'month', 'list']

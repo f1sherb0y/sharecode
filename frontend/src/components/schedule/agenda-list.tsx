@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui'
 import { getLocale } from '@/i18n'
 import { SessionPeople } from './session-people'
 import { cn } from '@/lib/utils'
-import { formatDayKey, groupSpan, overlapGroups, sessionsOnDay, type LaneRank } from '@/lib/schedule'
+import { formatDayKey, groupSpan, overlapGroups, sessionsOnDay, sessionTitle, type LaneRank } from '@/lib/schedule'
 import { timeInputValue } from '@/lib/zoned-time'
 
 interface AgendaListProps {
@@ -63,7 +63,7 @@ export function AgendaList({ days, today, appointments, timezone, showTech, show
                       // A session shows its own time only when it differs from the row's.
                       const ownTime = from !== span.from || to !== span.to
                       const tech = showTech ? appointment.tech?.username ?? t('schedule.unassigned') : null
-                      const title = showCustomer ? appointment.customer.name : tech
+                      const title = showCustomer ? sessionTitle(appointment, t) : tech
                       const role = [appointment.company, appointment.position].filter(Boolean).join(' · ')
                       return (
                         <li

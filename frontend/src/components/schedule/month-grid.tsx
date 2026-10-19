@@ -4,7 +4,7 @@ import { TriangleAlert } from 'lucide-react'
 import type { Appointment } from '@/types'
 import { getLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { formatDayKey, sessionsOnDay } from '@/lib/schedule'
+import { formatDayKey, sessionAgent, sessionsOnDay, sessionTitle } from '@/lib/schedule'
 import { timeInputValue } from '@/lib/zoned-time'
 
 interface MonthGridProps {
@@ -80,12 +80,12 @@ export function MonthGrid({ days, month, today, appointments, timezone, showTech
                       type="button"
                       className={cn('schedule-chip', `schedule-chip-${appointment.status}`, !appointment.tech && 'schedule-chip-unassigned')}
                       style={{ '--event-color': colorOf(appointment) } as CSSProperties}
-                      title={`${appointment.customer.name} · ${appointment.tech?.username ?? t('schedule.unassigned')} · ${appointment.customer.owner.username}`}
+                      title={`${sessionTitle(appointment, t)} · ${appointment.tech?.username ?? t('schedule.unassigned')} · ${sessionAgent(appointment).username}`}
                       onClick={() => onOpen(appointment)}
                     >
                       {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-label={t('schedule.conflictBadge')} />}
                       <span className="schedule-chip-time">{timeInputValue(Date.parse(appointment.startsAt), timezone)}</span>
-                      <span className="truncate">{appointment.customer.name}</span>
+                      <span className="truncate">{sessionTitle(appointment, t)}</span>
                       {showTech && <span className="schedule-chip-tech">{appointment.tech?.username ?? t('schedule.unassigned')}</span>}
                     </button>
                   ))}

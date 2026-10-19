@@ -72,7 +72,11 @@ await request(`/api/appointments?from=${encodeURIComponent(at(0, 0))}&to=${encod
 await request(`/api/appointments?from=${encodeURIComponent(at(1, 0))}&to=${encodeURIComponent(at(0, 0))}`, 'GET', undefined, as('agent_a'), 400)
 const plan = (actor, body, expected = 201) => request('/api/appointments', 'POST', body, as(actor), expected)
 await plan('tech_a', { customerId: zhang.id, startsAt: at(1, 10), durationMinutes: 60 }, 404)
-await plan('agent_a', { startsAt: at(1, 10) }, 400)
+await plan('agent_a', { customerId: zhang.id }, 400)
+// A customer is optional: work tables book by company and position.
+const bare = (await plan('agent_a', { startsAt: at(1, 10), company: 'Initech' })).appointment
+assert.deepEqual([bare.customer, bare.isBlock, bare.createdBy.username], [null, false, 'agent_a'])
+await request('/api/appointments/' + bare.id, 'DELETE', undefined, as('agent_a'))
 await plan('agent_a', { customerId: zhang.id, startsAt: '2026-10-20T10:00' }, 400)
 await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), durationMinutes: 4 }, 400)
 await plan('agent_a', { customerId: zhang.id, startsAt: at(1, 10), durationMinutes: 1441 }, 400)
@@ -118,7 +122,51 @@ assert.deepEqual(await mine('tech_a'), [first.id])
 // A range returns the sessions overlapping it, including one that started before.
 assert.deepEqual((await list('agent_a', `from=${encodeURIComponent(at(1, 10, 30))}&to=${encodeURIComponent(at(1, 10, 40))}`)).map(a => a.id).sort(), [first.id, techB.id].sort())
 assert.deepEqual(await list('agent_a', `from=${encodeURIComponent(at(1, 11))}&to=${encodeURIComponent(at(1, 12))}`), [])
-console.log('PASS sessions: validation, defaults, minute precision, no status or agent, staff-only planning, techs read only their own, range, filters and "mine"')
+// Work tables: a tech marks busy time on their own table, which keeps bookings out like any session.
+await plan('tech_a', { isBlock: true, customerId: zhang.id, startsAt: at(1, 14) }, 400)
+const busy = (await plan('tech_a', { isBlock: true, techId: id('tech_b'), startsAt: at(1, 14), durationMinutes: 60, company: 'x', notes: 'Dentist' })).appointment
+assert.deepEqual([busy.isBlock, busy.tech.username, busy.customer, busy.company, busy.notes], [true, 'tech_a', null, null, 'Dentist'], "busy time is on the tech's own table")
+// Busy time may cover a session; both are then marked as clashing.
+const over = (await plan('tech_a', { isBlock: true, startsAt: at(1, 10, 30), durationMinutes: 30 })).appointment
+assert.deepEqual((await list('tech_a', `from=${encodeURIComponent(at(1, 10, 30))}&to=${encodeURIComponent(at(1, 10, 40))}`)).map(a => a.hasConflict), [true, true])
+await request('/api/appointments/' + over.id, 'DELETE', undefined, as('tech_a'))
+assert.equal((await plan('agent_a', { techId: id('tech_a'), startsAt: at(1, 14, 30) }, 409)).conflicts[0].isBlock, true)
+await request('/api/appointments/' + busy.id, 'PUT', { durationMinutes: 90 }, as('tech_b'), 404)
+assert.equal((await request('/api/appointments/' + busy.id, 'PUT', { durationMinutes: 90, techId: id('tech_b') }, as('tech_a'))).appointment.tech.username, 'tech_a')
+await request(`/api/appointments/${busy.id}/room`, 'POST', {}, as('tech_a'), 404)
+const tables = (await request('/api/work-tables', 'GET', undefined, as('agent_a'))).tables
+assert(['tech_a', 'tech_b'].every(name => tables.some(table => table.username === name)) && tables.every(table => table.role === 'tech' || table.upcoming > 0))
+await request('/api/work-tables/note', 'PUT', { note: 'x'.repeat(201) }, as('tech_a'), 400)
+await request('/api/work-tables/note', 'PUT', { note: ' No late Fridays ' }, as('tech_a'))
+assert.deepEqual((await request('/api/work-tables', 'GET', undefined, as('tech_a'))).tables.map(table => [table.username, table.note]), [['tech_a', 'No late Fridays']])
+await request('/api/appointments/' + busy.id, 'DELETE', undefined, as('tech_a'))
+assert.equal((await notices('tech_a')).some(notice => notice.data.appointmentId === busy.id), false, 'nobody is told about busy time')
+// Table links: staff make a table for someone without an account; its link opens it without signing in.
+const made = (await request('/api/work-tables', 'POST', { name: 'Zhang Gong' }, as('agent_a'), 201)).table
+await request('/api/work-tables', 'POST', { name: 'Zhang Gong' }, as('agent_a'), 400)
+await request('/api/work-tables', 'POST', { name: 'x' }, as('tech_a'), 404)
+const linked = (await plan('agent_a', { techId: made.id, startsAt: at(3, 20), company: 'Bytedance' })).appointment
+const viaLink = (path, method = 'GET', body, expected = 200) => request(`/api/table-links/${made.link}${path}`, method, body, undefined, expected)
+const opened2 = await viaLink(`?${range(-1, 10)}`)
+assert.deepEqual([opened2.table.username, opened2.appointments.map(a => [a.id, a.customer, a.room, a.createdBy.username])], ['Zhang Gong', [[linked.id, null, null, 'agent_a']]])
+// Busy time through the link may cover a session: both show the clash.
+const linkBusy = (await viaLink('/busy', 'POST', { startsAt: at(3, 19, 30), durationMinutes: 60, techId: id('tech_b') }, 201)).appointment
+assert.deepEqual([linkBusy.isBlock, linkBusy.tech.id], [true, made.id])
+assert.deepEqual((await viaLink(`?${range(-1, 10)}`)).appointments.map(a => a.hasConflict), [true, true])
+await viaLink(`/busy/${linked.id}`, 'DELETE', undefined, 404)
+await viaLink('/note', 'PUT', { note: 'Weekdays only' })
+await request('/api/table-links/not-a-link', 'GET', undefined, undefined, 404)
+const relinked = (await request(`/api/work-tables/${made.id}/link`, 'POST', undefined, as('agent_a'))).link
+await viaLink(`?${range(-1, 10)}`, 'GET', undefined, 404)
+// Merging moves the table into a real account; the link goes along unless the account has one.
+await request(`/api/work-tables/${made.id}/merge`, 'POST', { into: id('tech_a') }, as('tech_a'), 404)
+assert.equal((await request(`/api/work-tables/${made.id}/merge`, 'POST', { into: id('tech_a') }, as('agent_a'))).merged, 2)
+const after = await request(`/api/table-links/${relinked}?${range(-1, 10)}`, 'GET')
+const mergedIn = after.appointments.filter(a => a.id === linked.id || a.id === linkBusy.id)
+assert.deepEqual([after.table.id, after.table.note, mergedIn.length, mergedIn.every(a => a.tech.id === id('tech_a'))], [id('tech_a'), 'No late Fridays', 2, true])
+for (const appointment of mergedIn) await request('/api/appointments/' + appointment.id, 'DELETE', undefined, as('agent_a'))
+assert.equal((await request('/api/work-tables', 'GET', undefined, as('agent_a'))).tables.some(table => table.id === made.id), false)
+console.log('PASS sessions: validation, defaults, minute precision, no status or agent, staff-only planning, techs read only their own, range, filters and "mine"; work tables, busy time, table links and merging')
 
 // Overlaps for one tech need confirmation; back-to-back sessions do not.
 const overlap = await plan('agent_b', { customerId: li.id, techId: id('tech_a'), startsAt: at(1, 10, 30), durationMinutes: 60 }, 409)
@@ -392,7 +440,7 @@ try {
       const { context, page, errors } = await openPage(browser, as('agent_a'))
       // The schedule uses the full window width.
       const pageWidth = () => page.locator('main > div').evaluate(el => el.getBoundingClientRect().width)
-      await page.goto(`${WEB}/schedule?view=day&date=${day}`)
+      await page.goto(`${WEB}/schedule/full?view=day&date=${day}`)
       const column = name => page.locator(`[data-schedule-row][data-tech="${name ? id(name) : ''}"]`)
       // Where a Shanghai time on the day shown is on a row: rows span data-span minutes from the instant data-start.
       const pointAt = async (row, hour, minute = 0) => {
@@ -650,7 +698,7 @@ try {
       const inZone = (instant, timeZone) => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(instant)).map(part => [part.type, part.value]))
       const eastern = inZone(abroad.startsAt, 'America/New_York')
       const easternDay = `${eastern.year}-${eastern.month}-${eastern.day}`
-      await page.goto(`${WEB}/schedule?view=day&date=${easternDay}`)
+      await page.goto(`${WEB}/schedule/full?view=day&date=${easternDay}`)
       const abroadCard = column('tech_a').locator(`[data-appointment="${abroad.id}"]`)
       await abroadCard.waitFor()
       // Switching the zone keeps every session in place; only the hours above change.
@@ -678,7 +726,7 @@ try {
       await page.keyboard.press('Escape')
       await form.waitFor({ state: 'hidden' })
       // The 场次 tab shows the same session in Shanghai time.
-      await page.goto(`${WEB}/schedule?tab=sessions&tz=America/New_York&session=${abroad.id}`)
+      await page.goto(`${WEB}/schedule/full?tab=sessions&tz=America/New_York&session=${abroad.id}`)
       form = page.getByRole('dialog', { name: 'Edit session' })
       await form.waitFor()
       assert.equal(await form.locator('#session-time').getAttribute('data-value'), '21:00')
@@ -713,7 +761,7 @@ try {
       await form.waitFor({ state: 'hidden' })
       // Deleting a session closes the confirmation and the session, with nothing fetched again.
       const doomed = (await plan('agent_a', { customerId: wang.id, startsAt: at(uiDay + 5, 9), durationMinutes: 30 })).appointment
-      await page.goto(`${WEB}/schedule?view=day&date=${at(uiDay + 5, 0).slice(0, 10)}&session=${doomed.id}`)
+      await page.goto(`${WEB}/schedule/full?view=day&date=${at(uiDay + 5, 0).slice(0, 10)}&session=${doomed.id}`)
       form = page.getByRole('dialog', { name: 'Edit session' })
       await form.getByRole('button', { name: 'Delete session' }).click()
       const missing = []
@@ -723,6 +771,24 @@ try {
       await page.waitForTimeout(500)
       assert.deepEqual(missing, [])
       assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0)
+      // The work table: book free time on a tech's table; a clash is refused.
+      const tableDay = at(uiDay + 6, 0).slice(0, 10)
+      await page.goto(`${WEB}/schedule?table=${id('tech_b')}&date=${tableDay}`)
+      const tableColumn = page.locator(`.wt-column[data-day="${tableDay}"]`)
+      const slotAt = async minute => tableColumn.click({ position: { x: 20, y: (minute / 1440) * (await tableColumn.boundingBox()).height + 4 } })
+      await slotAt(12 * 60)
+      let sheet = page.getByRole('dialog', { name: 'New session' })
+      await sheet.getByLabel('Company').fill('Table ' + engine)
+      saved = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST')
+      await sheet.getByRole('button', { name: 'Book' }).click()
+      const tabled = (await (await saved).json()).appointment
+      assert.deepEqual([tabled.tech.username, tabled.customer, Date.parse(tabled.startsAt)], ['tech_b', null, Date.parse(at(uiDay + 6, 12))])
+      await page.locator(`.wt-card[data-appointment="${tabled.id}"]`).filter({ hasText: 'agent_a' }).waitFor()
+      await slotAt(11 * 60 + 30)
+      sheet = page.getByRole('dialog', { name: 'New session' })
+      await sheet.getByRole('button', { name: 'Book' }).click()
+      await sheet.getByRole('alert').filter({ hasText: 'That time is taken' }).waitFor()
+      await request('/api/appointments/' + tabled.id, 'DELETE', undefined, as('agent_a'))
       // New rooms use the same date, start and length fields.
       await page.goto(`${WEB}/rooms`)
       await page.getByRole('button', { name: 'Create New Room' }).first().click()
@@ -748,7 +814,7 @@ try {
         const card = page.getByRole('region', { name: /Today's sessions/ })
         await card.getByText('Today ' + engine).waitFor()
         await page.locator('[data-sonner-toast]').filter({ hasText: /schedule update|New session/ }).first().waitFor()
-        await page.goto(`${WEB}/schedule?view=week&date=${day}`)
+        await page.goto(`${WEB}/schedule/full?view=week&date=${day}`)
         await page.locator(`[data-appointment="${waiting.id}"]`).waitFor()
         assert.equal(await page.locator(`[data-appointment="${first.id}"]`).count(), 0, "another tech's session")
         assert.equal(await page.locator('.ui-tour').count(), 0, 'techs get no tour')
@@ -769,7 +835,7 @@ try {
       // Phones: the list is the default, for techs and agents, in Chinese.
       for (const actor of ['tech_b', 'agent_a']) {
         const { context, page, errors } = await openPage(browser, as(actor), { mobile: true, lng: 'zh' })
-        await page.goto(`${WEB}/schedule?date=${day}`)
+        await page.goto(`${WEB}/schedule/full?date=${day}`)
         assert.equal(await page.getByRole('button', { name: '列表', exact: true }).getAttribute('aria-pressed'), 'true')
         await page.locator(`.schedule-agenda-item`).first().waitFor()
         // tech_b: their first session, the moved overlap and the session taken from the strip; agents: every session planned here.
@@ -802,7 +868,7 @@ try {
         await request('/api/admin/users', 'POST', { username, role: 'agent', password }, root, 201)
         const token = (await login(username)).token
         const { context, page, errors } = await openPage(browser, token, { mobile, lng })
-        await page.goto(`${WEB}/schedule?date=${day}`)
+        await page.goto(`${WEB}/schedule/full?date=${day}`)
         const card = page.locator('.ui-tour-card')
         const spotlit = async target => {
           await page.locator(`[data-tour="${target}"]`).waitFor()
@@ -859,7 +925,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, whole days that Ctrl+wheel zooms and dragging pans (within the day in the endless week, on through the days in the day view, dates at midnight), Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; day rows only for people with sessions; deleting closes the dialogs; EN/ZH')
+      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, whole days that Ctrl+wheel zooms and dragging pans (within the day in the endless week, on through the days in the day view, dates at midnight), Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; day rows only for people with sessions; deleting closes the dialogs; work table booking with clashes refused; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }

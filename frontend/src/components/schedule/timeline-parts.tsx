@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, TriangleAlert } from 'lucide-reac
 import type { Appointment } from '@/types'
 import { getLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { HOUR_MS, MINUTE_MS, clamp, formatDayKey, type DayLayout, type Segment } from '@/lib/schedule'
+import { clamp, formatDayKey, HOUR_MS, MINUTE_MS, sessionAgent, sessionTitle, type DayLayout, type Segment } from '@/lib/schedule'
 import { dateKeyOf, timeInputValue, zonedParts } from '@/lib/zoned-time'
 import { pointerInstant, type DragPreview, type GridDrop } from './use-schedule-drag'
 
@@ -350,9 +350,9 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
   const timeRange = (start: number, stop: number) => `${timeInputValue(start, timezone)}–${timeInputValue(stop, timezone)}`
   const describe = (appointment: Appointment) => [
     timeRange(Date.parse(appointment.startsAt), Date.parse(appointment.endsAt)),
-    appointment.customer.name,
+    sessionTitle(appointment, t),
     appointment.tech?.username ?? t('schedule.unassigned'),
-    appointment.customer.owner.username,
+    sessionAgent(appointment).username,
     [appointment.company, appointment.position].filter(Boolean).join(' '),
     appointment.status === 'completed' ? t('schedule.status.completed') : '',
     appointment.hasConflict ? t('schedule.conflictBadge') : '',
@@ -395,10 +395,10 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
         }}
       >
         {/* No time on the card: the hours above the grid show it. */}
-        <span className="schedule-event-meta">{appointment.customer.owner.username}</span>
+        <span className="schedule-event-meta">{sessionAgent(appointment).username}</span>
         <span className="schedule-event-title">
           {appointment.hasConflict && <TriangleAlert className="schedule-event-alert" aria-hidden="true" />}
-          <span className="truncate">{appointment.customer.name}</span>
+          <span className="truncate">{sessionTitle(appointment, t)}</span>
         </span>
         {showTech && <span className="schedule-event-meta">{appointment.tech?.username ?? t('schedule.unassigned')}</span>}
         {role && <span className="schedule-event-meta">{role}</span>}
@@ -458,7 +458,7 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
       } : undefined}
     >
       {shown.map(renderSegment)}
-      {ghost && renderGhost('ghost', Date.parse(ghost.startsAt), Date.parse(ghost.endsAt), `${timeRange(Date.parse(ghost.startsAt), Date.parse(ghost.endsAt))} ${ghost.customer.name}`, colorOf(ghost))}
+      {ghost && renderGhost('ghost', Date.parse(ghost.startsAt), Date.parse(ghost.endsAt), `${timeRange(Date.parse(ghost.startsAt), Date.parse(ghost.endsAt))} ${sessionTitle(ghost, t)}`, colorOf(ghost))}
       {preview?.kind === 'create' && preview.row === row.key && renderGhost(
         'new', preview.startsAt.getTime(), preview.startsAt.getTime() + preview.durationMinutes * MINUTE_MS,
         `${timeRange(preview.startsAt.getTime(), preview.startsAt.getTime() + preview.durationMinutes * MINUTE_MS)} ${t('schedule.newSession')}`,

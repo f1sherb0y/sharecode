@@ -54,6 +54,7 @@ import {
   indexSessions,
   layoutDay,
   layoutRange,
+  sessionAgent,
   sessionsIn,
   sessionsOnDay,
   stepAnchor,
@@ -234,18 +235,18 @@ export function SchedulePage() {
   // Sessions take the color of their customer's agent: one agent, one color.
   const agents = useMemo(() => {
     const owners = new Map<string, Pick<User, 'id' | 'color' | 'username'>>()
-    for (const appointment of appointments) owners.set(appointment.customer.owner.id, appointment.customer.owner)
+    for (const appointment of appointments) owners.set(sessionAgent(appointment).id, sessionAgent(appointment))
     return [...owners.values()].sort((a, b) => a.username.localeCompare(b.username))
   }, [appointments])
   const agentColors = useMemo(() => techColors(agents), [agents])
   const colorOf = useCallback(
-    (appointment: Appointment) => agentColors.get(appointment.customer.owner.id) ?? appointment.customer.owner.color ?? UNASSIGNED_COLOR,
+    (appointment: Appointment) => agentColors.get(sessionAgent(appointment).id) ?? sessionAgent(appointment).color ?? UNASSIGNED_COLOR,
     [agentColors],
   )
 
   const visible = useMemo(() => appointments
     .map(appointment => (pending?.id === appointment.id ? pending : appointment))
-    .filter(appointment => !hidden.has(appointment.customer.owner.id)),
+    .filter(appointment => !hidden.has(sessionAgent(appointment).id)),
   [appointments, pending, hidden])
 
   const techs = useMemo(() => users.filter(account => account.role === 'tech').sort((a, b) => a.username.localeCompare(b.username)), [users])
@@ -528,7 +529,7 @@ export function SchedulePage() {
     <div className={cn('schedule-page flex flex-col', fit ? 'is-fit' : 'min-h-screen')}>
       <Navbar
         fullWidth
-        leftContent={<NavbarBack label={t('common.back')} onClick={() => navigate('/rooms')} />}
+        leftContent={<NavbarBack label={t('common.back')} onClick={() => navigate('/schedule')} />}
         title={null}
         centerContent={<span className="font-semibold">{t('schedule.title')}</span>}
       />
@@ -782,7 +783,7 @@ export function SchedulePage() {
             {moveConflict?.conflicts.map(conflict => (
               <li key={conflict.id}>
                 {formatDayKey(dateKeyOf(Date.parse(conflict.startsAt), timezone), locale, { weekday: 'short', month: 'short', day: 'numeric' })}
-                {' '}{timeInputValue(Date.parse(conflict.startsAt), timezone)}–{timeInputValue(Date.parse(conflict.endsAt), timezone)} · {conflict.customer.name}
+                {' '}{timeInputValue(Date.parse(conflict.startsAt), timezone)}–{timeInputValue(Date.parse(conflict.endsAt), timezone)} · {conflict.customer?.name ?? conflict.createdBy.username}
               </li>
             ))}
           </ul>

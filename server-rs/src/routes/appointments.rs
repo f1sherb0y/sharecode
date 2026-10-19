@@ -13,7 +13,7 @@ use super::customers::{clean_text, double_option, MAX_NOTES_CHARS};
 use super::notifications::notify;
 use super::rooms::{insert_room, room_to_json_owner, NewRoom, SUPPORTED_LANGUAGES};
 use crate::{
-    auth::{AuthUser, StaffUser},
+    auth::AuthUser,
     db::db_error,
     error::ApiError,
     permissions::is_staff,
@@ -25,7 +25,9 @@ use crate::{
 // techs see only their own, read-only, and are notified of changes instead of
 // confirming them. A session can open a room owned by its tech, where the
 // customer joins through a share link. A session planned by mistake or called
-// off is deleted; none is cancelled or completed by hand.
+// off is deleted; none is cancelled or completed by hand. A customer is optional.
+// Techs mark time they are busy as blocks: theirs alone, without a customer or a
+// room, kept out of other sessions' way like any session.
 const MIN_DURATION_MINUTES: i32 = 5;
 const MAX_DURATION_MINUTES: i32 = 1440;
 const MAX_RANGE_DAYS: i64 = 100;
@@ -36,7 +38,7 @@ const UNNAMED_ROOM: &str = "场次";
 
 // a is the session. It reads as completed once its room has ended.
 pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as starts_at,
-    a."durationMinutes" as duration_minutes, a.company, a.position, a.notes,
+    a."durationMinutes" as duration_minutes, a.company, a.position, a.notes, a."isBlock" as is_block,
     CASE WHEN r."isEnded" THEN 'completed' ELSE 'scheduled' END as status,
     a."createdAt" as created_at, a."updatedAt" as updated_at,
     c.id as customer_id, c.name as customer_name, c.contact as customer_contact,
@@ -44,7 +46,7 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
     ow.id as owner_id, ow.username as owner_username, ow.color as owner_color,
     t.id as tech_id, t.username as tech_username, t.color as tech_color, t.role as tech_role,
     t."isDeleted" as tech_is_deleted,
-    cb.id as created_by_id, cb.username as created_by_username,
+    cb.id as created_by_id, cb.username as created_by_username, cb.color as created_by_color,
     r.id as room_id, r.name as room_name, r.language as room_language, r."isEnded" as room_is_ended,
     r."endedAt" as room_ended_at,
     (a."techId" IS NOT NULL AND EXISTS (
@@ -54,8 +56,8 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
           AND a."startsAt" < b."startsAt" + b."durationMinutes" * INTERVAL '1 minute'
     )) as has_conflict
     FROM "Appointment" a
-    JOIN "Customer" c ON c.id = a."customerId"
-    JOIN "User" ow ON ow.id = c."createdBy"
+    LEFT JOIN "Customer" c ON c.id = a."customerId"
+    LEFT JOIN "User" ow ON ow.id = c."createdBy"
     JOIN "User" cb ON cb.id = a."createdBy"
     LEFT JOIN "User" t ON t.id = a."techId"
     LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted""#;
@@ -68,17 +70,18 @@ pub(super) struct AppointmentRow {
     company: Option<String>,
     position: Option<String>,
     notes: Option<String>,
+    is_block: bool,
     status: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    customer_id: String,
-    customer_name: String,
+    customer_id: Option<String>,
+    customer_name: Option<String>,
     customer_contact: Option<String>,
     customer_notes: Option<String>,
-    customer_is_deleted: bool,
-    owner_id: String,
-    owner_username: String,
-    owner_color: String,
+    customer_is_deleted: Option<bool>,
+    owner_id: Option<String>,
+    owner_username: Option<String>,
+    owner_color: Option<String>,
     tech_id: Option<String>,
     tech_username: Option<String>,
     tech_color: Option<String>,
@@ -86,6 +89,7 @@ pub(super) struct AppointmentRow {
     tech_is_deleted: Option<bool>,
     created_by_id: String,
     created_by_username: String,
+    created_by_color: String,
     room_id: Option<String>,
     room_name: Option<String>,
     room_language: Option<String>,
@@ -97,8 +101,9 @@ pub(super) struct AppointmentRow {
 /// The stored session, locked for a change.
 #[derive(sqlx::FromRow)]
 struct StoredAppointment {
-    customer_id: String,
-    customer_name: String,
+    customer_id: Option<String>,
+    customer_name: Option<String>,
+    is_block: bool,
     tech_id: Option<String>,
     starts_at: DateTime<Utc>,
     duration_minutes: i32,
@@ -115,7 +120,9 @@ struct ConflictRow {
     id: String,
     starts_at: DateTime<Utc>,
     duration_minutes: i32,
-    customer_name: String,
+    customer_name: Option<String>,
+    created_by_username: String,
+    is_block: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -133,7 +140,8 @@ pub struct ListAppointmentsQuery {
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppointmentPayload {
-    customer_id: Option<String>,
+    #[serde(deserialize_with = "double_option")]
+    customer_id: Option<Option<String>>,
     #[serde(deserialize_with = "double_option")]
     tech_id: Option<Option<String>>,
     starts_at: Option<String>,
@@ -144,8 +152,10 @@ pub struct AppointmentPayload {
     position: Option<Option<String>>,
     #[serde(deserialize_with = "double_option")]
     notes: Option<Option<String>>,
-    /// Save even if the tech already has a session at that time.
+    /// Save even if the tech already has a session at that time (staff only).
     allow_conflicts: bool,
+    /// Busy time on a tech's table rather than a session (on create).
+    is_block: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -213,33 +223,51 @@ pub async fn get_appointment(
     Ok(Json(json!({ "appointment": appointment_json(&row, staff) })))
 }
 
+/// Staff plan sessions for anyone; a tech may only mark busy time on their own table.
 pub async fn create_appointment(
     State(state): State<AppState>,
     client: ClientInfo,
-    StaffUser(auth_user): StaffUser,
+    auth_user: AuthUser,
     Json(payload): Json<AppointmentPayload>,
 ) -> Result<Response, ApiError> {
-    let customer_id = payload
-        .customer_id
-        .filter(|id| !id.is_empty())
-        .ok_or_else(|| ApiError::bad_request("Customer is required"))?;
-    let tech_id = payload.tech_id.flatten();
+    let staff = is_staff(&auth_user.role);
+    let is_block = payload.is_block || !staff;
+    if !staff && !payload.is_block {
+        // Like every staff-only route, planning does not exist for techs.
+        return Err(ApiError::not_found("Not found"));
+    }
+    let customer_id = payload.customer_id.flatten().filter(|id| !id.is_empty());
+    let tech_id = if staff { payload.tech_id.flatten() } else { Some(auth_user.id.clone()) };
+    if is_block && (tech_id.is_none() || customer_id.is_some()) {
+        return Err(ApiError::bad_request("Busy time belongs to a tech and has no customer"));
+    }
     let starts_at = parse_start(payload.starts_at.as_deref())?;
     let duration = check_duration(payload.duration_minutes.unwrap_or(60))?;
-    let company = clean_field(payload.company.flatten(), "Company is too long")?;
-    let position = clean_field(payload.position.flatten(), "Position is too long")?;
+    let (company, position) = if is_block {
+        (None, None)
+    } else {
+        (
+            clean_field(payload.company.flatten(), "Company is too long")?,
+            clean_field(payload.position.flatten(), "Position is too long")?,
+        )
+    };
     let notes = clean_text(payload.notes.flatten(), MAX_NOTES_CHARS, "Notes are too long")?;
+    // Busy time may cover sessions already planned: both show as clashing until someone sorts it out.
+    let allow_conflicts = is_block || (staff && payload.allow_conflicts);
 
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
-    let customer_name = active_customer(&mut tx, &customer_id).await?;
+    let customer_name = match customer_id.as_deref() {
+        Some(id) => Some(active_customer(&mut tx, id).await?),
+        None => None,
+    };
     if let Some(tech) = tech_id.as_deref() {
         check_assignee(&mut tx, tech).await?;
         lock_tech_schedule(&mut tx, tech).await?;
-        if !payload.allow_conflicts {
+        if !allow_conflicts {
             let conflicts = find_conflicts(&mut tx, tech, starts_at, duration, None).await?;
             if !conflicts.is_empty() {
                 return Ok(conflict_response(&conflicts));
@@ -250,8 +278,8 @@ pub async fn create_appointment(
     let appointment_id = Uuid::new_v4().to_string();
     sqlx::query(
         r#"INSERT INTO "Appointment" (id, "customerId", "techId", "startsAt", "durationMinutes",
-            company, position, notes, "createdBy")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
+            company, position, notes, "createdBy", "isBlock")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"#,
     )
     .bind(&appointment_id)
     .bind(&customer_id)
@@ -262,19 +290,20 @@ pub async fn create_appointment(
     .bind(&position)
     .bind(&notes)
     .bind(&auth_user.id)
+    .bind(is_block)
     .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to create session"))?;
 
     let session = Notice {
         appointment_id: &appointment_id,
-        customer_name: &customer_name,
+        customer_name: customer_name.as_deref(),
         starts_at,
         duration,
         company: company.as_deref(),
         position: position.as_deref(),
     };
-    if let Some(tech) = tech_id.as_deref().filter(|tech| *tech != auth_user.id) {
+    if let Some(tech) = tech_id.as_deref().filter(|tech| *tech != auth_user.id && !is_block) {
         if session.is_ahead() {
             session.send(&mut tx, tech, &auth_user.id, NoticeKind::Assigned, None).await?;
         }
@@ -291,7 +320,7 @@ pub async fn create_appointment(
         None,
         None,
         json!({
-            "customerId": customer_id, "techId": tech_id,
+            "customerId": customer_id, "techId": tech_id, "isBlock": is_block,
             "startsAt": to_iso_string(starts_at), "durationMinutes": duration,
         }),
     )
@@ -303,7 +332,7 @@ pub async fn create_appointment(
     let row = load_appointment(&state.db, &appointment_id).await?;
     Ok((
         StatusCode::CREATED,
-        Json(json!({ "appointment": appointment_json(&row, true) })),
+        Json(json!({ "appointment": appointment_json(&row, staff) })),
     )
         .into_response())
 }
@@ -311,21 +340,22 @@ pub async fn create_appointment(
 pub async fn update_appointment(
     State(state): State<AppState>,
     client: ClientInfo,
-    StaffUser(auth_user): StaffUser,
+    auth_user: AuthUser,
     Path(appointment_id): Path<String>,
     Json(payload): Json<AppointmentPayload>,
 ) -> Result<Response, ApiError> {
+    let staff = is_staff(&auth_user.role);
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let current = sqlx::query_as::<_, StoredAppointment>(
-        r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."techId" as tech_id,
-            a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
+        r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."isBlock" as is_block,
+            a."techId" as tech_id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
             a.company, a.position, a.notes, r.id as room_id, r."ownerId" as room_owner_id,
             NOT r."isEnded" as room_is_live
-        FROM "Appointment" a JOIN "Customer" c ON c.id = a."customerId"
+        FROM "Appointment" a LEFT JOIN "Customer" c ON c.id = a."customerId"
         LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted"
         WHERE a.id = $1 FOR UPDATE OF a"#,
     )
@@ -333,23 +363,31 @@ pub async fn update_appointment(
     .fetch_optional(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to load session"))?
+    .filter(|row| staff || own_block(row, &auth_user.id))
     .ok_or_else(|| ApiError::not_found("Appointment not found"))?;
 
-    let customer_id = payload
-        .customer_id
-        .filter(|id| !id.is_empty())
-        .unwrap_or_else(|| current.customer_id.clone());
-    let tech_id = payload.tech_id.unwrap_or_else(|| current.tech_id.clone());
+    let customer_id = match payload.customer_id {
+        Some(value) => value.filter(|id| !id.is_empty()),
+        None => current.customer_id.clone(),
+    };
+    let tech_id = if staff {
+        payload.tech_id.unwrap_or_else(|| current.tech_id.clone())
+    } else {
+        current.tech_id.clone()
+    };
+    if current.is_block && (tech_id.is_none() || customer_id.is_some()) {
+        return Err(ApiError::bad_request("Busy time belongs to a tech and has no customer"));
+    }
     let starts_at = match payload.starts_at.as_deref() {
         Some(value) => parse_start(Some(value))?,
         None => current.starts_at,
     };
     let duration = check_duration(payload.duration_minutes.unwrap_or(current.duration_minutes))?;
-    let company = match payload.company {
+    let company = match payload.company.filter(|_| !current.is_block) {
         Some(value) => clean_field(value, "Company is too long")?,
         None => current.company.clone(),
     };
-    let position = match payload.position {
+    let position = match payload.position.filter(|_| !current.is_block) {
         Some(value) => clean_field(value, "Position is too long")?,
         None => current.position.clone(),
     };
@@ -358,10 +396,10 @@ pub async fn update_appointment(
         None => current.notes.clone(),
     };
 
-    let customer_name = if customer_id == current.customer_id {
-        current.customer_name.clone()
-    } else {
-        active_customer(&mut tx, &customer_id).await?
+    let customer_name = match customer_id.as_deref() {
+        Some(_) if customer_id == current.customer_id => current.customer_name.clone(),
+        Some(id) => Some(active_customer(&mut tx, id).await?),
+        None => None,
     };
     let tech_changed = tech_id != current.tech_id;
     if let Some(tech) = tech_id.as_deref().filter(|_| tech_changed) {
@@ -384,13 +422,13 @@ pub async fn update_appointment(
         // Saving an unchanged form writes, notifies and records nothing.
         drop(tx);
         let row = load_appointment(&state.db, &appointment_id).await?;
-        return Ok(Json(json!({ "appointment": appointment_json(&row, true) })).into_response());
+        return Ok(Json(json!({ "appointment": appointment_json(&row, staff) })).into_response());
     }
     // Edits that cannot create an overlap, like notes, never trip a conflict saved on purpose.
     let may_overlap = tech_changed || time_changed;
     if let Some(tech) = tech_id.as_deref().filter(|_| may_overlap) {
         lock_tech_schedule(&mut tx, tech).await?;
-        if !payload.allow_conflicts {
+        if !(current.is_block || (staff && payload.allow_conflicts)) {
             let conflicts =
                 find_conflicts(&mut tx, tech, starts_at, duration, Some(&appointment_id)).await?;
             if !conflicts.is_empty() {
@@ -461,7 +499,7 @@ pub async fn update_appointment(
 
     let before = Notice {
         appointment_id: &appointment_id,
-        customer_name: &current.customer_name,
+        customer_name: current.customer_name.as_deref(),
         starts_at: current.starts_at,
         duration: current.duration_minutes,
         company: current.company.as_deref(),
@@ -469,13 +507,14 @@ pub async fn update_appointment(
     };
     let after = Notice {
         appointment_id: &appointment_id,
-        customer_name: &customer_name,
+        customer_name: customer_name.as_deref(),
         starts_at,
         duration,
         company: company.as_deref(),
         position: position.as_deref(),
     };
-    let mine = |tech: &str| tech == auth_user.id;
+    // Busy time is the tech's own business: nobody is told about it.
+    let mine = |tech: &str| tech == auth_user.id || current.is_block;
     if tech_changed {
         if let Some(old) = current.tech_id.as_deref().filter(|t| !mine(t)) {
             if before.is_ahead() {
@@ -521,7 +560,12 @@ pub async fn update_appointment(
         .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
 
     let row = load_appointment(&state.db, &appointment_id).await?;
-    Ok(Json(json!({ "appointment": appointment_json(&row, true) })).into_response())
+    Ok(Json(json!({ "appointment": appointment_json(&row, staff) })).into_response())
+}
+
+/// Busy time on the caller's own table.
+fn own_block(row: &StoredAppointment, user_id: &str) -> bool {
+    row.is_block && row.tech_id.as_deref() == Some(user_id)
 }
 
 /// Deletes a session planned by mistake or called off; its room, if any, stays
@@ -529,23 +573,29 @@ pub async fn update_appointment(
 pub async fn delete_appointment(
     State(state): State<AppState>,
     client: ClientInfo,
-    StaffUser(auth_user): StaffUser,
+    auth_user: AuthUser,
     Path(appointment_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let staff = is_staff(&auth_user.role);
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
+    // Techs delete only their own busy time.
     let current = sqlx::query_as::<_, StoredAppointment>(
-        r#"DELETE FROM "Appointment" a USING "Customer" c
-        WHERE a.id = $1 AND c.id = a."customerId"
-        RETURNING a."customerId" as customer_id, c.name as customer_name, a."techId" as tech_id,
+        r#"DELETE FROM "Appointment" a
+        WHERE a.id = $1 AND ($2 OR (a."isBlock" AND a."techId" = $3))
+        RETURNING a."customerId" as customer_id,
+            (SELECT c.name FROM "Customer" c WHERE c.id = a."customerId") as customer_name,
+            a."isBlock" as is_block, a."techId" as tech_id,
             a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
             a.company, a.position, a.notes, a."roomId" as room_id,
             NULL::text as room_owner_id, NULL::boolean as room_is_live"#,
     )
     .bind(&appointment_id)
+    .bind(staff)
+    .bind(&auth_user.id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to delete session"))?
@@ -553,13 +603,13 @@ pub async fn delete_appointment(
 
     let session = Notice {
         appointment_id: &appointment_id,
-        customer_name: &current.customer_name,
+        customer_name: current.customer_name.as_deref(),
         starts_at: current.starts_at,
         duration: current.duration_minutes,
         company: current.company.as_deref(),
         position: current.position.as_deref(),
     };
-    if let Some(tech) = current.tech_id.as_deref().filter(|t| *t != auth_user.id) {
+    if let Some(tech) = current.tech_id.as_deref().filter(|t| *t != auth_user.id && !current.is_block) {
         if session.is_ahead() {
             session.send(&mut tx, tech, &auth_user.id, NoticeKind::Cancelled, None).await?;
         }
@@ -608,11 +658,11 @@ pub async fn open_appointment_room(
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
     let current = sqlx::query_as::<_, StoredAppointment>(
-        r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."techId" as tech_id,
-            a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
+        r#"SELECT a."customerId" as customer_id, c.name as customer_name, a."isBlock" as is_block,
+            a."techId" as tech_id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
             a.company, a.position, a.notes, r.id as room_id, r."ownerId" as room_owner_id,
             NOT r."isEnded" as room_is_live
-        FROM "Appointment" a JOIN "Customer" c ON c.id = a."customerId"
+        FROM "Appointment" a LEFT JOIN "Customer" c ON c.id = a."customerId"
         LEFT JOIN "Room" r ON r.id = a."roomId" AND NOT r."isDeleted"
         WHERE a.id = $1 FOR UPDATE OF a"#,
     )
@@ -620,7 +670,7 @@ pub async fn open_appointment_room(
     .fetch_optional(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to load session"))?
-    .filter(|row| staff || row.tech_id.as_deref() == Some(auth_user.id.as_str()))
+    .filter(|row| !row.is_block && (staff || row.tech_id.as_deref() == Some(auth_user.id.as_str())))
     .ok_or_else(|| ApiError::not_found("Appointment not found"))?;
 
     if let Some(room_id) = current.room_id.as_deref() {
@@ -705,20 +755,81 @@ pub async fn open_appointment_room(
         .into_response())
 }
 
-pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
-    let mut customer = json!({
-        "id": row.customer_id,
-        "name": row.customer_name,
-        "isDeleted": row.customer_is_deleted,
-        // The agent the customer belongs to; the calendar colors sessions by them.
-        "owner": { "id": row.owner_id, "username": row.owner_username, "color": row.owner_color },
-    });
-    // The profile stays with agents: techs meet customers through the session's
-    // room, and the session's own notes are the ones written for its tech.
-    if staff {
-        customer["contact"] = json!(row.customer_contact);
-        customer["notes"] = json!(row.customer_notes);
+/// Sessions and busy time on one tech's table, for its link: who booked (the
+/// 管理), when, company, position and notes. Never the customer.
+pub(super) async fn table_link_sessions(
+    db: &sqlx::PgPool,
+    tech_id: &str,
+    from: Option<&str>,
+    to: Option<&str>,
+) -> Result<Vec<Value>, ApiError> {
+    let from = parse_time(from, "A valid range start is required")?;
+    let to = parse_time(to, "A valid range end is required")?;
+    if to <= from || to - from > Duration::days(MAX_RANGE_DAYS) {
+        return Err(ApiError::bad_request("The range must be between 1 minute and 100 days"));
     }
+    let rows = sqlx::query_as::<_, AppointmentRow>(&format!(
+        r#"{APPOINTMENT_SELECT}
+        WHERE a."techId" = $3 AND a."startsAt" < $2 AND a."startsAt" > $1 - INTERVAL '1 day'
+          AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > $1
+        ORDER BY a."startsAt", a.id LIMIT 2000"#
+    ))
+    .bind(from)
+    .bind(to)
+    .bind(tech_id)
+    .fetch_all(db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load sessions"))?;
+    Ok(rows
+        .iter()
+        .map(|row| {
+            // The 管理 a session belongs to: its customer's agent, else whoever planned it.
+            let agent = match (&row.owner_id, &row.owner_username, &row.owner_color) {
+                (Some(id), Some(username), Some(color)) => json!({ "id": id, "username": username, "color": color }),
+                _ => json!({ "id": row.created_by_id, "username": row.created_by_username, "color": row.created_by_color }),
+            };
+            json!({
+                "id": row.id,
+                "startsAt": to_iso_string(row.starts_at),
+                "endsAt": to_iso_string(ends_at(row.starts_at, row.duration_minutes)),
+                "durationMinutes": row.duration_minutes,
+                "company": row.company,
+                "position": row.position,
+                "notes": row.notes,
+                "isBlock": row.is_block,
+                "status": row.status,
+                "customer": null,
+                "tech": row.tech_id.as_ref().map(|id| json!({
+                    "id": id, "username": row.tech_username, "color": row.tech_color,
+                    "role": row.tech_role, "isDeleted": row.tech_is_deleted.unwrap_or(false),
+                })),
+                "room": null,
+                "hasConflict": row.has_conflict,
+                "createdBy": agent,
+                "createdAt": to_iso_string(row.created_at),
+                "updatedAt": to_iso_string(row.updated_at),
+            })
+        })
+        .collect())
+}
+
+pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
+    let customer = row.customer_id.as_ref().map(|id| {
+        let mut customer = json!({
+            "id": id,
+            "name": row.customer_name,
+            "isDeleted": row.customer_is_deleted.unwrap_or(false),
+            // The agent the customer belongs to.
+            "owner": { "id": row.owner_id, "username": row.owner_username, "color": row.owner_color },
+        });
+        // The profile stays with agents: techs meet customers through the session's
+        // room, and the session's own notes are the ones written for its tech.
+        if staff {
+            customer["contact"] = json!(row.customer_contact);
+            customer["notes"] = json!(row.customer_notes);
+        }
+        customer
+    });
     json!({
         "id": row.id,
         "startsAt": to_iso_string(row.starts_at),
@@ -727,6 +838,7 @@ pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
         "company": row.company,
         "position": row.position,
         "notes": row.notes,
+        "isBlock": row.is_block,
         "status": row.status,
         "customer": customer,
         "tech": row.tech_id.as_ref().map(|id| json!({
@@ -744,7 +856,7 @@ pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
             "endedAt": to_iso_string_opt(row.room_ended_at),
         })),
         "hasConflict": row.has_conflict,
-        "createdBy": { "id": row.created_by_id, "username": row.created_by_username },
+        "createdBy": { "id": row.created_by_id, "username": row.created_by_username, "color": row.created_by_color },
         "createdAt": to_iso_string(row.created_at),
         "updatedAt": to_iso_string(row.updated_at),
     })
@@ -809,8 +921,9 @@ async fn find_conflicts(
 ) -> Result<Vec<ConflictRow>, ApiError> {
     sqlx::query_as::<_, ConflictRow>(
         r#"SELECT a.id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
-            c.name as customer_name
-        FROM "Appointment" a JOIN "Customer" c ON c.id = a."customerId"
+            c.name as customer_name, cb.username as created_by_username, a."isBlock" as is_block
+        FROM "Appointment" a LEFT JOIN "Customer" c ON c.id = a."customerId"
+        JOIN "User" cb ON cb.id = a."createdBy"
         WHERE a."techId" = $1 AND ($4::text IS NULL OR a.id <> $4)
           AND a."startsAt" < $3 AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > $2
         ORDER BY a."startsAt", a.id LIMIT 20"#,
@@ -833,7 +946,9 @@ fn conflict_response(conflicts: &[ConflictRow]) -> Response {
                 "startsAt": to_iso_string(conflict.starts_at),
                 "endsAt": to_iso_string(ends_at(conflict.starts_at, conflict.duration_minutes)),
                 "durationMinutes": conflict.duration_minutes,
-                "customer": { "name": conflict.customer_name },
+                "customer": conflict.customer_name.as_ref().map(|name| json!({ "name": name })),
+                "createdBy": { "username": conflict.created_by_username },
+                "isBlock": conflict.is_block,
             })
         })
         .collect::<Vec<_>>();
@@ -917,7 +1032,7 @@ impl NoticeKind {
 /// A session as its tech is told about it.
 struct Notice<'a> {
     appointment_id: &'a str,
-    customer_name: &'a str,
+    customer_name: Option<&'a str>,
     starts_at: DateTime<Utc>,
     duration: i32,
     company: Option<&'a str>,
@@ -949,9 +1064,13 @@ impl Notice<'_> {
         if let (Some(target), Some(Value::Object(extra))) = (data.as_object_mut(), extra) {
             target.extend(extra);
         }
+        let title = match (self.customer_name, self.company, self.position) {
+            (Some(name), _, _) => name.to_string(),
+            (None, company, position) => room_name(company, position),
+        };
         let content = format!(
             "{} · {} · {} min",
-            self.customer_name,
+            title,
             self.starts_at.format("%Y-%m-%d %H:%M UTC"),
             self.duration
         );
@@ -1040,7 +1159,7 @@ mod tests {
     fn only_unfinished_sessions_are_announced() {
         let notice = |starts_at, duration| Notice {
             appointment_id: "a",
-            customer_name: "c",
+            customer_name: Some("c"),
             starts_at,
             duration,
             company: None,

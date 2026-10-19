@@ -27,6 +27,8 @@ const JoinPage = lazy(() => import('@/pages/join').then(module => ({ default: mo
 const NotificationsPage = lazy(() => import('@/pages/notifications').then(module => ({ default: module.NotificationsPage })))
 const AuditPage = lazy(() => import('@/pages/audit').then(module => ({ default: module.AuditPage })))
 const SchedulePage = lazy(() => import('@/pages/schedule').then(module => ({ default: module.SchedulePage })))
+const WorkTablePage = lazy(() => import('@/pages/work-table').then(module => ({ default: module.WorkTablePage })))
+const TableLinkPage = lazy(() => import('@/pages/work-table').then(module => ({ default: module.TableLinkPage })))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
@@ -154,6 +156,15 @@ function AppRoutes() {
       />
       <Route
         path="/schedule"
+        element={
+          <PrivateRoute>
+            <WorkTablePage />
+          </PrivateRoute>
+        }
+      />
+      <Route path="/t/:token" element={<TableLinkPage />} />
+      <Route
+        path="/schedule/full"
         element={
           <PrivateRoute>
             <SchedulePage />

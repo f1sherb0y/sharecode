@@ -15,6 +15,7 @@ import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { api } from '@/api'
 import { translateError } from '@/i18n/errors'
 import type { Appointment } from '@/types'
+import { sessionTitle } from '@/lib/schedule'
 
 interface SessionRoomActionsProps {
   appointment: Appointment
@@ -112,9 +113,9 @@ export function SessionRoomActions({ appointment, compact = false, onChanged }: 
       <Dialog open={!!linkRoomId} onOpenChange={(next) => !next && setLinkRoomId(null)}>
         <DialogContent className="max-w-md" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{t('schedule.room.customerLinkTitle', { customer: appointment.customer.name })}</DialogTitle>
+            <DialogTitle>{t('schedule.room.customerLinkTitle', { customer: sessionTitle(appointment, t) })}</DialogTitle>
           </DialogHeader>
-          {linkRoomId && <ShareLinkManager roomId={linkRoomId} guestName={appointment.customer.name} showDescription={false} />}
+          {linkRoomId && <ShareLinkManager roomId={linkRoomId} guestName={appointment.customer?.name ?? ''} showDescription={false} />}
         </DialogContent>
       </Dialog>
     </>

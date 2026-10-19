@@ -8,7 +8,7 @@ import { useNow } from '@/hooks/use-now'
 import { getLocale } from '@/i18n'
 import { queryKeys } from '@/lib/query-keys'
 import { isStaff } from '@/lib/room-permissions'
-import { UNASSIGNED_COLOR, groupSpan, overlapGroups } from '@/lib/schedule'
+import { groupSpan, overlapGroups, sessionTitle, UNASSIGNED_COLOR } from '@/lib/schedule'
 import { dateKeyOf, daysBetween, timeInputValue, todayKey } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 import { useAuthStore, useSettingsStore } from '@/stores'
@@ -48,7 +48,7 @@ export function TodaySessions() {
     refetchInterval: 60_000,
   })
 
-  const sessions = (data ?? []).filter(a => Date.parse(a.endsAt) > now - BEFORE && Date.parse(a.startsAt) < now + AHEAD)
+  const sessions = (data ?? []).filter(a => !a.isBlock && Date.parse(a.endsAt) > now - BEFORE && Date.parse(a.startsAt) < now + AHEAD)
   if (sessions.length === 0) return null
   const range = (start: number, end: number) => `${timeInputValue(start, timezone)}–${timeInputValue(end, timezone)}`
   // Yesterday's or tomorrow's sessions say so; today's need not.
@@ -103,7 +103,7 @@ export function TodaySessions() {
                           <span className={cn('today-session-own-time tabular-nums', !ownTime && 'sr-only')}>
                             {dayOf(start) && <span className="sr-only">{dayOf(start)} </span>}{range(start, end)}{' '}
                           </span>
-                          <span className="font-medium">{appointment.customer.name}</span>
+                          <span className="font-medium">{sessionTitle(appointment, t)}</span>
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
                           {[staff ? appointment.tech?.username ?? t('schedule.unassigned') : null, appointment.company, appointment.position].filter(Boolean).join(' · ')}

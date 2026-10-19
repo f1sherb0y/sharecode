@@ -14,7 +14,7 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 - 🔒 Room-based access control (including strict session locking for ended rooms)
 - 🔑 Role-based access: admin (超级管理员, Super admin), agent (管理, Manager) and tech (技术) accounts; customers join through share links
 - 🔗 Guest share links with configurable view/edit permissions
-- 📅 Scheduling (排班): a calendar where agents plan every tech's sessions and a 场次 page of customers and their sessions; techs are notified and open the session's room from it
+- 📅 Scheduling (排班): a work table per tech where 管理 book free time and clashes are refused, techs mark busy time and pin a note; behind it, a full calendar and a 场次 page of customers and their sessions; techs are notified and open the session's room from it
 
 ## Tech Stack
 
@@ -366,7 +366,31 @@ Notes:
 
 ### Scheduling (排班)
 
-The **Schedule** page (the button on the room list) is as wide as the room list
+The **Schedule** button on the room list opens the **work tables** (工作表): one
+table per tech with a week of their sessions, hours running down the page.
+Phones show one day at a time under a week strip; wider screens show the week.
+
+- 管理 and 超级管理员 pick a tech's table from the chip at the top, click free
+  time (or **+**) and book it: date, start, end, company, position, and if they
+  like a customer and notes. A time already taken on that table is refused, with
+  who booked it. Cards show the 管理 who booked, the time, company and position.
+- A tech sees only their own table. They mark busy time (占用) on it, which keeps
+  bookings out, and pin a note above it (置顶说明) from the "···" menu. Busy time
+  may cover a session already booked; both then turn red until someone moves one.
+- Staff share a table with the share button at the top right, which copies its
+  link (`/t/<link>`). Whoever opens it sees that table without signing in, with
+  each session's 管理, time, company, position and notes but no customer and no
+  rooms, and may only pin the note and mark busy time; 管理 already signed in
+  get the table itself to edit. 重置链接 in the "···" menu stops the old link
+  and copies the new one.
+- For a tech without an account, staff make a new table (新建工作表) from the
+  chip; its link is copied at once. Once the tech registers, 合并到账号 moves its
+  sessions, busy time, note and link into their account.
+- A session's details hold its room buttons; staff edit or delete it there.
+- The "···" menu also leads back to the rooms and, for staff, to the **full
+  calendar** (完整排班) described below.
+
+The full calendar (`/schedule/full`) is as wide as the room list
 and has two tabs for agents and admins: **Calendar** and **场次 (Sessions)**.
 Techs see only the calendar. Above the room list, **Today's sessions** shows the
 sessions from two hours ago to ten hours ahead with their room buttons;

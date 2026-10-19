@@ -435,7 +435,13 @@ pub async fn delete_user(
     .execute(&mut *tx)
     .await
     .map_err(|err| db_error(err, "Failed to delete user"))?;
-    // Their sessions still to come go back to the unassigned list.
+    // Their busy time goes with them; their sessions still to come go back to
+    // the unassigned list.
+    sqlx::query(r#"DELETE FROM "Appointment" WHERE "techId" = $1 AND "isBlock""#)
+        .bind(&user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| db_error(err, "Failed to remove busy time"))?;
     let unassigned_sessions = sqlx::query(
         r#"UPDATE "Appointment" SET "techId" = NULL, "updatedAt" = NOW()
         WHERE "techId" = $1 AND "startsAt" + "durationMinutes" * INTERVAL '1 minute' > NOW()"#,

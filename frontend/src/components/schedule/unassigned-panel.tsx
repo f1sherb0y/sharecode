@@ -1,7 +1,7 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getLocale } from '@/i18n'
-import { formatDayKey } from '@/lib/schedule'
+import { formatDayKey, sessionTitle } from '@/lib/schedule'
 import { dateKeyOf, timeInputValue } from '@/lib/zoned-time'
 import type { Appointment } from '@/types'
 import type { DragPreview } from './use-schedule-drag'
@@ -43,7 +43,7 @@ export function UnassignedPanel({ appointments, timezone, colorOf, onOpen, drag 
                 {formatDayKey(dateKeyOf(Date.parse(appointment.startsAt), timezone), locale, { weekday: 'short', month: 'numeric', day: 'numeric' })}
                 {' '}{timeInputValue(Date.parse(appointment.startsAt), timezone)}–{timeInputValue(Date.parse(appointment.endsAt), timezone)}
               </span>
-              <span className="truncate font-medium">{appointment.customer.name}</span>
+              <span className="truncate font-medium">{sessionTitle(appointment, t)}</span>
               {(appointment.company || appointment.position) && (
                 <span className="truncate text-xs text-muted-foreground">{[appointment.company, appointment.position].filter(Boolean).join(' · ')}</span>
               )}

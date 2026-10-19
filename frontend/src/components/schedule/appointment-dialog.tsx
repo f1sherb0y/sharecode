@@ -24,7 +24,7 @@ import {
 import { api } from '@/api'
 import { getLocale } from '@/i18n'
 import { translateError } from '@/i18n/errors'
-import { DEFAULT_DURATION, SCHEDULE_ZONES, formatDayKey } from '@/lib/schedule'
+import { DEFAULT_DURATION, formatDayKey, SCHEDULE_ZONES, sessionTitle } from '@/lib/schedule'
 import { atMinute, dateKeyOf, parseTimeInput, timeInputValue, toZonedIso } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 import type { Appointment, AppointmentInput, AppointmentStatus, ScheduleConflict, User } from '@/types'
@@ -104,10 +104,9 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
   const saveMutation = useMutation({
     mutationFn: async (allowConflicts: boolean) => {
       const minute = parseTimeInput(time)
-      if (!customer) throw new Error(t('schedule.dialog.customerRequired'))
       if (!date || minute === null) throw new Error(t('schedule.dialog.timeRequired'))
       const input: AppointmentInput = {
-        customerId: customer.id,
+        customerId: customer?.id ?? null,
         techId: techId === NONE ? null : techId,
         startsAt: toZonedIso(atMinute(date, minute, zone), zone),
         durationMinutes: duration,
@@ -185,14 +184,14 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
           {appointment && (
             <>
               <DialogHeader>
-                <DialogTitle>{appointment.customer.name}</DialogTitle>
+                <DialogTitle>{sessionTitle(appointment, t)}</DialogTitle>
                 <DialogDescription>
                   {dayLabel(appointment.startsAt)} · {range(appointment.startsAt, appointment.endsAt)}
                 </DialogDescription>
               </DialogHeader>
-              {(appointment.customer.contact || appointment.company || appointment.position || appointment.notes) && (
+              {(appointment.customer?.contact || appointment.company || appointment.position || appointment.notes) && (
                 <dl className="schedule-details">
-                  {appointment.customer.contact && <><dt>{t('schedule.dialog.contact')}</dt><dd>{appointment.customer.contact}</dd></>}
+                  {appointment.customer?.contact && <><dt>{t('schedule.dialog.contact')}</dt><dd>{appointment.customer.contact}</dd></>}
                   {(appointment.company || appointment.position) && (
                     <><dt>{t('schedule.dialog.role')}</dt><dd>{[appointment.company, appointment.position].filter(Boolean).join(' · ')}</dd></>
                   )}
@@ -279,7 +278,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
               <Textarea id="session-notes" value={notes} rows={3} maxLength={2000} onChange={e => setNotes(e.target.value)} />
             </div>
 
-            {appointment?.customer.notes && (
+            {appointment?.customer?.notes && (
               <p className="rounded-md bg-muted/60 px-2 py-1 text-xs text-muted-foreground">
                 <span className="font-medium">{t('schedule.dialog.customerNotes')}:</span> {appointment.customer.notes}
               </p>
@@ -294,7 +293,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
                 <p className="text-xs">{t('schedule.dialog.conflictDescription', { tech: conflictTech })}</p>
                 <ul className="text-xs">
                   {conflicts.map(conflict => (
-                    <li key={conflict.id}>{dayLabel(conflict.startsAt)} {range(conflict.startsAt, conflict.endsAt)} · {conflict.customer.name}</li>
+                    <li key={conflict.id}>{dayLabel(conflict.startsAt)} {range(conflict.startsAt, conflict.endsAt)} · {conflict.customer?.name ?? conflict.createdBy.username}</li>
                   ))}
                 </ul>
                 <div className="flex justify-end">
@@ -335,7 +334,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{t('schedule.dialog.deleteTitle', { customer: appointment?.customer.name ?? '' })}</DialogTitle>
+            <DialogTitle>{t('schedule.dialog.deleteTitle', { customer: appointment ? sessionTitle(appointment, t) : '' })}</DialogTitle>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(false)}>{t('common.cancel')}</Button>

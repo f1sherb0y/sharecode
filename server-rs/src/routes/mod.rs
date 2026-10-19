@@ -18,6 +18,7 @@ mod rooms;
 mod share;
 mod sessions;
 mod tours;
+mod work_tables;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -44,6 +45,16 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/tours", get(tours::list_seen_tours))
         .route("/api/tours/{id}", put(tours::mark_tour_seen))
+        .route("/api/work-tables", get(work_tables::list_work_tables))
+        .route("/api/work-tables/note", put(work_tables::update_work_table_note))
+        .route("/api/work-tables", post(work_tables::create_work_table))
+        .route("/api/work-tables/{id}/link", post(work_tables::reset_work_table_link))
+        .route("/api/work-tables/{id}/merge", post(work_tables::merge_work_table))
+        .route("/api/table-links/{token}", get(work_tables::open_table_link))
+        .route("/api/table-links/{token}/note", put(work_tables::update_table_link_note))
+        .route("/api/table-links/{token}/busy", post(work_tables::create_table_link_busy))
+        .route("/api/table-links/{token}/busy/{id}", put(work_tables::update_table_link_busy))
+        .route("/api/table-links/{token}/busy/{id}", delete(work_tables::delete_table_link_busy))
         .route(
             "/api/config/registration",
             get(auth::get_registration_status),

@@ -247,18 +247,21 @@ export interface Appointment {
   notes: string | null
   /** Completed once its room has ended. */
   status: AppointmentStatus
-  /** Techs get the name only; contact and notes are for agents and admins. */
-  customer: { id: string; name: string; contact?: string | null; notes?: string | null; isDeleted: boolean; owner: { id: string; username: string; color: string } }
+  /** Busy time a tech marked on their own table: no customer, no room. */
+  isBlock: boolean
+  /** Optional. Techs get the name only; contact and notes are for agents and admins. */
+  customer: { id: string; name: string; contact?: string | null; notes?: string | null; isDeleted: boolean; owner: { id: string; username: string; color: string } } | null
   tech: { id: string; username: string; color: string; role: Role; isDeleted: boolean } | null
   room: { id: string; name: string; language: Language; isEnded: boolean; endedAt: string | null } | null
   hasConflict: boolean
-  createdBy: { id: string; username: string }
+  createdBy: { id: string; username: string; color: string }
   createdAt: string
   updatedAt: string
 }
 
 export interface AppointmentInput {
-  customerId?: string
+  customerId?: string | null
+  isBlock?: boolean
   techId?: string | null
   startsAt?: string
   durationMinutes?: number
@@ -274,5 +277,23 @@ export interface ScheduleConflict {
   startsAt: string
   endsAt: string
   durationMinutes: number
-  customer: { name: string }
+  customer: { name: string } | null
+  createdBy: { username: string }
+  isBlock: boolean
+}
+
+/** A tech's work table (工作表): their sessions and busy time. */
+export interface WorkTable {
+  id: string
+  username: string
+  color: string
+  role: Role
+  /** Pinned above the table by its tech. */
+  note: string | null
+  /** Sessions still to come. */
+  upcoming: number
+  /** A placeholder for a tech without an account, reached through its link only. */
+  linkOnly: boolean
+  /** The token of the link that opens the table without signing in (staff only). */
+  link: string | null
 }

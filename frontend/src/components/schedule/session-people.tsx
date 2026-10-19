@@ -2,6 +2,7 @@ import { BriefcaseBusiness, Laptop } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { Appointment } from '@/types'
+import { sessionAgent } from '@/lib/schedule'
 
 /** The tech and the customer's agent on one line, each marked by an icon instead of a label. */
 export function SessionPeople({ appointment, showTech, className }: { appointment: Appointment; showTech: boolean; className?: string }) {
@@ -16,7 +17,7 @@ export function SessionPeople({ appointment, showTech, className }: { appointmen
       )}
       <span title={t('schedule.agent')}>
         <BriefcaseBusiness aria-hidden="true" />
-        <span className="truncate">{appointment.customer.owner.username}</span>
+        <span className="truncate">{sessionAgent(appointment).username}</span>
       </span>
     </span>
   )
