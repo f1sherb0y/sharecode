@@ -197,7 +197,21 @@
       linear-gradient(to bottom, color-mix(in srgb, var(--color-border) 45%, transparent) 1px, transparent 1px);
     background-size: 100% var(--wt-hour), 100% calc(var(--wt-hour) / 2);
   }
-  .wt-column.is-open { cursor: copy; }
+  .wt-column.is-open { cursor: copy; user-select: none; }
+  .wt-draft {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    z-index: 2;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.375rem;
+    border: 1.5px dashed var(--wt-accent);
+    background: color-mix(in srgb, var(--wt-accent) 14%, transparent);
+    color: var(--wt-accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+    pointer-events: none;
+  }
   .wt-column.is-today { background-color: color-mix(in srgb, var(--wt-accent) 3%, transparent); }
   .wt-now-line { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid #e5484d; pointer-events: none; }
   .wt-now-line::before { content: ''; position: absolute; left: -0.3125rem; top: -0.3125rem; width: 0.5625rem; height: 0.5625rem; border-radius: 999px; background: #e5484d; }

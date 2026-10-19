@@ -121,6 +121,11 @@ export function layoutSpans(appointments: Appointment[], from: number, to: numbe
 
 export const MINUTE_MS = 60000
 export const HOUR_MS = 60 * MINUTE_MS
+
+/** Hours after its end a session is settled: only 超级管理员 change it then (as on the server). */
+const SETTLED_HOURS = 12
+export const canChangeSession = (appointment: Pick<Appointment, 'endsAt'>, user: Pick<User, 'role'> | null | undefined) =>
+  user?.role === 'admin' || Date.parse(appointment.endsAt) >= Date.now() - SETTLED_HOURS * HOUR_MS
 export const DAY_MS = 24 * HOUR_MS
 
 /** Sessions by start time, so the ones in a stretch are found without scanning them all. */

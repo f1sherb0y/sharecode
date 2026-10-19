@@ -228,7 +228,7 @@ assert.deepEqual([assigned.data.customerName, assigned.data.durationMinutes, ass
 assert.equal(firstNotices.filter(n => n.kind === 'schedule.assigned').length, 3, 'two sessions plus the overlap saved on purpose')
 assert.deepEqual(await notices('agent_a'), [], 'personal notices reach only their recipient')
 assert.deepEqual(await notices('tech_b').then(n => n.map(x => x.data.appointmentId)).then(ids => ids.includes(first.id)), false)
-await plan('agent_a', { customerId: zhang.id, techId: id('tech_b'), startsAt: at(-2, 9), durationMinutes: 60 })
+await plan('root', { customerId: zhang.id, techId: id('tech_b'), startsAt: at(-2, 9), durationMinutes: 60 })
 assert.equal((await notices('tech_b')).filter(n => n.kind === 'schedule.assigned').length, 2, 'no notice for a past session')
 await request('/api/notifications/read-all', 'POST', {}, as('tech_a'))
 assert.deepEqual(await notices('tech_a'), [])
@@ -332,7 +332,7 @@ await request(`/api/appointments/${doubled.id}/room`, 'POST', {}, as('agent_a'),
 // The inactivity sweep (run when a server starts) closes idle rooms but never a
 // session's room, even days after the session.
 const idle = (await request('/api/rooms', 'POST', { name: 'Idle', language: 'python' }, as('tech_a'), 201)).room
-const pastSession = (await plan('agent_a', { customerId: li.id, techId: id('tech_a'), startsAt: at(-3, 9), durationMinutes: 60 })).appointment
+const pastSession = (await plan('root', { customerId: li.id, techId: id('tech_a'), startsAt: at(-3, 9), durationMinutes: 60 })).appointment
 const pastRoom = (await request(`/api/appointments/${pastSession.id}/room`, 'POST', {}, as('tech_a'), 201)).room
 sql(`UPDATE "Room" SET "updatedAt" = NOW() - INTERVAL '7 hours' WHERE id IN (${literal(idle.id)}, ${literal(pastRoom.id)})`)
 const ended = roomId => sql(`SELECT "isEnded" FROM "Room" WHERE id = ${literal(roomId)}`) === 't'
@@ -355,7 +355,13 @@ await request('/api/customers/' + zhang.id, 'DELETE', undefined, as('agent_b'), 
 const history = await request('/api/customers/' + zhang.id, 'GET', undefined, as('agent_b'))
 assert(history.appointments.some(a => a.id === first.id))
 assert.equal(history.customer.upcomingCount, 1)
-await request('/api/appointments/' + first.id, 'PUT', { startsAt: at(-1, 9), allowConflicts: true }, as('agent_b'))
+// Sessions settle 12 hours after they end: from then on only 超级管理员 plan, change or delete them.
+await request('/api/appointments/' + first.id, 'PUT', { startsAt: at(-1, 9), allowConflicts: true }, as('agent_b'), 403)
+await plan('agent_b', { customerId: zhang.id, startsAt: at(-2, 9) }, 403)
+await request('/api/appointments/' + first.id, 'PUT', { startsAt: at(-1, 9), allowConflicts: true }, root)
+await request('/api/appointments/' + first.id, 'PUT', { notes: 'Late' }, as('agent_b'), 403)
+await request('/api/appointments/' + first.id, 'DELETE', undefined, as('agent_b'), 403)
+await request('/api/appointments/' + first.id, 'PUT', { notes: 'Settled' }, root)
 for (const a of await list('agent_b', range(-30, 60) + '&customerId=' + zhang.id)) {
   if (Date.parse(a.endsAt) > Date.now()) await request('/api/appointments/' + a.id, 'DELETE', undefined, as('agent_b'))
 }
@@ -366,7 +372,7 @@ assert.equal((await request('/api/appointments/' + first.id, 'GET', undefined, a
 await plan('agent_a', { customerId: zhang.id, startsAt: at(6, 9) }, 400)
 // A deleted tech's sessions to come return to the unassigned list.
 const gone = (await plan('agent_a', { customerId: wang.id, techId: id('tech_gone'), startsAt: at(7, 9) })).appointment
-const gonePast = (await plan('agent_a', { customerId: wang.id, techId: id('tech_gone'), startsAt: at(-3, 9) })).appointment
+const gonePast = (await plan('root', { customerId: wang.id, techId: id('tech_gone'), startsAt: at(-3, 9) })).appointment
 await request('/api/admin/users/' + id('tech_gone'), 'DELETE', undefined, root)
 assert.equal((await request('/api/appointments/' + gone.id, 'GET', undefined, as('agent_a'))).appointment.tech, null)
 assert.equal((await request('/api/appointments/' + gonePast.id, 'GET', undefined, as('agent_a'))).appointment.tech.isDeleted, true)

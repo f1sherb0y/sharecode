@@ -724,6 +724,7 @@
     "usernameSame": "这已经是你的用户名",
     "usernameRecent": "用户名每周只能改一次",
     "alreadyListed": "已经在名单里了",
+    "sessionSettled": "结束超过 12 小时的排班只有超级管理员能改",
     "nameRequired": "名字需 1 到 32 个字符"
   },
   "canvas": {

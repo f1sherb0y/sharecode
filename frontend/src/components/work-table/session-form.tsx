@@ -14,7 +14,7 @@ import { useManagerOptions } from '@/components/schedule/manager-options'
 
 /** A new session (or busy time) where free time was clicked, or one to edit. */
 export type FormTarget =
-  | { kind: 'new'; day: string; minute: number; techId: string; block: boolean }
+  | { kind: 'new'; day: string; minute: number; end?: number; techId: string; block: boolean }
   | { kind: 'edit'; appointment: Appointment }
 
 interface SessionFormProps {
@@ -82,7 +82,7 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
     } else {
       setDate(target.day)
       setStart(hhmm(target.minute))
-      setEnd(hhmm(target.minute + 60))
+      setEnd(hhmm(target.end ?? target.minute + 60))
       setTechId(target.techId)
       setCompany('')
       setPosition('')

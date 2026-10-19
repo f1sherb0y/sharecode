@@ -13,6 +13,7 @@ const errorKeys: Record<string, string> = {
   "That is already your username": "errors.usernameSame",
   "Username changed recently": "errors.usernameRecent",
   "Already on the list": "errors.alreadyListed",
+  "Past sessions are locked": "errors.sessionSettled",
   "A name of up to 32 characters is required": "errors.nameRequired",
   "Current password is incorrect": "errors.currentPassword",
   "Invalid token": "errors.sessionExpired",

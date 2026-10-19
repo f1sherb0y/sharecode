@@ -39,7 +39,7 @@ import { getLocale } from '@/i18n'
 import { translateError } from '@/i18n/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { isStaff } from '@/lib/room-permissions'
-import { SCHEDULE_ZONES, UNASSIGNED_COLOR, formatDayKey, sessionAgent, techColors, zoneName } from '@/lib/schedule'
+import { SCHEDULE_ZONES, canChangeSession, UNASSIGNED_COLOR, formatDayKey, sessionAgent, techColors, zoneName } from '@/lib/schedule'
 import { addDays, addMonths, dateKeyOf, dayStart, minuteOfDay, parseDateKey, startOfMonth, startOfWeek, timeInputValue, todayKey } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 import { useAuthStore, useSettingsStore } from '@/stores'
@@ -196,9 +196,9 @@ function WorkTable({ token }: { token?: string }) {
   const [blocking, setBlocking] = useState(false)
   const [tipHidden, setTipHidden] = useState(() => localStorage.getItem(TIP_HIDDEN) === '1')
   const canAdd = staff ? !!tableId && tableId !== UNASSIGNED : own && blocking
-  const addAt = (day: string, minute: number) => {
+  const addAt = (day: string, minute: number, end?: number) => {
     if (!canAdd || !tableId) return
-    setForm({ kind: 'new', day, minute, techId: tableId, block: !staff || (own && blocking) })
+    setForm({ kind: 'new', day, minute, end, techId: tableId, block: !staff || (own && blocking) })
   }
   const describeConflict = (conflict: ScheduleConflict) => {
     const start = Date.parse(conflict.startsAt)
@@ -486,7 +486,7 @@ function WorkTable({ token }: { token?: string }) {
       <SessionDetails
         appointment={form ? null : opened}
         onClose={() => update({ session: null })}
-        editable={!!opened && (staff || (opened.isBlock && own))}
+        editable={!!opened && (staff || (opened.isBlock && own)) && canChangeSession(opened, linked ? null : user)}
         meId={user?.id ?? ''}
         rooms={!linked}
         remove={linked ? id => api.deleteTableLinkBusy(token!, id) : undefined}

@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, RotateCcw, TriangleAlert } from 'lucide-reac
 import type { Appointment } from '@/types'
 import { getLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { clamp, formatDayKey, HOUR_MS, MINUTE_MS, sessionAgent, sessionTitle, type DayLayout, type Segment } from '@/lib/schedule'
+import { useAuthStore } from '@/stores'
+import { canChangeSession, clamp, formatDayKey, HOUR_MS, MINUTE_MS, sessionAgent, sessionTitle, type DayLayout, type Segment } from '@/lib/schedule'
 import { dateKeyOf, timeInputValue, zonedParts } from '@/lib/zoned-time'
 import { pointerInstant, type DragPreview, type GridDrop } from './use-schedule-drag'
 
@@ -336,6 +337,7 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
   const before = layout.segments.filter(segment => segment.end <= row.start)
   const after = layout.segments.filter(segment => segment.start >= end)
   const endsDrag = () => pan.endsPan() || drag.endsDrag()
+  const user = useAuthStore(state => state.user)
 
   const preview = drag.preview
   const moving = preview && preview.kind !== 'create' ? preview.appointment?.id : undefined
@@ -360,6 +362,8 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
 
   const renderSegment = (segment: Segment) => {
     const { appointment } = segment
+    // Settled sessions stay where they are, except for 超级管理员.
+    const movable = editable && canChangeSession(appointment, user)
     const from = Math.max(segment.start, row.start)
     const to = Math.min(segment.end, end)
     const role = [appointment.company, appointment.position].filter(Boolean).join(' · ')
@@ -385,7 +389,7 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
         style={style}
         aria-label={describe(appointment)}
         title={describe(appointment)}
-        onPointerDown={editable ? (event) => {
+        onPointerDown={movable ? (event) => {
           const at = pointerInstant({ clientX: event.clientX, currentTarget: event.currentTarget.parentElement! })
           drag.begin(event, { kind: 'move', appointment, grabOffset: at - Date.parse(appointment.startsAt) })
         } : undefined}
@@ -402,7 +406,7 @@ export function Track({ row, span, layout, timezone, editable, adding, showTech,
         </span>
         {showTech && <span className="schedule-event-meta">{appointment.tech?.username ?? t('schedule.unassigned')}</span>}
         {role && <span className="schedule-event-meta">{role}</span>}
-        {editable && !segment.continuesAfter && Date.parse(appointment.endsAt) <= end && (
+        {movable && !segment.continuesAfter && Date.parse(appointment.endsAt) <= end && (
           <span
             className="schedule-event-resize"
             aria-hidden="true"

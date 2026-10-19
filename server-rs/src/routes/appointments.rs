@@ -16,7 +16,7 @@ use crate::{
     auth::AuthUser,
     db::db_error,
     error::ApiError,
-    permissions::is_staff,
+    permissions::{is_admin, is_staff},
     state::AppState,
     utils::time::{to_iso_string, to_iso_string_opt},
 };
@@ -259,6 +259,7 @@ pub async fn create_appointment(
     }
     let starts_at = parse_start(payload.starts_at.as_deref())?;
     let duration = check_duration(payload.duration_minutes.unwrap_or(60))?;
+    check_unsettled(&auth_user.role, starts_at, duration)?;
     let (company, position) = if is_block {
         (None, None)
     } else {
@@ -407,6 +408,8 @@ pub async fn update_appointment(
         None => current.starts_at,
     };
     let duration = check_duration(payload.duration_minutes.unwrap_or(current.duration_minutes))?;
+    check_unsettled(&auth_user.role, current.starts_at, current.duration_minutes)?;
+    check_unsettled(&auth_user.role, starts_at, duration)?;
     let company = match payload.company.filter(|_| !current.is_block) {
         Some(value) => clean_field(value, "Company is too long")?,
         None => current.company.clone(),
@@ -614,6 +617,16 @@ pub async fn delete_appointment(
         .begin()
         .await
         .map_err(|e| db_error(e, "Failed to start audited operation"))?;
+    let time: Option<(DateTime<Utc>, i32)> = sqlx::query_as(
+        r#"SELECT "startsAt", "durationMinutes" FROM "Appointment" WHERE id = $1 FOR UPDATE"#,
+    )
+    .bind(&appointment_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to load session"))?;
+    if let Some((starts_at, duration)) = time {
+        check_unsettled(&auth_user.role, starts_at, duration)?;
+    }
     // Techs delete only their own busy time.
     let current = sqlx::query_as::<_, StoredAppointment>(
         r#"DELETE FROM "Appointment" a
@@ -1143,6 +1156,18 @@ fn parse_start(value: Option<&str>) -> Result<DateTime<Utc>, ApiError> {
         .with_second(0)
         .and_then(|time| time.with_nanosecond(0))
         .unwrap_or(start))
+}
+
+/// Hours after its end a session is settled: from then on only 超级管理员 plan, change or
+/// delete it (busy time included).
+const SETTLED_AFTER_HOURS: i64 = 12;
+
+fn check_unsettled(role: &str, starts_at: DateTime<Utc>, duration: i32) -> Result<(), ApiError> {
+    let settled = starts_at + Duration::minutes(duration.into()) + Duration::hours(SETTLED_AFTER_HOURS) < Utc::now();
+    if settled && !is_admin(role) {
+        return Err(ApiError::forbidden("Past sessions are locked"));
+    }
+    Ok(())
 }
 
 fn check_duration(minutes: i32) -> Result<i32, ApiError> {

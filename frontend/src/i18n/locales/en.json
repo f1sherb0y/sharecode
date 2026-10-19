@@ -724,6 +724,7 @@
     "usernameSame": "That is already your username.",
     "usernameRecent": "A username can change once a week.",
     "alreadyListed": "Already on the list.",
+    "sessionSettled": "Sessions that ended over 12 hours ago can only be changed by the super admin.",
     "nameRequired": "A name needs 1 to 32 characters."
   },
   "canvas": {

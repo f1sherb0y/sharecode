@@ -66,6 +66,7 @@ import {
   DEFAULT_ZONE,
   SCHEDULE_ZONES,
   zoneName,
+  canChangeSession,
   type DayLayout,
   type ScheduleView,
 } from '@/lib/schedule'
@@ -754,7 +755,8 @@ export function SchedulePage() {
         onOpenChange={open => !open && closeDialog()}
         appointment={draft ? null : openAppointment}
         draft={draft}
-        staff={staff}
+        // Settled sessions read like a tech's, except for 超级管理员.
+        staff={staff && (!!draft || !openAppointment || canChangeSession(openAppointment, user))}
         users={users}
         colors={colors}
         timezone={timezone}

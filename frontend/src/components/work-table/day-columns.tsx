@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties, type MouseEvent } from 'react'
+import { useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Appointment } from '@/types'
 import { DAY_MINUTES, MINUTE_MS, agentName, sessionTitle } from '@/lib/schedule'
@@ -7,6 +7,10 @@ import { cn } from '@/lib/utils'
 
 /** Minutes a click on free time snaps to. */
 const SLOT_MINUTES = 30
+/** Minutes a drag over free time snaps to. */
+const DRAG_MINUTES = 15
+/** Pixels the pointer moves before a press on free time becomes a drag. */
+const DRAG_PX = 4
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 
 interface Placed {
@@ -63,8 +67,8 @@ interface DayColumnsProps {
   now: number
   appointments: Appointment[]
   colorOf: (appointment: Appointment) => string
-  /** Free time was clicked: the day and the minute it snaps to. */
-  onSlot?: (day: string, minute: number) => void
+  /** Free time was clicked (the day and the minute it snaps to) or dragged over (and the end). */
+  onSlot?: (day: string, minute: number, end?: number) => void
   onOpen: (appointment: Appointment) => void
 }
 
@@ -75,7 +79,49 @@ export function DayColumns({ days, today, timezone, now, appointments, colorOf, 
   const nowMinute = days.includes(today) ? (now - dayStart(today, timezone).getTime()) / MINUTE_MS : null
   const time = (instant: string) => timeInputValue(Date.parse(instant), timezone)
 
+  // Dragging over free time with a mouse or pen picks the range; touch keeps scrolling.
+  const [draft, setDraft] = useState<{ day: string; from: number; to: number } | null>(null)
+  const drag = useRef<{ y: number; anchor: number; moved: boolean } | null>(null)
+  const dragged = useRef(false)
+  const minuteAt = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return Math.min(DAY_MINUTES, Math.max(0, ((event.clientY - rect.top) / rect.height) * DAY_MINUTES))
+  }
+  const press = (day: string) => (event: PointerEvent<HTMLDivElement>) => {
+    if (!onSlot || event.pointerType === 'touch' || event.button !== 0 || event.target !== event.currentTarget) return
+    const anchor = Math.min(DAY_MINUTES - DRAG_MINUTES, Math.floor(minuteAt(event) / DRAG_MINUTES) * DRAG_MINUTES)
+    dragged.current = false
+    drag.current = { y: event.clientY, anchor, moved: false }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDraft({ day, from: anchor, to: anchor + DRAG_MINUTES })
+  }
+  const move = (event: PointerEvent<HTMLDivElement>) => {
+    const state = drag.current
+    if (!state) return
+    if (Math.abs(event.clientY - state.y) >= DRAG_PX) state.moved = true
+    if (!state.moved) return
+    const minute = minuteAt(event)
+    setDraft(current => current && {
+      ...current,
+      from: Math.min(state.anchor, Math.floor(minute / DRAG_MINUTES) * DRAG_MINUTES),
+      to: Math.max(state.anchor + DRAG_MINUTES, Math.ceil(minute / DRAG_MINUTES) * DRAG_MINUTES),
+    })
+  }
+  const release = () => {
+    const state = drag.current
+    drag.current = null
+    setDraft(null)
+    if (!state?.moved || !draft || !onSlot) return
+    dragged.current = true
+    onSlot(draft.day, draft.from, draft.to)
+  }
+
   const slot = (day: string) => (event: MouseEvent<HTMLDivElement>) => {
+    // The click that ends a drag has already been handled.
+    if (dragged.current) {
+      dragged.current = false
+      return
+    }
     if (!onSlot || event.target !== event.currentTarget) return
     const rect = event.currentTarget.getBoundingClientRect()
     const minute = ((event.clientY - rect.top) / rect.height) * DAY_MINUTES
@@ -104,6 +150,10 @@ export function DayColumns({ days, today, timezone, now, appointments, colorOf, 
             className={cn('wt-column', onSlot && 'is-open', day === today && days.length > 1 && 'is-today')}
             data-day={day}
             onClick={slot(day)}
+            onPointerDown={press(day)}
+            onPointerMove={move}
+            onPointerUp={release}
+            onPointerCancel={() => { drag.current = null; setDraft(null) }}
           >
             {placed.map(({ appointment, top, bottom, lane, lanes }) => {
               const block = appointment.isBlock
@@ -132,6 +182,15 @@ export function DayColumns({ days, today, timezone, now, appointments, colorOf, 
                 </button>
               )
             })}
+            {draft?.day === day && drag.current?.moved && (
+              <span
+                className="wt-draft"
+                style={{ top: `calc(${draft.from / 60} * var(--wt-hour) + 1px)`, height: `calc(${(draft.to - draft.from) / 60} * var(--wt-hour) - 2px)` }}
+                aria-hidden="true"
+              >
+                {timeInputValue(dayStart(day, timezone).getTime() + draft.from * MINUTE_MS, timezone)} – {timeInputValue(dayStart(day, timezone).getTime() + draft.to * MINUTE_MS, timezone)}
+              </span>
+            )}
             {day === today && nowMinute !== null && (
               <span className="wt-now-line" style={{ top: `calc(${nowMinute / 60} * var(--wt-hour))` }} aria-hidden="true" />
             )}
