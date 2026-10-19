@@ -369,6 +369,21 @@ for (const token of [root, as('agent_owner'), as('tech_peer')]) {
 }
 console.log('PASS owner-role changes revoke stale socket access; deleted-room details and playback are denied')
 
+// Anyone renames themselves once a week, to a name nobody holds whatever its case.
+await request('/api/auth/username', 'PUT', { username: 'AGENT_PEER' }, as('tech_peer'), 400)
+await request('/api/auth/username', 'PUT', { username: 'two words' }, as('tech_peer'), 400)
+assert.deepEqual(await request('/api/auth/username', 'GET', undefined, as('tech_peer')), { nextChangeAt: null })
+assert.equal((await request('/api/auth/username', 'PUT', { username: ' tech_renamed ' }, as('tech_peer'))).username, 'tech_renamed')
+assert.equal((await request('/api/auth/profile', 'GET', undefined, as('tech_peer'))).user.username, 'tech_renamed')
+const recent = await request('/api/auth/username', 'PUT', { username: 'tech_again' }, as('tech_peer'), 429)
+assert(Date.parse(recent.nextChangeAt) > Date.now() + 6 * 86400_000)
+await request('/api/auth/login', 'POST', { username: 'tech_peer', password }, undefined, 401)
+actors.tech_peer = await login('tech_renamed')
+await request('/api/admin/users', 'POST', { username: 'Tech_Renamed', role: 'tech', password }, root, 400)
+sql(`UPDATE "User" SET "usernameChangedAt" = NOW() - INTERVAL '8 days' WHERE username = 'tech_renamed'`)
+assert.equal((await request('/api/auth/username', 'PUT', { username: 'tech_peer' }, as('tech_peer'))).username, 'tech_peer')
+console.log('PASS usernames: once a week, unique whatever the case, trimmed, signing in by the new name')
+
 const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
 const openPage = async (browser, token, { mobile = false, lng = 'en' } = {}) => {

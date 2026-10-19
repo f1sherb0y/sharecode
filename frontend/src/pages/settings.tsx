@@ -2,7 +2,7 @@ import { translateError } from '@/i18n/errors'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, X, Keyboard } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -226,6 +226,8 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
+        {canChangePassword && <UsernameCard username={user.username} />}
+
         {canChangePassword && (
           <Card className="mt-2">
             <CardHeader>
@@ -376,5 +378,65 @@ export function SettingsPage() {
         )}
       </PageContainer>
     </div>
+  )
+}
+
+/** The account's own name: once a week, and nobody else's whatever its case. */
+function UsernameCard({ username }: { username: string }) {
+  const { t, i18n } = useTranslation()
+  const queryClient = useQueryClient()
+  const [value, setValue] = useState(username)
+  const [error, setError] = useState('')
+  useEffect(() => setValue(username), [username])
+  const change = useQuery({ queryKey: ['username-change'], queryFn: () => api.getUsernameChange() })
+  const nextAt = change.data?.nextChangeAt ?? null
+  const save = useMutation({
+    mutationFn: () => api.changeUsername(value.trim()),
+    onSuccess: ({ username: renamed, nextChangeAt }) => {
+      setError('')
+      useAuthStore.setState(state => ({ user: state.user ? { ...state.user, username: renamed } : state.user }))
+      queryClient.setQueryData(['username-change'], { nextChangeAt })
+      void queryClient.invalidateQueries({ queryKey: ['work-tables'] })
+      toast.success(t('settings.username.saved'))
+    },
+    onError: err => {
+      const data = (err as { data?: { nextChangeAt?: string } }).data
+      if (data?.nextChangeAt) queryClient.setQueryData(['username-change'], { nextChangeAt: data.nextChangeAt })
+      setError(translateError(err instanceof Error ? err.message : t('common.requestFailed')))
+    },
+  })
+  const when = nextAt
+    ? new Date(nextAt).toLocaleString(i18n.language, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : ''
+  return (
+    <Card className="mt-2">
+      <CardHeader>
+        <CardTitle>{t('settings.username.title')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="flex flex-col gap-1.5"
+          onSubmit={event => { event.preventDefault(); if (value.trim() && value.trim() !== username) save.mutate() }}
+        >
+          <div className="flex gap-2">
+            <Input
+              id="newUsername"
+              aria-label={t('settings.username.title')}
+              value={value}
+              maxLength={32}
+              autoComplete="username"
+              disabled={!!nextAt}
+              onChange={event => setValue(event.target.value)}
+              className="max-w-xs"
+            />
+            <Button type="submit" disabled={!!nextAt || save.isPending || !value.trim() || value.trim() === username}>
+              {t('settings.username.save')}
+            </Button>
+          </div>
+          {nextAt && <p className="text-xs text-muted-foreground">{t('settings.username.next', { time: when })}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </form>
+      </CardContent>
+    </Card>
   )
 }

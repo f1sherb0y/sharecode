@@ -147,13 +147,14 @@ assert.deepEqual((await request('/api/work-tables', 'GET', undefined, as('tech_a
 await request('/api/appointments/' + busy.id, 'DELETE', undefined, as('tech_a'))
 assert.equal((await notices('tech_a')).some(notice => notice.data.appointmentId === busy.id), false, 'nobody is told about busy time')
 // Table links: staff make a table for someone without an account; its link opens it without signing in.
-const made = (await request('/api/work-tables', 'POST', { name: 'Zhang Gong' }, as('agent_a'), 201)).table
+const made = (await request('/api/work-tables', 'POST', { name: ' zhang_gong ' }, as('agent_a'), 201)).table
+await request('/api/work-tables', 'POST', { name: 'ZHANG_GONG' }, as('agent_a'), 400)
 await request('/api/work-tables', 'POST', { name: 'Zhang Gong' }, as('agent_a'), 400)
 await request('/api/work-tables', 'POST', { name: 'x' }, as('tech_a'), 404)
 const linked = (await plan('agent_a', { techId: made.id, startsAt: at(3, 20), company: 'Bytedance' })).appointment
 const viaLink = (path, method = 'GET', body, expected = 200) => request(`/api/table-links/${made.link}${path}`, method, body, undefined, expected)
 const opened2 = await viaLink(`?${range(-1, 10)}`)
-assert.deepEqual([opened2.table.username, opened2.appointments.map(a => [a.id, a.customer, a.room, a.createdBy.username])], ['Zhang Gong', [[linked.id, null, null, 'agent_a']]])
+assert.deepEqual([opened2.table.username, opened2.appointments.map(a => [a.id, a.customer, a.room, a.createdBy.username])], ['zhang_gong', [[linked.id, null, null, 'agent_a']]])
 // Busy time through the link may cover a session: both show the clash.
 const linkBusy = (await viaLink('/busy', 'POST', { startsAt: at(3, 19, 30), durationMinutes: 60, techId: id('tech_b') }, 201)).appointment
 assert.deepEqual([linkBusy.isBlock, linkBusy.tech.id], [true, made.id])

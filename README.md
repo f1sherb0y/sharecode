@@ -363,6 +363,8 @@ Notes:
   code stops working once its issuer is removed or is no longer an agent or admin.
   Registering with a code always creates a tech. Admins can also create accounts
   of any role in the admin dashboard.
+- Everyone can rename themselves in **Settings**, once a week. No two accounts
+  share a name, whatever the case.
 
 ### Scheduling (排班)
 
@@ -388,8 +390,9 @@ Phones show one day at a time under a week strip; wider screens show the week.
   chip; its link is copied at once. Once the tech registers, 合并到账号 moves its
   sessions, busy time, note and link into their account.
 - A session's details hold its room buttons; staff edit or delete it there.
-- The "···" menu also leads back to the rooms and, for staff, to the **full
-  calendar** (完整排班) described below.
+- The house at the top left goes back to the rooms; the "···" menu leads staff
+  to the **full calendar** (完整排班) described below. The table chip has
+  新建工作表 first, then a search and the tables a page at a time.
 
 The full calendar (`/schedule/full`) is as wide as the room list
 and has two tabs for agents and admins: **Calendar** and **场次 (Sessions)**.

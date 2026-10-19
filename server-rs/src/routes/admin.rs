@@ -129,9 +129,11 @@ pub async fn create_user(
         .and_then(|v| v.as_str())
         .unwrap_or(ROLE_TECH);
 
-    if username.is_empty() || password.is_empty() {
+    if username.trim().is_empty() || password.is_empty() {
         return Err(ApiError::bad_request("Username and password are required"));
     }
+    let username = crate::utils::usernames::normalize_username(username).map_err(ApiError::bad_request)?;
+    let username = username.as_str();
 
     validate_password(password).map_err(ApiError::bad_request)?;
 
@@ -139,15 +141,7 @@ pub async fn create_user(
         return Err(ApiError::bad_request("Invalid role"));
     }
 
-    let existing_user = sqlx::query_scalar::<_, bool>(
-        r#"SELECT "isDeleted" FROM "User" WHERE username = $1 LIMIT 1"#,
-    )
-    .bind(username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to check username"))?;
-
-    if let Some(deleted) = existing_user {
+    if let Some(deleted) = crate::db::username_holder(&state.db, username, None).await? {
         return Err(ApiError::bad_request(if deleted {
             "This username belongs to a deleted account and is still reserved. Restore that account or choose another username."
         } else {

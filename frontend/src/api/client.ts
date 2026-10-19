@@ -125,6 +125,15 @@ class ApiClient {
     return this.request<{ user: User }>('/api/auth/profile')
   }
 
+  /** When the account may next rename itself; null when it may now. */
+  async getUsernameChange(): Promise<{ nextChangeAt: string | null }> {
+    return this.request('/api/auth/username')
+  }
+
+  async changeUsername(username: string): Promise<{ username: string; nextChangeAt: string }> {
+    return this.request('/api/auth/username', { method: 'PUT', body: JSON.stringify({ username }) })
+  }
+
   async changePassword(
     oldPassword: string,
     newPassword: string

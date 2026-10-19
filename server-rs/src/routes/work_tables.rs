@@ -30,7 +30,6 @@ use crate::{
 // someone without an account belongs to a placeholder tech ("linkOnly") that
 // nobody can sign in as, merged into their real account once they have one.
 const MAX_NOTE_CHARS: usize = 200;
-const MAX_NAME_CHARS: usize = 32;
 /// Links are short to share yet too many to guess: 62^10 is about 2^59.
 const LINK_CHARS: usize = 10;
 const PASSWORD_CHARS: usize = 32;
@@ -137,9 +136,11 @@ pub async fn create_work_table(
     StaffUser(auth_user): StaffUser,
     Json(payload): Json<NewTablePayload>,
 ) -> Result<Response, ApiError> {
-    let name = payload.name.unwrap_or_default().trim().to_string();
-    if name.is_empty() || name.chars().count() > MAX_NAME_CHARS {
-        return Err(ApiError::bad_request("A name of up to 32 characters is required"));
+    // A table's name is its placeholder's username.
+    let name = crate::utils::usernames::normalize_username(payload.name.as_deref().unwrap_or_default())
+        .map_err(ApiError::bad_request)?;
+    if crate::db::username_holder(&state.db, &name, None).await?.is_some() {
+        return Err(ApiError::bad_request("Username already taken"));
     }
     // A password nobody knows: the placeholder is reached through its link only.
     let password = hash(random_token(PASSWORD_CHARS), 10)

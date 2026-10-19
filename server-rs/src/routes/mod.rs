@@ -30,6 +30,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/logout", post(sessions::logout))
         .route("/api/auth/profile", get(auth::get_profile))
         .route("/api/auth/change-password", post(auth::change_password))
+        .route("/api/auth/username", get(auth::get_username_change).put(auth::change_username))
         .route("/api/notifications", get(notifications::list_notifications))
         .route(
             "/api/notifications/unread",

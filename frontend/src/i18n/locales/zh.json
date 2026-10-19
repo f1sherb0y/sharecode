@@ -317,6 +317,12 @@
     "timezone": {
       "title": "时区"
     },
+    "username": {
+      "title": "用户名",
+      "save": "保存",
+      "saved": "用户名已修改",
+      "next": "下次可修改：{{time}}"
+    },
     "password": {
       "title": "修改密码",
       "current": "当前密码",
@@ -612,7 +618,8 @@
         "created": "创建用户",
         "permissions_changed": "修改权限",
         "updated": "修改用户",
-        "deleted": "删除用户"
+        "deleted": "删除用户",
+        "renamed": "修改用户名"
       },
       "room": {
         "created": "创建房间",
@@ -712,7 +719,10 @@
     "startRequired": "请填写有效的开始时间。",
     "customerRequired": "请选择客户。",
     "cancelledNoRoom": "已取消的场次没有房间。",
-    "invalidStatus": "未知的场次状态。"
+    "invalidStatus": "未知的场次状态。",
+    "usernameInvalid": "用户名需 2 到 32 个字符，不能有空格",
+    "usernameSame": "这已经是你的用户名",
+    "usernameRecent": "用户名每周只能改一次"
   },
   "canvas": {
     "title": "画布",
@@ -915,6 +925,8 @@
   },
   "workTable": {
     "switchTable": "切换工作表",
+    "searchTables": "搜索技术",
+    "noTables": "没有匹配的技术",
     "sessionCount": "{{count}} 个预约",
     "noSessions": "暂无预约",
     "previousWeek": "上一周",
@@ -948,7 +960,7 @@
     "noteSaved": "置顶说明已保存",
     "hideNote": "收起",
     "full": "完整排班",
-    "rooms": "房间",
+    "home": "主页",
     "notifications": "通知",
     "more": "更多",
     "editAction": "编辑",

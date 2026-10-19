@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, CalendarOff, Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pin, Plus, Share2, X } from 'lucide-react'
+import { Bell, CalendarOff, ChevronDown, House, ChevronLeft, ChevronRight, MoreHorizontal, Pin, Plus, Share2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Button,
@@ -14,7 +14,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
   Label,
@@ -32,6 +31,7 @@ import {
 import { DayColumns } from '@/components/work-table/day-columns'
 import { SessionDetails } from '@/components/work-table/session-details'
 import { SessionForm, nextSlot, type FormTarget, type SaveActions } from '@/components/work-table/session-form'
+import { TablePicker } from '@/components/work-table/table-picker'
 import { api } from '@/api'
 import { useCompactViewport } from '@/hooks/use-compact-viewport'
 import { getLocale } from '@/i18n'
@@ -319,56 +319,41 @@ function WorkTable({ token }: { token?: string }) {
   return (
     <div className="wt-page">
       <header className="wt-head">
-        <Popover open={monthOpen} onOpenChange={open => { setMonthOpen(open); if (open) setShownMonth(startOfMonth(date)) }}>
-          <PopoverTrigger asChild>
-            <button type="button" className="wt-month">
-              {formatDayKey(date, locale, { month: locale.startsWith('zh') ? 'short' : 'long' })}
-              <ChevronDown aria-hidden="true" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-auto p-2">
-            <MonthCalendar
-              month={shownMonth}
-              value={date}
-              today={today}
-              onMonth={setShownMonth}
-              onPick={day => { update({ date: day }); setMonthOpen(false) }}
-            />
-          </PopoverContent>
-        </Popover>
+        <div className="wt-title">
+          {!linked && (
+            <Button variant="ghost" size="icon" className="wt-home" aria-label={t('workTable.home')} asChild>
+              <Link to="/rooms"><House /></Link>
+            </Button>
+          )}
+          <Popover open={monthOpen} onOpenChange={open => { setMonthOpen(open); if (open) setShownMonth(startOfMonth(date)) }}>
+            <PopoverTrigger asChild>
+              <button type="button" className="wt-month">
+                {formatDayKey(date, locale, { month: locale.startsWith('zh') ? 'short' : 'long' })}
+                <ChevronDown aria-hidden="true" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto p-2">
+              <MonthCalendar
+                month={shownMonth}
+                value={date}
+                today={today}
+                onMonth={setShownMonth}
+                onPick={day => { update({ date: day }); setMonthOpen(false) }}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
         <div className="wt-sub">
           {staff ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" className="wt-chip" aria-label={t('workTable.switchTable')}>
-                  <span className="wt-chip-name">{tableId === UNASSIGNED ? t('schedule.unassigned') : table?.username ?? '…'}</span>
-                  <ChevronDown aria-hidden="true" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="wt-tables">
-                {tables.map(item => (
-                  <DropdownMenuItem key={item.id} onSelect={() => pickTable(item.id)} className={cn('wt-table-item', item.id === tableId && 'is-active')}>
-                    <span className="wt-dot" style={{ background: item.color }} aria-hidden="true" />
-                    <span className="wt-table-name">{item.username}</span>
-                    <span className="wt-table-count">{t('workTable.sessionCount', { count: item.upcoming })}</span>
-                    <Check className={cn('wt-table-check', item.id !== tableId && 'invisible')} aria-hidden="true" />
-                  </DropdownMenuItem>
-                ))}
-                {unassignedCount > 0 && (
-                  <DropdownMenuItem onSelect={() => pickTable(UNASSIGNED)} className={cn('wt-table-item', tableId === UNASSIGNED && 'is-active')}>
-                    <span className="wt-dot is-striped" aria-hidden="true" />
-                    <span className="wt-table-name">{t('schedule.unassigned')}</span>
-                    <span className="wt-table-count">{t('workTable.sessionCount', { count: unassignedCount })}</span>
-                    <Check className={cn('wt-table-check', tableId !== UNASSIGNED && 'invisible')} aria-hidden="true" />
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setNaming('')} className="wt-table-item">
-                  <Plus className="wt-table-check" aria-hidden="true" />
-                  <span className="wt-table-name">{t('workTable.newTable')}</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <TablePicker
+              tables={tables}
+              value={tableId}
+              label={tableId === UNASSIGNED ? t('schedule.unassigned') : table?.username ?? '…'}
+              unassigned={{ id: UNASSIGNED, count: unassignedCount }}
+              onPick={pickTable}
+              onNew={() => setNaming('')}
+              phone={phone}
+            />
           ) : (
             <span className="wt-chip is-static"><span className="wt-chip-name">{table?.username ?? user?.username ?? '…'}</span></span>
           )}
@@ -417,7 +402,6 @@ function WorkTable({ token }: { token?: string }) {
               <Button variant="ghost" size="icon" aria-label={t('workTable.more')}><MoreHorizontal /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {!linked && <DropdownMenuItem onSelect={() => navigate('/rooms')}>{t('workTable.rooms')}</DropdownMenuItem>}
               {own && <DropdownMenuItem onSelect={() => setEditingNote(table?.note ?? '')}>{t('workTable.note')}</DropdownMenuItem>}
               {staff && accountRow?.link && <DropdownMenuItem onSelect={() => setResetting(true)}>{t('workTable.resetLink')}</DropdownMenuItem>}
               {staff && accountRow?.linkOnly && <DropdownMenuItem onSelect={() => setMerging('')}>{t('workTable.merge')}</DropdownMenuItem>}

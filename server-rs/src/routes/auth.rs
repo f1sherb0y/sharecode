@@ -16,13 +16,14 @@ use crate::core::sessions;
 
 use crate::{
     auth::{build_user_claims, generate_user_token, verify_token, TokenPayload},
-    db::db_error,
+    db::{db_error, username_holder},
     error::ApiError,
     models::{UserPublicRow, UserRow},
     permissions::ROLE_TECH,
     state::AppState,
     utils::colors::random_user_color,
     utils::passwords::validate_password,
+    utils::usernames::normalize_username,
     utils::time::{to_iso_string, to_iso_string_opt},
 };
 
@@ -55,13 +56,14 @@ pub async fn register(
     Json(payload): Json<RegisterPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
     sessions::check_origin(&state.config, &headers)?;
-    let username = payload.username.unwrap_or_default();
+    let raw_username = payload.username.unwrap_or_default();
     let password = payload.password.unwrap_or_default();
     let invite_code = invites::normalize_code(payload.invite_code.as_deref().unwrap_or_default());
 
-    if username.is_empty() || password.is_empty() {
+    if raw_username.trim().is_empty() || password.is_empty() {
         return Err(ApiError::bad_request("Username and password are required"));
     }
+    let username = normalize_username(&raw_username).map_err(ApiError::bad_request)?;
 
     validate_password(&password).map_err(ApiError::bad_request)?;
     let invite_id = match invites::find_usable(&state.db, &invite_code).await? {
@@ -82,15 +84,7 @@ pub async fn register(
         }
     };
 
-    let existing_user = sqlx::query_scalar::<_, bool>(
-        r#"SELECT "isDeleted" FROM "User" WHERE username = $1 LIMIT 1"#,
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|err| db_error(err, "Failed to check existing username"))?;
-
-    if existing_user.is_some() {
+    if username_holder(&state.db, &username, None).await?.is_some() {
         return Err(ApiError::bad_request("Username already taken"));
     }
 
@@ -575,4 +569,98 @@ struct GuestProfileRow {
     room_ended_at: Option<chrono::DateTime<chrono::Utc>>,
     share_token: String,
     share_can_edit: bool,
+}
+
+/// A username may change once a week.
+const RENAME_EVERY_DAYS: i64 = 7;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct ChangeUsernamePayload {
+    username: Option<String>,
+}
+
+/// When the signed-in account may next rename itself (null: now).
+pub async fn get_username_change(
+    State(state): State<AppState>,
+    auth_user: crate::auth::AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let changed_at = sqlx::query_scalar::<_, Option<chrono::DateTime<Utc>>>(
+        r#"SELECT "usernameChangedAt" FROM "User" WHERE id = $1"#,
+    )
+    .bind(&auth_user.id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| db_error(err, "Failed to load account"))?;
+    Ok(Json(json!({ "nextChangeAt": next_rename(changed_at).map(to_iso_string) })))
+}
+
+fn next_rename(changed_at: Option<chrono::DateTime<Utc>>) -> Option<chrono::DateTime<Utc>> {
+    changed_at
+        .map(|at| at + chrono::Duration::days(RENAME_EVERY_DAYS))
+        .filter(|next| *next > Utc::now())
+}
+
+/// Anyone signed in renames themselves, once a week, to a name nobody else holds
+/// whatever its case. Everything refers to accounts by ID, so nothing else changes.
+pub async fn change_username(
+    State(state): State<AppState>,
+    auth_user: crate::auth::AuthUser,
+    client: ClientInfo,
+    headers: HeaderMap,
+    Json(payload): Json<ChangeUsernamePayload>,
+) -> Result<axum::response::Response, ApiError> {
+    sessions::check_origin(&state.config, &headers)?;
+    let username = normalize_username(payload.username.as_deref().unwrap_or_default()).map_err(ApiError::bad_request)?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_error(e, "Failed to start audited operation"))?;
+    let (current, changed_at) = sqlx::query_as::<_, (String, Option<chrono::DateTime<Utc>>)>(
+        r#"SELECT username, "usernameChangedAt" FROM "User" WHERE id = $1 AND NOT "isDeleted" FOR UPDATE"#,
+    )
+    .bind(&auth_user.id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to load account"))?
+    .ok_or_else(|| ApiError::unauthorized("Invalid token"))?;
+    if current == username {
+        return Err(ApiError::bad_request("That is already your username"));
+    }
+    if let Some(next) = next_rename(changed_at) {
+        return Ok((
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({ "error": "Username changed recently", "nextChangeAt": to_iso_string(next) })),
+        )
+            .into_response());
+    }
+    // A change of case alone is the same name and stays free.
+    if username_holder(&mut *tx, &username, Some(&auth_user.id)).await?.is_some() {
+        return Err(ApiError::bad_request("Username already taken"));
+    }
+    sqlx::query(r#"UPDATE "User" SET username = $2, "usernameChangedAt" = NOW() WHERE id = $1"#)
+        .bind(&auth_user.id)
+        .bind(&username)
+        .execute(&mut *tx)
+        .await
+        .map_err(crate::db::user_creation_error)?;
+    audit::record_details(
+        &mut *tx,
+        &client,
+        "user.renamed",
+        Some(&auth_user.id),
+        Some(&username),
+        Some(&auth_user.id),
+        true,
+        None,
+        None,
+        json!({ "before": current, "after": username }),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
+    let next = Utc::now() + chrono::Duration::days(RENAME_EVERY_DAYS);
+    Ok(Json(json!({ "username": username, "nextChangeAt": to_iso_string(next) })).into_response())
 }

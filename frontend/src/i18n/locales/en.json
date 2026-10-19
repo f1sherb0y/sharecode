@@ -317,6 +317,12 @@
     "timezone": {
       "title": "Timezone"
     },
+    "username": {
+      "title": "Username",
+      "save": "Save",
+      "saved": "Username changed.",
+      "next": "Next change: {{time}}"
+    },
     "password": {
       "title": "Change Password",
       "current": "Current password",
@@ -612,7 +618,8 @@
         "created": "User created",
         "permissions_changed": "Permissions changed",
         "updated": "User updated",
-        "deleted": "User deleted"
+        "deleted": "User deleted",
+        "renamed": "Changed username"
       },
       "room": {
         "created": "Room created",
@@ -712,7 +719,10 @@
     "startRequired": "Enter a valid start time.",
     "customerRequired": "Choose a customer.",
     "cancelledNoRoom": "A cancelled session has no room.",
-    "invalidStatus": "Unknown session status."
+    "invalidStatus": "Unknown session status.",
+    "usernameInvalid": "A username needs 2 to 32 characters and no spaces.",
+    "usernameSame": "That is already your username.",
+    "usernameRecent": "A username can change once a week."
   },
   "canvas": {
     "title": "Canvas",
@@ -915,6 +925,8 @@
   },
   "workTable": {
     "switchTable": "Switch table",
+    "searchTables": "Search techs",
+    "noTables": "No matching techs",
     "sessionCount_one": "{{count}} session",
     "sessionCount_other": "{{count}} sessions",
     "noSessions": "No sessions",
@@ -949,7 +961,7 @@
     "noteSaved": "Note saved.",
     "hideNote": "Hide",
     "full": "Full schedule",
-    "rooms": "Rooms",
+    "home": "Home",
     "notifications": "Notifications",
     "more": "More",
     "editAction": "Edit",
