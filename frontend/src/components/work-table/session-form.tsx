@@ -104,7 +104,7 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
       const startsAt = toZonedIso(atMinute(date, from, timezone), timezone)
       if (!block && staff && !editing && listed && !chosenManager) throw new Error(t('workTable.chooseManager'))
       const input: AppointmentInput = block
-        ? { startsAt, durationMinutes: duration, notes: notes.trim() || null, ...(editing ? {} : { isBlock: true }) }
+        ? { startsAt, durationMinutes: duration, notes: notes.trim() || null, ...(editing ? {} : { isBlock: true, ...(staff ? { techId } : {}) }) }
         : {
             techId: techId || null,
             startsAt,

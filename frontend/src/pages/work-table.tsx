@@ -192,13 +192,13 @@ function WorkTable({ token }: { token?: string }) {
   }, [linkedQuery.data, sessionId, timezone, date, staff, tableId, update])
 
   const [form, setForm] = useState<FormTarget | null>(null)
-  // Only 管理 book; a tech's clicks on free time mark busy time once they turn that on.
+  // Only 管理 book; on one's own table, clicks on free time mark busy time once that is on.
   const [blocking, setBlocking] = useState(false)
   const [tipHidden, setTipHidden] = useState(() => localStorage.getItem(TIP_HIDDEN) === '1')
   const canAdd = staff ? !!tableId && tableId !== UNASSIGNED : own && blocking
   const addAt = (day: string, minute: number) => {
     if (!canAdd || !tableId) return
-    setForm({ kind: 'new', day, minute, techId: tableId, block: !staff })
+    setForm({ kind: 'new', day, minute, techId: tableId, block: !staff || (own && blocking) })
   }
   const describeConflict = (conflict: ScheduleConflict) => {
     const start = Date.parse(conflict.startsAt)
@@ -376,7 +376,7 @@ function WorkTable({ token }: { token?: string }) {
           <Button variant="ghost" size="sm" className="wt-today" onClick={() => update({ date: null })}>
             {t('workTable.today')}
           </Button>
-          {!staff && own && (
+          {own && (
             <Button
               variant="ghost"
               size="icon"
@@ -478,7 +478,7 @@ function WorkTable({ token }: { token?: string }) {
       </div>
 
       {canAdd && (
-        <button type="button" className="wt-fab" aria-label={staff ? t('workTable.new') : t('workTable.newBusy')} onClick={() => addAt(date, nextSlot(timezone))}>
+        <button type="button" className="wt-fab" aria-label={staff && !(own && blocking) ? t('workTable.new') : t('workTable.newBusy')} onClick={() => addAt(date, nextSlot(timezone))}>
           <Plus />
         </button>
       )}
