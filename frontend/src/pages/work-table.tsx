@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pin, Plus, Share2, X } from 'lucide-react'
+import { Bell, CalendarOff, Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pin, Plus, Share2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Button,
@@ -47,6 +47,7 @@ import '@/styles/work-table.css'
 
 const UNASSIGNED = 'unassigned'
 const LAST_TABLE = 'sharecode-work-table'
+const TIP_HIDDEN = 'sharecode-work-table-tip'
 const PHONE = '(max-width: 767px)'
 
 export function WorkTablePage() {
@@ -190,7 +191,10 @@ function WorkTable({ token }: { token?: string }) {
   }, [linkedQuery.data, sessionId, timezone, date, staff, tableId, update])
 
   const [form, setForm] = useState<FormTarget | null>(null)
-  const canAdd = staff ? !!tableId && tableId !== UNASSIGNED : own
+  // Only 管理 book; a tech's clicks on free time mark busy time once they turn that on.
+  const [blocking, setBlocking] = useState(false)
+  const [tipHidden, setTipHidden] = useState(() => localStorage.getItem(TIP_HIDDEN) === '1')
+  const canAdd = staff ? !!tableId && tableId !== UNASSIGNED : own && blocking
   const addAt = (day: string, minute: number) => {
     if (!canAdd || !tableId) return
     setForm({ kind: 'new', day, minute, techId: tableId, block: !staff })
@@ -387,6 +391,18 @@ function WorkTable({ token }: { token?: string }) {
           <Button variant="ghost" size="sm" className="wt-today" onClick={() => update({ date: null })}>
             {t('workTable.today')}
           </Button>
+          {!staff && own && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn('wt-mode', blocking && 'is-on')}
+              aria-label={t('workTable.busyMode')}
+              aria-pressed={blocking}
+              onClick={() => setBlocking(on => !on)}
+            >
+              <CalendarOff />
+            </Button>
+          )}
           {staff && accountRow && (
             <Button variant="ghost" size="icon" aria-label={t('workTable.share')} disabled={resetLink.isPending} onClick={share}><Share2 /></Button>
           )}
@@ -438,6 +454,18 @@ function WorkTable({ token }: { token?: string }) {
           <span className={cn('wt-pill', dayCount === 0 && 'is-empty')}>
             {dayCount ? t('workTable.sessionCount', { count: dayCount }) : t('workTable.noSessions')}
           </span>
+        </div>
+      )}
+
+      {!staff && !tipHidden && (
+        <div className="wt-tip">
+          <span className="wt-note-text">
+            {t('workTable.staffOnly')}
+            {linked && <Link to={`/login?next=${encodeURIComponent(`/t/${token}`)}`}>{t('workTable.signInToEdit')}</Link>}
+          </span>
+          <button type="button" className="wt-note-close" aria-label={t('workTable.hideNote')} onClick={() => { localStorage.setItem(TIP_HIDDEN, '1'); setTipHidden(true) }}>
+            <X />
+          </button>
         </div>
       )}
 

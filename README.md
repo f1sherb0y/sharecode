@@ -374,14 +374,15 @@ Phones show one day at a time under a week strip; wider screens show the week.
   time (or **+**) and book it: date, start, end, company, position, and if they
   like a customer and notes. A time already taken on that table is refused, with
   who booked it. Cards show the 管理 who booked, the time, company and position.
-- A tech sees only their own table. They mark busy time (占用) on it, which keeps
-  bookings out, and pin a note above it (置顶说明) from the "···" menu. Busy time
+- A tech sees only their own table and cannot book on it. With the 标记占用
+  button at the top right turned on, clicks on free time mark busy time (占用),
+  which keeps bookings out; they also pin a note above it (置顶说明) from the "···" menu. Busy time
   may cover a session already booked; both then turn red until someone moves one.
 - Staff share a table with the share button at the top right, which copies its
   link (`/t/<link>`). Whoever opens it sees that table without signing in, with
   each session's 管理, time, company, position and notes but no customer and no
   rooms, and may only pin the note and mark busy time; 管理 already signed in
-  get the table itself to edit. 重置链接 in the "···" menu stops the old link
+  get the table itself to edit, and 如要编辑请登录 signs in and comes back. 重置链接 in the "···" menu stops the old link
   and copies the new one.
 - For a tech without an account, staff make a new table (新建工作表) from the
   chip; its link is copied at once. Once the tech registers, 合并到账号 moves its

@@ -966,6 +966,9 @@
     "mergeAction": "合并",
     "merged": "已合并",
     "linkGone": "这个链接无效或已重置",
-    "clash": "时间冲突"
+    "clash": "时间冲突",
+    "busyMode": "标记占用",
+    "staffOnly": "只有管理能编辑排班",
+    "signInToEdit": "如要编辑请登录"
   }
 }

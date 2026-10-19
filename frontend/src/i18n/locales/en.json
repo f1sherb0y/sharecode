@@ -967,6 +967,9 @@
     "mergeAction": "Merge",
     "merged": "Merged.",
     "linkGone": "This link is not valid or was reset.",
-    "clash": "Time clash"
+    "clash": "Time clash",
+    "busyMode": "Mark busy time",
+    "staffOnly": "Only managers can edit the schedule",
+    "signInToEdit": "Sign in to edit"
   }
 }

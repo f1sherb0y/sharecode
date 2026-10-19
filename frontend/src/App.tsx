@@ -1,5 +1,5 @@
 import { useEffect, lazy, Suspense } from 'react'
-import { BrowserRouter, HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui'
 
@@ -11,6 +11,7 @@ import {
 } from '@/lib/tauri'
 import { queryClient } from '@/lib/query-client'
 import { Spinner } from '@/components/ui'
+import { afterLogin } from '@/lib/after-login'
 import { Toaster } from 'sonner'
 import { useSessionRenewal } from '@/hooks/use-session-renewal'
 import { NotificationPopup } from '@/components/features/notification-popup'
@@ -51,6 +52,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
   const user = useAuthStore((state) => state.user)
   const isLoading = useAuthStore((state) => state.isLoading)
   const isInitialized = useAuthStore((state) => state.isInitialized)
@@ -64,7 +66,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
-    return <Navigate to="/rooms" replace />
+    return <Navigate to={afterLogin(location.search)} replace />
   }
 
   return <>{children}</>

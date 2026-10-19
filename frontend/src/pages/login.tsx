@@ -1,6 +1,6 @@
 import { translateError } from '@/i18n/errors'
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Settings } from 'lucide-react'
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
@@ -8,10 +8,12 @@ import { AuthBrand, ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { useAuthStore } from '@/stores'
 import { isTauriApp } from '@/lib/tauri'
 import { parseShareToken } from '@/lib/share'
+import { afterLogin } from '@/lib/after-login'
 
 export function LoginPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuthStore()
 
   const [error, setError] = useState('')
@@ -34,7 +36,7 @@ export function LoginPage() {
 
     try {
       await login(username, password)
-      navigate('/rooms')
+      navigate(afterLogin(location.search))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
