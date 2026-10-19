@@ -385,10 +385,11 @@ yesterday's and tomorrow's say so.
   (only the hours above it change) and shows the week in that zone's days. New rooms and new sessions share the same
   date, start and length fields. The legend above the calendar lists the agents
   whose customers have sessions in view, one color each.
-- The tech picker in the toolbar shows one tech's sessions, every agent's, so
-  their free time is right; what is drawn or dropped on it is theirs, and the
-  **Unassigned** strip above then lists every session waiting for a tech. In the
-  day view a tech's name opens their calendar.
+- The person picker in the toolbar lists techs, 管理 and 超级管理员 together by
+  name, since anyone can take a session. Choosing one shows that person's
+  sessions, every agent's, so their free time is right; what is drawn or dropped
+  on it is theirs, and the **Unassigned** strip above then lists every session
+  waiting for a tech. In the day view a name opens that person's calendar.
 
 - On their first visit, agents get a short guided tour of the page, on any
   device: adding a customer, planning a session, and moving and assigning
@@ -399,7 +400,9 @@ yesterday's and tomorrow's say so.
   list. Week and day are timelines with the hours across: the week is days down
   the page without end and without a scrollbar (the wheel, dragging, a flick or
   the arrow keys move it; only the days in view are drawn), opening on the
-  current week; the day has a row per tech plus one for unassigned sessions.
+  current week; the day has a row for each person with sessions that day (or
+  in the hours shown) and one for unassigned sessions if there are any, or else
+  a single unnamed row to plan on.
   Sessions at the same time in a row sit in lanes one under another, in tech
   order. Both show the whole day, 00:00 to 24:00, at first. Ctrl and the wheel
   (or a pinch) zoom in on as little as two hours around the pointer, and

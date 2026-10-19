@@ -31,6 +31,8 @@ export interface DayRow extends TimelineRow {
 interface TimeGridProps {
   /** Every row starts at the same instant. */
   rows: DayRow[]
+  /** Rows keep a column for names, even an unnamed one. */
+  labeled: boolean
   /** Each row's sessions in lanes, in the order of the rows. */
   layouts: DayLayout[]
   /** Minutes every row's window spans. */
@@ -60,7 +62,7 @@ interface TimeGridProps {
  * sideways through the days without end, a date where each begins. Sessions at the same
  * time in a row take lanes, one under another.
  */
-export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding, showTech, colorOf, onOpen, onDrop, onPan, onZoom, onReset, drag, label }: TimeGridProps) {
+export function TimeGrid({ rows, labeled, layouts, span, timezone, now, editable, adding, showTech, colorOf, onOpen, onDrop, onPan, onZoom, onReset, drag, label }: TimeGridProps) {
   const scroller = useRef<HTMLDivElement>(null)
   const hoursRef = useRef<HTMLDivElement>(null)
   const width = useTrackWidth(hoursRef)
@@ -73,7 +75,6 @@ export function TimeGrid({ rows, layouts, span, timezone, now, editable, adding,
     const end = Math.min(segment.end, segment.start + span * MINUTE_MS)
     onPan(((segment.start + end) / 2 - first) / MINUTE_MS - span / 2)
   }, [onPan, first, span])
-  const labeled = rows.some(row => row.label)
   const lines = cardLines(showTech)
   const lanesOf = (index: number) => (layouts[index] ?? EMPTY_LAYOUT).lanes
 

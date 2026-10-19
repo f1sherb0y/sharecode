@@ -78,6 +78,7 @@ type Tab = 'calendar' | 'sessions'
 const ALL_TECHS = 'all'
 const NO_SESSIONS: Appointment[] = []
 const everyone = () => true
+const UNASSIGNED_ROW = 'unassigned'
 
 /** 排班: agents and admins plan every tech's sessions and keep the customer list; techs see their own sessions. */
 export function SchedulePage() {
@@ -204,11 +205,13 @@ export function SchedulePage() {
   })
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data])
 
-  // A linked session (from a notice or the customer history) may lie outside the range.
+  // A linked session (from a notice or the customer history) may lie outside the range;
+  // one just deleted here is not fetched again while the address still names it.
+  const deleted = useRef(new Set<string>())
   const linkedQuery = useQuery({
     queryKey: queryKeys.appointment(sessionId ?? ''),
     queryFn: async () => (await api.getAppointment(sessionId!)).appointment,
-    enabled: !!sessionId && !appointments.some(a => a.id === sessionId) && !fetching,
+    enabled: !!sessionId && !deleted.current.has(sessionId) && !appointments.some(a => a.id === sessionId) && !fetching,
     retry: false,
   })
   const openAppointment = (sessionId && (appointments.find(a => a.id === sessionId) ?? linkedQuery.data)) || null
@@ -445,26 +448,31 @@ export function SchedulePage() {
   })
 
   const techName = (id: string) => users.find(account => account.id === id)?.username ?? people.find(person => person.id === id)?.username ?? ''
-  // Every tech, and whoever is chosen even if they are not a tech.
-  const techOptions = useMemo(() => {
-    const extra = techFilter && !techs.some(tech => tech.id === techFilter) ? users.filter(account => account.id === techFilter) : []
-    return [...techs, ...extra]
-  }, [techs, techFilter, users])
+  // Anyone can take a session: techs, 管理 and 超级管理员, in one list by name.
+  const techOptions = useMemo(() => [...users].sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' })), [users])
 
   // Sessions by time, so each day finds its own without going through them all.
   const index = useMemo(() => indexSessions(visible), [visible])
-  // The day view: a row per tech to plan on and one for sessions waiting for a tech; a tech
-  // sees a single row, and one tech's calendar is theirs alone.
+  // The day view: a row for each person with sessions that day (or in the hours shown) and
+  // one for sessions waiting for a tech when there are any; with none, one unnamed row to
+  // plan on. A tech sees a single row, and one person's calendar is theirs alone.
   const filterName = techFilter ? techName(techFilter) : ''
+  const dayFrom = Math.min(dayStart(shownDay, timezone).getTime(), origin)
+  const dayTo = Math.max(dayStart(addDays(shownDay, 1), timezone).getTime(), origin + span * MINUTE_MS)
+  const dayKeys = useMemo(() => {
+    if (!timeline || view !== 'day') return ''
+    const busy = new Set(sessionsIn(index, dayFrom, dayTo).map(appointment => appointment.tech?.id ?? UNASSIGNED_ROW))
+    return [...people.filter(person => busy.has(person.id)).map(person => person.id), ...(busy.has(UNASSIGNED_ROW) ? [UNASSIGNED_ROW] : [])].join(',')
+  }, [timeline, view, index, dayFrom, dayTo, people])
   const dayRows = useMemo<Pick<DayRow, 'key' | 'techId' | 'label'>[]>(() => {
     if (!timeline || view !== 'day') return []
     if (!staff) return [{ key: 'self', label: '' }]
     if (techFilter) return [{ key: techFilter, techId: techFilter, label: filterName }]
-    return [
-      ...people.map(person => ({ key: person.id, techId: person.id, label: person.username })),
-      { key: 'unassigned', techId: null, label: t('schedule.unassigned') },
-    ]
-  }, [timeline, view, staff, techFilter, filterName, people, t])
+    const rows = dayKeys.split(',').filter(Boolean).map(key => key === UNASSIGNED_ROW
+      ? { key, techId: null, label: t('schedule.unassigned') }
+      : { key, techId: key, label: people.find(person => person.id === key)?.username ?? '' })
+    return rows.length ? rows : [{ key: UNASSIGNED_ROW, techId: null, label: '' }]
+  }, [timeline, view, staff, techFilter, filterName, dayKeys, people, t])
   const dayLayouts = useMemo(
     () => dayRows.map(row => layoutDay(index, shownDay, timezone, reach, appointment => inRow(appointment.tech?.id ?? null, row), laneRank)),
     [dayRows, index, shownDay, timezone, reach, laneRank],
@@ -510,7 +518,7 @@ export function SchedulePage() {
   // what the rows in view hold, in their window or counted at its edge (one tech's
   // calendar shows none); the month and the list, whatever they hold.
   const calendarSpan = !timeline || techFilter ? null
-    : view === 'day' ? [dayStart(shownDay, timezone).getTime() - reach, dayStart(addDays(shownDay, 1), timezone).getTime() + reach]
+    : view === 'day' ? [dayFrom, dayTo]
       : visibleDays ? [dayStart(visibleDays.first, timezone).getTime(), dayStart(addDays(visibleDays.last, 1), timezone).getTime()] : null
   const onCalendar = new Set((calendarSpan ? sessionsIn(index, calendarSpan[0]!, calendarSpan[1]!) : timeline ? [] : visible).map(a => a.id))
   const waiting = (unassignedQuery.data ?? []).filter(a => Date.parse(a.endsAt) > now && !onCalendar.has(a.id))
@@ -587,7 +595,7 @@ export function SchedulePage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={ALL_TECHS}>{t('schedule.allTechs')}</SelectItem>
+                      <SelectItem value={ALL_TECHS}>{t('schedule.everyone')}</SelectItem>
                       {techOptions.map(person => <SelectItem key={person.id} value={person.id}>{person.username}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -665,6 +673,7 @@ export function SchedulePage() {
                     {!staff && dayCount === 0 && <p className="schedule-empty">{t('schedule.noSessionsDay')}</p>}
                     <TimeGrid
                       rows={rows}
+                      labeled={staff}
                       layouts={dayLayouts}
                       span={span}
                       timezone={timezone}
@@ -753,9 +762,11 @@ export function SchedulePage() {
           setDraft(null)
           setParams({ session: null, ...(tab === 'calendar' ? bringIntoView(saved) : {}) })
         }}
-        onDeleted={async () => {
-          await refresh()
+        onDeleted={async (appointmentId) => {
+          deleted.current.add(appointmentId)
           closeDialog()
+          queryClient.removeQueries({ queryKey: queryKeys.appointment(appointmentId) })
+          await refresh()
         }}
       />
 

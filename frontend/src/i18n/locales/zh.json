@@ -728,7 +728,7 @@
     "entry": "排班",
     "newSession": "新建场次",
     "add": "添加",
-    "allTechs": "全部技术",
+    "everyone": "所有人",
     "earlier": "更早 {{count}} 场",
     "later": "更晚 {{count}} 场",
     "unassigned": "未分配",
@@ -787,8 +787,6 @@
       "changeCustomer": "更换",
       "noCustomers": "没有匹配的客户。",
       "tech": "技术",
-      "techsGroup": "技术",
-      "staffGroup": "管理",
       "deletedAccount": "{{username}}（已删除）",
       "date": "日期",
       "start": "开始时间",
@@ -896,7 +894,7 @@
       },
       "assign": {
         "title": "安排技术",
-        "body": "选一个技术，只看他的场次和空闲时间，把上方未分配的场次拖到空闲处就交给他。日视图里每个技术一行，也能拖过去。"
+        "body": "选一个技术，只看他的场次和空闲时间，把上方未分配的场次拖到空闲处就交给他。日视图里当天有场次的技术各占一行，也能拖过去。"
       },
       "onlyMine": {
         "title": "只看我的",

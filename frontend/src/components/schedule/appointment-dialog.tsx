@@ -16,10 +16,7 @@ import {
   Label,
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
   Textarea,
@@ -101,8 +98,8 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seed])
 
-  const techs = useMemo(() => users.filter(user => user.role === 'tech'), [users])
-  const staffUsers = useMemo(() => users.filter(user => user.role !== 'tech'), [users])
+  // Anyone can take a session: techs, 管理 and 超级管理员, in one list by name.
+  const people = useMemo(() => [...users].sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' })), [users])
 
   const saveMutation = useMutation({
     mutationFn: async (allowConflicts: boolean) => {
@@ -142,6 +139,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
     mutationFn: () => api.deleteAppointment(appointment!.id),
     onSuccess: () => {
       toast.success(t('schedule.dialog.deleted'))
+      setConfirmDelete(false)
       onDeleted(appointment!.id)
     },
     onError: (err) => setError(err instanceof Error ? err.message : t('common.requestFailed')),
@@ -227,21 +225,7 @@ export function AppointmentDialog({ open, onOpenChange, appointment, draft, staf
         <SelectContent>
           <SelectItem value={NONE}>{t('schedule.unassigned')}</SelectItem>
           {missingTech && <SelectItem value={missingTech.id}>{t('schedule.dialog.deletedAccount', { username: missingTech.username })}</SelectItem>}
-          {techs.length > 0 && (
-            <SelectGroup>
-              <SelectLabel>{t('schedule.dialog.techsGroup')}</SelectLabel>
-              {techs.map(techOption)}
-            </SelectGroup>
-          )}
-          {staffUsers.length > 0 && (
-            <>
-              <SelectSeparator />
-              <SelectGroup>
-                <SelectLabel>{t('schedule.dialog.staffGroup')}</SelectLabel>
-                {staffUsers.map(techOption)}
-              </SelectGroup>
-            </>
-          )}
+          {people.map(techOption)}
         </SelectContent>
       </Select>
     </div>

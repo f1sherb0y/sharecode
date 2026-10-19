@@ -385,6 +385,8 @@ try {
     // In an hour: on the tech's card above the room list, which covers two hours back to ten ahead.
     const today = (await plan('agent_a', { customerId: wang.id, techId: id('tech_b'), startsAt: new Date(Date.now() + 3600e3).toISOString(), durationMinutes: 30, company: 'Today ' + engine, allowConflicts: true })).appointment
     const booked = []
+    // tech_b already has a session on the day shown, tech_a none: the day view gives a row to tech_b only.
+    booked.push((await plan('agent_a', { customerId: wang.id, techId: id('tech_b'), startsAt: at(uiDay, 7), durationMinutes: 30 })).appointment)
     try {
       // Agents: click free time, add the customer in place, confirm an overlap.
       const { context, page, errors } = await openPage(browser, as('agent_a'))
@@ -399,7 +401,8 @@ try {
         const start = Number(await row.getAttribute('data-start')), span = Number(await row.getAttribute('data-span'))
         return { x: box.x + ((Date.parse(at(uiDay, hour, minute)) - start) / (span * 60000)) * box.width, y: box.y + box.height / 2, minuteWidth: box.width / span }
       }
-      await column('tech_a').waitFor()
+      await column('tech_b').waitFor()
+      assert.equal(await column('tech_a').count(), 0, 'only people with sessions that day have a row')
       assert.equal(await pageWidth(), 1440)
       assert.equal(await column('').count(), 1, 'the day view has an unassigned row')
       await column('').locator(`[data-appointment="${shown.id}"]`).waitFor()
@@ -415,21 +418,24 @@ try {
       await column('').locator(`[data-appointment="${others.id}"]`).waitFor()
       await onlyMine.click()
       await page.locator(`[data-appointment="${others.id}"]`).waitFor({ state: 'detached' })
-      // With Add on, a click plans an hour from the half hour.
-      let point = await pointAt('tech_a', 10, 15)
+      // With Add on, a click plans an hour from the half hour, for whichever tech is chosen.
+      let point = await pointAt('', 10, 15)
       const add = page.getByRole('button', { name: 'Add', exact: true })
       await add.click()
       await page.mouse.click(point.x, point.y)
       let dialog = page.getByRole('dialog', { name: 'New session' })
       await dialog.waitFor()
       assert.deepEqual([await dialog.locator('#session-date').getAttribute('data-value'), await dialog.locator('#session-time').getAttribute('data-value')], [day, '10:00'])
-      assert.match(await dialog.getByRole('combobox', { name: 'Tech' }).innerText(), /tech_a/)
       await dialog.getByRole('combobox', { name: 'Customer' }).fill(customerName)
       await dialog.getByRole('option', { name: `New customer “${customerName}”` }).click()
       const adding = dialog.getByRole('group', { name: 'New customer' })
       await adding.getByLabel('Contact').fill('ui@example.invalid')
       await adding.getByRole('button', { name: 'Add customer' }).click()
       await dialog.getByText(customerName, { exact: true }).waitFor()
+      // After the customer: a closing select hands focus back to its trigger a moment later,
+      // which would close the customer suggestions if they were typed straight after.
+      await dialog.getByRole('combobox', { name: 'Tech' }).click()
+      await page.getByRole('option', { name: 'tech_a', exact: true }).click()
       await dialog.getByLabel('Company').fill('Initech')
       let saved = page.waitForResponse(r => r.url().endsWith('/api/appointments') && r.request().method() === 'POST')
       await dialog.getByRole('button', { name: 'Create session' }).click()
@@ -582,7 +588,7 @@ try {
       assert.equal(await page.locator('.schedule-hour').first().innerText(), '00:00', 'and the whole day')
       // The day view shows the whole day; its hours are dragged on through the days, and where one begins, the hours above name it.
       await page.getByRole('button', { name: 'Day', exact: true }).click()
-      const waitingRow = column('')
+      const waitingRow = page.locator('.schedule-grid-scroll [data-schedule-row]').first()
       await waitingRow.waitFor()
       const dayBox = await waitingRow.boundingBox()
       const blank = await waitingRow.evaluate(freeX)
@@ -653,10 +659,10 @@ try {
       await page.getByRole('option', { name: 'Eastern Time' }).click()
       await page.locator('.schedule-hour').filter({ hasText: new RegExp(`^${eastern.hour}:00$`) }).waitFor()
       assert(Math.abs((await abroadCard.boundingBox()).x - cardBefore.x) < 1, 'the session stays in place')
-      // The legend names the agents whose customers have sessions in view (one color each); the day view keeps a row for every tech.
+      // The legend names the agents whose customers have sessions in view (one color each); the day view leaves out techs without sessions.
       const legendNames = (await page.locator('.schedule-legend-item').allInnerTexts()).map(text => text.trim())
       assert(legendNames.includes('audit_admin') && legendNames.every(name => ['agent_a', 'agent_b', 'audit_admin'].includes(name)), legendNames.join())
-      assert.equal(await column('tech_b').count(), 1)
+      assert.equal(await column('tech_b').count(), 0)
       assert.match(await abroadCard.innerText(), /tech_a[\s\S]*audit_admin|audit_admin/)
       await abroadCard.click()
       let form = page.getByRole('dialog', { name: 'Edit session' })
@@ -705,6 +711,18 @@ try {
       const pacificParts = inZone(pacific.startsAt, 'America/Los_Angeles')
       assert.deepEqual([`${pacificParts.year}-${pacificParts.month}-${pacificParts.day}`, `${pacificParts.hour}:${pacificParts.minute}`], [pacificDay, '09:30'])
       await form.waitFor({ state: 'hidden' })
+      // Deleting a session closes the confirmation and the session, with nothing fetched again.
+      const doomed = (await plan('agent_a', { customerId: wang.id, startsAt: at(uiDay + 5, 9), durationMinutes: 30 })).appointment
+      await page.goto(`${WEB}/schedule?view=day&date=${at(uiDay + 5, 0).slice(0, 10)}&session=${doomed.id}`)
+      form = page.getByRole('dialog', { name: 'Edit session' })
+      await form.getByRole('button', { name: 'Delete session' }).click()
+      const missing = []
+      page.on('response', response => { if (response.status() === 404 && response.url().includes(doomed.id)) missing.push(response.url()) })
+      await page.getByRole('dialog', { name: 'Delete the session with Wang Wu?' }).getByRole('button', { name: 'Delete', exact: true }).click()
+      await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
+      await page.waitForTimeout(500)
+      assert.deepEqual(missing, [])
+      assert.equal(await page.locator('[data-sonner-toast][data-type="error"]').count(), 0)
       // New rooms use the same date, start and length fields.
       await page.goto(`${WEB}/rooms`)
       await page.getByRole('button', { name: 'Create New Room' }).first().click()
@@ -754,8 +772,8 @@ try {
         await page.goto(`${WEB}/schedule?date=${day}`)
         assert.equal(await page.getByRole('button', { name: '列表', exact: true }).getAttribute('aria-pressed'), 'true')
         await page.locator(`.schedule-agenda-item`).first().waitFor()
-        // tech_b: the moved overlap and the session taken from the strip; agents: every session planned here.
-        assert.equal(await page.locator('.schedule-agenda-item').count(), actor === 'tech_b' ? 2 : [first, second, waiting, shown, ...booked].length)
+        // tech_b: their first session, the moved overlap and the session taken from the strip; agents: every session planned here.
+        assert.equal(await page.locator('.schedule-agenda-item').count(), actor === 'tech_b' ? 3 : [first, second, waiting, shown, ...booked].length)
         assert(await fitsWidth(page), 'no sideways scrolling')
         if (actor === 'agent_a') {
           await page.getByRole('button', { name: '添加', exact: true }).click()
@@ -841,7 +859,7 @@ try {
         await context.close()
       }
       for (const session of [first, second, waiting, shown, others, today, ...booked]) await request('/api/appointments/' + session.id, 'DELETE', undefined, as('agent_a'))
-      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, whole days that Ctrl+wheel zooms and dragging pans (within the day in the endless week, on through the days in the day view, dates at midnight), Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; EN/ZH')
+      console.log('PASS', engine, 'full-width timelines colored by agent: only mine by default, Add to plan, whole days that Ctrl+wheel zooms and dragging pans (within the day in the endless week, on through the days in the day view, dates at midnight), Reset, inline customer, overlap lanes and confirmation, drag to another tech, resize, unassigned strip without repeats, no status or agent; 场次: customers and their sessions, new session for a customer, customer add/delete; tech read-only with room and the next hours on the room list; phone list and 场次; the agent tour once (walk with Back/Next, skip on a phone); calendar in Eastern Time (same window, other hours) while 场次 keeps Shanghai; session form zone switch; room form time row; legend of agents in view; day rows only for people with sessions; deleting closes the dialogs; EN/ZH')
     } finally { await browser.close() }
   }
 } finally { await web.close() }

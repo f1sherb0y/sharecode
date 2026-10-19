@@ -728,7 +728,7 @@
     "entry": "Schedule",
     "newSession": "New session",
     "add": "Add",
-    "allTechs": "All techs",
+    "everyone": "Everyone",
     "earlier": "{{count}} earlier",
     "later": "{{count}} later",
     "unassigned": "Unassigned",
@@ -787,8 +787,6 @@
       "changeCustomer": "Change",
       "noCustomers": "No matching customers.",
       "tech": "Tech",
-      "techsGroup": "Techs",
-      "staffGroup": "Managers",
       "deletedAccount": "{{username}} (removed)",
       "date": "Date",
       "start": "Start",
@@ -896,7 +894,7 @@
       },
       "assign": {
         "title": "Assign a tech",
-        "body": "Pick a tech to see only their sessions and free time, then drag an unassigned session from above onto free time to give it to them. The day view has a row per tech to drop on too."
+        "body": "Pick a tech to see only their sessions and free time, then drag an unassigned session from above onto free time to give it to them. In the day view, each tech with sessions that day has a row to drop on too."
       },
       "onlyMine": {
         "title": "Only mine",
