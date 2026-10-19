@@ -31,13 +31,16 @@ use crate::{
 // nobody can sign in as, merged into their real account once they have one.
 const MAX_NOTE_CHARS: usize = 200;
 /// Links are short to share yet too many to guess: 62^10 is about 2^59.
-const LINK_CHARS: usize = 10;
-const PASSWORD_CHARS: usize = 32;
+pub(super) const LINK_CHARS: usize = 10;
+pub(super) const PASSWORD_CHARS: usize = 32;
 
 #[derive(sqlx::FromRow)]
 struct TableRow {
     id: String,
     username: String,
+    /// The name on the techs' list, else the username.
+    name: String,
+    listed: bool,
     color: String,
     role: String,
     note: Option<String>,
@@ -52,18 +55,24 @@ pub async fn list_work_tables(
 ) -> Result<Json<Value>, ApiError> {
     let staff = is_staff(&auth_user.role);
     let rows = sqlx::query_as::<_, TableRow>(
-        r#"SELECT u.id, u.username, u.color, u.role, u."scheduleNote" as note,
+        r#"SELECT u.id, u.username, COALESCE(re.name, u.username) as name, re."userId" IS NOT NULL as listed,
+            u.color, u.role, u."scheduleNote" as note,
             u."linkOnly" as link_only, u."tableToken" as token,
             (SELECT count(*) FROM "Appointment" a
              WHERE a."techId" = u.id AND NOT a."isBlock"
                AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW()) as upcoming
         FROM "User" u
+        LEFT JOIN "RosterEntry" re ON re.kind = 'tech' AND re."userId" = u.id
+        CROSS JOIN (SELECT EXISTS (SELECT 1 FROM "RosterEntry" WHERE kind = 'tech') as on_list) roster
         WHERE NOT u."isDeleted"
           AND ($1 OR u.id = $2)
-          AND (u.role = 'tech' OR u.id = $2 OR EXISTS (
-            SELECT 1 FROM "Appointment" a WHERE a."techId" = u.id AND NOT a."isBlock"
-              AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW()))
-        ORDER BY lower(u.username), u.id"#,
+          -- With a techs' list, staff see the tables on it; without, every tech's and
+          -- anyone else's holding sessions still to come.
+          AND CASE WHEN $1 AND roster.on_list THEN re."userId" IS NOT NULL
+              ELSE u.role = 'tech' OR u.id = $2 OR EXISTS (
+                SELECT 1 FROM "Appointment" a WHERE a."techId" = u.id AND NOT a."isBlock"
+                  AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > NOW()) END
+        ORDER BY re.position NULLS LAST, lower(u.username), u.id"#,
     )
     .bind(staff)
     .bind(&auth_user.id)
@@ -84,10 +93,10 @@ pub async fn list_work_tables(
     };
     let tables = rows
         .iter()
-        .filter(|row| row.role == "tech" || row.upcoming > 0 || (!staff && row.id == auth_user.id))
+        .filter(|row| row.listed || row.role == "tech" || row.upcoming > 0 || (!staff && row.id == auth_user.id))
         .map(|row| {
             json!({
-                "id": row.id, "username": row.username, "color": row.color, "role": row.role,
+                "id": row.id, "username": row.username, "name": row.name, "color": row.color, "role": row.role,
                 "note": row.note, "upcoming": row.upcoming, "linkOnly": row.link_only,
                 // The link opens the table without signing in: staff hand it out.
                 "link": if staff { row.token.clone() } else { None },
@@ -160,6 +169,33 @@ pub async fn create_work_table(
     .execute(&mut *tx)
     .await
     .map_err(user_creation_error)?;
+    // With a techs' list, only listed tables show: the new one joins its end.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('roster', 0))")
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| db_error(err, "Failed to lock the lists"))?;
+    let listed: Option<bool> = sqlx::query_scalar(
+        r#"SELECT bool_or(lower(name) = lower($1)) FROM "RosterEntry" WHERE kind = 'tech'"#,
+    )
+    .bind(&name)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to read the lists"))?;
+    match listed {
+        Some(true) => return Err(ApiError::bad_request("Already on the list")),
+        Some(false) => {
+            sqlx::query(
+                r#"INSERT INTO "RosterEntry" (kind, "userId", name, position)
+                VALUES ('tech', $1, $2, (SELECT max(position) + 1 FROM "RosterEntry" WHERE kind = 'tech'))"#,
+            )
+            .bind(&id)
+            .bind(&name)
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| db_error(err, "Failed to add to the list"))?;
+        }
+        None => {}
+    }
     audit::record_details(
         &mut *tx, &client, "work_table.created", Some(&auth_user.id), Some(&auth_user.username),
         Some(&id), true, None, None, json!({ "linkOnly": true }),
@@ -217,61 +253,7 @@ pub async fn merge_work_table(
         return Err(ApiError::bad_request("Choose another account"));
     }
     let mut tx = state.db.begin().await.map_err(|e| db_error(e, "Failed to start audited operation"))?;
-    let placeholder: Option<(Option<String>, Option<String>)> = sqlx::query_as(
-        r#"SELECT "scheduleNote", "tableToken" FROM "User" WHERE id = $1 AND "linkOnly" AND NOT "isDeleted" FOR UPDATE"#,
-    )
-    .bind(&source)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|err| db_error(err, "Failed to load the work table"))?;
-    let (note, token) = placeholder.ok_or_else(|| ApiError::not_found("Work table not found"))?;
-    let account: Option<String> = sqlx::query_scalar(
-        r#"SELECT id FROM "User" WHERE id = $1 AND NOT "linkOnly" AND NOT "isDeleted" FOR UPDATE"#,
-    )
-    .bind(&target)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|err| db_error(err, "Failed to load the account"))?;
-    if account.is_none() {
-        return Err(ApiError::bad_request("Choose an account"));
-    }
-    for key in [&source, &target] {
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-            .bind(format!("schedule:{key}"))
-            .execute(&mut *tx)
-            .await
-            .map_err(|err| db_error(err, "Failed to lock the schedule"))?;
-    }
-    let moved = sqlx::query(r#"UPDATE "Appointment" SET "techId" = $2, "updatedAt" = NOW() WHERE "techId" = $1"#)
-        .bind(&source)
-        .bind(&target)
-        .execute(&mut *tx)
-        .await
-        .map_err(|err| db_error(err, "Failed to move sessions"))?
-        .rows_affected();
-    sqlx::query(r#"UPDATE "Room" SET "ownerId" = $2, "updatedAt" = NOW() WHERE "ownerId" = $1"#)
-        .bind(&source)
-        .bind(&target)
-        .execute(&mut *tx)
-        .await
-        .map_err(|err| db_error(err, "Failed to move rooms"))?;
-    // The placeholder goes; its link and note carry over unless the account has its own.
-    sqlx::query(
-        r#"UPDATE "User" SET "isDeleted" = true, "tableToken" = NULL, "tokenVersion" = "tokenVersion" + 1 WHERE id = $1"#,
-    )
-    .bind(&source)
-    .execute(&mut *tx)
-    .await
-    .map_err(|err| db_error(err, "Failed to remove the work table"))?;
-    sqlx::query(
-        r#"UPDATE "User" SET "scheduleNote" = COALESCE("scheduleNote", $2), "tableToken" = COALESCE("tableToken", $3) WHERE id = $1"#,
-    )
-    .bind(&target)
-    .bind(&note)
-    .bind(&token)
-    .execute(&mut *tx)
-    .await
-    .map_err(|err| db_error(err, "Failed to merge the work table"))?;
+    let moved = merge_placeholder(&mut tx, &source, &target).await?;
     audit::record_details(
         &mut *tx, &client, "work_table.merged", Some(&auth_user.id), Some(&auth_user.username),
         Some(&source), true, None, None, json!({ "into": target, "sessions": moved }),
@@ -281,10 +263,98 @@ pub async fn merge_work_table(
     Ok(Json(json!({ "merged": moved })))
 }
 
+/// Moves a placeholder's sessions (as tech and as 管理), rooms, note, link and list entries
+/// into a real account and removes the placeholder. Returns the sessions moved.
+pub(super) async fn merge_placeholder(
+    tx: &mut sqlx::PgConnection,
+    source: &str,
+    target: &str,
+) -> Result<u64, ApiError> {
+    let placeholder: Option<(Option<String>, Option<String>)> = sqlx::query_as(
+        r#"SELECT "scheduleNote", "tableToken" FROM "User" WHERE id = $1 AND "linkOnly" AND NOT "isDeleted" FOR UPDATE"#,
+    )
+    .bind(source)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to load the work table"))?;
+    let (note, token) = placeholder.ok_or_else(|| ApiError::not_found("Work table not found"))?;
+    let account: Option<String> = sqlx::query_scalar(
+        r#"SELECT id FROM "User" WHERE id = $1 AND NOT "linkOnly" AND NOT "isDeleted" FOR UPDATE"#,
+    )
+    .bind(target)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to load the account"))?;
+    if account.is_none() {
+        return Err(ApiError::bad_request("Choose an account"));
+    }
+    for key in [source, target] {
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(format!("schedule:{key}"))
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| db_error(err, "Failed to lock the schedule"))?;
+    }
+    let moved = sqlx::query(r#"UPDATE "Appointment" SET "techId" = $2, "updatedAt" = NOW() WHERE "techId" = $1"#)
+        .bind(source)
+        .bind(target)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| db_error(err, "Failed to move sessions"))?
+        .rows_affected();
+    let managed = sqlx::query(r#"UPDATE "Appointment" SET "managerId" = $2, "updatedAt" = NOW() WHERE "managerId" = $1"#)
+        .bind(source)
+        .bind(target)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| db_error(err, "Failed to move sessions"))?
+        .rows_affected();
+    // A list entry follows to the account unless the account is on that list already.
+    sqlx::query(
+        r#"UPDATE "RosterEntry" e SET "userId" = $2 WHERE e."userId" = $1
+          AND NOT EXISTS (SELECT 1 FROM "RosterEntry" o WHERE o.kind = e.kind AND o."userId" = $2)"#,
+    )
+    .bind(source)
+    .bind(target)
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to move list entries"))?;
+    sqlx::query(r#"DELETE FROM "RosterEntry" WHERE "userId" = $1"#)
+        .bind(source)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| db_error(err, "Failed to move list entries"))?;
+    sqlx::query(r#"UPDATE "Room" SET "ownerId" = $2, "updatedAt" = NOW() WHERE "ownerId" = $1"#)
+        .bind(source)
+        .bind(target)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| db_error(err, "Failed to move rooms"))?;
+    // The placeholder goes; its link and note carry over unless the account has its own.
+    sqlx::query(
+        r#"UPDATE "User" SET "isDeleted" = true, "tableToken" = NULL, "tokenVersion" = "tokenVersion" + 1 WHERE id = $1"#,
+    )
+    .bind(source)
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to remove the work table"))?;
+    sqlx::query(
+        r#"UPDATE "User" SET "scheduleNote" = COALESCE("scheduleNote", $2), "tableToken" = COALESCE("tableToken", $3) WHERE id = $1"#,
+    )
+    .bind(target)
+    .bind(&note)
+    .bind(&token)
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| db_error(err, "Failed to merge the work table"))?;
+    Ok(moved + managed)
+}
+
 #[derive(sqlx::FromRow)]
 struct LinkedTech {
     id: String,
     username: String,
+    name: String,
     color: String,
     note: Option<String>,
     token_version: i64,
@@ -293,7 +363,8 @@ struct LinkedTech {
 /// The tech whose table a link opens.
 async fn linked_tech(state: &AppState, token: &str) -> Result<LinkedTech, ApiError> {
     sqlx::query_as::<_, LinkedTech>(
-        r#"SELECT id, username, color, "scheduleNote" as note, "tokenVersion" as token_version
+        r#"SELECT id, username, color, "scheduleNote" as note, "tokenVersion" as token_version,
+            COALESCE((SELECT re.name FROM "RosterEntry" re WHERE re.kind = 'tech' AND re."userId" = "User".id), username) as name
         FROM "User" WHERE "tableToken" = $1 AND NOT "isDeleted""#,
     )
     .bind(token)
@@ -331,7 +402,7 @@ pub async fn open_table_link(
     let tech = linked_tech(&state, &token).await?;
     let appointments = table_link_sessions(&state.db, &tech.id, range.from.as_deref(), range.to.as_deref()).await?;
     Ok(Json(json!({
-        "table": { "id": tech.id, "username": tech.username, "color": tech.color, "note": tech.note },
+        "table": { "id": tech.id, "username": tech.username, "name": tech.name, "color": tech.color, "note": tech.note },
         "appointments": appointments,
     })))
 }
@@ -384,7 +455,7 @@ pub async fn delete_table_link_busy(
     delete_appointment(State(state), client, as_tech(&tech), Path(appointment_id)).await
 }
 
-fn random_token(len: usize) -> String {
+pub(super) fn random_token(len: usize) -> String {
     const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     // Bytes past the last whole multiple of 62 are dropped so every character is as likely.
     let limit = (256 / CHARSET.len() * CHARSET.len()) as u8;

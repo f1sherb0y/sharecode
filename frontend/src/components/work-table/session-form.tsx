@@ -1,16 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button, DatePicker, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea, TimePicker } from '@/components/ui'
 import { api } from '@/api'
 import { translateError } from '@/i18n/errors'
-import { queryKeys } from '@/lib/query-keys'
 import { DAY_MINUTES } from '@/lib/schedule'
 import { useAuthStore } from '@/stores'
 import { atMinute, dateKeyOf, minuteOfDay, parseTimeInput, timeInputValue, toZonedIso, todayKey } from '@/lib/zoned-time'
 import type { Appointment, AppointmentInput, ScheduleConflict, WorkTable } from '@/types'
 import { Sheet } from './sheet'
+import { useManagerOptions } from '@/components/schedule/manager-options'
 
 /** A new session (or busy time) where free time was clicked, or one to edit. */
 export type FormTarget =
@@ -62,16 +62,9 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState<ScheduleConflict[] | null>(null)
   const meId = useAuthStore(state => state.user?.id ?? '')
-  // A session belongs to a 管理: an agent or admin, by name.
-  const usersQuery = useQuery({
-    queryKey: queryKeys.roomCreationUsers,
-    queryFn: async () => (await api.getRoomOwners()).users,
-    enabled: staff && !!target && !block,
-    staleTime: 60_000,
-  })
-  const managers = (usersQuery.data ?? [])
-    .filter(user => user.role !== 'tech')
-    .sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }))
+  const { options: managers, listed } = useManagerOptions(staff && !!target && !block, editing?.manager)
+  // A new session belongs to whoever books it when they are among the 管理 to choose from.
+  const chosenManager = managerId || (!editing && managers.some(manager => manager.id === meId) ? meId : '')
 
   useEffect(() => {
     if (!target) return
@@ -93,12 +86,12 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
       setTechId(target.techId)
       setCompany('')
       setPosition('')
-      setManagerId(meId)
+      setManagerId('')
       setNotes('')
     }
     setError('')
     setConflicts(null)
-  }, [target, timezone, meId])
+  }, [target, timezone])
 
   const save = useMutation({
     mutationFn: async () => {
@@ -109,6 +102,7 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
       const duration = to > from ? to - from : to + DAY_MINUTES - from
       if (duration < 5) throw new Error(t('workTable.mustEnd'))
       const startsAt = toZonedIso(atMinute(date, from, timezone), timezone)
+      if (!block && staff && !editing && listed && !chosenManager) throw new Error(t('workTable.chooseManager'))
       const input: AppointmentInput = block
         ? { startsAt, durationMinutes: duration, notes: notes.trim() || null, ...(editing ? {} : { isBlock: true }) }
         : {
@@ -118,7 +112,7 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
             company: company.trim() || null,
             position: position.trim() || null,
             // The customer stays as it was; the 管理 is sent when chosen.
-            ...(managerId && managerId !== editing?.manager?.id ? { managerId } : {}),
+            ...(chosenManager && chosenManager !== editing?.manager?.id ? { managerId: chosenManager } : {}),
             notes: notes.trim() || null,
           }
       return editing ? actions.update(editing.id, input) : actions.create(input)
@@ -184,7 +178,7 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
                   <SelectItem key={table.id} value={table.id}>
                     <span className="flex items-center gap-1.5">
                       <span className="wt-dot" style={{ background: table.color }} aria-hidden="true" />
-                      {table.username}
+                      {table.name}
                     </span>
                   </SelectItem>
                 ))}
@@ -207,14 +201,14 @@ export function SessionForm({ target, onClose, staff, tables, timezone, onSaved,
         {!block && staff && (
           <div className="wt-field">
             <Label>{t('workTable.manager')}</Label>
-            <Select value={managerId} onValueChange={setManagerId}>
+            <Select value={chosenManager} onValueChange={setManagerId}>
               <SelectTrigger aria-label={t('workTable.manager')}><SelectValue /></SelectTrigger>
               <SelectContent>
                 {managers.map(manager => (
                   <SelectItem key={manager.id} value={manager.id}>
                     <span className="flex items-center gap-1.5">
                       <span className="wt-dot" style={{ background: manager.color }} aria-hidden="true" />
-                      {manager.username}
+                      {manager.name}
                     </span>
                   </SelectItem>
                 ))}

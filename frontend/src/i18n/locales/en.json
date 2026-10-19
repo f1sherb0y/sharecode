@@ -722,7 +722,9 @@
     "invalidStatus": "Unknown session status.",
     "usernameInvalid": "A username needs 2 to 32 characters and no spaces.",
     "usernameSame": "That is already your username.",
-    "usernameRecent": "A username can change once a week."
+    "usernameRecent": "A username can change once a week.",
+    "alreadyListed": "Already on the list.",
+    "nameRequired": "A name needs 1 to 32 characters."
   },
   "canvas": {
     "title": "Canvas",
@@ -944,6 +946,7 @@
     "company": "Company",
     "position": "Position",
     "manager": "Manager",
+    "chooseManager": "Choose a manager.",
     "customer": "Customer",
     "notes": "Notes",
     "book": "Book",
@@ -984,6 +987,11 @@
     "clash": "Time clash",
     "busyMode": "Mark busy time",
     "staffOnly": "Only managers can edit the schedule",
-    "signInToEdit": "Sign in to edit"
+    "signInToEdit": "Sign in to edit",
+    "roster": "Lists",
+    "rosterName": "Name",
+    "noAccount": "No account",
+    "linkAccount": "Link account",
+    "remove": "Remove"
   }
 }

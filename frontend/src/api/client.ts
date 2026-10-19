@@ -24,6 +24,8 @@ import type {
   Appointment,
   AppointmentInput,
   WorkTable,
+  RosterEntry,
+  RosterKind,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
 import { useAuthStore } from '@/stores'
@@ -123,6 +125,23 @@ class ApiClient {
 
   async getProfile(): Promise<{ user: User }> {
     return this.request<{ user: User }>('/api/auth/profile')
+  }
+
+  /** The work tables' lists: techs whose tables show, 管理 who book. */
+  async getRoster(): Promise<{ techs: RosterEntry[]; managers: RosterEntry[] }> {
+    return this.request('/api/roster')
+  }
+
+  async addRosterEntry(kind: RosterKind, name: string, accountId?: string | null): Promise<{ entry: RosterEntry }> {
+    return this.request('/api/roster', { method: 'POST', body: JSON.stringify({ kind, name, accountId: accountId || null }) })
+  }
+
+  async updateRosterEntry(kind: RosterKind, userId: string, change: { name?: string; accountId?: string }): Promise<{ entry: RosterEntry }> {
+    return this.request(`/api/roster/${kind}/${encodeURIComponent(userId)}`, { method: 'PUT', body: JSON.stringify(change) })
+  }
+
+  async removeRosterEntry(kind: RosterKind, userId: string): Promise<{ removed: boolean }> {
+    return this.request(`/api/roster/${kind}/${encodeURIComponent(userId)}`, { method: 'DELETE' })
   }
 
   /** When the account may next rename itself; null when it may now. */
@@ -359,7 +378,7 @@ class ApiClient {
   }
 
   /** A table opened through its link, without signing in. */
-  async openTableLink(token: string, range: { from: string; to: string }, signal?: AbortSignal): Promise<{ table: Pick<WorkTable, 'id' | 'username' | 'color' | 'note'>; appointments: Appointment[] }> {
+  async openTableLink(token: string, range: { from: string; to: string }, signal?: AbortSignal): Promise<{ table: Pick<WorkTable, 'id' | 'username' | 'name' | 'color' | 'note'>; appointments: Appointment[] }> {
     return this.request(`/api/table-links/${encodeURIComponent(token)}?${new URLSearchParams(range)}`, { signal })
   }
 

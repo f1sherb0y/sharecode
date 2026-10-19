@@ -199,7 +199,7 @@ pub async fn login(
             "createdAt" as created_at,
             "tokenVersion" as token_version, "lastSeen" as last_seen
         FROM "User"
-        WHERE username = $1
+        WHERE username = $1 AND NOT "linkOnly"
         "#,
     )
     .bind(&username)

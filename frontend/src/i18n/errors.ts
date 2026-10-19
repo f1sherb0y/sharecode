@@ -12,6 +12,8 @@ const errorKeys: Record<string, string> = {
   "A username of 2 to 32 characters without spaces is required": "errors.usernameInvalid",
   "That is already your username": "errors.usernameSame",
   "Username changed recently": "errors.usernameRecent",
+  "Already on the list": "errors.alreadyListed",
+  "A name of up to 32 characters is required": "errors.nameRequired",
   "Current password is incorrect": "errors.currentPassword",
   "Invalid token": "errors.sessionExpired",
   "No token provided": "errors.sessionExpired",

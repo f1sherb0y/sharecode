@@ -15,6 +15,7 @@ mod notes;
 mod notifications;
 mod playback;
 mod rooms;
+mod roster;
 mod share;
 mod sessions;
 mod tours;
@@ -46,6 +47,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/tours", get(tours::list_seen_tours))
         .route("/api/tours/{id}", put(tours::mark_tour_seen))
+        .route("/api/roster", get(roster::list_roster).post(roster::add_roster_entry))
+        .route("/api/roster/{kind}/{user_id}", put(roster::update_roster_entry).delete(roster::remove_roster_entry))
         .route("/api/work-tables", get(work_tables::list_work_tables))
         .route("/api/work-tables/note", put(work_tables::update_work_table_note))
         .route("/api/work-tables", post(work_tables::create_work_table))

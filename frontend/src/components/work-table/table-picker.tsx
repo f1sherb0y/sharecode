@@ -29,7 +29,7 @@ export function TablePicker({ tables, value, label, unassigned, onPick, onNew, p
 
   const found = useMemo(() => {
     const term = query.trim().toLocaleLowerCase()
-    return term ? tables.filter(table => table.username.toLocaleLowerCase().includes(term)) : tables
+    return term ? tables.filter(table => [table.name, table.username].some(name => name.toLocaleLowerCase().includes(term))) : tables
   }, [tables, query])
   const pages = Math.max(1, Math.ceil(found.length / PAGE_SIZE))
   const shown = found.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -91,7 +91,7 @@ export function TablePicker({ tables, value, label, unassigned, onPick, onNew, p
         </label>
         <div className="wt-table-list">
           {unassignedShown && item(unassigned.id, t('schedule.unassigned'), unassigned.count, { striped: true })}
-          {shown.map(table => item(table.id, table.username, table.upcoming, { color: table.color }))}
+          {shown.map(table => item(table.id, table.name, table.upcoming, { color: table.color }))}
           {found.length === 0 && <p className="wt-table-empty">{t('workTable.noTables')}</p>}
         </div>
         {pages > 1 && (

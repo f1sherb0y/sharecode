@@ -6,6 +6,10 @@ import { addDays, addMonths, atMinute, dateKeyOf, dayStart, daysBetween, startOf
 export const sessionAgent = (appointment: Pick<Appointment, 'customer' | 'createdBy'> & { manager?: Appointment['manager'] }) =>
   appointment.manager ?? appointment.customer?.owner ?? appointment.createdBy
 
+/** The 管理's name as the work tables show it: their name on the list, else the username. */
+export const agentName = (appointment: Pick<Appointment, 'customer' | 'createdBy'> & { manager?: Appointment['manager'] }) =>
+  appointment.manager?.name ?? sessionAgent(appointment).username
+
 /** What a session is called: its customer, else its company and position. */
 export function sessionTitle(appointment: Pick<Appointment, 'customer' | 'company' | 'position' | 'isBlock'>, t: TFunction) {
   if (appointment.isBlock) return t('schedule.busy')

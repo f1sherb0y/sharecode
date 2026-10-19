@@ -48,6 +48,9 @@ pub(super) const APPOINTMENT_SELECT: &str = r#"SELECT a.id, a."startsAt" as star
     t."isDeleted" as tech_is_deleted,
     cb.id as created_by_id, cb.username as created_by_username, cb.color as created_by_color,
     mg.id as manager_id, mg.username as manager_username, mg.color as manager_color,
+    -- Names on the work tables' lists, where the person is on one.
+    COALESCE((SELECT re.name FROM "RosterEntry" re WHERE re.kind = 'manager' AND re."userId" = mg.id), mg.username) as manager_name,
+    (SELECT re.name FROM "RosterEntry" re WHERE re.kind = 'tech' AND re."userId" = t.id) as tech_name,
     r.id as room_id, r.name as room_name, r.language as room_language, r."isEnded" as room_is_ended,
     r."endedAt" as room_ended_at,
     (a."techId" IS NOT NULL AND EXISTS (
@@ -96,6 +99,8 @@ pub(super) struct AppointmentRow {
     manager_id: String,
     manager_username: String,
     manager_color: String,
+    manager_name: String,
+    tech_name: Option<String>,
     room_id: Option<String>,
     room_name: Option<String>,
     room_language: Option<String>,
@@ -823,7 +828,7 @@ pub(super) async fn table_link_sessions(
                 "status": row.status,
                 "customer": null,
                 "tech": row.tech_id.as_ref().map(|id| json!({
-                    "id": id, "username": row.tech_username, "color": row.tech_color,
+                    "id": id, "username": row.tech_username, "name": row.tech_name.as_ref().or(row.tech_username.as_ref()), "color": row.tech_color,
                     "role": row.tech_role, "isDeleted": row.tech_is_deleted.unwrap_or(false),
                 })),
                 "room": null,
@@ -868,6 +873,7 @@ pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
         "tech": row.tech_id.as_ref().map(|id| json!({
             "id": id,
             "username": row.tech_username,
+            "name": row.tech_name.as_ref().or(row.tech_username.as_ref()),
             "color": row.tech_color,
             "role": row.tech_role,
             "isDeleted": row.tech_is_deleted.unwrap_or(false),
@@ -889,7 +895,7 @@ pub(super) fn appointment_json(row: &AppointmentRow, staff: bool) -> Value {
 
 /// The 管理 a session belongs to: the one chosen, else its customer's agent, else its planner.
 fn manager_json(row: &AppointmentRow) -> Value {
-    json!({ "id": row.manager_id, "username": row.manager_username, "color": row.manager_color })
+    json!({ "id": row.manager_id, "username": row.manager_username, "name": row.manager_name, "color": row.manager_color })
 }
 
 async fn load_appointment(db: &sqlx::PgPool, appointment_id: &str) -> Result<AppointmentRow, ApiError> {
@@ -959,9 +965,10 @@ async fn find_conflicts(
 ) -> Result<Vec<ConflictRow>, ApiError> {
     sqlx::query_as::<_, ConflictRow>(
         r#"SELECT a.id, a."startsAt" as starts_at, a."durationMinutes" as duration_minutes,
-            c.name as customer_name, mg.username as manager_username, a."isBlock" as is_block
+            c.name as customer_name, COALESCE(re.name, mg.username) as manager_username, a."isBlock" as is_block
         FROM "Appointment" a LEFT JOIN "Customer" c ON c.id = a."customerId"
         JOIN "User" mg ON mg.id = COALESCE(a."managerId", c."createdBy", a."createdBy")
+        LEFT JOIN "RosterEntry" re ON re.kind = 'manager' AND re."userId" = mg.id
         WHERE a."techId" = $1 AND ($4::text IS NULL OR a.id <> $4)
           AND a."startsAt" < $3 AND a."startsAt" + a."durationMinutes" * INTERVAL '1 minute' > $2
         ORDER BY a."startsAt", a.id LIMIT 20"#,

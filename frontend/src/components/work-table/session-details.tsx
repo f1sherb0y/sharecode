@@ -8,7 +8,7 @@ import { SessionRoomActions, hasRoomActions } from '@/components/schedule/sessio
 import { api } from '@/api'
 import { getLocale } from '@/i18n'
 import { translateError } from '@/i18n/errors'
-import { formatDayKey, sessionAgent } from '@/lib/schedule'
+import { agentName, formatDayKey, sessionAgent } from '@/lib/schedule'
 import { dateKeyOf, timeInputValue } from '@/lib/zoned-time'
 import type { Appointment } from '@/types'
 import { Sheet } from './sheet'
@@ -46,7 +46,7 @@ export function SessionDetails({ appointment, onClose, editable, meId, color, ti
 
   const a = appointment
   const block = !!a?.isBlock
-  const who = a ? (block ? t('schedule.busy') : sessionAgent(a).username) : ''
+  const who = a ? (block ? t('schedule.busy') : agentName(a)) : ''
   const start = a ? Date.parse(a.startsAt) : 0
   const task = a ? [a.company, a.position].filter(Boolean).join(' · ') : ''
 

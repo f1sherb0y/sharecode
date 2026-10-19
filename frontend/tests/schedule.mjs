@@ -172,7 +172,32 @@ const mergedIn = after.appointments.filter(a => a.id === linked.id || a.id === l
 assert.deepEqual([after.table.id, after.table.note, mergedIn.length, mergedIn.every(a => a.tech.id === id('tech_a'))], [id('tech_a'), 'No late Fridays', 2, true])
 for (const appointment of mergedIn) await request('/api/appointments/' + appointment.id, 'DELETE', undefined, as('agent_a'))
 assert.equal((await request('/api/work-tables', 'GET', undefined, as('agent_a'))).tables.some(table => table.id === made.id), false)
-console.log('PASS sessions: validation, defaults, minute precision, no status or agent, staff-only planning, techs read only their own, range, filters and "mine"; work tables, busy time, table links and merging')
+// Lists: with names on the techs' list staff see just those tables, under those names; sessions
+// read their 管理 by list name; linking a placeholder moves its sessions to the account.
+await request('/api/roster', 'POST', { kind: 'tech', name: 'kk', accountId: id('tech_b') }, as('agent_a'), 201)
+const nameless = (await request('/api/roster', 'POST', { kind: 'tech', name: '可可西里' }, as('agent_a'), 201)).entry
+await request('/api/roster', 'POST', { kind: 'tech', name: 'KK' }, as('agent_a'), 400)
+await request('/api/roster', 'GET', undefined, as('tech_a'), 404)
+assert.deepEqual((await request('/api/work-tables', 'GET', undefined, as('agent_a'))).tables.map(table => table.name), ['kk', '可可西里'])
+assert.deepEqual((await request('/api/work-tables', 'GET', undefined, as('tech_a'))).tables.map(table => table.username), ['tech_a'])
+const joined = (await request('/api/work-tables', 'POST', { name: 'newcomer' }, as('agent_a'), 201)).table
+await request('/api/work-tables', 'POST', { name: 'Kk' }, as('agent_a'), 400)
+assert.deepEqual((await request('/api/work-tables', 'GET', undefined, as('agent_a'))).tables.map(table => table.name), ['kk', '可可西里', 'newcomer'])
+await request(`/api/work-tables/${joined.id}/merge`, 'POST', { into: id('tech_b') }, as('agent_a'))
+assert.deepEqual((await request('/api/roster', 'GET', undefined, as('agent_a'))).techs.map(entry => entry.name), ['kk', '可可西里'])
+const qiulian = (await request('/api/roster', 'POST', { kind: 'manager', name: '秋莲' }, as('agent_a'), 201)).entry
+await request('/api/roster', 'POST', { kind: 'manager', name: 'tech', accountId: id('tech_a') }, as('agent_a'), 400)
+await request('/api/auth/login', 'POST', { username: '秋莲', password: 'anything' }, undefined, 401)
+const listedSession = (await plan('agent_a', { techId: nameless.userId, startsAt: at(4, 9), managerId: qiulian.userId })).appointment
+assert.deepEqual([listedSession.tech.name, listedSession.manager.name], ['可可西里', '秋莲'])
+await request(`/api/roster/manager/${qiulian.userId}`, 'PUT', { accountId: id('agent_b') }, as('agent_a'))
+await request(`/api/roster/tech/${nameless.userId}`, 'PUT', { accountId: id('tech_a') }, as('agent_a'))
+const relisted = (await request('/api/appointments/' + listedSession.id, 'GET', undefined, as('agent_a'))).appointment
+assert.deepEqual([relisted.tech.id, relisted.tech.name, relisted.manager.id, relisted.manager.name], [id('tech_a'), '可可西里', id('agent_b'), '秋莲'])
+await request('/api/appointments/' + listedSession.id, 'DELETE', undefined, as('agent_a'))
+for (const [kind, user] of [['tech', 'tech_b'], ['tech', 'tech_a'], ['manager', 'agent_b']]) await request(`/api/roster/${kind}/${id(user)}`, 'DELETE', undefined, as('agent_a'))
+assert((await request('/api/work-tables', 'GET', undefined, as('agent_a'))).tables.some(table => table.name === 'tech_b'), 'without a list every tech shows again')
+console.log('PASS sessions: validation, defaults, minute precision, no status or agent, staff-only planning, techs read only their own, range, filters and "mine"; work tables, busy time, table links, merging and the lists')
 
 // Overlaps for one tech need confirmation; back-to-back sessions do not.
 const overlap = await plan('agent_b', { customerId: li.id, techId: id('tech_a'), startsAt: at(1, 10, 30), durationMinutes: 60 }, 409)

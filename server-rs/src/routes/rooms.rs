@@ -102,7 +102,7 @@ pub async fn get_all_users_for_room_creation(
         r#"
         SELECT id, username, color, role
         FROM "User"
-        WHERE "isDeleted" = false
+        WHERE "isDeleted" = false AND NOT "linkOnly"
         ORDER BY username ASC
         "#,
     )

@@ -390,6 +390,9 @@ Phones show one day at a time under a week strip; wider screens show the week.
   chip; its link is copied at once. Once the tech registers, 合并到账号 moves its
   sessions, busy time, note and link into their account.
 - A session's details hold its room buttons; staff edit or delete it there.
+- 名单 in the "···" menu keeps two lists of names: the techs whose tables show
+  and the 管理 sessions are booked for. A name can stand for an account or for
+  someone without one, linked to their account later.
 - The house at the top left goes back to the rooms; the "···" menu leads staff
   to the **full calendar** (完整排班) described below. The table chip has
   新建工作表 first, then a search and the tables a page at a time.

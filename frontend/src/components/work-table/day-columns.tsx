@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Appointment } from '@/types'
-import { DAY_MINUTES, MINUTE_MS, sessionAgent, sessionTitle } from '@/lib/schedule'
+import { DAY_MINUTES, MINUTE_MS, agentName, sessionTitle } from '@/lib/schedule'
 import { addDays, dayStart, timeInputValue } from '@/lib/zoned-time'
 import { cn } from '@/lib/utils'
 
@@ -124,7 +124,7 @@ export function DayColumns({ days, today, timezone, now, appointments, colorOf, 
                   } as CSSProperties}
                   onClick={() => onOpen(appointment)}
                 >
-                  <span className="wt-card-who">{block ? t('schedule.busy') : sessionAgent(appointment).username}</span>
+                  <span className="wt-card-who">{block ? t('schedule.busy') : agentName(appointment)}</span>
                   <span className="wt-card-time">{time(appointment.startsAt)} – {time(appointment.endsAt)}</span>
                   {(task || (!block && appointment.customer)) && (
                     <span className="wt-card-task">{task || sessionTitle(appointment, t)}</span>

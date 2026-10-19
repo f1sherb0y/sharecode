@@ -32,6 +32,7 @@ import { DayColumns } from '@/components/work-table/day-columns'
 import { SessionDetails } from '@/components/work-table/session-details'
 import { SessionForm, nextSlot, type FormTarget, type SaveActions } from '@/components/work-table/session-form'
 import { TablePicker } from '@/components/work-table/table-picker'
+import { RosterDialog } from '@/components/work-table/roster-dialog'
 import { api } from '@/api'
 import { useCompactViewport } from '@/hooks/use-compact-viewport'
 import { getLocale } from '@/i18n'
@@ -134,7 +135,7 @@ function WorkTable({ token }: { token?: string }) {
     from: dayStart(weekStart, timezone).toISOString(),
     to: dayStart(addDays(weekStart, 7), timezone).toISOString(),
   }), [weekStart, timezone])
-  const sessionsQuery = useQuery<{ appointments: Appointment[]; table?: Pick<WorkTable, 'id' | 'username' | 'color' | 'note'> }>({
+  const sessionsQuery = useQuery<{ appointments: Appointment[]; table?: Pick<WorkTable, 'id' | 'username' | 'name' | 'color' | 'note'> }>({
     queryKey: ['work-table', token ?? accountTable, range],
     queryFn: ({ signal }) => linked
       ? api.openTableLink(token!, range, signal)
@@ -231,6 +232,7 @@ function WorkTable({ token }: { token?: string }) {
 
   // Staff hand out links, make tables for techs without an account and merge them later.
   const [resetting, setResetting] = useState(false)
+  const [rostering, setRostering] = useState(false)
   const [naming, setNaming] = useState<string | null>(null)
   const [merging, setMerging] = useState<string | null>(null)
   /** Copies a table's link, even one still being made: Safari lets only the click itself start a copy. */
@@ -348,14 +350,14 @@ function WorkTable({ token }: { token?: string }) {
             <TablePicker
               tables={tables}
               value={tableId}
-              label={tableId === UNASSIGNED ? t('schedule.unassigned') : table?.username ?? '…'}
+              label={tableId === UNASSIGNED ? t('schedule.unassigned') : table?.name ?? '…'}
               unassigned={{ id: UNASSIGNED, count: unassignedCount }}
               onPick={pickTable}
               onNew={() => setNaming('')}
               phone={phone}
             />
           ) : (
-            <span className="wt-chip is-static"><span className="wt-chip-name">{table?.username ?? user?.username ?? '…'}</span></span>
+            <span className="wt-chip is-static"><span className="wt-chip-name">{table?.name ?? user?.username ?? '…'}</span></span>
           )}
           <Select value={timezone} onValueChange={zone => update({ tz: zone === homeZone ? null : zone })}>
             <SelectTrigger className="wt-zone" aria-label={t('schedule.zone')}><SelectValue /></SelectTrigger>
@@ -405,6 +407,7 @@ function WorkTable({ token }: { token?: string }) {
               {own && <DropdownMenuItem onSelect={() => setEditingNote(table?.note ?? '')}>{t('workTable.note')}</DropdownMenuItem>}
               {staff && accountRow?.link && <DropdownMenuItem onSelect={() => setResetting(true)}>{t('workTable.resetLink')}</DropdownMenuItem>}
               {staff && accountRow?.linkOnly && <DropdownMenuItem onSelect={() => setMerging('')}>{t('workTable.merge')}</DropdownMenuItem>}
+              {staff && <DropdownMenuItem onSelect={() => setRostering(true)}>{t('workTable.roster')}</DropdownMenuItem>}
               {staff && <DropdownMenuItem onSelect={() => navigate('/schedule/full')}>{t('workTable.full')}</DropdownMenuItem>}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -521,9 +524,10 @@ function WorkTable({ token }: { token?: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {staff && <RosterDialog open={rostering} onOpenChange={setRostering} />}
       <Dialog open={resetting && !!accountRow} onOpenChange={setResetting}>
         <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{t('workTable.resetLinkTitle', { name: accountRow?.username })}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t('workTable.resetLinkTitle', { name: accountRow?.name })}</DialogTitle></DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResetting(false)}>{t('common.cancel')}</Button>
             <Button variant="destructive" onClick={() => {
@@ -548,13 +552,13 @@ function WorkTable({ token }: { token?: string }) {
       </Dialog>
       <Dialog open={merging !== null} onOpenChange={open => !open && setMerging(null)}>
         <DialogContent aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>{t('workTable.merge')} · {accountRow?.username}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t('workTable.merge')} · {accountRow?.name}</DialogTitle></DialogHeader>
           <div className="wt-field">
             <Label>{t('workTable.account')}</Label>
             <Select value={merging ?? ''} onValueChange={setMerging}>
               <SelectTrigger aria-label={t('workTable.account')}><SelectValue /></SelectTrigger>
               <SelectContent>
-                {accounts.map(item => <SelectItem key={item.id} value={item.id}>{item.username}</SelectItem>)}
+                {accounts.map(item => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

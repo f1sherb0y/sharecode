@@ -722,7 +722,9 @@
     "invalidStatus": "未知的场次状态。",
     "usernameInvalid": "用户名需 2 到 32 个字符，不能有空格",
     "usernameSame": "这已经是你的用户名",
-    "usernameRecent": "用户名每周只能改一次"
+    "usernameRecent": "用户名每周只能改一次",
+    "alreadyListed": "已经在名单里了",
+    "nameRequired": "名字需 1 到 32 个字符"
   },
   "canvas": {
     "title": "画布",
@@ -943,6 +945,7 @@
     "company": "公司",
     "position": "岗位",
     "manager": "管理",
+    "chooseManager": "选择管理",
     "customer": "客户",
     "notes": "备注",
     "book": "确认预约",
@@ -983,6 +986,11 @@
     "clash": "时间冲突",
     "busyMode": "标记占用",
     "staffOnly": "只有管理能编辑排班",
-    "signInToEdit": "如要编辑请登录"
+    "signInToEdit": "如要编辑请登录",
+    "roster": "名单",
+    "rosterName": "名字",
+    "noAccount": "无账号",
+    "linkAccount": "关联账号",
+    "remove": "移除"
   }
 }

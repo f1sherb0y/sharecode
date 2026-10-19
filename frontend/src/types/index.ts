@@ -251,11 +251,12 @@ export interface Appointment {
   isBlock: boolean
   /** Optional. Techs get the name only; contact and notes are for agents and admins. */
   customer: { id: string; name: string; contact?: string | null; notes?: string | null; isDeleted: boolean; owner: { id: string; username: string; color: string } } | null
-  tech: { id: string; username: string; color: string; role: Role; isDeleted: boolean } | null
+  /** `name` is the name on the techs' list, else the username. */
+  tech: { id: string; username: string; name?: string; color: string; role: Role; isDeleted: boolean } | null
   room: { id: string; name: string; language: Language; isEnded: boolean; endedAt: string | null } | null
   hasConflict: boolean
   /** The 管理 it belongs to: the one chosen, else its customer's agent, else its planner. None for busy time. */
-  manager: { id: string; username: string; color: string } | null
+  manager: { id: string; username: string; color: string; name?: string } | null
   createdBy: { id: string; username: string; color: string }
   createdAt: string
   updatedAt: string
@@ -290,6 +291,8 @@ export interface ScheduleConflict {
 export interface WorkTable {
   id: string
   username: string
+  /** The name on the techs' list, else the username. */
+  name: string
   color: string
   role: Role
   /** Pinned above the table by its tech. */
@@ -301,3 +304,15 @@ export interface WorkTable {
   /** The token of the link that opens the table without signing in (staff only). */
   link: string | null
 }
+
+/** A name on one of the work tables' lists: an account, or a placeholder for someone without one. */
+export interface RosterEntry {
+  userId: string
+  name: string
+  username: string
+  color: string
+  role: Role
+  linkOnly: boolean
+}
+
+export type RosterKind = 'tech' | 'manager'
