@@ -19,6 +19,8 @@ export function NotificationPopup() {
   const queryClient = useQueryClient()
   const actorType = useAuthStore((state) => state.actorType)
   const [dismissed, setDismissed] = useState(false)
+  // A shared table link shows the table only, whoever is signed in on the browser.
+  const shown = actorType === 'user' && !location.pathname.startsWith('/t/')
 
   const unreadQuery = useQuery({
     queryKey: queryKeys.unreadNotifications,
@@ -26,7 +28,7 @@ export function NotificationPopup() {
       const { notifications } = await api.getUnreadNotifications()
       return notifications
     },
-    enabled: actorType === 'user',
+    enabled: shown,
     // Poll so non-admin users see new notifications without needing to refocus/refresh.
     refetchInterval: 30_000,
     staleTime: 0,
@@ -50,10 +52,10 @@ export function NotificationPopup() {
   // Announcements take over the screen; a tech's schedule notices are toasts.
   const unread = unreadQuery.data ?? []
   const unreadNotifications = unread.filter(notification => !notification.kind)
-  useScheduleToasts(unread.filter(isScheduleNotice), actorType === 'user' && location.pathname !== '/notifications')
+  useScheduleToasts(unread.filter(isScheduleNotice), shown && location.pathname !== '/notifications')
   const shouldSuppressPopup = location.pathname === '/notifications'
   const isVisible =
-    actorType === 'user' &&
+    shown &&
     !dismissed &&
     !shouldSuppressPopup &&
     unreadNotifications.length > 0
