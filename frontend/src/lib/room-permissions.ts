@@ -21,13 +21,16 @@ export function canViewRoomPlayback(user: User | null | undefined, room: Room | 
   return room.canViewPlayback ?? (room.ownerId === user.id || isStaff(user))
 }
 
-/** Share links, the room name and its language belong to the owner and staff. */
+/** Share links and the room name belong to the owner and staff. */
 export function canManageRoom(user: Actor, roomOwnerId: string | null | undefined): boolean {
   return !!user && !!roomOwnerId && (user.id === roomOwnerId || isStaff(user))
 }
 
 export const canManageRoomShares = canManageRoom
-export const canChangeRoomLanguage = canManageRoom
+/** The language: the owner and staff, and whoever else edits the live room (an editing link). */
+export function canChangeRoomLanguage(user: Actor, room: Pick<Room, 'ownerId' | 'canEdit'> | null | undefined): boolean {
+  return !!user && !!room && (canManageRoom(user, room.ownerId) || room.canEdit === true)
+}
 export const canEndRoom = canManageRoom
 
 export function canDeleteRoom(user: Actor): boolean {

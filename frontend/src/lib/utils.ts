@@ -7,6 +7,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Enter (or any key) that an input method is still composing with, as when Enter confirms
+ * pinyin: it belongs to the input method, not to the field's own shortcuts.
+ */
+export function isComposing(event: { nativeEvent: KeyboardEvent; keyCode: number }): boolean {
+  return event.nativeEvent.isComposing || event.keyCode === 229
+}
+
 export function getTimezone(): string {
   return useSettingsStore.getState().timezone
 }

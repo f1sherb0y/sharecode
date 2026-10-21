@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
@@ -19,7 +19,7 @@ import {
 import { api } from '@/api'
 import { translateError } from '@/i18n/errors'
 import { queryKeys } from '@/lib/query-keys'
-import { cn } from '@/lib/utils'
+import { cn, isComposing } from '@/lib/utils'
 import type { RosterEntry, RosterKind, User } from '@/types'
 
 const NO_ACCOUNT = 'none'
@@ -129,16 +129,22 @@ interface RosterRowProps {
 function RosterRow({ entry, accounts, busy, onRename, onLink, onRemove }: RosterRowProps) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState<string | null>(null)
+  // The name being typed, read once: Enter and the blur that may follow it save it only once.
+  const draft = useRef<string | null>(null)
+  const edit = (value: string | null) => {
+    draft.current = value
+    setEditing(value)
+  }
   const save = () => {
-    const value = editing?.trim()
-    setEditing(null)
+    const value = draft.current?.trim()
+    edit(null)
     if (value && value !== entry.name) onRename(value)
   }
   return (
     <li className="wt-roster-row">
       <span className="wt-dot" style={{ background: entry.color }} aria-hidden="true" />
       {editing === null ? (
-        <button type="button" className="wt-roster-name" onClick={() => setEditing(entry.name)}>
+        <button type="button" className="wt-roster-name" onClick={() => edit(entry.name)}>
           {entry.name}
           {!entry.linkOnly && entry.username !== entry.name && <span className="wt-table-count"> · {entry.username}</span>}
         </button>
@@ -149,11 +155,12 @@ function RosterRow({ entry, accounts, busy, onRename, onLink, onRemove }: Roster
           maxLength={32}
           aria-label={t('workTable.rosterName')}
           className="wt-roster-input"
-          onChange={event => setEditing(event.target.value)}
+          onChange={event => edit(event.target.value)}
           onBlur={save}
           onKeyDown={event => {
+            if (isComposing(event)) return
             if (event.key === 'Enter') save()
-            if (event.key === 'Escape') setEditing(null)
+            if (event.key === 'Escape') edit(null)
           }}
         />
       )}

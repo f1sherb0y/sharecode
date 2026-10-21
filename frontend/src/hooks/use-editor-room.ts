@@ -120,7 +120,7 @@ export function useEditorRoom(): EditorRoomState {
   }, [isGuestMode, guestProfile])
 
   const isOwner = !isGuestMode && (effectiveRoom?.isOwner ?? effectiveRoom?.ownerId === user?.id)
-  const canChangeLanguage = !isGuestMode && canChangeRoomLanguage(user, effectiveRoom?.ownerId)
+  const canChangeLanguage = !isGuestMode && canChangeRoomLanguage(user, effectiveRoom)
   const canEdit = isGuestMode
     ? (guestProfile?.guest.canEdit ?? false)
     : effectiveRoom?.canEdit === true

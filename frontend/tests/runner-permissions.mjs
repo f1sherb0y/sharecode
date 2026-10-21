@@ -30,14 +30,15 @@ const wait = async predicate => { for (let i=0;i<200;i++) { if(predicate())retur
 try {
   await wait(() => peer.synced)
   assert.equal(peer.authorizedScope, 'readonly')
-  for (const [token, language] of [[root,'java'], [actors.agent.token,'c'], [actors.owner.token,'javascript']]) {
+  // The owner, agents and admins switch the language, and so does a member whose link lets them edit.
+  for (const [token, language] of [[root,'java'], [actors.agent.token,'c'], [actors.member.token,'typescript'], [actors.owner.token,'javascript']]) {
     await ok('/api/rooms/' + room.id, 'PUT', { language }, token)
     await wait(() => messages.at(-1)?.language === language)
     assert.equal((await ok('/api/rooms/' + room.id, 'GET', undefined, actors.owner.token)).room.language, language)
   }
-  // Room settings stay with the owner, agents and admins, even for link members who edit.
+  // Other room settings stay with the owner, agents and admins, even for link members who edit.
   for (const actor of ['member', 'readonly', 'outsider']) {
-    assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors[actor].token)).status, 404)
+    if (actor !== 'member') assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors[actor].token)).status, 404)
     assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python', name:'not allowed' }, actors[actor].token)).status, 404)
   }
   assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'bogus' }, root)).status, 400)
@@ -45,7 +46,7 @@ try {
   peer = new HocuspocusProvider({ url: API.replace('http','ws')+'/api/ws', name: room.id, document:doc, token:actors.readonly.token, onStateless:({payload})=>messages.push(JSON.parse(payload)) })
   await wait(() => messages.some(m=>m.type==='room-language' && m.language==='javascript'))
   assert.equal(peer.authorizedScope, 'readonly')
-  console.log('PASS owner/agent/admin language permissions; link members and outsiders denied; read-only live sync and reconnect')
+  console.log('PASS owner/agent/admin and editing link members switch the language; read-only members and outsiders denied; read-only live sync and reconnect')
   const samples = [
     ['python', 'print(input())'],
     ['java', 'public class Main { public static void main(String[] args) { System.out.println(new java.util.Scanner(System.in).nextLine()); } }'],
@@ -84,17 +85,18 @@ try {
       await page.goto('http://127.0.0.1:55461/room/'+room.id)
       await page.locator('.monaco-editor').waitFor()
       const picker=page.getByRole('combobox',{name:'Language',exact:true})
-      if(actor!=='agent') assert.equal(await picker.count(),0)
+      if(actor==='readonly') assert.equal(await picker.count(),0)
       else {
+        const language = actor==='agent' ? 'python' : 'java'
         await picker.click()
-        await page.getByRole('option',{name:'python',exact:true}).click()
-        await page.waitForFunction(language=>document.querySelector('.editor-statusbar [role=combobox]')?.textContent===language,'python')
-        assert.equal((await ok('/api/rooms/'+room.id,'GET',undefined,root)).room.language,'python')
+        await page.getByRole('option',{name:language,exact:true}).click()
+        await page.waitForFunction(language=>document.querySelector('.editor-statusbar [role=combobox]')?.textContent===language,language)
+        assert.equal((await ok('/api/rooms/'+room.id,'GET',undefined,root)).room.language,language)
       }
       assert.deepEqual(errors,[])
       await context.close()
     }
-    console.log('PASS browser language picker: agent changes it; read-only and editing link members do not see it')
+    console.log('PASS browser language picker: agent and editing link member change it; read-only member does not see it')
   } finally { await browser.close(); await web.close() }
 
 } finally { peer.destroy(); doc.destroy() }

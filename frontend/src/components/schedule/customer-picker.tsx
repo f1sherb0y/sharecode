@@ -6,7 +6,7 @@ import { Button, Input, Label, Spinner } from '@/components/ui'
 import { api } from '@/api'
 import { translateError } from '@/i18n/errors'
 import { queryKeys } from '@/lib/query-keys'
-import { cn } from '@/lib/utils'
+import { cn, isComposing } from '@/lib/utils'
 import type { Customer } from '@/types'
 
 export type PickedCustomer = Pick<Customer, 'id' | 'name'> & { contact?: string | null; createdBy?: { id: string } }
@@ -83,7 +83,7 @@ export function CustomerPicker({ id, value, onChange }: CustomerPickerProps) {
       event.preventDefault()
       setOpen(true)
       setHighlight(current => (current + (event.key === 'ArrowDown' ? 1 : optionCount - 1)) % optionCount)
-    } else if (event.key === 'Enter' && open) {
+    } else if (event.key === 'Enter' && open && !isComposing(event)) {
       event.preventDefault()
       choose(highlight)
     } else if (event.key === 'Escape' && open) {

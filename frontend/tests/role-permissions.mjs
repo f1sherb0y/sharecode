@@ -241,13 +241,15 @@ await wait(() => readonlySocket.state.closed, 'upgraded member reconnects')
 close(readonlySocket)
 assert.equal(await canEdit('tech_peer'), true)
 await probe(decide, as('tech_peer'), true, 'read-write')
-// Editing members still leave settings, sharing and the lifecycle to the owner and staff.
+// Editing members switch the language but leave settings, sharing and the lifecycle to the owner and staff.
 await request('/api/rooms/' + decide.id, 'PUT', { company: 'Edited by link member' }, as('tech_peer'))
+await request('/api/rooms/' + decide.id, 'PUT', { language: 'java' }, as('tech_peer'))
 for (const [suffix, method, body] of [
-  ['', 'PUT', { name: 'blocked' }], ['', 'PUT', { language: 'java' }], ['/share-links', 'GET'], ['/share-links', 'POST', {}], ['/end', 'POST', {}], ['', 'DELETE'],
+  ['', 'PUT', { name: 'blocked' }], ['', 'PUT', { language: 'go', name: 'blocked' }], ['/share-links', 'GET'], ['/share-links', 'POST', {}], ['/end', 'POST', {}], ['', 'DELETE'],
 ]) await request('/api/rooms/' + decide.id + suffix, method, body, as('tech_peer'), 404)
 await accept(await link(decide, as('agent_owner'), false), 'tech_peer')
 assert.equal(await canEdit('tech_peer'), false)
+await request('/api/rooms/' + decide.id, 'PUT', { language: 'python' }, as('tech_peer'), 404)
 await probe(decide, as('tech_peer'), true, 'readonly')
 // Staff and the owner keep their own access and leave the link unused.
 const unusedByAgent = await link(decide, as('tech_owner'), false)

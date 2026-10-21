@@ -508,16 +508,17 @@ pub async fn update_room(
     };
 
     let participants = fetch_participants(&state, &room.id).await?;
-    // Members who joined through a link edit content; settings stay with the owner and staff.
+    let participant = participants.iter().find(|p| p.user_id == auth_user.id);
+    let can_edit = can_edit_room(&auth_user, &room, participant);
+    // Settings stay with the owner and staff; whoever edits the live room, a member who
+    // joined through an editing link included, also switches its language.
     let can_change_settings = can_manage_room(&auth_user, &room.owner_id);
-    let can_change_language = can_change_settings;
+    let can_change_language = can_change_settings || can_edit;
     let language_only = payload.language.is_some()
         && payload.name.is_none()
         && payload.company.is_none()
         && payload.position.is_none();
     let language_permission = language_only && can_change_language;
-    let participant = participants.iter().find(|p| p.user_id == auth_user.id);
-    let can_edit = can_edit_room(&auth_user, &room, participant);
 
     if !can_edit && !language_permission {
         return Err(ApiError::not_found("Room not found"));

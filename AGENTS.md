@@ -49,6 +49,7 @@
 - **Room visibility**: Techs see their own rooms, live pinned rooms (read-only) and rooms they joined by share link; agents and admins see and edit every standard room
 - **Share-link membership**: The link a tech last joined through decides whether they can edit; the room stays in their list for replay after it ends
 - **Room ownership**: Owners rename, share and end their rooms; only admins delete rooms or create private ones
+- **Room language**: the owner and staff switch it, and so does anyone else who edits the live room (a tech on an editing link); read-only members and guests do not
 - **Language support**: 8 programming languages with syntax highlighting
   - JavaScript, TypeScript, Python, Java, C++, Rust, Go, PHP
 - **Scheduled sessions**: Optional start time and duration
@@ -73,6 +74,7 @@
 - **Comprehensive coverage**: All UI text translatable
 - **Persistent preference**: Language stored in localStorage
 - **Auto-detection**: Falls back to browser language on first visit
+- **Input methods**: Enter shortcuts in fields ignore keys an input method is composing with (`isComposing` in `lib/utils.ts`), so confirming pinyin never saves or picks anything
 
 ### 7. Responsive Design
 - **Desktop-first approach**: Desktop layout (>1024px) preserved unchanged

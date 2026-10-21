@@ -2,7 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn, isComposing } from '@/lib/utils'
 import type { WorkTable } from '@/types'
 
 /** Tables a page of the picker holds: short enough for a phone. */
@@ -48,7 +48,7 @@ export function TablePicker({ tables, value, label, unassigned, onPick, onNew, p
     onPick(id)
   }
   const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && shown[0]) pick(shown[0].id)
+    if (event.key === 'Enter' && shown[0] && !isComposing(event)) pick(shown[0].id)
   }
 
   const item = (id: string, name: string, count: number, dot: { color?: string; striped?: boolean }) => (
