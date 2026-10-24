@@ -114,6 +114,10 @@ The customer client uses one combined window/editor toolbar. Window settings inc
 opacity controls; new windows default to 90% text and 65% background opacity. Custom saved
 opacity is preserved. Enabling click-through (button or Ctrl+Shift+F) also pins the window;
 disabling click-through keeps it pinned until it is explicitly unpinned.
+As background opacity decreases, gray labels and borders move toward the theme foreground.
+Menus, dialogs and Canvas controls use the same background opacity; text remains independently
+adjustable. Native and Monaco scrollbars have transparent tracks and translucent thumbs that
+adapt to the opacity and theme, with a minimum visibility floor for the thumb.
 
 Headless client-chrome checks (no desktop input injection):
 

@@ -40,20 +40,32 @@ html {
 body {
   --client-bg: calc(var(--client-bg-alpha, 1) * 100%);
   --client-text: calc(var(--client-text-alpha, 1) * 100%);
+  /* 0% boost when opaque, 100% at the minimum 10% background opacity. Keep line
+     alpha tied to text, not the background: fading both made controls disappear. */
+  --client-contrast: clamp(0%, calc((1 - var(--client-bg-alpha, 1)) / 0.9 * 100%), 100%);
+  --client-muted-solid: color-mix(in srgb, var(--client-base-muted-foreground), var(--client-base-foreground) var(--client-contrast));
+  --client-border-solid: color-mix(in srgb, var(--client-base-border), var(--client-base-foreground) var(--client-contrast));
+  --client-input-solid: color-mix(in srgb, var(--client-base-input), var(--client-base-foreground) var(--client-contrast));
+  --client-ring-solid: color-mix(in srgb, var(--client-base-ring), var(--client-base-foreground) var(--client-contrast));
+  --client-surface: color-mix(in srgb, var(--client-base-background) var(--client-bg), transparent);
+  --client-primary-surface: color-mix(in srgb, var(--client-base-primary) var(--client-bg), transparent);
+  --client-scrollbar-alpha: calc((0.3 + 0.45 * var(--client-bg-alpha, 1)) * var(--client-text-alpha, 1) * 100%);
+  --client-scrollbar-thumb: color-mix(in srgb, var(--client-muted-solid) var(--client-scrollbar-alpha), transparent);
+  --client-scrollbar-hover: color-mix(in srgb, var(--client-base-foreground) var(--client-scrollbar-alpha), transparent);
 
   /* Exactly one background layer: the shell paints the theme background at the background
      opacity, and surfaces of that colour (toolbars, status bar, editors) are transparent over it.
      Stacked translucent layers would add up to a more opaque window than the slider says. */
   --color-background: transparent;
 
-  /* Surfaces in other colours and the lines sit on the shell at the background opacity. */
+  /* Surface fills follow background opacity; contrast-bearing strokes follow text opacity. */
   --color-card: color-mix(in srgb, var(--client-base-card) var(--client-bg), transparent);
   --color-popover: color-mix(in srgb, var(--client-base-popover) var(--client-bg), transparent);
   --color-muted: color-mix(in srgb, var(--client-base-muted) var(--client-bg), transparent);
   --color-secondary: color-mix(in srgb, var(--client-base-secondary) var(--client-bg), transparent);
   --color-accent: color-mix(in srgb, var(--client-base-accent) var(--client-bg), transparent);
-  --color-border: color-mix(in srgb, var(--client-base-border) var(--client-bg), transparent);
-  --color-input: color-mix(in srgb, var(--client-base-input) var(--client-bg), transparent);
+  --color-border: color-mix(in srgb, var(--client-border-solid) var(--client-text), transparent);
+  --color-input: color-mix(in srgb, var(--client-input-solid) var(--client-text), transparent);
 
   /* Text, icons (currentColor) and the status colours follow the text opacity only. */
   --color-foreground: color-mix(in srgb, var(--client-base-foreground) var(--client-text), transparent);
@@ -62,38 +74,107 @@ body {
   --color-primary: color-mix(in srgb, var(--client-base-primary) var(--client-text), transparent);
   --color-primary-foreground: color-mix(in srgb, var(--client-base-primary-foreground) var(--client-text), transparent);
   --color-secondary-foreground: color-mix(in srgb, var(--client-base-secondary-foreground) var(--client-text), transparent);
-  --color-muted-foreground: color-mix(in srgb, var(--client-base-muted-foreground) var(--client-text), transparent);
+  --color-muted-foreground: color-mix(in srgb, var(--client-muted-solid) var(--client-text), transparent);
   --color-accent-foreground: color-mix(in srgb, var(--client-base-accent-foreground) var(--client-text), transparent);
   --color-destructive: color-mix(in srgb, var(--client-base-destructive) var(--client-text), transparent);
   --color-destructive-foreground: color-mix(in srgb, var(--client-base-destructive-foreground) var(--client-text), transparent);
   --color-success: color-mix(in srgb, var(--client-base-success) var(--client-text), transparent);
   --color-success-foreground: color-mix(in srgb, var(--client-base-success-foreground) var(--client-text), transparent);
-  --color-ring: color-mix(in srgb, var(--client-base-ring) var(--client-text), transparent);
+  --color-ring: color-mix(in srgb, var(--client-ring-solid) var(--client-text), transparent);
   --color-emphasis: color-mix(in srgb, var(--client-base-emphasis) var(--client-text), transparent);
   --color-heading-1: color-mix(in srgb, var(--client-base-heading-1) var(--client-text), transparent);
   --color-heading-2: color-mix(in srgb, var(--client-base-heading-2) var(--client-text), transparent);
   --color-heading-3: color-mix(in srgb, var(--client-base-heading-3) var(--client-text), transparent);
 }
 
-/* Menus, selects, tooltips and dialogs float over content, so they keep solid surfaces
-   (their text still follows the text opacity). */
+/* Portals inherit the same translucent surfaces and boosted strokes as the app.
+   Only dialogs using bg-background need a local surface instead of the shell's transparent one. */
 [role="dialog"],
 [role="alertdialog"],
 [data-radix-popper-content-wrapper] {
-  --color-background: var(--client-base-background);
-  --color-card: var(--client-base-card);
-  --color-popover: var(--client-base-popover);
-  --color-muted: var(--client-base-muted);
-  --color-secondary: var(--client-base-secondary);
-  --color-accent: var(--client-base-accent);
-  --color-border: var(--client-base-border);
-  --color-input: var(--client-base-input);
+  --color-background: var(--client-surface);
 }
 
-/* Canvas toolbars and popups float over the board (canvas.css feeds them, and inverted popup
-   text, from the theme background), so they keep it solid too. */
+/* Primary-coloured button fills follow background opacity without fading their labels. */
+body .bg-primary {
+  background-color: var(--client-primary-surface);
+}
+
+/* Canvas loads its own theme lazily. Scope these more specifically than that theme,
+   so loading/switching views cannot restore opaque islands, zoom or history controls. */
 .client-content .sharecode-canvas {
-  --canvas-bg: var(--client-base-background);
+  --canvas-bg: var(--client-surface);
+}
+.client-content .sharecode-canvas .excalidraw,
+.client-content .sharecode-canvas .excalidraw.theme--dark {
+  --default-bg-color: var(--client-surface);
+  --button-gray-1: var(--canvas-secondary);
+  --button-gray-2: var(--canvas-secondary);
+  --button-gray-3: var(--canvas-secondary);
+  --color-surface-high: var(--canvas-secondary);
+  --color-muted: var(--canvas-muted);
+  --color-muted-darker: var(--canvas-muted);
+  --color-muted-darkest: var(--canvas-fg);
+  --color-disabled: color-mix(in srgb, var(--canvas-muted) 65%, transparent);
+  --popup-text-inverted-color: var(--color-primary-foreground);
+  --scrollbar-thumb: var(--client-scrollbar-thumb);
+  --scrollbar-thumb-hover: var(--client-scrollbar-hover);
+  --overlay-bg-color: var(--client-surface);
+  --list-border-color: var(--canvas-border);
+  --userlist-hint-bg-color: var(--canvas-bg);
+  --userlist-hint-heading-color: var(--canvas-fg);
+  --userlist-hint-text-color: var(--canvas-muted);
+  --userlist-collaborators-border-color: var(--canvas-border);
+  --ExcTextField--border: var(--canvas-border);
+  --ExcTextField--placeholder: var(--canvas-muted);
+}
+.client-content .sharecode-canvas .excalidraw :is(.HintViewer, .dropdown-menu-item__shortcut, .ToolIcon__keybinding) {
+  color: var(--canvas-muted);
+  opacity: 1;
+}
+/* The group already paints a surface. Do not stack another fill on each idle button. */
+.client-content .sharecode-canvas .excalidraw :is(.zoom-button, .undo-redo-buttons button) {
+  background-color: transparent !important;
+}
+.client-content .sharecode-canvas .excalidraw :is(.zoom-button, .undo-redo-buttons button):is(:hover, :active):not(:disabled) {
+  background-color: var(--canvas-secondary) !important;
+}
+.client-content .sharecode-canvas .excalidraw :is(.zoom-actions, .undo-redo-buttons) {
+  box-shadow: 0 0 0 1px var(--canvas-border);
+}
+
+/* Native Windows/WebView2 scrollbars otherwise use an opaque OS track. Use a
+   transparent track in both the standard and Chromium legacy styling paths. */
+body, body * {
+  scrollbar-color: var(--client-scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+body ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+body ::-webkit-scrollbar-track,
+body ::-webkit-scrollbar-corner { background: transparent; }
+body ::-webkit-scrollbar-thumb {
+  background-color: var(--client-scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+body ::-webkit-scrollbar-thumb:hover { background-color: var(--client-scrollbar-hover); }
+body ::-webkit-scrollbar-button { display: none; }
+
+/* Monaco draws its own scrollbars and sets colours from its JS theme. Override
+   those surfaces too; native scrollbar rules cannot reach these DOM sliders. */
+.client-content .monaco-scrollable-element > .scrollbar,
+.client-content .monaco-scrollable-element > .scrollbar > .slider {
+  background: transparent !important;
+}
+.client-content .monaco-scrollable-element > .scrollbar > .slider {
+  background-color: var(--client-scrollbar-thumb) !important;
+}
+.client-content .monaco-scrollable-element > .scrollbar > .slider:is(:hover, .active) {
+  background-color: var(--client-scrollbar-hover) !important;
+}
+.client-content .monaco-editor .line-numbers {
+  color: var(--client-muted-solid) !important;
 }
 
 /* Monaco paints its surfaces in the editor background (the theme background), so they become
@@ -180,12 +261,46 @@ body {
 }
 
 .client-title-button.client-title-close:hover {
-  background-color: #e81123;
-  color: #ffffff;
+  background-color: color-mix(in srgb, #e81123 var(--client-bg), transparent);
+  color: color-mix(in srgb, #ffffff var(--client-text), transparent);
 }
 
 .client-opacity-slider {
-  accent-color: var(--color-primary);
+  appearance: none;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+.client-opacity-slider::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-secondary);
+}
+.client-opacity-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-top: -0.3125rem;
+  border-radius: 50%;
+  background: var(--color-foreground);
+}
+.client-opacity-slider::-moz-range-track {
+  height: 0.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-secondary);
+}
+.client-opacity-slider::-moz-range-thumb {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-foreground);
+}
+.client-opacity-slider:focus-visible {
+  outline: 1px solid var(--color-ring);
+  outline-offset: 2px;
 }
 
 /* Camouflage switches in the title bar: a whole row is the button, so the label and hint are part
@@ -223,7 +338,7 @@ body {
 }
 
 .client-stealth-row[data-active="true"] .client-stealth-icon {
-  background-color: var(--color-primary);
+  background-color: var(--client-primary-surface);
   color: var(--color-primary-foreground);
 }
 
@@ -238,7 +353,7 @@ body {
 }
 
 .client-stealth-switch[data-active="true"] {
-  background-color: var(--color-primary);
+  background-color: var(--client-primary-surface);
 }
 
 .client-stealth-knob {
@@ -248,7 +363,7 @@ body {
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 9999px;
-  background-color: var(--color-background, #fff);
+  background-color: color-mix(in srgb, var(--client-base-primary-foreground) var(--client-text), transparent);
   transition: transform 120ms;
 }
 
@@ -264,7 +379,7 @@ body {
   margin-right: 0.375rem;
   padding: 0 0.5rem;
   border-radius: 9999px;
-  background-color: var(--color-primary);
+  background-color: var(--client-primary-surface);
   color: var(--color-primary-foreground);
   font-size: 11px;
   font-weight: 500;
