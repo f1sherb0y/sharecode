@@ -93,14 +93,21 @@ try {
         await saved()
       }
       await record('forced watchdog reconnect restores both sync states')
-      // Hold acknowledgements, including a retry. No timer may mark edits Saved.
+      // Hold acknowledgements of the barriers sent from here on, including a retry. No timer may
+      // mark edits Saved. A barrier still in flight from the reconnect above (every sync sends
+      // one) completes normally; holding its acknowledgement too would leave the held edit
+      // without a barrier of its own when the browser is slow.
       await page.evaluate(() => {
         const p = window.__collab.provider
         window.receiveStateless = p.receiveStateless.bind(p)
         window.heldAcks = []; window.holdAcks = true; window.barrierIds = []
         const send = p.sendStateless.bind(p)
         p.sendStateless = payload => { const m = JSON.parse(payload); if (m.type === 'durability-barrier') window.barrierIds.push(m.id); send(payload) }
-        p.receiveStateless = payload => { if (window.holdAcks && JSON.parse(payload).type === 'durability-ack') window.heldAcks.push(payload); else window.receiveStateless(payload) }
+        p.receiveStateless = payload => {
+          const m = JSON.parse(payload)
+          if (window.holdAcks && m.type === 'durability-ack' && window.barrierIds.includes(m.id)) window.heldAcks.push(payload)
+          else window.receiveStateless(payload)
+        }
         window.__collab.ydoc.getText('codemirror').insert(0, 'held acknowledgement\n')
       })
       await page.waitForFunction(() => window.heldAcks.length >= 2)

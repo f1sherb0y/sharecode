@@ -3,6 +3,7 @@
 // customers and sessions are disposable.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
 const API = 'http://127.0.0.1:55460'
@@ -336,7 +337,8 @@ const pastSession = (await plan('root', { customerId: li.id, techId: id('tech_a'
 const pastRoom = (await request(`/api/appointments/${pastSession.id}/room`, 'POST', {}, as('tech_a'), 201)).room
 sql(`UPDATE "Room" SET "updatedAt" = NOW() - INTERVAL '7 hours' WHERE id IN (${literal(idle.id)}, ${literal(pastRoom.id)})`)
 const ended = roomId => sql(`SELECT "isEnded" FROM "Room" WHERE id = ${literal(roomId)}`) === 't'
-const sweeper = spawn(new URL('../../server-rs/target/debug/sharecode-server', import.meta.url).pathname, [], {
+// fileURLToPath, not .pathname: on Windows a URL path reads /D:/… (the .exe is found anyway).
+const sweeper = spawn(fileURLToPath(new URL('../../server-rs/target/debug/sharecode-server', import.meta.url)), [], {
   stdio: 'ignore',
   env: { ...process.env, DATABASE_URL: 'postgresql://runner_test:local_runner_test@127.0.0.1:55459/runner_test', BIND_ADDRESS: '127.0.0.1', PORT: '55462',
     JWT_SECRET: 'local-runner-test-key-not-production', ADMIN_USERNAME: 'audit_admin', ADMIN_PASSWORD: password, ADMIN_EMAIL: 'audit@example.invalid',

@@ -237,7 +237,8 @@ test('compact secondary pages keep forms and navigation inside desktop and phone
           const box = await checkbox.boundingBox(); assert.ok(Math.abs(box.width - box.height) < 0.1)
         }
         assert.deepEqual(errors, [])
-        await page.screenshot({ animations: 'disabled', path: screenshots + '/' + path.replaceAll('/', '-') + (mobile ? '-mobile' : '-desktop') + '.png' })
+        // File names without / or ? (admin?section=…), which Windows refuses.
+        await page.screenshot({ animations: 'disabled', path: screenshots + '/' + path.replace(/[/?]/g, '-') + (mobile ? '-mobile' : '-desktop') + '.png' })
       } finally { await context.close() }
     }
   }
