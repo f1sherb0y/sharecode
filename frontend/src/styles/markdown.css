@@ -12,6 +12,10 @@
   --md-input: var(--color-input);
   --md-ring: var(--color-ring);
   --md-accent: var(--color-primary);
+  --md-emphasis: var(--color-emphasis);
+  --md-heading-1: var(--color-heading-1);
+  --md-heading-2: var(--color-heading-2);
+  --md-heading-3: var(--color-heading-3);
   --md-selection: color-mix(in srgb, var(--color-foreground) 15%, transparent);
   --font-mono: var(--md-font-family, ui-monospace, monospace);
 }
@@ -133,6 +137,22 @@
   font-size: 1.1em;
 }
 
+/* Section titles carry the blue, deepest (light) or brightest (dark) at the top level. */
+.md-editor .ProseMirror h1 {
+  color: var(--md-heading-1);
+}
+
+.md-editor .ProseMirror h2 {
+  color: var(--md-heading-2);
+}
+
+.md-editor .ProseMirror h3,
+.md-editor .ProseMirror h4,
+.md-editor .ProseMirror h5,
+.md-editor .ProseMirror h6 {
+  color: var(--md-heading-3);
+}
+
 .md-editor .ProseMirror p {
   margin: 0.35em 0;
 }
@@ -150,6 +170,8 @@
 
 .md-editor .ProseMirror strong {
   font-weight: 600;
+  /* Bold marks the key points in the orange emphasis colour (headings use the blue). */
+  color: var(--md-emphasis);
 }
 
 .md-editor .ProseMirror ul,
