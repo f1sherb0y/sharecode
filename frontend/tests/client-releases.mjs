@@ -252,15 +252,18 @@ try {
   }
 
   // The button follows the visitor's system: client hints in Chromium, the user agent elsewhere.
+  // Every case names its system, so the result does not depend on the machine running the test.
+  const windowsChrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
+  const windowsHints = { platform: 'Windows', architecture: 'x86' }
   const macSafari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15'
   const linuxFirefox = 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0'
   const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
   const cases = [
-    { name: 'Windows (client hints)', type: chromium, path: '/login', button: 'Download the desktop client for Windows', details: 'x64 · version 0.4.0', file: setupName, content: WINDOWS_030 },
+    { name: 'Windows (client hints)', type: chromium, path: '/login', userAgent: windowsChrome, hints: windowsHints, button: 'Download the desktop client for Windows', details: 'x64 · version 0.4.0', file: setupName, content: WINDOWS_030 },
     { name: 'Apple silicon Mac (client hints)', type: chromium, path: '/join', hints: { platform: 'macOS', architecture: 'arm' }, button: 'Download the desktop client for macOS', details: 'Apple silicon · version 0.2.0', file: 'ShareCode Client_0.2.0_aarch64.dmg', content: dmg },
     { name: 'Mac Safari (user agent)', type: webkit, path: '/login', userAgent: macSafari, button: 'Download the desktop client for macOS', details: 'Apple silicon · version 0.2.0' },
     { name: 'Linux (nothing published)', type: firefox, path: '/login', userAgent: linuxFirefox, menu: 'Download the desktop client' },
-    { name: 'Chinese', type: chromium, path: '/login', locale: 'zh', button: '下载 Windows 桌面客户端', details: 'x64 · 版本 0.4.0' },
+    { name: 'Chinese', type: chromium, path: '/login', locale: 'zh', userAgent: windowsChrome, hints: windowsHints, button: '下载 Windows 桌面客户端', details: 'x64 · 版本 0.4.0' },
     { name: 'phone', type: webkit, path: '/login', userAgent: iphone, hidden: true },
   ]
   for (const item of cases) {
