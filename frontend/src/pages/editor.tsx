@@ -1,7 +1,7 @@
 import { loadCanvasView, loadMarkdownEditor, prepareEditorView } from '@/lib/editor-loaders'
 import { LANGUAGES } from '@/types'
 import { translateError } from '@/i18n/errors'
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useContext, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useViewportHeight } from '@/hooks/use-viewport-height'
 import { useTranslation } from 'react-i18next'
@@ -58,6 +58,7 @@ import {
 } from '@/hooks'
 import { ShareLinkManager } from '@/components/features/share-link-manager'
 import { CodeRunnerPanel, type CodeRunnerPanelRef } from '@/components/features/code-runner-panel'
+import { EditorToolbar, EditorToolbarTarget } from '@/components/features/editor-toolbar'
 import { RoomViewSwitch } from '@/components/features/room-view-switch'
 import { FontControls } from '@/components/features/font-controls'
 import { generateUserColor, cn, formatDateTime } from '@/lib/utils'
@@ -83,6 +84,7 @@ function parseRunnerPosition(value: string | null): 'bottom' | 'right' {
 }
 
 export function EditorPage() {
+  const toolbarTarget = useContext(EditorToolbarTarget)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
@@ -471,14 +473,14 @@ export function EditorPage() {
         style={{ height: viewportHeight }}
       >
         {/* Toolbar */}
-        <header
+        <EditorToolbar
           className={cn(
-            'relative z-30 flex items-center justify-between border-b bg-background shrink-0 overflow-hidden safe-x',
+            'editor-toolbar relative z-30 flex items-center justify-between border-b bg-background shrink-0 overflow-hidden safe-x',
             'h-9 px-1.5 gap-1'
           )}
         >
           {/* Document navigation */}
-          <div className="flex items-center gap-1 min-w-0 shrink">
+          <div data-tauri-drag-region={toolbarTarget ? true : undefined} className="editor-room-navigation flex items-center gap-1 min-w-0 shrink">
             <Button
               variant="ghost"
               size="icon"
@@ -489,6 +491,7 @@ export function EditorPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <span
+              data-tauri-drag-region={toolbarTarget ? true : undefined}
               title={effectiveRoom.name}
               className={cn(
                 'font-medium truncate text-sm',
@@ -588,7 +591,7 @@ export function EditorPage() {
               </DropdownMenu>
             </div>
           </div>
-        </header>
+        </EditorToolbar>
 
         {/* End Room Confirmation Dialog */}
         <Dialog open={isEndRoomDialogOpen} onOpenChange={setIsEndRoomDialogOpen}>

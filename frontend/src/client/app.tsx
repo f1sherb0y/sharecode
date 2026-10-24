@@ -11,6 +11,7 @@ import { useConnectionStore } from './connection'
 import { ClientHome, type HomeNotice } from './home'
 import { loadSavedSession, rememberGuestSessions, restoreSavedSession } from './session'
 import { TitleBar } from './title-bar'
+import { EditorToolbarTarget } from '@/components/features/editor-toolbar'
 import { startUpdateChecks } from './updater'
 import { useWindowPreferences } from './window'
 
@@ -110,6 +111,7 @@ function ClientShell() {
   const [notice, setNotice] = useState<HomeNotice>(null)
   const ready = useSavedSessionRestore(setNotice)
   const title = useWindowTitle()
+  const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -127,23 +129,25 @@ function ClientShell() {
   useEffect(() => startUpdateChecks(), [])
 
   return (
-    <div className="client-shell">
-      <TitleBar title={title} />
-      <main className="client-content">
-        {ready ? (
-          <Suspense fallback={<Loading />}>
-            <Routes>
-              <Route path="/" element={<ClientHome notice={notice} />} />
-              <Route path="/s/:shareToken" element={<ShareRoute />} />
-              <Route path="/room/:roomId" element={<RoomRoute />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
-        ) : (
-          <Loading />
-        )}
-      </main>
-    </div>
+    <EditorToolbarTarget.Provider value={toolbarTarget}>
+      <div className="client-shell">
+        <TitleBar title={title} toolbarRef={setToolbarTarget} />
+        <main className="client-content">
+          {ready ? (
+            <Suspense fallback={<Loading />}>
+              <Routes>
+                <Route path="/" element={<ClientHome notice={notice} />} />
+                <Route path="/s/:shareToken" element={<ShareRoute />} />
+                <Route path="/room/:roomId" element={<RoomRoute />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          ) : (
+            <Loading />
+          )}
+        </main>
+      </div>
+    </EditorToolbarTarget.Provider>
   )
 }
 

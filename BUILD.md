@@ -60,6 +60,27 @@ server node and connects to the fastest one, then shows the site's own share and
 Nothing else from the site is bundled: `tooling/client-scope.ts` fails the build if other pages,
 the schedule/work-table/layout code or the staff app's window helpers reach the bundle.
 
+On Windows the client also carries three camouflage switches, in the title bar's Ghost panel
+(`frontend/src-tauri-client/src/stealth.rs`): 共享隐藏 keeps the window out of every screen capture
+and screen share (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`), 穿透 makes it take no mouse or
+keyboard focus so every event reaches the app behind it (`WS_EX_NOACTIVATE | WS_EX_TRANSPARENT |
+WS_EX_LAYERED`, flipped with `Ctrl+Shift+F` because a click-through window never sees the key press),
+and 任务栏隐藏 removes the taskbar button and the Alt+Tab entry (`WS_EX_TOOLWINDOW`, `WS_EX_APPWINDOW`
+cleared, `set_skip_taskbar`); the client has no tray icon. tao rewrites the whole `GWL_EXSTYLE` on
+every window state change, so `stealth.rs` subclasses the window: it rewrites `styleNew` in
+`WM_STYLECHANGING` and re-asserts the bits in `WM_STYLECHANGED`. To check a running build:
+
+```bash
+cd frontend
+node scripts/inspect-stealth.mjs <pid>    # extended style bits, display affinity (17 = excluded)
+node scripts/check-taskbar.mjs <pid>      # taskbar / Alt+Tab eligibility, real taskbar button count
+node scripts/check-hit-test.mjs <pid>     # WindowFromPoint grid must never resolve to the client
+node scripts/check-capture.mjs <pid>      # display affinity + what a BitBlt capture sees
+```
+
+All four read window state only: they never move the cursor, never send keys and never change the
+window, so they are safe to run on a desktop that is in use.
+
 ```bash
 cd frontend
 bun install
@@ -88,6 +109,18 @@ VITE_CLIENT_NODES=http://127.0.0.1:3001 bun run client:tauri dev
 `bun run client:dev` serves just the client UI at `http://localhost:5174/client.html`. Keep the
 `tauri` crates in `src-tauri-client/Cargo.toml` on the minor version of `@tauri-apps/api`, and the
 Tauri plugins on the minor version of their `@tauri-apps/plugin-*` packages.
+
+The customer client uses one combined window/editor toolbar. Window settings include the
+opacity controls; new windows default to 90% text and 65% background opacity. Custom saved
+opacity is preserved. Enabling click-through (button or Ctrl+Shift+F) also pins the window;
+disabling click-through keeps it pinned until it is explicitly unpinned.
+
+Headless client-chrome checks (no desktop input injection):
+
+```bash
+cd frontend
+node --test tests/client-chrome.test.mjs
+```
 
 #### Releases and updates
 

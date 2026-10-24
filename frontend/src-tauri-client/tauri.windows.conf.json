@@ -1,0 +1,25 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ShareCode",
+        "url": "client.html",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 480,
+        "minHeight": 360,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "visible": false,
+        "focus": false,
+        "skipTaskbar": true,
+        "contentProtected": true
+      }
+    ]
+  }
+}
