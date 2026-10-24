@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "sharecode-client"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "block2 0.6.2",
  "objc2 0.6.3",
