@@ -35,6 +35,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         EnvFilter::new(default_filter)
     });
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    if config.client_releases_ci_token_sha256.is_none()
+        && std::env::var("CLIENT_RELEASES_CI_TOKEN_SHA256").is_ok_and(|value| !value.trim().is_empty())
+    {
+        tracing::warn!("CLIENT_RELEASES_CI_TOKEN_SHA256 is not 64 hex digits; CI release uploads are off");
+    }
 
     let db = PgPoolOptions::new()
         .max_connections(10)

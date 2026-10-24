@@ -23,6 +23,9 @@ pub struct Config {
     /// The desktop client's update signing public key (`plugins.updater.pubkey` in its
     /// tauri.conf.json). Uploaded signatures are checked against it, as the client does.
     pub client_updater_pubkey: String,
+    /// SHA-256 of the token the release workflow (CI) presents to open drafts and upload their
+    /// files (`CLIENT_RELEASES_CI_TOKEN_SHA256`, hex). Unset: no CI uploads.
+    pub client_releases_ci_token_sha256: Option<[u8; 32]>,
 }
 
 /// The public key the desktop client trusts; keep in sync with
@@ -73,6 +76,10 @@ impl Config {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| CLIENT_UPDATER_PUBKEY.to_string());
+        let client_releases_ci_token_sha256 = env::var("CLIENT_RELEASES_CI_TOKEN_SHA256")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .and_then(|value| parse_sha256_hex(&value));
 
         Self {
             port,
@@ -101,8 +108,14 @@ impl Config {
             admin_update_password,
             client_releases_dir,
             client_updater_pubkey,
+            client_releases_ci_token_sha256,
         }
     }
+}
+
+/// A SHA-256 digest written as 64 hex digits.
+pub fn parse_sha256_hex(value: &str) -> Option<[u8; 32]> {
+    hex::decode(value.trim()).ok()?.try_into().ok()
 }
 
 fn env_bool(key: &str, default: bool) -> bool {

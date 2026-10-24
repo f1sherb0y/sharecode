@@ -1,0 +1,147 @@
+name: Client release
+
+# A client-v<version> tag builds the customer client for Windows and macOS, signs its updates and
+# uploads the files to that version's draft in 管理后台 → 客户端发布. Publishing stays a manual
+# click there: the CI token can open drafts and add files to them, nothing else.
+# Run by hand, it builds the same installers unsigned as artifacts and uploads nothing.
+on:
+  push:
+    tags: ['client-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-release-${{ github.ref }}
+
+env:
+  SERVER: https://collabcode.cc
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - id: version
+        name: Check the tag against Cargo.toml
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("frontend/src-tauri-client/Cargo.toml", "rb"))["package"]["version"])')
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "client-v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in src-tauri-client/Cargo.toml"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.3.14'
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+      - name: Build the installer
+        working-directory: frontend
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: |
+          updates=${{ github.event_name == 'push' }}
+          bun run client:tauri build --ci --bundles nsis \
+            --config "{\"bundle\":{\"createUpdaterArtifacts\":$updates}}" -- --locked
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: client-windows
+          path: |
+            frontend/src-tauri-client/target/release/bundle/nsis/*-setup.exe
+            frontend/src-tauri-client/target/release/bundle/nsis/*-setup.exe.sig
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    needs: version
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.3.14'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.13'
+      - name: Build the universal DMG
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: scripts/build-client-macos.sh ${{ github.event_name == 'push' && '--signed-updates' || '' }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: client-macos
+          path: build/macos-dist/**
+          if-no-files-found: error
+          retention-days: 7
+
+  upload:
+    if: github.event_name == 'push'
+    needs: [version, windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+      - name: Upload to the draft
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          CI_TOKEN: ${{ secrets.CLIENT_RELEASES_CI_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # An annotated tag's message becomes the notes of a new draft (a rerun keeps them).
+          notes=''
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME")
+          if [[ "$(jq -r .object.type <<<"$ref")" == tag ]]; then
+            notes=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$(jq -r .object.sha <<<"$ref")" --jq .message)
+          fi
+          draft=$(curl --fail-with-body -sS -X PUT "$SERVER/api/ci/client-releases/$VERSION" \
+            -H "Authorization: Bearer $CI_TOKEN" -H 'Content-Type: application/json' \
+            --data "$(jq -n --arg notes "$notes" '{notes: $notes}')")
+          id=$(jq -r .release.id <<<"$draft")
+
+          # One file per system and kind: a rerun replaces what an earlier run uploaded.
+          upload() {
+            local platform=$1 kind=$2 file=$3
+            local fields=(-F "platform=$platform" -F "kind=$kind")
+            [[ ! -f "$file.sig" ]] || fields+=(-F "signature=<$file.sig")
+            if ! curl --fail-with-body -sS -o response.json -H "Authorization: Bearer $CI_TOKEN" \
+              "${fields[@]}" -F "file=@$file" "$SERVER/api/admin/client-releases/$id/assets"; then
+              cat response.json >&2
+              return 1
+            fi
+            echo "Uploaded ${file##*/} as $platform $kind"
+          }
+          one() {
+            [[ $# -eq 1 ]] || { echo "Expected one file, found $#: $*" >&2; return 1; }
+            echo "$1"
+          }
+          shopt -s nullglob
+          setup=$(one dist/client-windows/*_x64-setup.exe)
+          dmg=$(one dist/client-macos/*/*_universal.dmg)
+          bundle=$(one dist/client-macos/*/*_universal.app.tar.gz)
+          upload windows-x86_64 installer "$setup"
+          # The universal build runs on both chips.
+          for platform in darwin-aarch64 darwin-x86_64; do
+            upload "$platform" installer "$dmg"
+            upload "$platform" update "$bundle"
+          done
+          echo "Draft $VERSION is ready: 管理后台 → 客户端发布"

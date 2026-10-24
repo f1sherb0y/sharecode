@@ -155,6 +155,8 @@ pub fn router(state: AppState) -> Router {
             "/api/admin/client-releases/{id}/assets/{assetId}",
             delete(client_releases::delete_asset),
         )
+        // The release workflow opens a draft here; its files go to the admin upload route above.
+        .route("/api/ci/client-releases/{version}", put(client_releases::open_ci_draft))
         .route("/api/client/releases/latest", get(client_releases::latest_downloads))
         .route(
             "/api/client/update/{target}/{arch}/{currentVersion}",

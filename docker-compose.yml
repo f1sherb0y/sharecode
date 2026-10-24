@@ -57,6 +57,8 @@ services:
       PISTON_URL: http://piston:2000
       # Desktop client installers published from the admin page (keep on a volume).
       CLIENT_RELEASES_DIR: /data/client-releases
+      # SHA-256 of the release workflow's token (BUILD.md); empty: no uploads from CI.
+      CLIENT_RELEASES_CI_TOKEN_SHA256: ${CLIENT_RELEASES_CI_TOKEN_SHA256:-}
     volumes:
       - client_releases:/data/client-releases
     expose:

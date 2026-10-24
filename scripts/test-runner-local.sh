@@ -24,8 +24,9 @@ done
 cd "$project_dir"
 cargo test --manifest-path server-rs/Cargo.toml --offline
 cargo build --manifest-path server-rs/Cargo.toml --offline
-# Client releases: files in the work directory, and a throwaway update signing key (discarded)
-# whose signatures tests/client-releases.mjs uploads.
+# Client releases: files in the work directory, a throwaway update signing key (discarded)
+# whose signatures tests/client-releases.mjs uploads, and the SHA-256 of its CI token
+# (ci-test-token-not-a-secret).
 env DATABASE_URL=postgresql://runner_test:local_runner_test@127.0.0.1:55459/runner_test \
   PISTON_URL="${PISTON_URL:-http://127.0.0.1:2000}" \
   BIND_ADDRESS=127.0.0.1 PORT=55460 JWT_SECRET=local-runner-test-key-not-production \
@@ -33,6 +34,7 @@ env DATABASE_URL=postgresql://runner_test:local_runner_test@127.0.0.1:55459/runn
   ADMIN_EMAIL=audit@example.invalid FRONTEND_URL=http://127.0.0.1:55461 \
   APP_URL=http://127.0.0.1:55461 TRUSTED_PROXY_CIDRS='' \
   CLIENT_RELEASES_DIR="$work_dir/client-releases" \
+  CLIENT_RELEASES_CI_TOKEN_SHA256=47a13613a90ad9136e0efbf02fc07b54e9d0de7e71e032673b610604ced19351 \
   CLIENT_UPDATER_PUBKEY=dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4NEZDMzdBMzFFRjY0MkMKUldRc1pPOHhlc05QdUpFSVpoQ0R3NmVvbXNnRDZYWHBNUVJ5MjdFVTFza1BrbXRaNHV1aDQxdTYK \
   "$project_dir/server-rs/target/debug/sharecode-server" >"$work_dir/api.log" 2>&1 &
 api_pid=$!

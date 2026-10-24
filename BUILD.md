@@ -146,18 +146,59 @@ them, plus an admin account, can ship code to every customer.
 To release a version:
 
 1. Raise `version` in `src-tauri-client/Cargo.toml` (a semantic version above the last one; it is
-   the only version, `tauri.conf.json` has none).
-2. Build on each system with the two signing variables set. On macOS build
-   `bun run client:tauri build --target universal-apple-darwin`, which runs on both chips, and
-   upload its files for both macOS entries.
-3. In 管理后台 → 客户端发布, create the version, add the files (pick each installer and update
-   together with its `.sig`; the page pairs them and reads the system and type from the file
-   names), and publish. The server checks every signature against the client's public key, so a
-   wrong or stale `.sig` is refused at upload instead of breaking updates later.
+   the only version, `tauri.conf.json` has none) and merge it to `master`.
+2. Tag that commit `client-v<version>` and push the tag. An annotated tag's message becomes the
+   draft's notes, which the updater shows:
+
+   ```bash
+   git tag -a client-v0.1.2 -m "修复……"
+   git push origin client-v0.1.2
+   ```
+
+   The release workflow (`.github/workflows/client-release.yml`) checks the tag against
+   Cargo.toml, builds the Windows installer and the universal macOS DMG with signed updates, opens
+   the version's draft on the server and uploads the files (the DMG and the `.app.tar.gz` under
+   both macOS entries). Rerunning it replaces the draft's files. A hotfix is tagged on a branch
+   made from the last release tag.
+3. In 管理后台 → 客户端发布, check the draft and publish it. The server checks every signature
+   against the client's public key, so a wrong or stale `.sig` is refused at upload instead of
+   breaking updates later.
 4. The download button on the login and join pages offers the newest installer for the visitor's
    system at once, and clients pick the update up on their next check. Unpublishing a version
    sends downloads and updates back to the previous one (clients never downgrade). A published
    version cannot be changed; unpublish it first.
+
+Without the workflow, build on each system with the two signing variables set (on macOS
+`scripts/build-client-macos.sh --signed-updates`, below), then create the version on the same page
+and add the files: pick each installer and update together with its `.sig`; the page pairs them
+and reads the system and type from the file names.
+
+#### Release workflow setup
+
+The workflow reads three repository secrets (Settings → Secrets and variables → Actions). GitHub
+Free has no environment secrets for private repositories, so a workflow on any branch of this
+repository can read them: give write access only to people trusted with the signing key.
+
+- `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: the contents of
+  `~/.tauri/sharecode-client.key` and its password (`client-macos.yml` uses the same two).
+- `CLIENT_RELEASES_CI_TOKEN`: a random token; the server keeps only its SHA-256.
+
+  ```bash
+  token=$(openssl rand -hex 32)
+  printf %s "$token" | gh secret set CLIENT_RELEASES_CI_TOKEN
+  printf %s "$token" | sha256sum | cut -d' ' -f1
+  ```
+
+  Set the printed digest as `CLIENT_RELEASES_CI_TOKEN_SHA256` in the server's environment and
+  restart it. The token opens a draft (`PUT /api/ci/client-releases/{version}`: 201 new, 200
+  already a draft, 409 published) and adds files to drafts through the admin upload route; it
+  cannot list, publish, edit or delete anything. Its changes are audited as "CI workflow".
+  Without the variable the route answers 404; changing or removing it revokes the token.
+
+Run by hand (Actions → Client release → Run workflow), the workflow builds the same installers
+without update signatures and keeps them as run artifacts for a week; it needs no secrets and
+uploads nothing. It appears there only once the workflow is on the default branch; a tag runs the
+workflow file of the tagged commit.
 
 ### macOS DMG without Apple Developer membership
 

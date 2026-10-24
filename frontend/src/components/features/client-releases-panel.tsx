@@ -256,7 +256,7 @@ function ReleaseCard({ release }: { release: ClientRelease }) {
           <Badge variant="success">{t('admin.releases.published', { date: formatDateTime(release.publishedAt!) })}</Badge>
         )}
         <span className="text-xs text-muted-foreground">
-          {t('admin.releases.createdBy', { name: release.createdBy ?? '-', date: formatDateTime(release.createdAt) })}
+          {t('admin.releases.createdBy', { name: release.createdBy ?? 'CI', date: formatDateTime(release.createdAt) })}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => setEditingNotes(true)}>

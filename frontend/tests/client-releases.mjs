@@ -46,13 +46,13 @@ const admin = (await ok('/api/auth/login', { method: 'POST', body: { username: '
 await ok('/api/admin/users', { method: 'POST', token: admin, body: { username: 'release_tech', role: 'tech', password } })
 const tech = (await ok('/api/auth/login', { method: 'POST', body: { username: 'release_tech', password } })).token
 
-function upload(releaseId, { platform, kind, name, content, signature }) {
+function upload(releaseId, { platform, kind, name, content, signature }, token = admin) {
   const form = new FormData()
   form.append('platform', platform)
   form.append('kind', kind)
   if (signature) form.append('signature', signature)
   form.append('file', new Blob([content]), name)
-  return request(`/api/admin/client-releases/${releaseId}/assets`, { method: 'POST', token: admin, body: form })
+  return request(`/api/admin/client-releases/${releaseId}/assets`, { method: 'POST', token, body: form })
 }
 const latest = async () => (await ok('/api/client/releases/latest')).downloads
 const updateFor = (target, arch, version) => request(`/api/client/update/${target}/${arch}/${version}`)
@@ -195,12 +195,47 @@ assert.equal((await request(windows030.downloadUrl)).status, 404)
 await ok(`/api/admin/client-releases/${v030.id}`, { method: 'DELETE', token: admin })
 assert.equal((await ok('/api/admin/client-releases', { token: admin })).releases.length, 1)
 
+// The release workflow's token opens a draft (again on a rerun) and uploads signed files to it,
+// and does nothing else: no published version, no listing, publishing or deleting.
+const CI = 'ci-test-token-not-a-secret'
+const openDraft = (version, token = CI, body = {}) => request(`/api/ci/client-releases/${version}`, { method: 'PUT', token, body })
+const opened = await openDraft('0.4.0', CI, { notes: 'Built by CI' })
+assert.equal(opened.status, 201, opened.text)
+assert.deepEqual([opened.body.release.version, opened.body.release.notes, opened.body.release.createdBy, opened.body.release.publishedAt], ['0.4.0', 'Built by CI', null, null])
+const reopened = await openDraft('0.4.0', CI, { notes: 'Rerun' })
+assert.deepEqual([reopened.status, reopened.body.release.id, reopened.body.release.notes], [200, opened.body.release.id, 'Built by CI'])
+for (const [version, token, status] of [['0.2.0', CI, 409], ['v0.4', CI, 400], ['0.4.0', 'wrong-token', 401], ['0.4.0', '', 401], ['0.4.0', admin, 401]]) {
+  assert.equal((await openDraft(version, token)).status, status, `${version} ${status}`)
+}
+const ciDraft = opened.body.release.id
+const ciFile = { platform: 'windows-x86_64', kind: 'installer', name: 'ShareCode Client_0.4.0_x64-setup.exe', content: WINDOWS_030, signature: WINDOWS_030_SIG }
+const ciAsset = await upload(ciDraft, ciFile, CI)
+assert.equal(ciAsset.status, 201, ciAsset.text)
+assert.equal(ciAsset.body.asset.signed, true)
+assert.equal((await upload(ciDraft, { ...ciFile, signature: MAC_UPDATE_020_SIG }, CI)).status, 400)
+assert.equal((await upload(ciDraft, { ...ciFile, kind: 'update', signature: undefined }, CI)).status, 400)
+assert.equal((await upload(v020.id, ciFile, CI)).status, 409)
+assert.equal((await upload(ciDraft, ciFile, 'wrong-token')).status, 401)
+for (const [path, method, body] of [
+  ['/api/admin/client-releases', 'GET'], ['/api/admin/client-releases', 'POST', { version: '0.5.0' }],
+  [`/api/admin/client-releases/${ciDraft}`, 'PATCH', { published: true }], [`/api/admin/client-releases/${ciDraft}`, 'DELETE'],
+  [`/api/admin/client-releases/${ciDraft}/assets/${ciAsset.body.asset.id}`, 'DELETE'], ['/api/admin/audit', 'GET'],
+]) assert.equal((await request(path, { method, body, token: CI })).status, 401, `${method} ${path}`)
+assert.equal((await updateFor('windows', 'x86_64', '0.2.0')).status, 204, 'a CI draft is not offered')
+const ciListed = (await ok('/api/admin/client-releases', { token: admin })).releases.find((release) => release.id === ciDraft)
+assert.deepEqual([ciListed.createdBy, ciListed.assets.length], [null, 1])
+const ciEvents = (await ok('/api/admin/audit?pageSize=100', { token: admin })).events.filter((event) => event.targetId === ciDraft)
+assert.deepEqual(ciEvents.map((event) => [event.action, event.username, event.actorId ?? null]).reverse(),
+  [['client_release.created', 'CI workflow', null], ['client_release.asset_uploaded', 'CI workflow', null]])
+await ok(`/api/admin/client-releases/${ciDraft}`, { method: 'DELETE', token: admin })
+assert.equal((await ok('/api/admin/client-releases', { token: admin })).releases.length, 1)
+
 // Every change is audited.
 const actions = (await ok('/api/admin/audit?pageSize=100', { token: admin })).events.map((event) => event.action)
 for (const action of ['client_release.created', 'client_release.asset_uploaded', 'client_release.published', 'client_release.notes_updated', 'client_release.unpublished', 'client_release.deleted']) {
   assert.ok(actions.includes(action), action)
 }
-console.log('PASS client release API: drafts, signature checks, publishing, latest downloads, updater responses, ranged downloads, freezing, rollback and audit')
+console.log('PASS client release API: drafts, signature checks, publishing, latest downloads, updater responses, ranged downloads, freezing, rollback, CI drafts and uploads only, and audit')
 
 // ----- Browser: publishing from the admin page, and the download button -----
 const fixtures = mkdtempSync(join(tmpdir(), 'sharecode-client-release-'))

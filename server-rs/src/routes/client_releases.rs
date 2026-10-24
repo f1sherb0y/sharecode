@@ -2,8 +2,8 @@ use std::io::Read;
 use std::path::{Path as FsPath, PathBuf};
 
 use axum::body::Body;
-use axum::extract::{Multipart, Path, Request, State};
-use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+use axum::extract::{FromRef, FromRequestParts, Multipart, Path, Request, State};
+use axum::http::{header, request::Parts, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::Engine;
@@ -288,6 +288,89 @@ fn storage_error(err: std::io::Error) -> ApiError {
     ApiError::internal("Release storage is not available")
 }
 
+// ----- Who may change releases -----
+
+/// The name audit events and drafts carry for the release workflow; usernames cannot contain
+/// spaces, so it is never an account's.
+const CI_NAME: &str = "CI workflow";
+
+/// The release workflow, by the token whose SHA-256 is `CLIENT_RELEASES_CI_TOKEN_SHA256`. It
+/// only opens drafts and uploads their files: it never publishes, edits or deletes.
+pub struct CiToken;
+
+impl CiToken {
+    /// Whether the request carries the CI token; `None` when CI uploads are off.
+    fn presented(parts: &Parts, state: &AppState) -> Option<bool> {
+        let expected = state.config.client_releases_ci_token_sha256?;
+        let token = parts
+            .headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .map(str::trim)
+            .filter(|token| !token.is_empty());
+        let Some(token) = token else { return Some(false) };
+        let actual: [u8; 32] = Sha256::digest(token.as_bytes()).into();
+        // Compare every byte, whatever the first difference.
+        Some(actual.iter().zip(expected.iter()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0)
+    }
+}
+
+impl<S> FromRequestParts<S> for CiToken
+where
+    S: Send + Sync,
+    AppState: FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let state = AppState::from_ref(state);
+        match Self::presented(parts, &state) {
+            None => Err(ApiError::not_found("Not found")),
+            Some(false) => Err(ApiError::unauthorized("Invalid token")),
+            Some(true) => Ok(CiToken),
+        }
+    }
+}
+
+/// An admin, or the release workflow by its CI token: who may upload a draft's files.
+pub enum Uploader {
+    Admin(AuthUser),
+    Ci,
+}
+
+impl Uploader {
+    fn actor_id(&self) -> Option<&str> {
+        match self {
+            Uploader::Admin(admin) => Some(&admin.id),
+            Uploader::Ci => None,
+        }
+    }
+
+    fn actor_name(&self) -> &str {
+        match self {
+            Uploader::Admin(admin) => &admin.username,
+            Uploader::Ci => CI_NAME,
+        }
+    }
+}
+
+impl<S> FromRequestParts<S> for Uploader
+where
+    S: Send + Sync,
+    AppState: FromRef<S>,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        if CiToken::presented(parts, &AppState::from_ref(state)) == Some(true) {
+            return Ok(Uploader::Ci);
+        }
+        let AdminUser(admin) = AdminUser::from_request_parts(parts, state).await?;
+        Ok(Uploader::Admin(admin))
+    }
+}
+
 // ----- Admin -----
 
 pub async fn list_releases(
@@ -472,7 +555,7 @@ struct ReceivedFile {
 pub async fn upload_asset(
     State(state): State<AppState>,
     client: ClientInfo,
-    AdminUser(admin): AdminUser,
+    uploader: Uploader,
     Path(id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -485,7 +568,7 @@ pub async fn upload_asset(
     let partial = dir.join(format!(".{asset_id}.part"));
 
     let result = match receive_asset(&mut multipart, &partial).await {
-        Ok((fields, file)) => store_asset(&state, &client, &admin, &id, &asset_id, &partial, fields, file).await,
+        Ok((fields, file)) => store_asset(&state, &client, &uploader, &id, &asset_id, &partial, fields, file).await,
         Err(err) => Err(err),
     };
     if result.is_err() {
@@ -545,7 +628,7 @@ async fn receive_asset(multipart: &mut Multipart, partial: &FsPath) -> Result<(A
 async fn store_asset(
     state: &AppState,
     client: &ClientInfo,
-    admin: &AuthUser,
+    uploader: &Uploader,
     release_id: &str,
     asset_id: &str,
     partial: &FsPath,
@@ -609,7 +692,7 @@ async fn store_asset(
         .await
         .map_err(|e| db_error(e, "Failed to update client release"))?;
     audit::record_details(
-        &mut *tx, client, "client_release.asset_uploaded", Some(&admin.id), Some(&admin.username),
+        &mut *tx, client, "client_release.asset_uploaded", uploader.actor_id(), Some(uploader.actor_name()),
         Some(release_id), true, None, None,
         json!({
             "version": release.version, "platform": platform, "kind": kind, "fileName": file.name,
@@ -657,6 +740,61 @@ pub async fn delete_asset(
     tx.commit().await.map_err(|e| db_error(e, "Failed to commit audited operation"))?;
     remove_file(&state.config, &asset_id).await;
     Ok(Json(json!({ "message": "File deleted" })))
+}
+
+// ----- Release workflow (CI) -----
+
+/// Opens the draft of a version for the release workflow, or returns the one already open (a
+/// rerun, or a draft an admin made), so files can be uploaded to it with the same token. Notes
+/// only go on a new draft; a published version is refused, since it is frozen.
+pub async fn open_ci_draft(
+    State(state): State<AppState>,
+    client: ClientInfo,
+    _ci: CiToken,
+    Path(version): Path<String>,
+    payload: Option<Json<CiDraftPayload>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let version = parse_version(&version)?.to_string();
+    let notes = validate_notes(&payload.map(|Json(p)| p.notes).unwrap_or_default())?;
+    let id = Uuid::new_v4().to_string();
+
+    let mut tx = state.db.begin().await.map_err(|e| db_error(e, "Failed to start audited operation"))?;
+    let inserted = sqlx::query(
+        r#"INSERT INTO "ClientRelease" (id, version, notes, "createdBy") VALUES ($1, $2, $3, NULL)
+        ON CONFLICT (version) DO NOTHING"#,
+    )
+    .bind(&id)
+    .bind(&version)
+    .bind(&notes)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| db_error(e, "Failed to create client release"))?
+    .rows_affected()
+        == 1;
+    let existing: String = sqlx::query_scalar(r#"SELECT id FROM "ClientRelease" WHERE version = $1"#)
+        .bind(&version)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| db_error(e, "Failed to load client release"))?;
+    let release = load_release(&mut *tx, &existing, true).await?;
+    require_draft(&release)?;
+    if inserted {
+        audit::record_details(
+            &mut *tx, &client, "client_release.created", None, Some(CI_NAME),
+            Some(&release.id), true, None, None, json!({ "version": version }),
+        )
+        .await?;
+    }
+    let assets = release_assets(&mut *tx, &release.id).await?;
+    tx.commit().await.map_err(|e| db_error(e, "Failed to commit audited operation"))?;
+    let status = if inserted { StatusCode::CREATED } else { StatusCode::OK };
+    Ok((status, Json(json!({ "release": release_json(&release, &assets) }))))
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct CiDraftPayload {
+    pub notes: String,
 }
 
 // ----- Public -----
