@@ -209,7 +209,8 @@ body ::-webkit-scrollbar-button { display: none; }
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  height: 2.25rem;
+  position: relative;
+  height: 2rem;
   border-bottom: 1px solid var(--color-border);
   background-color: color-mix(in srgb, var(--client-base-muted) calc(var(--client-bg-alpha, 1) * 45%), transparent);
   user-select: none;
@@ -232,6 +233,53 @@ body ::-webkit-scrollbar-button { display: none; }
 .client-window-controls { padding-left: 0.25rem; }
 .client-title-bar:has(.editor-toolbar) .client-window-controls {
   border-left: 1px solid var(--color-border);
+}
+
+/* macOS layout: traffic lights on the right edge (close last, like the native order),
+   hairline bar, rounded window corners; the room toolbar still fills the same host. */
+.client-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.875rem;
+  flex-shrink: 0;
+}
+.client-traffic-light {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  padding: 0;
+  color: transparent;
+  transition: color 120ms;
+}
+.client-traffic-light:nth-child(1) { background-color: #febc2e; }
+.client-traffic-light:nth-child(2) { background-color: #ff5f57; }
+.client-traffic-light:disabled { background-color: #808080; opacity: 0.55; }
+.client-traffic-light .client-traffic-glyph { width: 0.5rem; height: 0.5rem; pointer-events: none; }
+.client-traffic-lights:hover .client-traffic-light .client-traffic-glyph {
+  color: rgba(0, 0, 0, 0.55);
+}
+.client-traffic-light:hover { filter: brightness(1.1); }
+.client-title-bar[data-macos='true'] { border-bottom-color: transparent; }
+.client-title-bar[data-macos='true']:has(.editor-toolbar) { border-bottom-color: var(--color-border); }
+.client-title-bar[data-macos='true'] .client-window-controls {
+  border-left: none;
+  padding-left: 0;
+}
+.client-title-bar[data-macos='true']:has(.editor-toolbar) .client-window-controls {
+  border-left: 1px solid var(--color-border);
+}
+
+/* Rounded macOS window: the web view clips itself to the OS-drawn rounded frame.
+   The window is never maximizable on macOS, so the corners are always rounded;
+   Windows keeps square corners. */
+.client-title-bar[data-macos='true'] ~ .client-content,
+.client-shell:has(.client-title-bar[data-macos='true']) {
+  border-radius: 0.625rem;
+  overflow: hidden;
 }
 @media (max-width: 900px) {
   .client-toolbar-host .editor-toolbar-actions { gap: 0; }

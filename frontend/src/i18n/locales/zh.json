@@ -1116,7 +1116,10 @@
       "update": "重启以更新",
       "updating": "正在更新...",
       "updateReady": "新版本 {{version}} 已下载。重启应用即可完成更新，房间会自动重新打开。",
-      "updateFailed": "更新安装失败，请稍后再试。"
+      "updateFailed": "更新安装失败，请稍后再试。",
+      "screenCaptureProtectionMacHint": "请求屏幕捕获保护；新版 macOS 录屏仍可能包含此窗口。",
+      "hideFromDock": "程序坞隐藏",
+      "hideFromDockHint": "不显示程序坞图标，也不出现在 Cmd+Tab 中。"
     }
   },
   "clientPlatforms": {

@@ -4,6 +4,9 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 
 #[cfg(windows)]
 mod stealth;
+#[cfg(target_os = "macos")]
+#[path = "stealth_macos.rs"]
+mod stealth;
 
 /// The client's three camouflage switches, mirrored from its persisted settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -29,17 +32,17 @@ impl StealthState {
 
 // --- Windows: implemented over the HWND (see stealth.rs) ----------------------------------------
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn read_state() -> StealthState {
     stealth::state()
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn actual_state(window: &WebviewWindow) -> Result<StealthState, String> {
     stealth::actual(window)
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn write_platform_state(
     window: &WebviewWindow,
     next: StealthState,
@@ -47,14 +50,14 @@ fn write_platform_state(
     stealth::set(window, next)
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn install(window: &WebviewWindow) -> Result<(), String> {
     stealth::attach(window)
 }
 
 // --- Other platforms: Tauri's own window API ---------------------------------------------------
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 mod fallback {
     use super::*;
     use std::sync::Mutex;
@@ -84,17 +87,17 @@ mod fallback {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn read_state() -> StealthState {
     fallback::read()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn actual_state(_window: &WebviewWindow) -> Result<StealthState, String> {
     Ok(fallback::read())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn write_platform_state(
     window: &WebviewWindow,
     next: StealthState,
@@ -102,7 +105,7 @@ fn write_platform_state(
     fallback::write(window, next)
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn install(window: &WebviewWindow) -> Result<(), String> {
     write_state(window, read_state()).map(|_| ())
 }
@@ -110,6 +113,20 @@ fn install(window: &WebviewWindow) -> Result<(), String> {
 /// Both the title-bar command and global shortcut use this path. Pin before making the
 /// window non-interactive; disabling click-through leaves pinning for the user to change.
 fn write_state(window: &WebviewWindow, next: StealthState) -> Result<StealthState, String> {
+    // An input-transparent Mac window has no tray recovery path. Never enter this
+    // state if another process owns the only shortcut (including saved preferences).
+    #[cfg(target_os = "macos")]
+    if next.click_through
+        && !window
+            .app_handle()
+            .global_shortcut()
+            .is_registered(Shortcut::new(
+                Some(Modifiers::CONTROL | Modifiers::SHIFT),
+                Code::KeyF,
+            ))
+    {
+        return Err("Ctrl+Shift+F is unavailable; click-through was not enabled".into());
+    }
     let was_pinned = window
         .is_always_on_top()
         .map_err(|error| error.to_string())?;
@@ -148,6 +165,25 @@ async fn on_window_thread<T: Send + 'static>(
 #[tauri::command]
 async fn get_stealth_state(window: WebviewWindow) -> Result<StealthState, String> {
     on_window_thread(window, actual_state).await
+}
+
+#[tauri::command]
+async fn client_is_maximized(window: WebviewWindow) -> Result<bool, String> {
+    on_window_thread(window, |window| {
+        // The macOS client is deliberately not maximizable: a zoomed borderless
+        // translucent window loses its rounded frame and can disappear entirely
+        // behind the full-screen bounds. Windows still uses the real query.
+        #[cfg(target_os = "macos")]
+        {
+            let _ = window;
+            Ok(false)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            window.is_maximized().map_err(|error| error.to_string())
+        }
+    })
+    .await
 }
 
 #[tauri::command]
@@ -253,7 +289,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_stealth_state,
-            set_stealth_state
+            set_stealth_state,
+            client_is_maximized
         ])
         .run(tauri::generate_context!())
         .expect("error while running the ShareCode client");

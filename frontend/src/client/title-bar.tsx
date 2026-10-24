@@ -9,6 +9,7 @@ import { nodeHost } from './nodes'
 import { installUpdate, useUpdateStore } from './updater'
 import {
   appWindow,
+  isMacOSClient,
   useStealthPreferences,
   useWindowPreferences,
   MIN_BACKGROUND_OPACITY,
@@ -145,7 +146,31 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
   const hiddenCount = [screenCaptureProtection, hideFromTaskbar, clickThrough].filter(Boolean).length
 
   return (
-    <div data-tauri-drag-region className="client-title-bar">
+    <div data-tauri-drag-region data-macos={isMacOSClient ? 'true' : undefined} className="client-title-bar">
+      {/* macOS traffic lights on the right edge: minimize and close only. The window
+          is not maximizable (zoom disabled natively), matching the translucent overlay design. */}
+      {isMacOSClient && (
+        <div className="client-traffic-lights">
+          <button
+            type="button"
+            className="client-traffic-light"
+            onClick={() => void appWindow.minimize()}
+            aria-label={t('client.titleBar.minimize')}
+            title={t('client.titleBar.minimize')}
+          >
+            <Minus className="client-traffic-glyph" />
+          </button>
+          <button
+            type="button"
+            className="client-traffic-light"
+            onClick={() => void appWindow.close()}
+            aria-label={t('client.titleBar.close')}
+            title={t('client.titleBar.close')}
+          >
+            <X className="client-traffic-glyph" />
+          </button>
+        </div>
+      )}
       <div data-tauri-drag-region className="client-title-fallback flex min-w-0 flex-1 items-center gap-2 pl-2.5">
         <svg viewBox="0 0 32 32" className="pointer-events-none h-4 w-4 shrink-0" aria-hidden="true">
           <rect width="32" height="32" rx="6" fill="#3b82f6" />
@@ -201,7 +226,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
             <StealthRow
               icon={<EyeOff className="h-3.5 w-3.5" />}
               label={t('client.titleBar.screenCaptureProtection')}
-              description={t('client.titleBar.screenCaptureProtectionHint')}
+              description={isMacOSClient ? t('client.titleBar.screenCaptureProtectionMacHint') : t('client.titleBar.screenCaptureProtectionHint')}
               disabled={!ready || busy}
               enabled={screenCaptureProtection}
               onToggle={() => setScreenCaptureProtection(!screenCaptureProtection)}
@@ -216,8 +241,8 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
             />
             <StealthRow
               icon={<MonitorOff className="h-3.5 w-3.5" />}
-              label={t('client.titleBar.hideFromTaskbar')}
-              description={t('client.titleBar.hideFromTaskbarHint')}
+              label={isMacOSClient ? t('client.titleBar.hideFromDock') : t('client.titleBar.hideFromTaskbar')}
+              description={isMacOSClient ? t('client.titleBar.hideFromDockHint') : t('client.titleBar.hideFromTaskbarHint')}
               disabled={!ready || busy}
               enabled={hideFromTaskbar}
               onToggle={() => setHideFromTaskbar(!hideFromTaskbar)}
@@ -274,35 +299,41 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
           <Pin className={cn('h-3.5 w-3.5', pinned && 'fill-current')} />
         </button>
 
-        <span className="mx-1 h-4 w-px bg-border" />
+        {/* Windows uses flat square buttons with a separator; macOS traffic lights
+            render in the same right-hand position, already declared above. */}
+        {isMacOSClient ? null : (
+          <>
+            <span className="mx-1 h-4 w-px bg-border" />
 
-        <button
-          type="button"
-          className="client-title-button"
-          onClick={() => void appWindow.minimize()}
-          aria-label={t('client.titleBar.minimize')}
-          title={t('client.titleBar.minimize')}
-        >
-          <Minus className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          className="client-title-button"
-          onClick={() => void appWindow.toggleMaximize()}
-          aria-label={isMaximized ? t('client.titleBar.restore') : t('client.titleBar.maximize')}
-          title={isMaximized ? t('client.titleBar.restore') : t('client.titleBar.maximize')}
-        >
-          {isMaximized ? <Copy className="h-3 w-3 -scale-x-100" /> : <Square className="h-3 w-3" />}
-        </button>
-        <button
-          type="button"
-          className="client-title-button client-title-close"
-          onClick={() => void appWindow.close()}
-          aria-label={t('client.titleBar.close')}
-          title={t('client.titleBar.close')}
-        >
-          <X className="h-4 w-4" />
-        </button>
+            <button
+              type="button"
+              className="client-title-button"
+              onClick={() => void appWindow.minimize()}
+              aria-label={t('client.titleBar.minimize')}
+              title={t('client.titleBar.minimize')}
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="client-title-button"
+              onClick={() => void appWindow.toggleMaximize()}
+              aria-label={isMaximized ? t('client.titleBar.restore') : t('client.titleBar.maximize')}
+              title={isMaximized ? t('client.titleBar.restore') : t('client.titleBar.maximize')}
+            >
+              {isMaximized ? <Copy className="h-3 w-3 -scale-x-100" /> : <Square className="h-3 w-3" />}
+            </button>
+            <button
+              type="button"
+              className="client-title-button client-title-close"
+              onClick={() => void appWindow.close()}
+              aria-label={t('client.titleBar.close')}
+              title={t('client.titleBar.close')}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

@@ -2,8 +2,15 @@ import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { chromium } from 'playwright'
+import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
+
+// Any Playwright engine works: UI_BROWSER=chromium|firefox|webkit (chromium default).
+// Each engine gets its own Vite cache so pre-bundled dependencies never mix engines.
+const engine = process.env.UI_BROWSER ?? 'chromium'
+const engines = { chromium, firefox, webkit }
+const launchBrowser = engines[engine]
+if (!launchBrowser) throw new Error(`UI_BROWSER must be chromium, firefox or webkit, not ${engine}`)
 
 // Headless only: no OS input injection, live account, or desktop application is used.
 let server, browser, base
@@ -27,9 +34,10 @@ export function useMonacoEditor() { return {
 } }
 `
 before(async () => {
-  await mkdir('.cache/client-chrome', { recursive: true })
+  await mkdir(`.cache/client-chrome-${engine}`, { recursive: true })
   server = await createServer({
     configFile: resolve('vite.client.config.ts'), logLevel: 'error',
+    cacheDir: `node_modules/.vite/client-chrome-${engine}`,
     server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false },
     plugins: [{ name: 'client-chrome-fixtures', enforce: 'pre', load(id) {
       if (id.endsWith('/src/hooks/use-yjs-provider.ts')) return provider
@@ -37,12 +45,17 @@ before(async () => {
     } }],
   })
   await server.listen(); base = server.resolvedUrls.local[0]
-  browser = await chromium.launch({ headless: true })
+  browser = await launchBrowser.launch({ headless: true })
 })
 after(async () => { await browser?.close(); await server?.close() })
 
-async function open({ width = 1100, scale = 1, saved, locale = 'en', touch = false } = {}) {
-  const context = await browser.newContext({ viewport: { width, height: 760 }, deviceScaleFactor: scale, hasTouch: touch, reducedMotion: 'reduce' })
+// The client is a Windows app in the baseline tests unless a Mac user agent is requested;
+// macOS assertions reuse the same open() with `mac: true`.
+async function open({ width = 1100, scale = 1, saved, locale = 'en', touch = false, mac = false } = {}) {
+  const context = await browser.newContext({
+    viewport: { width, height: 760 }, deviceScaleFactor: scale, hasTouch: touch, reducedMotion: 'reduce',
+    userAgent: mac ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15' : undefined,
+  })
   await context.addInitScript(({ saved, locale }) => {
     localStorage.setItem('i18nextLng', locale)
     if (saved && !localStorage.getItem('sharecode-client-window')) localStorage.setItem('sharecode-client-window', JSON.stringify(saved))
@@ -50,15 +63,19 @@ async function open({ width = 1100, scale = 1, saved, locale = 'en', touch = fal
     const callbacks = new Map(), listeners = new Map()
     window.nativeCalls = []
     window.nativeState = { clickThrough: false, screenCaptureProtection: true, hideFromTaskbar: true }
+    window.nativeFail = null // set a command name to make the next invoke of it reject
+    window.nativeMaximized = false
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: event => listeners.delete(event) }
     window.__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
       transformCallback: handler => { callbacks.set(++id, handler); return id },
       invoke: async (command, args = {}) => {
         window.nativeCalls.push({ command, args })
+        if (window.nativeFail === command) { window.nativeFail = null; throw new Error(`mock failure: ${command}`) }
         if (command === 'plugin:event|listen') { listeners.set(args.event, args.handler); return args.handler }
         if (command === 'get_stealth_state') return window.nativeState
         if (command === 'set_stealth_state') return window.nativeState = args
+        if (command === 'client_is_maximized') return window.nativeMaximized
         if (command === 'plugin:window|is_maximized') return false
         return null
       },
@@ -142,7 +159,7 @@ test('merged toolbar fits minimum width and DPI layouts; menus and navigation st
       await settings.click()
       await page.getByRole('slider').first().waitFor()
       assert.deepEqual(await page.getByRole('slider').evaluateAll(nodes => nodes.map(el => Number(el.value))), [90, 65])
-      await page.screenshot({ path: `.cache/client-chrome/toolbar-${width}-${scale}-${touch}.png` })
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/toolbar-${width}-${scale}-${touch}.png` })
       await page.keyboard.press('Escape')
       await page.getByRole('button', { name: locale === 'en' ? 'Back' : '返回', exact: true }).click()
       await page.locator('.editor-toolbar').waitFor({ state: 'detached' })
@@ -210,7 +227,7 @@ test('transparency boosts neutral contrast and fades settings/menu surfaces with
       near((await paintedColor(muted, 'color'))[3], 0.5 * 255, 'text slider remains independent')
       near((await paintedColor(panel, 'background-color'))[3], 0.65 * 255, 'text slider leaves panel fill unchanged')
       await appearance(page, theme, 0.35)
-      await page.screenshot({ path: `.cache/client-chrome/settings-transparent-${theme}.png`, omitBackground: true })
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/settings-transparent-${theme}.png`, omitBackground: true })
       await page.keyboard.press('Escape')
       await page.getByRole('button', { name: 'More actions', exact: true }).click()
       near((await paintedColor(page.getByRole('menu'), 'background-color'))[3], 0.35 * 255, 'room menu alpha')
@@ -292,7 +309,7 @@ test('real Canvas toolbar, zoom/history controls and menu stay translucent after
       const menu = page.locator('.excalidraw .dropdown-menu-container')
       await menu.waitFor()
       near((await paintedColor(menu, 'background-color'))[3], 0.35 * 255, 'canvas menu surface alpha')
-      await page.screenshot({ path: `.cache/client-chrome/canvas-transparent-${theme}.png`, omitBackground: true })
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/canvas-transparent-${theme}.png`, omitBackground: true })
       await page.keyboard.press('Escape')
     }
     assert.deepEqual(errors, [])

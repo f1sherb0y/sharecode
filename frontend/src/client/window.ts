@@ -5,13 +5,18 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+export const isMacOSClient = isTauri && navigator.userAgent.includes('Macintosh')
 
 // No-ops outside Tauri so the client UI can also be developed in a plain browser.
 export const appWindow = {
   minimize: () => (isTauri ? getCurrentWindow().minimize() : Promise.resolve()),
-  toggleMaximize: () => (isTauri ? getCurrentWindow().toggleMaximize() : Promise.resolve()),
+  // The macOS client is not maximizable (a zoomed borderless translucent window loses
+  // its rounded frame and can disappear), so toggling is a no-op there.
+  toggleMaximize: () => (isTauri && !isMacOSClient ? getCurrentWindow().toggleMaximize() : Promise.resolve()),
   close: () => (isTauri ? getCurrentWindow().close() : Promise.resolve()),
-  isMaximized: () => (isTauri ? getCurrentWindow().isMaximized() : Promise.resolve(false)),
+  // The native macOS query avoids Tao's borderless style-mask/resize feedback loop; on
+  // macOS it is constant false because the window can never be maximized.
+  isMaximized: () => (isTauri && !isMacOSClient ? invoke<boolean>('client_is_maximized') : Promise.resolve(false)),
   setAlwaysOnTop: (onTop: boolean) => (isTauri ? getCurrentWindow().setAlwaysOnTop(onTop) : Promise.resolve()),
   setFocus: () => (isTauri ? getCurrentWindow().setFocus() : Promise.resolve()),
   setTitle: (title: string) => {

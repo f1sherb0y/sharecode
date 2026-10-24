@@ -1117,7 +1117,10 @@
       "update": "Restart to update",
       "updating": "Updating...",
       "updateReady": "Version {{version}} is ready. Restart to finish updating; your room reopens afterwards.",
-      "updateFailed": "The update couldn't be installed. Try again later."
+      "updateFailed": "The update couldn't be installed. Try again later.",
+      "screenCaptureProtectionMacHint": "Requests capture protection; modern macOS recordings may still include this window.",
+      "hideFromDock": "Hide from Dock",
+      "hideFromDockHint": "No Dock icon, no Cmd+Tab entry."
     }
   },
   "clientPlatforms": {
