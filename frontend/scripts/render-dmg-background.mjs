@@ -1,4 +1,4 @@
-// Run on macOS: node frontend/scripts/render-dmg-background.mjs
+// node frontend/scripts/render-dmg-background.mjs (needs Inter and Noto Sans CJK SC, or the macOS system fonts)
 // The committed PNG pair is used by dmgbuild; Playwright is needed only to edit the artwork.
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'

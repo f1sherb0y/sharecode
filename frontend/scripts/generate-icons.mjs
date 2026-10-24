@@ -1,88 +1,69 @@
-import sharp from 'sharp';
-import fs from 'fs';
-import path from 'path';
+// Every logo file comes from src/assets/sharecode-logo.svg: the site's favicons and the icons the
+// staff app and the customer client share (src-tauri/icons). Run after changing the logo:
+//   node scripts/generate-icons.mjs
+import { spawnSync } from 'node:child_process'
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import sharp from 'sharp'
 
-const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="96" fill="#3b82f6"/>
-  <path d="M192 160L96 256L192 352" stroke="white" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M320 160L416 256L320 352" stroke="white" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`;
+const root = join(import.meta.dirname, '..')
+const logo = readFileSync(join(root, 'src/assets/sharecode-logo.svg'), 'utf8')
+const publicDir = join(root, 'public')
+const iconsDir = join(root, 'src-tauri/icons')
+const work = mkdtempSync(join(tmpdir(), 'sharecode-icons-'))
 
-const TAURI_ICONS_DIR = path.join(import.meta.dirname, '../src-tauri/icons');
-const PUBLIC_DIR = path.join(import.meta.dirname, '../public');
+/** Rasterises the 64-unit SVG straight at the size, from vectors. */
+const render = (svg, size) => sharp(Buffer.from(svg), { density: (72 * size) / 64 }).resize(size, size).png().toBuffer()
 
-// Tauri icon sizes
-const tauriSizes = [
-  { name: '32x32.png', size: 32 },
-  { name: '128x128.png', size: 128 },
-  { name: '128x128@2x.png', size: 256 },
-  { name: 'icon.png', size: 512 },
-  // Windows Store logos
-  { name: 'Square30x30Logo.png', size: 30 },
-  { name: 'Square44x44Logo.png', size: 44 },
-  { name: 'Square71x71Logo.png', size: 71 },
-  { name: 'Square89x89Logo.png', size: 89 },
-  { name: 'Square107x107Logo.png', size: 107 },
-  { name: 'Square142x142Logo.png', size: 142 },
-  { name: 'Square150x150Logo.png', size: 150 },
-  { name: 'Square284x284Logo.png', size: 284 },
-  { name: 'Square310x310Logo.png', size: 310 },
-  { name: 'StoreLogo.png', size: 50 },
-];
-
-// Web icon sizes
-const webSizes = [
-  { name: 'favicon-16x16.png', size: 16 },
-  { name: 'favicon-32x32.png', size: 32 },
-  { name: 'apple-touch-icon.png', size: 180 },
-  { name: 'android-chrome-192x192.png', size: 192 },
-  { name: 'android-chrome-512x512.png', size: 512 },
-];
-
-async function generateIcons() {
-  const svgBuffer = Buffer.from(SVG);
-
-  // Generate Tauri icons
-  console.log('Generating Tauri icons...');
-  for (const { name, size } of tauriSizes) {
-    await sharp(svgBuffer)
-      .resize(size, size)
-      .png()
-      .toFile(path.join(TAURI_ICONS_DIR, name));
-    console.log(`  ✓ ${name}`);
-  }
-
-  // Generate ICO file (Windows)
-  const ico32 = await sharp(svgBuffer).resize(32, 32).png().toBuffer();
-  const ico48 = await sharp(svgBuffer).resize(48, 48).png().toBuffer();
-  const ico256 = await sharp(svgBuffer).resize(256, 256).png().toBuffer();
-
-  // For ICO, we'll just use the 256x256 PNG as ico (simple approach)
-  // A proper ICO would need a dedicated library
-  await sharp(svgBuffer)
-    .resize(256, 256)
-    .png()
-    .toFile(path.join(TAURI_ICONS_DIR, 'icon.ico'));
-  console.log('  ✓ icon.ico (256x256 PNG)');
-
-  // Generate ICNS placeholder (macOS) - using PNG as placeholder
-  await sharp(svgBuffer)
-    .resize(512, 512)
-    .png()
-    .toFile(path.join(TAURI_ICONS_DIR, 'icon.icns'));
-  console.log('  ✓ icon.icns (512x512 PNG placeholder)');
-
-  // Generate web icons
-  console.log('Generating web icons...');
-  for (const { name, size } of webSizes) {
-    await sharp(svgBuffer)
-      .resize(size, size)
-      .png()
-      .toFile(path.join(PUBLIC_DIR, name));
-    console.log(`  ✓ ${name}`);
-  }
-
-  console.log('\nDone! Icons generated successfully.');
+/** iOS masks the touch icon itself and fills transparent corners black: give it the tile's full square. */
+function square(svg) {
+  const result = svg.replace(/<path id="tile" d="[^"]*"/, '<path id="tile" d="M0 0H64V64H0Z"').replace(/<path id="rim"[^>]*\/>/, '')
+  if (result === svg || result.includes('id="rim"')) throw new Error('sharecode-logo.svg lost its tile or rim path')
+  return result
 }
 
-generateIcons().catch(console.error);
+/** macOS draws app icons on Apple's grid: the shape 824 of 1024 px with a soft drop shadow. */
+async function macCanvas() {
+  const body = await render(logo, 824)
+  const silhouette = await sharp({ create: { width: 824, height: 824, channels: 3, background: '#000' } })
+    .joinChannel(await sharp(body).extractChannel('alpha').linear(0.3, 0).toBuffer())
+    .png()
+    .toBuffer()
+  const shadow = await sharp({ create: { width: 1024, height: 1024, channels: 4, background: '#0000' } })
+    .composite([{ input: silhouette, left: 100, top: 110 }])
+    .png()
+    .toBuffer()
+  return sharp(await sharp(shadow).blur(10).toBuffer()).composite([{ input: body, left: 100, top: 100 }]).png().toBuffer()
+}
+
+/** The Tauri CLI's icon set (real .ico and .icns) from a 1024 px source. */
+function tauriIcons(png, name) {
+  const source = join(work, `${name}.png`)
+  writeFileSync(source, png)
+  const out = join(work, name)
+  const tauri = join(root, 'node_modules/.bin/tauri')
+  const run = spawnSync(tauri, ['icon', source, '--output', out], { stdio: 'inherit' })
+  if (run.status !== 0) throw new Error(`tauri icon failed (${run.status})`)
+  return out
+}
+
+try {
+  writeFileSync(join(publicDir, 'favicon.svg'), logo)
+  for (const [name, size] of [['favicon-16x16.png', 16], ['favicon-32x32.png', 32], ['android-chrome-192x192.png', 192], ['android-chrome-512x512.png', 512]]) {
+    writeFileSync(join(publicDir, name), await render(logo, size))
+  }
+  writeFileSync(join(publicDir, 'apple-touch-icon.png'), await render(square(logo), 180))
+
+  // Windows, Linux and the PNGs: the tile edge to edge. macOS: the .icns on Apple's grid.
+  const full = tauriIcons(await render(logo, 1024), 'full')
+  const mac = tauriIcons(await macCanvas(), 'mac')
+  for (const name of readdirSync(iconsDir)) {
+    const from = join(name === 'icon.icns' ? mac : full, name)
+    if (!existsSync(from)) throw new Error(`tauri icon made no ${name}`)
+    copyFileSync(from, join(iconsDir, name))
+  }
+  console.log(`Updated public/ favicons and ${readdirSync(iconsDir).length} files in src-tauri/icons`)
+} finally {
+  rmSync(work, { recursive: true, force: true })
+}

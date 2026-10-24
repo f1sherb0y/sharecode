@@ -1,16 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- ShareCode's mark, the source of every logo and icon (scripts/generate-icons.mjs): two
+       slashes on a dark continuous-corner tile, white and sunset. -->
   <defs>
-    <linearGradient id="sharecode-logo-gradient" x1="5" y1="4" x2="35" y2="36" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#6D5DFB" />
-      <stop offset="1" stop-color="#19B7B0" />
+    <linearGradient id="sharecode-tile" x1="32" y1="0" x2="32" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#23263A"/>
+      <stop offset="1" stop-color="#0B0C12"/>
     </linearGradient>
+    <linearGradient id="sharecode-rim" x1="32" y1="0" x2="32" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".1"/>
+    </linearGradient>
+    <linearGradient id="sharecode-ink" x1="45.25" y1="16" x2="30.75" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FDE68A"/>
+      <stop offset=".5" stop-color="#FB7185"/>
+      <stop offset="1" stop-color="#C026D3"/>
+    </linearGradient>
+    <filter id="sharecode-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4.5"/>
+    </filter>
+    <g id="sharecode-slashes" stroke-width="1.6" stroke-linejoin="round">
+      <path d="M26.75 16H33.25L25.25 48H18.75Z" fill="#fff" stroke="#fff"/>
+      <path d="M38.75 16H45.25L37.25 48H30.75Z" fill="url(#sharecode-ink)" stroke="url(#sharecode-ink)"/>
+    </g>
   </defs>
-  <rect x="1" y="1" width="38" height="38" rx="12" fill="url(#sharecode-logo-gradient)" />
-  <path d="M11.5 12.5 20 17.4m0 5.2-8.5 4.9m8.5-10.1 8.5-4.9m-8.5 10.1 8.5 4.9" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".92" />
-  <circle cx="11.5" cy="12.5" r="3.5" fill="white" />
-  <circle cx="28.5" cy="12.5" r="3.5" fill="white" />
-  <circle cx="20" cy="20" r="4.25" fill="white" />
-  <circle cx="11.5" cy="27.5" r="3.5" fill="white" />
-  <circle cx="28.5" cy="27.5" r="3.5" fill="white" />
-  <circle cx="20" cy="20" r="1.7" fill="#5C62E8" />
+  <path id="tile" d="M63.94 32C63.94 21.17 64.86 9.25 59.81 4.19C54.75 -0.86 42.83 0.06 32 0.06C21.17 0.06 9.25 -0.86 4.19 4.19C-0.86 9.25 0.06 21.17 0.06 32C0.06 42.83 -0.86 54.75 4.19 59.81C9.25 64.86 21.17 63.94 32 63.94C42.83 63.94 54.75 64.86 59.81 59.81C64.86 54.75 63.94 42.83 63.94 32Z" fill="url(#sharecode-tile)"/>
+  <path id="rim" d="M63.44 32C63.44 21.34 64.35 9.61 59.37 4.63C54.39 -0.35 42.66 0.56 32 0.56C21.34 0.56 9.61 -0.35 4.63 4.63C-0.35 9.61 0.56 21.34 0.56 32C0.56 42.66 -0.35 54.39 4.63 59.37C9.61 64.35 21.34 63.44 32 63.44C42.66 63.44 54.39 64.35 59.37 59.37C64.35 54.39 63.44 42.66 63.44 32Z" stroke="url(#sharecode-rim)"/>
+  <use href="#sharecode-slashes" filter="url(#sharecode-glow)" opacity=".55"/>
+  <use href="#sharecode-slashes"/>
 </svg>

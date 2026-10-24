@@ -1,26 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480">
   <defs>
-    <linearGradient id="paper" x2="0.7" y2="1">
-      <stop stop-color="#fbfcfe"/><stop offset="1" stop-color="#edf2f9"/>
-    </linearGradient>
-    <radialGradient id="halo">
-      <stop stop-color="#dce8fc" stop-opacity=".9"/><stop offset="1" stop-color="#e9f0fc" stop-opacity="0"/>
+    <!-- The logo's sunset (src/assets/sharecode-logo.svg), as soft light over paper. -->
+    <radialGradient id="sun" cx="600" cy="40" r="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FDE68A" stop-opacity=".55"/><stop offset="1" stop-color="#FDE68A" stop-opacity="0"/>
     </radialGradient>
+    <radialGradient id="rose" cx="430" cy="230" r="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FB7185" stop-opacity=".22"/><stop offset="1" stop-color="#FB7185" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="violet" cx="80" cy="470" r="340" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C026D3" stop-opacity=".16"/><stop offset="1" stop-color="#C026D3" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ink" x1="322" y1="0" x2="398" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F59E0B"/><stop offset=".5" stop-color="#FB7185"/><stop offset="1" stop-color="#C026D3"/>
+    </linearGradient>
+    <filter id="lift" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#1B1530" flood-opacity=".08"/>
+    </filter>
   </defs>
-  <rect width="720" height="480" fill="url(#paper)"/>
-  <ellipse cx="360" cy="205" rx="350" ry="180" fill="url(#halo)"/>
-  <g font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif" text-anchor="middle">
-    <text x="360" y="59" font-size="30" font-weight="650" letter-spacing="-1" fill="#202d42">ShareCode</text>
-    <text x="360" y="91" font-size="16" fill="#58677e">Drag to Applications · 拖入应用程序</text>
-    <!-- Finder places real, draggable icons at (190, 210) and (530, 210). -->
-    <circle cx="190" cy="210" r="78" fill="#ffffff" fill-opacity=".72" stroke="#dce4ef"/>
-    <circle cx="530" cy="210" r="78" fill="#ffffff" fill-opacity=".72" stroke="#dce4ef"/>
-    <path d="M310 210 H408 M391 193 L408 210 L391 227" fill="none" stroke="#587ec1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="360" y="246" font-size="12" fill="#637998">drag / 拖动</text>
-    <rect x="32" y="335" width="656" height="110" rx="18" fill="#fff" fill-opacity=".85" stroke="#dde5f0"/>
-    <text x="360" y="363" font-size="13" font-weight="600" fill="#4f5f77">First launch blocked? · 首次打开被拦截？</text>
-    <text x="360" y="393" font-size="15" font-weight="500" fill="#253d62">System Settings → Privacy &amp; Security → Open Anyway</text>
-    <text x="360" y="420" font-size="14" fill="#58677e">系统设置 → 隐私与安全性 → 仍要打开</text>
-    <text x="360" y="467" font-size="11" letter-spacing=".4" fill="#7b899d">Apple silicon + Intel</text>
+  <rect width="720" height="480" fill="#FBFAFC"/>
+  <rect width="720" height="480" fill="url(#sun)"/>
+  <rect width="720" height="480" fill="url(#rose)"/>
+  <rect width="720" height="480" fill="url(#violet)"/>
+
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Noto Sans CJK SC', sans-serif">
+    <text x="360" y="66" text-anchor="middle" font-size="28" font-weight="700" letter-spacing="-.6" fill="#15161D">ShareCode</text>
+    <text x="360" y="96" text-anchor="middle" font-size="15" fill="#5B5E6B">Drag to Applications · 拖到“应用程序”</text>
+
+    <!-- Finder places the real icons (96 px, label below) at (190, 210) and (530, 210). -->
+    <rect x="118" y="138" width="144" height="160" rx="30" fill="#fff" fill-opacity=".72" stroke="#1B1530" stroke-opacity=".06" filter="url(#lift)"/>
+    <rect x="458" y="138" width="144" height="160" rx="30" fill="#fff" fill-opacity=".72" stroke="#1B1530" stroke-opacity=".06" filter="url(#lift)"/>
+    <g fill="none" stroke="url(#ink)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M322 196l14 14-14 14" opacity=".35"/>
+      <path d="M350 196l14 14-14 14" opacity=".65"/>
+      <path d="M378 196l14 14-14 14"/>
+    </g>
+
+    <rect x="40" y="338" width="640" height="100" rx="22" fill="#fff" fill-opacity=".8" stroke="#1B1530" stroke-opacity=".06" filter="url(#lift)"/>
+    <circle cx="92" cy="388" r="22" fill="url(#ink)" opacity=".14"/>
+    <g fill="none" stroke="#C0265F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M92 376l-9 4v6c0 6 4 10 9 12 5-2 9-6 9-12v-6z"/>
+      <path d="M88 387l3 3 5-6"/>
+    </g>
+    <text x="130" y="368" font-size="13" font-weight="600" fill="#6B6E7B">First launch blocked? · 首次打开被拦截？</text>
+    <text x="130" y="394" font-size="15" font-weight="600" fill="#15161D">System Settings → Privacy &amp; Security → Open Anyway</text>
+    <text x="130" y="419" font-size="14" fill="#5B5E6B">系统设置 → 隐私与安全性 → 仍要打开</text>
+
+    <text x="360" y="466" text-anchor="middle" font-size="11" letter-spacing=".4" fill="#8A8D99">Apple silicon + Intel</text>
   </g>
 </svg>

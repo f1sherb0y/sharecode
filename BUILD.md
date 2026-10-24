@@ -44,6 +44,13 @@ bun run build
 
 Output: `frontend/dist/`
 
+### Logo and icons
+
+`frontend/src/assets/sharecode-logo.svg` is the logo everywhere: the site and the customer client
+show that file, and after changing it `cd frontend && node scripts/generate-icons.mjs` remakes the
+favicons in `public/` and the icons in `src-tauri/icons/` (shared by both desktop apps; the macOS
+`.icns` sits on Apple's icon grid with a drop shadow).
+
 ### Desktop App (Tauri)
 
 ```bash
@@ -230,16 +237,17 @@ For a smaller chip-specific installer, pass `--target aarch64-apple-darwin` or
 `--target x86_64-apple-darwin`. Old successful builds are preserved in separate directories.
 
 Artwork: edit `docs/macos/dmg-background.svg`, then run
-`node frontend/scripts/render-dmg-background.mjs` on macOS (requires Playwright Chromium,
-installed with `cd frontend && bunx playwright install chromium`). Commit the generated 1×/2×
+`node frontend/scripts/render-dmg-background.mjs` (requires Playwright Chromium, installed with
+`cd frontend && bunx playwright install chromium`, and Inter with Noto Sans CJK SC, or the macOS
+system fonts). Commit the generated 1×/2×
 PNGs with the SVG. Icon positions and window dimensions live in `scripts/macos-dmg-settings.py`;
 keep them aligned with the artwork. Packaging combines both images into a Retina TIFF and
 writes Finder metadata without AppleScript.
 
 The default mode omits updater *artifacts*, since those need the existing minisign private key.
 The installed app still checks updates with its original public key and endpoints. This DMG
-can be shared directly, but cannot be uploaded to the client-release admin page without its
-minisign `.sig` (that server deliberately requires signatures for installers too).
+can be shared directly or uploaded as a macOS installer for the download button; installed
+clients update only from a signed `.app.tar.gz`.
 
 To produce server-uploadable files, set `TAURI_SIGNING_PRIVATE_KEY` to the existing key contents
 and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to its password in your local secret environment, then:

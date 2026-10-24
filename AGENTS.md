@@ -87,6 +87,7 @@
 - **Compact UI**: Smaller fonts, reduced padding, icon-only badges on very small screens
 
 ### 8. Desktop Application (Tauri)
+- **Logo**: `frontend/src/assets/sharecode-logo.svg` (two slashes, white and sunset, on a dark continuous-corner tile) is the only source: the site and the client show it through `ShareCodeLogo`, and `node scripts/generate-icons.mjs` (in `frontend/`) makes the favicons and the icons both apps share (`src-tauri/icons`; the macOS `.icns` on Apple's grid)
 - **Cross-platform packaging**: Native desktop apps for Linux, Windows, and macOS
 - **Server configuration**: Configurable HTTP and WebSocket endpoints
 - **Connection testing**: Test server connectivity before login

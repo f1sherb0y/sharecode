@@ -23,7 +23,7 @@
   /* Bold text in documents: an orange that stands out from the neutral palette
      without reading as an error (destructive) or a confirmation (success). */
   --color-emphasis: #c2410c;
-  /* Markdown headings in the logo's blue (complements the orange emphasis);
+  /* Markdown headings in blue (complements the orange emphasis);
      the top level is the deepest. */
   --color-heading-1: #1e40af;
   --color-heading-2: #1d4ed8;
