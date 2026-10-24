@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Code2 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import { ShareCodeLogo } from '../share-code-logo'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from './theme-toggle'
@@ -33,7 +34,7 @@ export function Navbar({
         <div className="flex items-center gap-2">
           {leftContent ?? (
             <Link to="/rooms" aria-label={title ?? 'ShareCode'} className="flex shrink-0 items-center gap-1.5 font-semibold leading-none">
-              <Code2 className="h-7 w-7 shrink-0 text-foreground" aria-hidden="true" />
+              <ShareCodeLogo className="h-7 w-7 shrink-0" />
               {title !== null && <span className="hidden text-[1.125rem] sm:inline">{title ?? 'ShareCode'}</span>}
             </Link>
           )}

@@ -1,8 +1,9 @@
 import { useEffect, useState, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowDownToLine, Blend, Copy, EyeOff, Ghost, Minus, MonitorOff, MousePointer2, MousePointer2Off, Pin, Square, X } from 'lucide-react'
+import { ArrowDownToLine, Blend, Copy, EyeOff, Ghost, Maximize2, Minus, MonitorOff, MousePointer2, MousePointer2Off, Pin, Square, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ShareCodeLogo } from '@/components/share-code-logo'
 import { cn } from '@/lib/utils'
 import { useConnectionStore } from './connection'
 import { nodeHost } from './nodes'
@@ -147,35 +148,44 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
 
   return (
     <div data-tauri-drag-region data-macos={isMacOSClient ? 'true' : undefined} className="client-title-bar">
-      {/* macOS traffic lights on the right edge: minimize and close only. The window
-          is not maximizable (zoom disabled natively), matching the translucent overlay design. */}
+      {/* Keep the macOS controls in their native order and position. The custom title bar is
+          borderless, so these three controls provide the familiar red/yellow/green affordance. */}
       {isMacOSClient && (
-        <div className="client-traffic-lights">
+        <div className="client-traffic-lights" role="group" aria-label="Window controls">
           <button
             type="button"
             className="client-traffic-light"
-            onClick={() => void appWindow.minimize()}
-            aria-label={t('client.titleBar.minimize')}
-            title={t('client.titleBar.minimize')}
-          >
-            <Minus className="client-traffic-glyph" />
-          </button>
-          <button
-            type="button"
-            className="client-traffic-light"
+            data-control="close"
             onClick={() => void appWindow.close()}
             aria-label={t('client.titleBar.close')}
             title={t('client.titleBar.close')}
           >
-            <X className="client-traffic-glyph" />
+            <X className="client-traffic-glyph" strokeWidth={3} />
+          </button>
+          <button
+            type="button"
+            className="client-traffic-light"
+            data-control="minimize"
+            onClick={() => void appWindow.minimize()}
+            aria-label={t('client.titleBar.minimize')}
+            title={t('client.titleBar.minimize')}
+          >
+            <Minus className="client-traffic-glyph" strokeWidth={3} />
+          </button>
+          <button
+            type="button"
+            className="client-traffic-light"
+            data-control="zoom"
+            onClick={() => void appWindow.toggleMaximize()}
+            aria-label={isMaximized ? t('client.titleBar.restore') : t('client.titleBar.maximize')}
+            title={isMaximized ? t('client.titleBar.restore') : t('client.titleBar.maximize')}
+          >
+            <Maximize2 className="client-traffic-glyph" strokeWidth={2.75} />
           </button>
         </div>
       )}
       <div data-tauri-drag-region className="client-title-fallback flex min-w-0 flex-1 items-center gap-2 pl-2.5">
-        <svg viewBox="0 0 32 32" className="pointer-events-none h-4 w-4 shrink-0" aria-hidden="true">
-          <rect width="32" height="32" rx="6" fill="#3b82f6" />
-          <path d="M12 10L6 16L12 22M20 10L26 16L20 22" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        </svg>
+        <ShareCodeLogo className="pointer-events-none h-4 w-4 shrink-0" />
         <span data-tauri-drag-region className="truncate text-xs font-medium">{title}</span>
         {server && (
           <span
@@ -299,8 +309,8 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
           <Pin className={cn('h-3.5 w-3.5', pinned && 'fill-current')} />
         </button>
 
-        {/* Windows uses flat square buttons with a separator; macOS traffic lights
-            render in the same right-hand position, already declared above. */}
+        {/* Windows keeps its square controls; macOS uses the traffic lights declared at the
+            leading edge of the bar. */}
         {isMacOSClient ? null : (
           <>
             <span className="mx-1 h-4 w-px bg-border" />

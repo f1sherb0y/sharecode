@@ -2,7 +2,8 @@ import { translateError } from '@/i18n/errors'
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Code2, Link as LinkIcon } from 'lucide-react'
+import { Link as LinkIcon } from 'lucide-react'
+import { ShareCodeLogo } from '@/components/share-code-logo'
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { DownloadApp } from '@/components/features/download-app'
@@ -45,7 +46,7 @@ export function JoinPage() {
         <Card className="w-full max-w-sm border-0 bg-transparent shadow-none">
           {/* Mobile branding */}
           <div className="flex items-center gap-1 px-2 pb-3">
-            <Code2 className="h-5 w-5 text-foreground" />
+            <ShareCodeLogo className="h-5 w-5" />
             <span className="text-base font-semibold">ShareCode</span>
           </div>
 

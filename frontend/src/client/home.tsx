@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Code2, Link as LinkIcon } from 'lucide-react'
+import { Link as LinkIcon } from 'lucide-react'
+import { ShareCodeLogo } from '@/components/share-code-logo'
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '@/components/ui'
 import { parseShareToken } from '@/lib/share'
 import { cn } from '@/lib/utils'
@@ -63,7 +64,7 @@ export function ClientHome({ notice }: { notice: HomeNotice }) {
     <div className="flex flex-1 items-center justify-center p-2">
       <Card className="w-full max-w-sm border-0 bg-transparent shadow-none">
         <div className="flex items-center gap-1 px-2 pb-3">
-          <Code2 className="h-5 w-5 text-foreground" />
+          <ShareCodeLogo className="h-5 w-5" />
           <span className="text-base font-semibold">ShareCode</span>
         </div>
 
