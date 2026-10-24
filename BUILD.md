@@ -159,6 +159,86 @@ To release a version:
    sends downloads and updates back to the previous one (clients never downgrade). A published
    version cannot be changed; unpublish it first.
 
+### macOS DMG without Apple Developer membership
+
+Build a candidate universal installer (Apple silicon + Intel) on a Mac with the Command Line
+Tools, Rust, Python 3.10+ and Bun 1.3.14 installed:
+
+```bash
+# From the repository root; no Apple account or updater private key required.
+scripts/build-client-macos.sh
+```
+
+This uses the committed `bun.lock` and Cargo lockfile, runs the client Rust tests and the full
+TypeScript/client build, bundles with the ad-hoc identity `-`, verifies the code signature and
+both CPU architectures, then creates and verifies a compressed DMG. Pinned `dmgbuild`
+dependencies are installed in the isolated `build/dmg-tools` environment. The Finder window
+uses a Retina background with two aligned icons, a drag arrow and a brief bilingual first-launch
+hint. It mounts the final image
+read-only and verifies the packaged app again. No Finder automation, system-wide security
+changes, installation, upload or publishing occurs.
+
+The script prints a unique output directory under `build/macos-dist/`. It contains:
+
+- `ShareCode Client_<version>_universal.dmg`: app and Applications shortcut over the visual installation background.
+- `Install.html`: optional offline English/Chinese help for sharing alongside the download; not shown inside the DMG.
+- `SHA256SUMS`: integrity checksums for the artifacts.
+- `BUILD.txt`: commit, dirty-worktree flag, target, signing mode and build time.
+
+For a smaller chip-specific installer, pass `--target aarch64-apple-darwin` or
+`--target x86_64-apple-darwin`. Old successful builds are preserved in separate directories.
+
+Artwork: edit `docs/macos/dmg-background.svg`, then run
+`node frontend/scripts/render-dmg-background.mjs` on macOS (requires Playwright Chromium,
+installed with `cd frontend && bunx playwright install chromium`). Commit the generated 1×/2×
+PNGs with the SVG. Icon positions and window dimensions live in `scripts/macos-dmg-settings.py`;
+keep them aligned with the artwork. Packaging combines both images into a Retina TIFF and
+writes Finder metadata without AppleScript.
+
+The default mode omits updater *artifacts*, since those need the existing minisign private key.
+The installed app still checks updates with its original public key and endpoints. This DMG
+can be shared directly, but cannot be uploaded to the client-release admin page without its
+minisign `.sig` (that server deliberately requires signatures for installers too).
+
+To produce server-uploadable files, set `TAURI_SIGNING_PRIVATE_KEY` to the existing key contents
+and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to its password in your local secret environment, then:
+
+```bash
+scripts/build-client-macos.sh --signed-updates
+```
+
+This additionally produces the signed `.app.tar.gz` updater bundle, its `.sig`, and the DMG's
+`.sig`. Never generate a replacement key for existing clients. For a universal build, upload
+the same installer and update files under both `darwin-aarch64` and `darwin-x86_64` platforms.
+Raise the Cargo version before publishing a new update. Run `just predeploy` against the exact
+source before publishing/deploying; building a candidate installer does not replace that gate.
+
+#### GitHub Actions
+
+Merge `.github/workflows/client-macos.yml` into the repository's default branch so GitHub
+registers the manual workflow, then open **Actions → Build macOS client DMG → Run workflow**,
+choosing the branch to build (which must also contain the workflow). The default needs no secrets. It runs the client UI
+suite in Chromium, Firefox and WebKit, then uses the same local build script. Download
+`sharecode-client-macos-universal` from the completed run's artifacts and extract the DMG.
+It does not create a GitHub Release or publish to production. Artifacts are retained for 30 days.
+
+For the optional **signed_updates** mode, configure repository Actions secrets named
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` with the existing updater
+credentials. Only the signing step receives them. No Apple membership or Apple secrets are used.
+
+#### First launch
+
+Ad-hoc signing is **not** Apple notarization. Users drag the app into Applications, try to open
+it, and if blocked use **System Settings → Privacy & Security → Open Anyway**. This short hint
+is on the DMG background. The optional detailed guide at `docs/macos/Install.html` is copied
+next to the DMG for anyone who needs more help.
+Managed Macs may require an administrator. Test an actual browser-downloaded DMG on a separate
+Mac before public distribution; local signature verification does not test Gatekeeper approval,
+Intel runtime behavior or the in-app update cycle.
+
+References: [Tauri ad-hoc signing](https://v2.tauri.app/distribute/sign/macos/),
+[Apple first-launch instructions](https://support.apple.com/en-us/102445).
+
 ### Build Outputs
 
 | Platform | Output Location |

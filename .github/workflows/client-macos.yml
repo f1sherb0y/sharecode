@@ -1,0 +1,63 @@
+name: Build macOS client DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      signed_updates:
+        description: 'Also sign update artifacts with the existing Tauri key'
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+      - name: Install browser engines
+        working-directory: frontend
+        run: bunx playwright install chromium firefox webkit
+      - name: Check client UI in all three browsers
+        working-directory: frontend
+        run: |
+          for engine in chromium firefox webkit; do
+            UI_BROWSER="$engine" node --test tests/client-chrome.test.mjs
+          done
+      - name: Build ad-hoc-signed universal DMG
+        if: ${{ !inputs.signed_updates }}
+        run: scripts/build-client-macos.sh
+      - name: Build DMG and signed updater artifacts
+        if: ${{ inputs.signed_updates }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: scripts/build-client-macos.sh --signed-updates
+      - name: Upload candidate installer and installation guide
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharecode-client-macos-universal
+          path: build/macos-dist/**
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-client-ui
+          path: frontend/.cache/client-chrome-*/
+          if-no-files-found: ignore

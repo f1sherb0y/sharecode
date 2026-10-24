@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480">
+  <defs>
+    <linearGradient id="paper" x2="0.7" y2="1">
+      <stop stop-color="#fbfcfe"/><stop offset="1" stop-color="#edf2f9"/>
+    </linearGradient>
+    <radialGradient id="halo">
+      <stop stop-color="#dce8fc" stop-opacity=".9"/><stop offset="1" stop-color="#e9f0fc" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="480" fill="url(#paper)"/>
+  <ellipse cx="360" cy="205" rx="350" ry="180" fill="url(#halo)"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif" text-anchor="middle">
+    <text x="360" y="59" font-size="30" font-weight="650" letter-spacing="-1" fill="#202d42">ShareCode</text>
+    <text x="360" y="91" font-size="16" fill="#58677e">Drag to Applications · 拖入应用程序</text>
+    <!-- Finder places real, draggable icons at (190, 210) and (530, 210). -->
+    <circle cx="190" cy="210" r="78" fill="#ffffff" fill-opacity=".72" stroke="#dce4ef"/>
+    <circle cx="530" cy="210" r="78" fill="#ffffff" fill-opacity=".72" stroke="#dce4ef"/>
+    <path d="M310 210 H408 M391 193 L408 210 L391 227" fill="none" stroke="#587ec1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="360" y="246" font-size="12" fill="#637998">drag / 拖动</text>
+    <rect x="32" y="335" width="656" height="110" rx="18" fill="#fff" fill-opacity=".85" stroke="#dde5f0"/>
+    <text x="360" y="363" font-size="13" font-weight="600" fill="#4f5f77">First launch blocked? · 首次打开被拦截？</text>
+    <text x="360" y="393" font-size="15" font-weight="500" fill="#253d62">System Settings → Privacy &amp; Security → Open Anyway</text>
+    <text x="360" y="420" font-size="14" fill="#58677e">系统设置 → 隐私与安全性 → 仍要打开</text>
+    <text x="360" y="467" font-size="11" letter-spacing=".4" fill="#7b899d">Apple silicon + Intel</text>
+  </g>
+</svg>

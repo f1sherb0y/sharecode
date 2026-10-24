@@ -227,7 +227,8 @@ test('transparency boosts neutral contrast and fades settings/menu surfaces with
       near((await paintedColor(muted, 'color'))[3], 0.5 * 255, 'text slider remains independent')
       near((await paintedColor(panel, 'background-color'))[3], 0.65 * 255, 'text slider leaves panel fill unchanged')
       await appearance(page, theme, 0.35)
-      await page.screenshot({ path: `.cache/client-chrome-${engine}/settings-transparent-${theme}.png`, omitBackground: true })
+      // Firefox cannot override the screenshot background; alpha is asserted above.
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/settings-transparent-${theme}.png`, omitBackground: engine !== 'firefox' })
       await page.keyboard.press('Escape')
       await page.getByRole('button', { name: 'More actions', exact: true }).click()
       near((await paintedColor(page.getByRole('menu'), 'background-color'))[3], 0.35 * 255, 'room menu alpha')
@@ -266,10 +267,36 @@ test('native and real Monaco scrollbars use transparent tracks and adjustable tr
         assert.ok(color[3] > 0 && color[3] < 255 && color[3] < previousAlpha, `Monaco thumb fades, stays translucent and visible: ${theme}, bg=${background}, rgba=${color}, previous=${previousAlpha}`)
         previousAlpha = color[3]
         assert.equal((await paintedColor(thumb.locator('..'), 'background-color'))[3], 0, 'Monaco track is transparent')
-        assert.equal((await paintedColor(native, 'background-color', '::-webkit-scrollbar-track'))[3], 0, 'native track is transparent')
-        const nativeThumb = await paintedColor(native, 'background-color', '::-webkit-scrollbar-thumb')
-        near(nativeThumb[3], color[3], 'native and Monaco thumbs agree')
-        assert.match(await native.evaluate(el => getComputedStyle(el).scrollbarColor), /rgba\(0, 0, 0, 0\)/, 'standard scrollbar track is transparent')
+        if (engine !== 'firefox') {
+          assert.equal((await paintedColor(native, 'background-color', '::-webkit-scrollbar-track'))[3], 0, 'native track is transparent')
+          const nativeThumb = await paintedColor(native, 'background-color', '::-webkit-scrollbar-thumb')
+          near(nativeThumb[3], color[3], 'native and Monaco thumbs agree')
+        }
+        // Firefox uses the standard property, not WebKit's scrollbar pseudo-elements.
+        // Split only at top-level whitespace: CSS colour functions contain spaces.
+        const standard = await native.evaluate(el => {
+          const value = getComputedStyle(el).scrollbarColor
+          const colors = []; let depth = 0, token = ''
+          for (const char of value) {
+            if (/\s/.test(char) && depth === 0) {
+              if (token) { colors.push(token); token = '' }
+            } else {
+              token += char
+              if (char === '(') depth++
+              if (char === ')') depth--
+            }
+          }
+          if (token) colors.push(token)
+          return colors.map(color => {
+            if (!CSS.supports('color', color)) throw new Error(`Invalid scrollbar colour: ${value}`)
+            const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1
+            const ctx = canvas.getContext('2d'); ctx.fillStyle = color; ctx.fillRect(0, 0, 1, 1)
+            return [...ctx.getImageData(0, 0, 1, 1).data]
+          })
+        })
+        assert.equal(standard.length, 2, 'standard scrollbar defines thumb and track colours')
+        assert.equal(standard[1][3], 0, 'standard scrollbar track is transparent')
+        near(standard[0][3], color[3], 'standard native and Monaco thumbs agree')
       }
     }
     await page.evaluate(() => window.scrollEditor.dispose())
@@ -309,7 +336,7 @@ test('real Canvas toolbar, zoom/history controls and menu stay translucent after
       const menu = page.locator('.excalidraw .dropdown-menu-container')
       await menu.waitFor()
       near((await paintedColor(menu, 'background-color'))[3], 0.35 * 255, 'canvas menu surface alpha')
-      await page.screenshot({ path: `.cache/client-chrome-${engine}/canvas-transparent-${theme}.png`, omitBackground: true })
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/canvas-transparent-${theme}.png`, omitBackground: engine !== 'firefox' })
       await page.keyboard.press('Escape')
     }
     assert.deepEqual(errors, [])
