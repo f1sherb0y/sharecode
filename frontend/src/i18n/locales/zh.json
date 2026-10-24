@@ -284,6 +284,86 @@
       "label": "管理列表分页",
       "total": "共 {{count}} 条",
       "page": "{{page}} / {{total}}"
+    },
+    "releases": {
+      "title": "客户端发布",
+      "description": "发布给客户使用的桌面客户端。网站上的下载按钮会提供各系统最新的安装包，已安装的客户端会自动更新到最新的已签名版本。",
+      "create": "新建版本",
+      "createTitle": "新建版本",
+      "creating": "正在创建...",
+      "version": "版本号",
+      "versionHint": "与应用的版本号一致（src-tauri-client/Cargo.toml 中的 version），例如 {{example}}。",
+      "versionLabel": "v{{version}}",
+      "notes": "更新说明",
+      "notesTitle": "{{version}} 的更新说明",
+      "editNotes": "说明",
+      "empty": "还没有版本。",
+      "draft": "草稿",
+      "published": "已发布 · {{date}}",
+      "createdBy": "{{name}} 创建于 {{date}}",
+      "noFiles": "还没有文件。",
+      "table": {
+        "platform": "系统",
+        "kind": "类型",
+        "file": "文件",
+        "size": "大小",
+        "sha256": "SHA-256",
+        "update": "自动更新",
+        "actions": "操作"
+      },
+      "kinds": {
+        "installer": "安装包",
+        "update": "更新包"
+      },
+      "signed": "已签名",
+      "unsigned": "未签名",
+      "addFiles": "添加文件",
+      "dropHint": "选择或拖入打包目录中的安装包及其 .sig 签名文件。",
+      "choosePlatform": "选择系统",
+      "signatureMatched": "签名：{{name}}",
+      "noSignature": "没有签名：已安装的客户端不会更新到此文件",
+      "versionMismatch": "文件名中的版本是 {{fileVersion}}",
+      "duplicate": "另一个文件的系统和类型与此相同",
+      "replaces": "将替换 {{name}}",
+      "straySignatures": "没有对应文件的签名：{{names}}",
+      "upload": "上传",
+      "uploading": "正在上传 {{name}}（{{percent}}%）",
+      "remove": "移除 {{name}}",
+      "deleteFile": "删除 {{name}}",
+      "downloadFile": "下载 {{name}}",
+      "publish": "发布",
+      "unpublish": "撤回发布",
+      "delete": "删除版本",
+      "publishTitle": "发布 {{version}}？",
+      "publishConfirm": "发布后，网站的下载按钮会提供此版本，已安装的客户端会自动更新到此版本。",
+      "unpublishTitle": "撤回 {{version}}？",
+      "unpublishConfirm": "下载和自动更新会回到上一个已发布的版本，已经更新的客户端保留此版本。",
+      "deleteTitle": "删除 {{version}}？",
+      "deleteConfirm": "此草稿及其文件将被删除。",
+      "warnings": {
+        "noInstaller": "至少上传一个安装包才能发布此版本。",
+        "noUpdate": "{{platform}}：安装包没有签名，已安装的客户端不会更新到此版本。",
+        "noMacUpdate": "{{platform}}：请上传 .app.tar.gz 更新包及其 .sig 签名，否则已安装的客户端不会更新到此版本。"
+      },
+      "errors": {
+        "version": "版本号必须是语义化版本，例如 1.2.3。",
+        "versionExists": "此版本已存在。",
+        "notesTooLong": "更新说明太长。",
+        "published": "已发布的版本不能修改，请先撤回发布。",
+        "noInstaller": "发布前至少上传一个安装包。",
+        "signatureInvalid": "签名必须是 .sig 文件的内容。",
+        "signatureMismatch": "签名与此文件不符，或不是用客户端的签名密钥生成的。",
+        "signatureRequired": "更新包必须附带 .sig 签名。",
+        "fileType": "请上传安装包或更新包（.exe、.msi、.dmg、.app.tar.gz、.AppImage、.deb、.rpm）。",
+        "tooLarge": "文件太大。",
+        "empty": "文件是空的。",
+        "noFile": "请选择要上传的文件。",
+        "storage": "发布文件存储不可用。",
+        "notFound": "此版本已不存在。",
+        "fileNotFound": "此文件已不存在。",
+        "invalidUpload": "上传中断或无效，请重试。",
+        "platform": "请为文件选择系统和类型。"
+      }
     }
   },
   "playback": {
@@ -993,5 +1073,58 @@
     "noAccount": "无账号",
     "linkAccount": "关联账号",
     "remove": "移除"
+  },
+  "client": {
+    "connecting": "正在选择最快的节点...",
+    "unreachable": "无法连接服务器，请检查网络后重试。",
+    "sessionExpired": "之前的会话已失效，请粘贴新的邀请链接加入。",
+    "servers": "节点",
+    "nodeTesting": "测速中...",
+    "nodeUnreachable": "无法连接",
+    "nodeLatency": "{{ms}} ms",
+    "nodeChosen": "{{ms}} ms · 最快",
+    "titleBar": {
+      "server": "节点",
+      "serverLatency": "{{host}} · {{ms}} ms",
+      "opacity": "窗口透明度",
+      "textOpacity": "文字",
+      "backgroundOpacity": "背景",
+      "presetOpaque": "不透明",
+      "presetRecommended": "推荐",
+      "percent": "{{value}}%",
+      "pin": "窗口置顶",
+      "unpin": "取消置顶",
+      "minimize": "最小化",
+      "maximize": "最大化",
+      "restore": "还原",
+      "close": "关闭",
+      "update": "重启以更新",
+      "updating": "正在更新...",
+      "updateReady": "新版本 {{version}} 已下载。重启应用即可完成更新，房间会自动重新打开。",
+      "updateFailed": "更新安装失败，请稍后再试。"
+    }
+  },
+  "clientPlatforms": {
+    "os": {
+      "windows": "Windows",
+      "darwin": "macOS",
+      "linux": "Linux"
+    },
+    "arch": {
+      "windows-x86_64": "x64",
+      "windows-aarch64": "ARM64",
+      "darwin-aarch64": "Apple 芯片",
+      "darwin-x86_64": "Intel 芯片",
+      "linux-x86_64": "x64",
+      "linux-aarch64": "ARM64"
+    }
+  },
+  "download": {
+    "title": "桌面客户端",
+    "button": "下载 {{os}} 桌面客户端",
+    "details": "{{arch}} · 版本 {{version}} · {{size}}",
+    "otherPlatforms": "其他系统",
+    "choose": "下载桌面客户端",
+    "menuItem": "{{platform}} · {{version}}"
   }
 }

@@ -55,6 +55,10 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sharecode.local}
       PISTON_URL: http://piston:2000
+      # Desktop client installers published from the admin page (keep on a volume).
+      CLIENT_RELEASES_DIR: /data/client-releases
+    volumes:
+      - client_releases:/data/client-releases
     expose:
       - "3001"
     networks:
@@ -96,6 +100,7 @@ services:
 volumes:
   pgdata:
   piston_packages:
+  client_releases:
   caddy_data:
   caddy_config:
 

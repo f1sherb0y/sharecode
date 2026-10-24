@@ -284,6 +284,86 @@
       "label": "Management pages",
       "total": "{{count}} results",
       "page": "{{page}} / {{total}}"
+    },
+    "releases": {
+      "title": "Desktop Client",
+      "description": "Publish the customer desktop client. The download button on the site offers the newest installer for each system, and installed clients update themselves to the newest signed release.",
+      "create": "New version",
+      "createTitle": "New version",
+      "creating": "Creating...",
+      "version": "Version",
+      "versionHint": "The app's version (version in src-tauri-client/Cargo.toml), such as {{example}}.",
+      "versionLabel": "v{{version}}",
+      "notes": "Release notes",
+      "notesTitle": "Release notes for {{version}}",
+      "editNotes": "Notes",
+      "empty": "No versions yet.",
+      "draft": "Draft",
+      "published": "Published {{date}}",
+      "createdBy": "Created by {{name}} · {{date}}",
+      "noFiles": "No files yet.",
+      "table": {
+        "platform": "System",
+        "kind": "Type",
+        "file": "File",
+        "size": "Size",
+        "sha256": "SHA-256",
+        "update": "Auto-update",
+        "actions": "Actions"
+      },
+      "kinds": {
+        "installer": "Installer",
+        "update": "Update bundle"
+      },
+      "signed": "Signed",
+      "unsigned": "Not signed",
+      "addFiles": "Add files",
+      "dropHint": "Pick or drop the installers and their .sig files from the bundle folder.",
+      "choosePlatform": "Choose a system",
+      "signatureMatched": "Signature: {{name}}",
+      "noSignature": "No signature: installed clients will not update to it",
+      "versionMismatch": "the file name says {{fileVersion}}",
+      "duplicate": "another file has this system and type",
+      "replaces": "replaces {{name}}",
+      "straySignatures": "No file for: {{names}}",
+      "upload": "Upload",
+      "uploading": "Uploading {{name}} ({{percent}}%)",
+      "remove": "Remove {{name}}",
+      "deleteFile": "Delete {{name}}",
+      "downloadFile": "Download {{name}}",
+      "publish": "Publish",
+      "unpublish": "Unpublish",
+      "delete": "Delete version",
+      "publishTitle": "Publish {{version}}?",
+      "publishConfirm": "The download button will offer it, and installed clients will update to it.",
+      "unpublishTitle": "Unpublish {{version}}?",
+      "unpublishConfirm": "Downloads and updates go back to the previous published version. Clients that already updated keep this one.",
+      "deleteTitle": "Delete {{version}}?",
+      "deleteConfirm": "The draft and its files will be deleted.",
+      "warnings": {
+        "noInstaller": "Upload at least one installer to publish this version.",
+        "noUpdate": "{{platform}}: no signed installer, so installed clients will not update to this version.",
+        "noMacUpdate": "{{platform}}: upload the .app.tar.gz update bundle with its .sig, or installed clients will not update to this version."
+      },
+      "errors": {
+        "version": "The version must be a semantic version such as 1.2.3.",
+        "versionExists": "This version already exists.",
+        "notesTooLong": "The release notes are too long.",
+        "published": "Published versions cannot be changed. Unpublish it first.",
+        "noInstaller": "Upload at least one installer before publishing.",
+        "signatureInvalid": "The signature must be the content of the .sig file.",
+        "signatureMismatch": "The signature doesn't match this file, or wasn't made with the client's signing key.",
+        "signatureRequired": "Update bundles need their .sig signature.",
+        "fileType": "Upload an installer or update bundle (.exe, .msi, .dmg, .app.tar.gz, .AppImage, .deb, .rpm).",
+        "tooLarge": "The file is too large.",
+        "empty": "The file is empty.",
+        "noFile": "Choose a file to upload.",
+        "storage": "Release storage is not available.",
+        "notFound": "This version no longer exists.",
+        "fileNotFound": "This file no longer exists.",
+        "invalidUpload": "The upload was interrupted or invalid. Try again.",
+        "platform": "Choose a system and type for the file."
+      }
     }
   },
   "playback": {
@@ -994,5 +1074,58 @@
     "noAccount": "No account",
     "linkAccount": "Link account",
     "remove": "Remove"
+  },
+  "client": {
+    "connecting": "Finding the fastest server...",
+    "unreachable": "Can't reach the server. Check your network and try again.",
+    "sessionExpired": "Your previous session is no longer available. Paste a new invitation to join.",
+    "servers": "Servers",
+    "nodeTesting": "Testing...",
+    "nodeUnreachable": "Unreachable",
+    "nodeLatency": "{{ms}} ms",
+    "nodeChosen": "{{ms}} ms · fastest",
+    "titleBar": {
+      "server": "Server",
+      "serverLatency": "{{host}} · {{ms}} ms",
+      "opacity": "Window opacity",
+      "textOpacity": "Text",
+      "backgroundOpacity": "Background",
+      "presetOpaque": "Opaque",
+      "presetRecommended": "Recommended",
+      "percent": "{{value}}%",
+      "pin": "Keep on top",
+      "unpin": "Stop keeping on top",
+      "minimize": "Minimize",
+      "maximize": "Maximize",
+      "restore": "Restore",
+      "close": "Close",
+      "update": "Restart to update",
+      "updating": "Updating...",
+      "updateReady": "Version {{version}} is ready. Restart to finish updating; your room reopens afterwards.",
+      "updateFailed": "The update couldn't be installed. Try again later."
+    }
+  },
+  "clientPlatforms": {
+    "os": {
+      "windows": "Windows",
+      "darwin": "macOS",
+      "linux": "Linux"
+    },
+    "arch": {
+      "windows-x86_64": "x64",
+      "windows-aarch64": "ARM64",
+      "darwin-aarch64": "Apple silicon",
+      "darwin-x86_64": "Intel",
+      "linux-x86_64": "x64",
+      "linux-aarch64": "ARM64"
+    }
+  },
+  "download": {
+    "title": "Desktop client",
+    "button": "Download the desktop client for {{os}}",
+    "details": "{{arch}} · version {{version}} · {{size}}",
+    "otherPlatforms": "Other systems",
+    "choose": "Download the desktop client",
+    "menuItem": "{{platform}} · {{version}}"
   }
 }

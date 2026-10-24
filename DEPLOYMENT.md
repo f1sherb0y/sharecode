@@ -473,6 +473,23 @@ docker-compose exec postgres pg_dump -U sharecode_app sharecode > backup.sql
 cat backup.sql | docker-compose exec -T postgres psql -U sharecode_app sharecode
 ```
 
+### Desktop Client Releases
+
+Installers that admins publish (管理后台 → 客户端发布; see BUILD.md) are files on the server, in
+`CLIENT_RELEASES_DIR` (default `data/client-releases` under the server's working directory). The
+database only lists them, so:
+
+- Keep the directory on a volume (`client_releases:/data/client-releases` in docker-compose.yml);
+  without one, published downloads and updates break when the container is replaced. Back it up
+  together with the database.
+- Uploads can be up to 512 MB. The Caddyfile keeps its 10 MB request limit except for
+  `/api/admin/client-releases/*/assets`; any proxy in front of it (for example a host Caddy that
+  terminates TLS) must accept such uploads too.
+- The update endpoint answers with download URLs on the origin the client asked (one of
+  `APP_URL`, `FRONTEND_URL`, `ALLOWED_ORIGINS`), so keep those in step with the served domains.
+- `CLIENT_UPDATER_PUBKEY` is only needed if the client's update key ever changes; by default the
+  server checks uploads against the key built into the client.
+
 ## Production Recommendations
 
 1. **Use a reverse proxy** (Nginx or Caddy) for SSL termination

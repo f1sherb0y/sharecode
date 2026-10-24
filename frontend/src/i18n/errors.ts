@@ -86,7 +86,26 @@ const errorKeys: Record<string, string> = {
   "A valid start time is required": "errors.startRequired",
   "Customer is required": "errors.customerRequired",
   "Cancelled sessions have no room": "errors.cancelledNoRoom",
-  "Invalid session status": "errors.invalidStatus"
+  "Invalid session status": "errors.invalidStatus",
+  "Version must be a semantic version such as 1.2.3": "admin.releases.errors.version",
+  "This version already exists": "admin.releases.errors.versionExists",
+  "Release notes are too long": "admin.releases.errors.notesTooLong",
+  "Published releases cannot be changed; unpublish it first": "admin.releases.errors.published",
+  "Upload at least one installer before publishing": "admin.releases.errors.noInstaller",
+  "The signature must be the content of the .sig file": "admin.releases.errors.signatureInvalid",
+  "The signature does not match this file or was not made with the client's signing key": "admin.releases.errors.signatureMismatch",
+  "Update bundles need their signature (.sig)": "admin.releases.errors.signatureRequired",
+  "Upload an installer or update bundle (.exe, .msi, .dmg, .app.tar.gz, .AppImage, .deb, .rpm)": "admin.releases.errors.fileType",
+  "The file is too large": "admin.releases.errors.tooLarge",
+  "The file is empty": "admin.releases.errors.empty",
+  "Choose a file to upload": "admin.releases.errors.noFile",
+  "The file needs a name": "admin.releases.errors.noFile",
+  "Release storage is not available": "admin.releases.errors.storage",
+  "Release not found": "admin.releases.errors.notFound",
+  "File not found": "admin.releases.errors.fileNotFound",
+  "Invalid upload": "admin.releases.errors.invalidUpload",
+  "Unknown platform": "admin.releases.errors.platform",
+  "Unknown file kind": "admin.releases.errors.platform"
 }
 
 export function translateError(message: string): string {

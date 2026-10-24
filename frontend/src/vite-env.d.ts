@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string
   readonly VITE_WS_URL?: string
+  /** Desktop client: comma-separated server origins to choose from (default kode666.com, collabcode.cc) */
+  readonly VITE_CLIENT_NODES?: string
 }
 
 interface ImportMeta {

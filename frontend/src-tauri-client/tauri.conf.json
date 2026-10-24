@@ -1,0 +1,77 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "ShareCode Client",
+  "mainBinaryName": "sharecode-client",
+  "identifier": "dev.sharecode.client",
+  "build": {
+    "frontendDist": "../dist-client",
+    "devUrl": "http://localhost:5174",
+    "beforeDevCommand": "bun run client:dev",
+    "beforeBuildCommand": "bun run client:build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ShareCode",
+        "url": "client.html",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 480,
+        "minHeight": 360,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true
+      }
+    ],
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "app",
+      "dmg",
+      "appimage"
+    ],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "../src-tauri/icons/32x32.png",
+      "../src-tauri/icons/128x128.png",
+      "../src-tauri/icons/128x128@2x.png",
+      "../src-tauri/icons/icon.icns",
+      "../src-tauri/icons/icon.ico"
+    ],
+    "publisher": "ShareCode",
+    "category": "Productivity",
+    "shortDescription": "Join ShareCode sessions",
+    "longDescription": "ShareCode Client lets customers join a live ShareCode session from an invitation link or code. It connects to the fastest server automatically.",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "timestampUrl": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZFQzk4NDk1Mzg3RTQ1MUYKUldRZlJYNDRsWVRKL3JtQXFGMlc2YWZSL2M3eUpQQ0dCTm8vdDg4S1A0dGw5am9wN1U3NzNjNzEK",
+      "endpoints": [
+        "https://kode666.com/api/client/update/{{target}}/{{arch}}/{{current_version}}",
+        "https://collabcode.cc/api/client/update/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

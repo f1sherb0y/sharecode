@@ -52,6 +52,76 @@ bun install
 bun run tauri build
 ```
 
+### Customer Desktop Client (Tauri)
+
+A separate app for customers (`frontend/src-tauri-client`, entry `client.html` → `src/client/`):
+paste a share link (`https://kode666.com/s/<code>`) or the bare code, the client measures every
+server node and connects to the fastest one, then shows the site's own share and room pages.
+Nothing else from the site is bundled: `tooling/client-scope.ts` fails the build if other pages,
+the schedule/work-table/layout code or the staff app's window helpers reach the bundle.
+
+```bash
+cd frontend
+bun install
+# Release builds sign their updates (see "Releases and updates" below).
+export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/sharecode-client.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat ~/.tauri/sharecode-client.key.password)"
+bun run client:tauri build
+```
+
+Outputs, in `src-tauri-client/target/release/bundle/` (`target/<target>/release/bundle/` with
+`--target`), each update file with its `.sig` beside it:
+
+| System | Installer (download button) | Update (in-app updater) |
+|--------|-----------------------------|-------------------------|
+| Windows | `nsis/ShareCode Client_<version>_x64-setup.exe` (per-user, no admin rights) | the installer and its `.sig` |
+| macOS | `dmg/ShareCode Client_<version>_<arch>.dmg` | `macos/ShareCode Client.app.tar.gz` and its `.sig` |
+| Linux | `appimage/ShareCode Client_<version>_amd64.AppImage` | the AppImage and its `.sig` |
+
+Server nodes default to `https://kode666.com,https://collabcode.cc` (they serve the same
+deployment). Override them at build time with `VITE_CLIENT_NODES`, e.g. for a local API:
+
+```bash
+VITE_CLIENT_NODES=http://127.0.0.1:3001 bun run client:tauri dev
+```
+
+`bun run client:dev` serves just the client UI at `http://localhost:5174/client.html`. Keep the
+`tauri` crates in `src-tauri-client/Cargo.toml` on the minor version of `@tauri-apps/api`, and the
+Tauri plugins on the minor version of their `@tauri-apps/plugin-*` packages.
+
+#### Releases and updates
+
+Installed clients update themselves with Tauri's updater (`tauri-plugin-updater`). Five seconds
+after launch and then every six hours they ask
+`/api/client/update/{target}/{arch}/{version}` on kode666.com, then collabcode.cc. A newer signed
+release downloads in the background and a 重启以更新 button appears in the title bar; it installs
+the update and restarts (Windows runs the installer passively), and the saved seat reopens the
+room. Nothing installs on its own in the middle of a session.
+
+Updates are signed with a minisign key pair. The public key is `plugins.updater.pubkey` in
+`src-tauri-client/tauri.conf.json` and `CLIENT_UPDATER_PUBKEY` in `server-rs/src/core/config.rs`
+(a server test keeps them equal). The private key and its password never go in the repository:
+they live in `~/.tauri/sharecode-client.key` and `~/.tauri/sharecode-client.key.password` on the
+machine that builds releases. Back both up somewhere safe. If they are lost, installed clients can
+never be updated again (customers would have to reinstall a client with a new key). Whoever has
+them, plus an admin account, can ship code to every customer.
+
+To release a version:
+
+1. Raise `version` in `src-tauri-client/Cargo.toml` (a semantic version above the last one; it is
+   the only version, `tauri.conf.json` has none).
+2. Build on each system with the two signing variables set. On macOS build
+   `bun run client:tauri build --target universal-apple-darwin`, which runs on both chips, and
+   upload its files for both macOS entries.
+3. In 管理后台 → 客户端发布, create the version, add the files (pick each installer and update
+   together with its `.sig`; the page pairs them and reads the system and type from the file
+   names), and publish. The server checks every signature against the client's public key, so a
+   wrong or stale `.sig` is refused at upload instead of breaking updates later.
+4. The download button on the login and join pages offers the newest installer for the visitor's
+   system at once, and clients pick the update up on their next check. Unpublishing a version
+   sends downloads and updates back to the previous one (clients never downgrade). A published
+   version cannot be changed; unpublish it first.
+
 ### Build Outputs
 
 | Platform | Output Location |

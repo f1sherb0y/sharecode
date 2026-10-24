@@ -10,7 +10,10 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "client:dev": "vite --config vite.client.config.ts",
+    "client:build": "tsc -b && vite build --config vite.client.config.ts",
+    "client:tauri": "cd src-tauri-client && tauri"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",
@@ -30,6 +33,8 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.96.1",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-process": "~2.3.1",
+    "@tauri-apps/plugin-updater": "~2.10.1",
     "@vitejs/plugin-react": "^6.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

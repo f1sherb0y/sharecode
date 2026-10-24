@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dotenvy = "0.15"
@@ -29,6 +29,9 @@ reqwest = { version = "0.13", features = ["json"] }
 hex = "0.4"
 cookie = "0.18"
 sha2 = "0.10"
+semver = "1"
+# Same signature checks as the desktop client's updater (tauri-plugin-updater).
+minisign-verify = "0.2"
 
 # TODO: confirm latest yrs version before first build.
 yrs = { version = "0.25", features = ["sync"] }

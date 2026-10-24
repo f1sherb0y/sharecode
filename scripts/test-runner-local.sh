@@ -24,12 +24,16 @@ done
 cd "$project_dir"
 cargo test --manifest-path server-rs/Cargo.toml --offline
 cargo build --manifest-path server-rs/Cargo.toml --offline
+# Client releases: files in the work directory, and a throwaway update signing key (discarded)
+# whose signatures tests/client-releases.mjs uploads.
 env DATABASE_URL=postgresql://runner_test:local_runner_test@127.0.0.1:55459/runner_test \
   PISTON_URL="${PISTON_URL:-http://127.0.0.1:2000}" \
   BIND_ADDRESS=127.0.0.1 PORT=55460 JWT_SECRET=local-runner-test-key-not-production \
   ADMIN_USERNAME=audit_admin ADMIN_PASSWORD='LocalAudit#2026Strong' \
   ADMIN_EMAIL=audit@example.invalid FRONTEND_URL=http://127.0.0.1:55461 \
   APP_URL=http://127.0.0.1:55461 TRUSTED_PROXY_CIDRS='' \
+  CLIENT_RELEASES_DIR="$work_dir/client-releases" \
+  CLIENT_UPDATER_PUBKEY=dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4NEZDMzdBMzFFRjY0MkMKUldRc1pPOHhlc05QdUpFSVpoQ0R3NmVvbXNnRDZYWHBNUVJ5MjdFVTFza1BrbXRaNHV1aDQxdTYK \
   "$project_dir/server-rs/target/debug/sharecode-server" >"$work_dir/api.log" 2>&1 &
 api_pid=$!
 export SHARECODE_TEST_CONTAINER="$container_name"
@@ -43,6 +47,6 @@ throw Error('Local API not ready')
 JS
 case "${1:-tests/runner-permissions.mjs}" in
   tests/canvas-integration.ts) node --experimental-transform-types tests/canvas-integration.ts ;;
-  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs|tests/selection-blink.mjs|tests/role-permissions.mjs|tests/audit-devices.mjs|tests/session-renewal.mjs|tests/reconnect-recovery.mjs|tests/browser-sessions.mjs|tests/notes-permissions.mjs|tests/follow-permission.mjs|tests/schedule.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
+  tests/runner-permissions.mjs|tests/admin-pagination.mjs|tests/markdown-switch.mjs|tests/share-links.mjs|tests/selection-blink.mjs|tests/role-permissions.mjs|tests/audit-devices.mjs|tests/session-renewal.mjs|tests/reconnect-recovery.mjs|tests/browser-sessions.mjs|tests/notes-permissions.mjs|tests/follow-permission.mjs|tests/schedule.mjs|tests/client-releases.mjs) node "${1:-tests/runner-permissions.mjs}" ;;
   *) echo 'Unknown local test suite' >&2; exit 2 ;;
 esac

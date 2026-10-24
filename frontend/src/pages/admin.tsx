@@ -1,4 +1,5 @@
 import { UserDevicesDialog } from '@/components/features/user-devices-dialog'
+import { ClientReleasesPanel } from '@/components/features/client-releases-panel'
 import { translateError } from '@/i18n/errors'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -32,12 +33,12 @@ import { canDeleteRoom, isAdmin } from '@/lib/room-permissions'
 import { validatePasswordPolicy } from '@/lib/password-policy'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores'
-import { formatDate, formatDateTime } from '@/lib/utils'
+import { formatBytes, formatDate, formatDateTime } from '@/lib/utils'
 import { LANGUAGES } from '@/types'
 import type { Language, Role, RoomPlaybackSize, PaginationMeta } from '@/types'
 
 const ROLES: Role[] = ['tech', 'agent', 'admin']
-const ADMIN_SECTIONS = ['users', 'rooms'] as const
+const ADMIN_SECTIONS = ['users', 'rooms', 'releases'] as const
 const ROOM_STATUS_FILTERS = ['all', 'active', 'ended'] as const
 
 type AdminSection = (typeof ADMIN_SECTIONS)[number]
@@ -75,14 +76,6 @@ function AdminPagination({ pagination, disabled, onPage }: { pagination: Paginat
       <Button size="sm" variant="outline" disabled={disabled || !pagination.hasNext} onClick={() => onPage(pagination.page + 1)}>{t('rooms.pagination.next')}</Button>
     </div>
   </nav>
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  const value = bytes / Math.pow(1024, exponent)
-  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
 }
 
 function CreateUserDialog({
@@ -247,6 +240,7 @@ export function AdminPage() {
   const canAccessAdmin = isAdmin(user)
   const showUsersSection = section === 'users'
   const showRoomsSection = section === 'rooms'
+  const showReleasesSection = section === 'releases'
 
   const usersParams = { page: userPage, pageSize, role: userRoleFilter, q: searchParams.get('userSearch') ?? '' }
   const roomsParams = { page: roomPage, pageSize, status: roomStatusFilter, language: roomLanguage, owner: ownerSearch, q: searchParams.get('roomSearch') ?? '' }
@@ -567,10 +561,11 @@ export function AdminPage() {
           <Tabs.List aria-label={t('admin.filters.view')} className="mb-2 flex gap-1 border-b">
             {ADMIN_SECTIONS.map(value => <Tabs.Trigger key={value} value={value}
               className="min-h-control px-2 text-sm border-b-2 border-transparent text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-              {value === 'users' ? t('admin.users.title') : t('admin.rooms.title')}
+              {value === 'users' ? t('admin.users.title') : value === 'rooms' ? t('admin.rooms.title') : t('admin.releases.title')}
             </Tabs.Trigger>)}
           </Tabs.List>
           <Tabs.Content value={section} className="outline-none">
+        {showReleasesSection ? <ClientReleasesPanel /> : <>
         <form className="mb-2 flex flex-wrap items-center gap-1" onSubmit={event => {
           event.preventDefault()
           updateAdminParams({ [searchKey]: searchDraft.trim(), ...(showRoomsSection ? { owner: ownerDraft.trim() } : {}) })
@@ -883,6 +878,7 @@ export function AdminPage() {
         )}
         <AdminPagination pagination={pagination} disabled={showUsersSection ? usersQuery.isFetching : roomsQuery.isFetching}
           onPage={page => updateAdminParams({ [showUsersSection ? 'userPage' : 'roomPage']: page })} />
+        </>}
           </Tabs.Content>
         </Tabs.Root>
       </PageContainer>

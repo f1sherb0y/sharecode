@@ -74,8 +74,14 @@
 	}
 	respond @blocked_paths 404
 
-	# Limit request body size (prevents large payload attacks)
-	request_body {
+	# Limit request body size (prevents large payload attacks). Desktop client installers,
+	# uploaded by admins, are the exception; the API caps them at 512 MB itself.
+	@client_release_upload path /api/admin/client-releases/*/assets
+	request_body @client_release_upload {
+		max_size 513MiB
+	}
+	@regular_request not path /api/admin/client-releases/*/assets
+	request_body @regular_request {
 		max_size 10MB
 	}
 

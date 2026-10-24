@@ -316,3 +316,52 @@ export interface RosterEntry {
 }
 
 export type RosterKind = 'tech' | 'manager'
+
+/** Desktop client platforms, Tauri's `{target}-{arch}` names. */
+export const CLIENT_PLATFORMS = [
+  'windows-x86_64',
+  'windows-aarch64',
+  'darwin-aarch64',
+  'darwin-x86_64',
+  'linux-x86_64',
+  'linux-aarch64',
+] as const
+export type ClientPlatform = (typeof CLIENT_PLATFORMS)[number]
+/** What the download page offers, or what the in-app updater installs (macOS .app.tar.gz). */
+export type ClientAssetKind = 'installer' | 'update'
+
+export interface ClientReleaseAsset {
+  id: string
+  platform: ClientPlatform
+  kind: ClientAssetKind
+  fileName: string
+  size: number
+  sha256: string
+  /** Has its updater signature: the in-app updater can install it. */
+  signed: boolean
+  createdAt: string
+  downloadUrl: string
+}
+
+/** A desktop client version; drafts are only seen by admins. */
+export interface ClientRelease {
+  id: string
+  version: string
+  notes: string
+  publishedAt: string | null
+  createdAt: string
+  updatedAt: string
+  createdBy: string | null
+  assets: ClientReleaseAsset[]
+}
+
+/** A platform's newest published installer. */
+export interface ClientDownload {
+  platform: ClientPlatform
+  version: string
+  publishedAt: string | null
+  fileName: string
+  size: number
+  sha256: string
+  url: string
+}

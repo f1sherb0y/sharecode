@@ -26,6 +26,11 @@ import type {
   WorkTable,
   RosterEntry,
   RosterKind,
+  ClientRelease,
+  ClientReleaseAsset,
+  ClientAssetKind,
+  ClientDownload,
+  ClientPlatform,
 } from '@/types'
 import { isTauriApp } from '@/lib/tauri'
 import { useAuthStore } from '@/stores'
@@ -487,6 +492,74 @@ class ApiClient {
     })
   }
 
+  // Desktop client releases
+  async listClientReleases(): Promise<{ releases: ClientRelease[] }> {
+    return this.request('/api/admin/client-releases')
+  }
+
+  async createClientRelease(data: { version: string; notes: string }): Promise<{ release: ClientRelease }> {
+    return this.request('/api/admin/client-releases', { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async updateClientRelease(releaseId: string, data: { notes?: string; published?: boolean }): Promise<{ release: ClientRelease }> {
+    return this.request(`/api/admin/client-releases/${encodeURIComponent(releaseId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteClientRelease(releaseId: string): Promise<{ message: string }> {
+    return this.request(`/api/admin/client-releases/${encodeURIComponent(releaseId)}`, { method: 'DELETE' })
+  }
+
+  async deleteClientReleaseAsset(releaseId: string, assetId: string): Promise<{ message: string }> {
+    return this.request(
+      `/api/admin/client-releases/${encodeURIComponent(releaseId)}/assets/${encodeURIComponent(assetId)}`,
+      { method: 'DELETE' }
+    )
+  }
+
+  /** A multipart upload through XMLHttpRequest, since fetch cannot report upload progress.
+   * `signature` is the content of the file's .sig (the updater signature). */
+  async uploadClientReleaseAsset(
+    releaseId: string,
+    upload: { platform: ClientPlatform; kind: ClientAssetKind; file: File; signature?: string },
+    onProgress?: (fraction: number) => void
+  ): Promise<{ asset: ClientReleaseAsset }> {
+    await ensureFreshSession()
+    const token = useAuthStore.getState().token
+    const headers: Record<string, string> = {
+      'X-Sharecode-Client': 'web',
+      ...await deviceHeaders(true),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+    const form = new FormData()
+    form.append('platform', upload.platform)
+    form.append('kind', upload.kind)
+    if (upload.signature) form.append('signature', upload.signature)
+    form.append('file', upload.file, upload.file.name)
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${getApiBaseUrl()}/api/admin/client-releases/${encodeURIComponent(releaseId)}/assets`)
+      xhr.withCredentials = true
+      for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded / event.total)
+      }
+      xhr.onload = () => {
+        let body: { error?: string } | null = null
+        try { body = JSON.parse(xhr.responseText) } catch { /* proxies answer in HTML */ }
+        if (xhr.status >= 200 && xhr.status < 300 && body) return resolve(body as { asset: ClientReleaseAsset })
+        // A proxy's own body limit answers 413 before the server sees the file.
+        const message = body?.error || (xhr.status === 413 ? 'The file is too large' : 'Request failed')
+        reject(Object.assign(new Error(message), { status: xhr.status, data: body }))
+      }
+      xhr.onerror = () => reject(new Error('Failed to fetch'))
+      xhr.send(form)
+    })
+  }
+
   // Playback
   async getPlaybackUpdates(roomId: string): Promise<PlaybackData> {
     return this.request<PlaybackData>(`/api/rooms/${roomId}/playback/updates`)
@@ -539,6 +612,13 @@ class ApiClient {
 }
 
 export const api = new ApiClient()
+
+/** Each platform's newest desktop client installer (public). */
+export async function getClientDownloads(): Promise<{ downloads: ClientDownload[] }> {
+  const response = await fetch(`${getApiBaseUrl()}/api/client/releases/latest`)
+  if (!response.ok) throw Object.assign(new Error('Request failed'), { status: response.status })
+  return response.json()
+}
 
 // Share API (unauthenticated endpoints)
 export async function joinShare(

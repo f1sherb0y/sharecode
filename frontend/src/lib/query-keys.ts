@@ -18,4 +18,6 @@ export const queryKeys = {
   adminRooms: ['admin-rooms'] as const,
   adminDbSize: ['admin-db-size'] as const,
   adminPlaybackSizes: ['admin-playback-sizes'] as const,
+  adminClientReleases: ['admin-client-releases'] as const,
+  clientDownloads: ['client-downloads'] as const,
 }

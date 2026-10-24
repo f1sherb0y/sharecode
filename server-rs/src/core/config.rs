@@ -18,7 +18,16 @@ pub struct Config {
     pub admin_password: String,
     pub admin_email: String,
     pub admin_update_password: bool,
+    /// Where uploaded desktop client installers and update bundles are kept.
+    pub client_releases_dir: std::path::PathBuf,
+    /// The desktop client's update signing public key (`plugins.updater.pubkey` in its
+    /// tauri.conf.json). Uploaded signatures are checked against it, as the client does.
+    pub client_updater_pubkey: String,
 }
+
+/// The public key the desktop client trusts; keep in sync with
+/// frontend/src-tauri-client/tauri.conf.json (a test checks this).
+pub const CLIENT_UPDATER_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZFQzk4NDk1Mzg3RTQ1MUYKUldRZlJYNDRsWVRKL3JtQXFGMlc2YWZSL2M3eUpQQ0dCTm8vdDg4S1A0dGw5am9wN1U3NzNjNzEK";
 
 impl Config {
     pub fn from_env() -> Self {
@@ -56,6 +65,14 @@ impl Config {
         let admin_email =
             env::var("ADMIN_EMAIL").unwrap_or_else(|_| "admin@sharecode.local".to_string());
         let admin_update_password = env_bool("ADMIN_UPDATE_PASSWORD", false);
+        let client_releases_dir = env::var("CLIENT_RELEASES_DIR")
+            .unwrap_or_else(|_| "data/client-releases".to_string())
+            .into();
+        let client_updater_pubkey = env::var("CLIENT_UPDATER_PUBKEY")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| CLIENT_UPDATER_PUBKEY.to_string());
 
         Self {
             port,
@@ -82,6 +99,8 @@ impl Config {
             admin_password,
             admin_email,
             admin_update_password,
+            client_releases_dir,
+            client_updater_pubkey,
         }
     }
 }

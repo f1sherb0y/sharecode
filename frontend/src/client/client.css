@@ -1,0 +1,214 @@
+/* The native window is transparent so the client can fade, text and background independently
+   (title bar opacity control; app.tsx sets --client-text-alpha and --client-bg-alpha on <body>,
+   which also holds the portaled menus and dialogs). */
+html,
+body {
+  background: transparent !important;
+  overflow: hidden;
+}
+
+/* Theme colours are re-derived on <body> from the values captured on <html> (a variable cannot
+   refer to itself), so each theme keeps its own colours. */
+html {
+  --client-base-background: var(--color-background);
+  --client-base-card: var(--color-card);
+  --client-base-popover: var(--color-popover);
+  --client-base-muted: var(--color-muted);
+  --client-base-secondary: var(--color-secondary);
+  --client-base-accent: var(--color-accent);
+  --client-base-border: var(--color-border);
+  --client-base-input: var(--color-input);
+  --client-base-foreground: var(--color-foreground);
+  --client-base-card-foreground: var(--color-card-foreground);
+  --client-base-popover-foreground: var(--color-popover-foreground);
+  --client-base-primary: var(--color-primary);
+  --client-base-primary-foreground: var(--color-primary-foreground);
+  --client-base-secondary-foreground: var(--color-secondary-foreground);
+  --client-base-muted-foreground: var(--color-muted-foreground);
+  --client-base-accent-foreground: var(--color-accent-foreground);
+  --client-base-destructive: var(--color-destructive);
+  --client-base-destructive-foreground: var(--color-destructive-foreground);
+  --client-base-success: var(--color-success);
+  --client-base-success-foreground: var(--color-success-foreground);
+  --client-base-ring: var(--color-ring);
+  --client-base-emphasis: var(--color-emphasis);
+  --client-base-heading-1: var(--color-heading-1);
+  --client-base-heading-2: var(--color-heading-2);
+  --client-base-heading-3: var(--color-heading-3);
+}
+
+body {
+  --client-bg: calc(var(--client-bg-alpha, 1) * 100%);
+  --client-text: calc(var(--client-text-alpha, 1) * 100%);
+
+  /* Exactly one background layer: the shell paints the theme background at the background
+     opacity, and surfaces of that colour (toolbars, status bar, editors) are transparent over it.
+     Stacked translucent layers would add up to a more opaque window than the slider says. */
+  --color-background: transparent;
+
+  /* Surfaces in other colours and the lines sit on the shell at the background opacity. */
+  --color-card: color-mix(in srgb, var(--client-base-card) var(--client-bg), transparent);
+  --color-popover: color-mix(in srgb, var(--client-base-popover) var(--client-bg), transparent);
+  --color-muted: color-mix(in srgb, var(--client-base-muted) var(--client-bg), transparent);
+  --color-secondary: color-mix(in srgb, var(--client-base-secondary) var(--client-bg), transparent);
+  --color-accent: color-mix(in srgb, var(--client-base-accent) var(--client-bg), transparent);
+  --color-border: color-mix(in srgb, var(--client-base-border) var(--client-bg), transparent);
+  --color-input: color-mix(in srgb, var(--client-base-input) var(--client-bg), transparent);
+
+  /* Text, icons (currentColor) and the status colours follow the text opacity only. */
+  --color-foreground: color-mix(in srgb, var(--client-base-foreground) var(--client-text), transparent);
+  --color-card-foreground: color-mix(in srgb, var(--client-base-card-foreground) var(--client-text), transparent);
+  --color-popover-foreground: color-mix(in srgb, var(--client-base-popover-foreground) var(--client-text), transparent);
+  --color-primary: color-mix(in srgb, var(--client-base-primary) var(--client-text), transparent);
+  --color-primary-foreground: color-mix(in srgb, var(--client-base-primary-foreground) var(--client-text), transparent);
+  --color-secondary-foreground: color-mix(in srgb, var(--client-base-secondary-foreground) var(--client-text), transparent);
+  --color-muted-foreground: color-mix(in srgb, var(--client-base-muted-foreground) var(--client-text), transparent);
+  --color-accent-foreground: color-mix(in srgb, var(--client-base-accent-foreground) var(--client-text), transparent);
+  --color-destructive: color-mix(in srgb, var(--client-base-destructive) var(--client-text), transparent);
+  --color-destructive-foreground: color-mix(in srgb, var(--client-base-destructive-foreground) var(--client-text), transparent);
+  --color-success: color-mix(in srgb, var(--client-base-success) var(--client-text), transparent);
+  --color-success-foreground: color-mix(in srgb, var(--client-base-success-foreground) var(--client-text), transparent);
+  --color-ring: color-mix(in srgb, var(--client-base-ring) var(--client-text), transparent);
+  --color-emphasis: color-mix(in srgb, var(--client-base-emphasis) var(--client-text), transparent);
+  --color-heading-1: color-mix(in srgb, var(--client-base-heading-1) var(--client-text), transparent);
+  --color-heading-2: color-mix(in srgb, var(--client-base-heading-2) var(--client-text), transparent);
+  --color-heading-3: color-mix(in srgb, var(--client-base-heading-3) var(--client-text), transparent);
+}
+
+/* Menus, selects, tooltips and dialogs float over content, so they keep solid surfaces
+   (their text still follows the text opacity). */
+[role="dialog"],
+[role="alertdialog"],
+[data-radix-popper-content-wrapper] {
+  --color-background: var(--client-base-background);
+  --color-card: var(--client-base-card);
+  --color-popover: var(--client-base-popover);
+  --color-muted: var(--client-base-muted);
+  --color-secondary: var(--client-base-secondary);
+  --color-accent: var(--client-base-accent);
+  --color-border: var(--client-base-border);
+  --color-input: var(--client-base-input);
+}
+
+/* Canvas toolbars and popups float over the board (canvas.css feeds them, and inverted popup
+   text, from the theme background), so they keep it solid too. */
+.client-content .sharecode-canvas {
+  --canvas-bg: var(--client-base-background);
+}
+
+/* Monaco paints its surfaces in the editor background (the theme background), so they become
+   transparent over the shell; its text layers (code, line numbers, cursors) take the text opacity. */
+.client-content .monaco-editor,
+.client-content .monaco-editor .monaco-editor-background,
+.client-content .monaco-editor .margin {
+  background-color: transparent;
+}
+
+.client-content .monaco-editor .view-lines,
+.client-content .monaco-editor .line-numbers,
+.client-content .monaco-editor .cursors-layer,
+.client-content img {
+  opacity: var(--client-text-alpha, 1);
+}
+
+/* The Canvas board colour is part of the shared document, so the board fades as one piece. */
+.client-content .excalidraw canvas {
+  opacity: var(--client-bg-alpha, 1);
+}
+
+.client-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: color-mix(in srgb, var(--client-base-background) var(--client-bg), transparent);
+  color: var(--color-foreground);
+}
+
+.client-title-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 2rem;
+  border-bottom: 1px solid var(--color-border);
+  background-color: color-mix(in srgb, var(--client-base-muted) calc(var(--client-bg-alpha, 1) * 45%), transparent);
+  user-select: none;
+}
+
+.client-title-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2rem;
+  color: var(--color-muted-foreground);
+  transition: background-color 120ms, color 120ms;
+}
+
+.client-title-button:hover {
+  background-color: var(--color-accent);
+  color: var(--color-foreground);
+}
+
+.client-title-button[data-active="true"] {
+  color: var(--color-primary);
+}
+
+.client-title-button.client-title-close:hover {
+  background-color: #e81123;
+  color: #ffffff;
+}
+
+.client-opacity-slider {
+  accent-color: var(--color-primary);
+}
+
+.client-update-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.375rem;
+  margin-right: 0.375rem;
+  padding: 0 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: filter 120ms;
+}
+
+.client-update-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.client-update-button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.client-update-button:focus-visible {
+  outline: 1px solid var(--color-ring);
+  outline-offset: 1px;
+}
+
+/* The site's pages size themselves to the viewport (h-screen, min-h-screen and the room's
+   measured height); inside the client they fill the area below the title bar instead. */
+.client-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.client-content > .editor-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto !important;
+}
+
+.client-content > .min-h-screen {
+  flex: 1 0 auto;
+  min-height: 0;
+}

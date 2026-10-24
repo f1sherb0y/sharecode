@@ -1,3 +1,4 @@
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, patch, post, put};
 use axum::Router;
 
@@ -7,6 +8,7 @@ use crate::ws;
 mod admin;
 mod appointments;
 mod auth;
+mod client_releases;
 mod code;
 mod customers;
 mod health;
@@ -134,6 +136,33 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/admin/rooms/{id}/playback/compress",
             post(admin::compress_room_playback),
+        )
+        // Desktop client releases: publishing (admins), downloads and the in-app updater
+        .route(
+            "/api/admin/client-releases",
+            get(client_releases::list_releases).post(client_releases::create_release),
+        )
+        .route(
+            "/api/admin/client-releases/{id}",
+            patch(client_releases::update_release).delete(client_releases::delete_release),
+        )
+        .route(
+            "/api/admin/client-releases/{id}/assets",
+            post(client_releases::upload_asset)
+                .layer(DefaultBodyLimit::max(client_releases::MAX_UPLOAD_BYTES)),
+        )
+        .route(
+            "/api/admin/client-releases/{id}/assets/{assetId}",
+            delete(client_releases::delete_asset),
+        )
+        .route("/api/client/releases/latest", get(client_releases::latest_downloads))
+        .route(
+            "/api/client/update/{target}/{arch}/{currentVersion}",
+            get(client_releases::update_check),
+        )
+        .route(
+            "/api/client/downloads/{assetId}/{fileName}",
+            get(client_releases::download_asset),
         )
         // Playback
         .route(

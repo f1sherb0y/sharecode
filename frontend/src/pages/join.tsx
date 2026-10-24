@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Code2, Link as LinkIcon } from 'lucide-react'
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { ThemeToggle, LanguageSwitcher } from '@/components/layout'
+import { DownloadApp } from '@/components/features/download-app'
 import { parseShareToken } from '@/lib/share'
 
 export function JoinPage() {
@@ -90,6 +91,8 @@ export function JoinPage() {
                 {t('join.loginLink')}
               </Link>
             </p>
+
+            <DownloadApp />
           </CardContent>
         </Card>
       </div>

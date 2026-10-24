@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Settings } from 'lucide-react'
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { AuthBrand, ThemeToggle, LanguageSwitcher } from '@/components/layout'
+import { DownloadApp } from '@/components/features/download-app'
 import { useAuthStore } from '@/stores'
 import { isTauriApp } from '@/lib/tauri'
 import { parseShareToken } from '@/lib/share'
@@ -142,6 +143,8 @@ export function LoginPage() {
                 {t('auth.login.joinLinkLabel')}
               </Link>
             </p>
+
+            <DownloadApp />
 
             {isTauri && (
               <>
