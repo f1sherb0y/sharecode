@@ -17,7 +17,7 @@ export const appWindow = {
   // The native macOS query avoids Tao's borderless style-mask/resize feedback loop; on
   // macOS it is constant false because the window can never be maximized.
   isMaximized: () => (isTauri && !isMacOSClient ? invoke<boolean>('client_is_maximized') : Promise.resolve(false)),
-  setAlwaysOnTop: (onTop: boolean) => (isTauri ? getCurrentWindow().setAlwaysOnTop(onTop) : Promise.resolve()),
+  setAlwaysOnTop: (onTop: boolean) => (isTauri ? invoke<void>('client_set_pinned', { pinned: onTop }) : Promise.resolve()),
   setFocus: () => (isTauri ? getCurrentWindow().setFocus() : Promise.resolve()),
   setTitle: (title: string) => {
     document.title = title
@@ -95,7 +95,15 @@ export interface StealthState {
   hideFromTaskbar: boolean
 }
 
+export interface HotkeyStatus {
+  nativeListener: boolean
+  globalShortcut: boolean
+  permissionRequired: boolean
+  error: string | null
+}
+
 interface StealthPreferences extends StealthState {
+  hotkeyStatus: HotkeyStatus | null
   /** False until the native state has been read once, so the UI does not flash wrong values. */
   ready: boolean
   busy: boolean
@@ -122,6 +130,7 @@ export const useStealthPreferences = create<StealthPreferences>()(
       clickThrough: false,
       screenCaptureProtection: true,
       hideFromTaskbar: true,
+      hotkeyStatus: null,
       ready: false,
       busy: false,
       error: null,
@@ -205,7 +214,17 @@ export function watchStealthShortcut(): () => void {
     return () => {}
   }
   let stop: (() => void) | undefined
+  let stopStatus: (() => void) | undefined
   let cancelled = false
+  void listen<HotkeyStatus>('sharecode:hotkey-status', (event) => {
+    useStealthPreferences.setState({ hotkeyStatus: event.payload })
+  }).then((unlisten) => {
+    if (cancelled) void unlisten()
+    else stopStatus = unlisten
+  }).catch((error) => console.error('Failed to watch the hotkey status:', error))
+  void invoke<HotkeyStatus>('get_hotkey_status').then((hotkeyStatus) => {
+    useStealthPreferences.setState({ hotkeyStatus })
+  }).catch((error) => console.error('Failed to read the hotkey status:', error))
   void listen<StealthState>('sharecode:stealth-state', (event) => {
     if (event.payload.clickThrough) useWindowPreferences.setState({ pinned: true })
     useStealthPreferences.setState({ ...event.payload, ready: true })
@@ -223,5 +242,6 @@ export function watchStealthShortcut(): () => void {
   return () => {
     cancelled = true
     stop?.()
+    stopStatus?.()
   }
 }

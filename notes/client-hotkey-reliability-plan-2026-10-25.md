@@ -1,6 +1,6 @@
 # 客户端穿透快捷键可靠性方案
 
-状态：待实现。本文只记录方案，不修改客户端、不升级版本、不创建发布标签或重新打包。
+状态：Windows 第一阶段已实现，macOS 原生监听与权限引导仍待实现。本文继续作为实施清单，不升级版本、不创建发布标签或重新打包。
 
 ## 目标与已确认取舍
 
@@ -91,3 +91,22 @@ Hook/event tap 提高可达性，但不是无条件保证。Windows 的其他 ho
 - [Apple DTS：Accessibility Permission In Sandbox For Keyboard](https://developer.apple.com/forums/thread/789896)：确认后台监听键盘可使用输入监控权限，并区分 `ListenEvent`、`PostEvent` 与完整 Accessibility 权限。
 
 以上资料于 2026-10-25 查阅。
+
+
+## 2026-10-26 实施记录
+
+- Windows 已增加 `src-tauri-client/src/hotkey_windows.rs`：专用 `WH_KEYBOARD_LL` 线程、左右 Ctrl/Shift 识别、F 键按下去重、丢失释放后的 1.5 秒状态恢复、继续调用 `CallNextHookEx`，并把动作投递回 Tauri 主线程。
+- 标准 `tauri-plugin-global-shortcut` 保留为回退；原生监听可用时忽略同一标准回调，避免一次按键切换两次。
+- 原生监听未启动且标准回退不可用时，后端拒绝开启穿透，避免进入无法恢复的状态。
+- 窗口设置面板显示原生监听、标准回退或不可用状态；状态通过 `sharecode:hotkey-status` 和 `get_hotkey_status` 读取。
+- Windows 单元测试覆盖左右修饰键的一次按下只触发一次，以及丢失释放后的恢复。未执行会移动鼠标或注入按键的实机测试。
+- macOS `.listenOnly` `CGEventTap`、输入监控授权和睡眠/唤醒恢复仍是下一阶段。
+
+
+### 后续用户修正与手动验证（2026-10-26）
+
+- 用户要求只保留原生监听，不使用标准全局快捷键回退；此前的回退描述已不再是当前实现。
+- 手动日志确认 Windows 实际发出左右独立修饰键 VK_LCONTROL/VK_RCONTROL/VK_LSHIFT/VK_RSHIFT，现已同时识别这些代码和通用代码。
+- 钩子线程每 30ms 对 Ctrl/Shift/F 的系统状态作协调，恢复遗漏的释放，也识别漏送的按下；与 hook 共享 F 按下周期，未增加浏览器快捷键或按键注入。
+- 用户要求切换不改变窗口焦点：Windows 移除 SetFocus/SetForegroundWindow 和自动恢复最小化窗口；置顶改为原生 SetWindowPos(SWP_NOACTIVATE)，避免 Tao 的通用 setter 调用 SW_SHOW 导致激活。
+- 日志通过有界队列交给独立线程写入，仅记录相关修饰键/目标快捷键和窗口操作结果，不记录普通输入。仍需用户手动验证应用内外行为；构建通过不等于该验收完成。

@@ -125,7 +125,7 @@ test('button and native shortcut sync pinning; disabling click-through preserves
   try {
     await page.locator('[aria-keyshortcuts]').click()
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('sharecode-client-window')).state.pinned)
-    await page.waitForFunction(() => window.nativeCalls.some(call => call.command === 'plugin:window|set_always_on_top' && call.args.value === true))
+    await page.waitForFunction(() => window.nativeCalls.some(call => call.command === 'client_set_pinned' && call.args.pinned === true))
     await page.evaluate(() => window.shortcutState(false))
     assert.equal(await page.locator('[aria-keyshortcuts]').getAttribute('aria-pressed'), 'false')
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sharecode-client-window')).state.pinned), true)

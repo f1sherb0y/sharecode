@@ -7,6 +7,7 @@ import { ShareCodeLogo } from '@/components/share-code-logo'
 import { cn } from '@/lib/utils'
 import { useConnectionStore } from './connection'
 import { nodeHost } from './nodes'
+import { supportsMeetingPrivacy, useMeetingPrivacy, watchMeetingPrivacy } from './meeting-privacy'
 import { installUpdate, useUpdateStore } from './updater'
 import {
   appWindow,
@@ -103,6 +104,7 @@ function StealthRow({
 export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Ref<HTMLDivElement> }) {
   const { t } = useTranslation()
   const server = useConnectionStore((state) => state.server)
+  const meetingPrivacy = useMeetingPrivacy()
   const { pinned, setPinned, textOpacity, backgroundOpacity, setTextOpacity, setBackgroundOpacity, setOpacity } = useWindowPreferences()
   const {
     clickThrough,
@@ -111,6 +113,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
     error,
     screenCaptureProtection,
     hideFromTaskbar,
+    hotkeyStatus,
     setClickThrough,
     setScreenCaptureProtection,
     setHideFromTaskbar,
@@ -128,6 +131,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
 
   // The native shortcut works without UI focus; subscribe before restoring saved preferences.
   useEffect(() => watchStealthShortcut(), [])
+  useEffect(() => watchMeetingPrivacy(), [])
 
   useEffect(() => {
     if (error) toast.error(t('client.titleBar.stealthFailed'))
@@ -231,7 +235,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
               <Ghost className="h-3.5 w-3.5" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-72 space-y-1 p-2">
+          <PopoverContent align="end" className="w-72 max-h-[calc(100dvh-3rem)] overflow-y-auto space-y-1 p-2">
             <p className="px-1 pb-0.5 text-xs font-medium">{t('client.titleBar.windowSettings')}</p>
             <StealthRow
               icon={<EyeOff className="h-3.5 w-3.5" />}
@@ -257,8 +261,38 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
               enabled={hideFromTaskbar}
               onToggle={() => setHideFromTaskbar(!hideFromTaskbar)}
             />
+            {supportsMeetingPrivacy && (
+              <div className="border-t border-border pt-1" data-testid="meeting-privacy">
+                <StealthRow
+                  icon={<MonitorOff className="h-3.5 w-3.5" />}
+                  label={t('client.meetingPrivacy.label')}
+                  description={t('client.meetingPrivacy.hint')}
+                  disabled={meetingPrivacy.busy}
+                  enabled={meetingPrivacy.enabled}
+                  onToggle={() => void meetingPrivacy.setEnabled(!meetingPrivacy.enabled)}
+                />
+                <p className="px-1 text-[11px] leading-tight text-muted-foreground" role="status">
+                  {meetingPrivacy.busy
+                    ? t('client.meetingPrivacy.applying')
+                    : t(`client.meetingPrivacy.${meetingPrivacy.status?.state ?? 'disabled'}`, {
+                        windows: meetingPrivacy.status?.protectedWindows ?? 0,
+                        taskbar: meetingPrivacy.status?.hiddenTaskbarWindows ?? 0,
+                      })}
+                </p>
+                {meetingPrivacy.error && <p role="alert" className="px-1 text-[11px] text-destructive">{meetingPrivacy.error}</p>}
+              </div>
+            )}
             <p className="px-1 pt-0.5 text-[11px] leading-tight text-muted-foreground">
               {t('client.titleBar.stealthShortcut')}
+            </p>
+            <p className="client-hotkey-status px-1 text-[11px] leading-tight" data-state={hotkeyStatus?.nativeListener ? 'native' : hotkeyStatus?.globalShortcut ? 'fallback' : 'error'}>
+              {hotkeyStatus?.nativeListener
+                ? t('client.titleBar.hotkeyNative')
+                : hotkeyStatus?.globalShortcut
+                  ? t('client.titleBar.hotkeyFallback')
+                  : hotkeyStatus?.permissionRequired
+                    ? t('client.titleBar.hotkeyPermission')
+                    : hotkeyStatus?.error ?? t('client.titleBar.hotkeyUnavailable')}
             </p>
             <div className="space-y-2.5 border-t border-border px-1 pt-2">
               <p className="flex items-center gap-1 text-xs font-medium"><Blend className="h-3.5 w-3.5" />{t('client.titleBar.opacity')}</p>

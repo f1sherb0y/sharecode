@@ -342,3 +342,30 @@ docker compose up --build
 ```
 
 This runs the full stack (backend + frontend) at `http://localhost:3000`.
+
+
+### Optional WeMeet/VooV window privacy (Windows)
+
+The Ghost menu has one **Hide meeting share overlays** switch, off by default. Enabling it
+starts a one-second background scan of identified `wemeetapp.exe`, `voovmeeting.exe` and
+`voovmeetingapp.exe` windows. Visible Qt `screen_share_tracker` / `screen_share_float_container`
+markers activate handling for that process. Matching share markers and topmost meeting tool
+windows request `WDA_EXCLUDEFROMCAPTURE`; running taskbar entries are removed locally as well.
+Pinned shortcuts and notification-area tray icons are not removed.
+
+`native/meeting_window_hook.rs` is built into a same-architecture helper DLL and embedded in the
+client. A temporary, thread-specific `WH_CALLWNDPROC` hook applies display affinity from inside
+the owning meeting process (Windows rejects setting another process's window affinity directly).
+It does not patch meeting binaries, simulate input, or hook audio/video/network functions. Original
+window affinity and the affected style bits are saved on the HWND; unrelated style bits remain intact.
+
+Turning the switch off stops new modifications and restores the saved state. Stopping sharing
+also restores changes. Failed restoration is reported and retried while the app runs. Normal exit
+attempts restoration; after forced termination, reopen the client and toggle on/off to restore
+remaining marked windows. Closing/restarting the meeting process also destroys these window states.
+Only one ShareCode instance can manage meeting windows in a Windows session.
+
+Capture exclusion depends on the recording application honoring Windows display affinity. Unknown
+meeting window layouts, mismatched architectures, elevated targets or blocked DLL loading can fail;
+the UI reports those failures. These paths have been compiled but require manual meeting and
+capture validation; no live meeting was modified during implementation.

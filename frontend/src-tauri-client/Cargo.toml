@@ -21,7 +21,6 @@ tauri = { version = "~2.10.3", features = ["macos-private-api"] }
 # Signed in-app updates (see plugins.updater in tauri.conf.json) and the restart after one.
 tauri-plugin-updater = "~2.10.1"
 tauri-plugin-process = "~2.3.1"
-tauri-plugin-global-shortcut = "~2.3.1"
 # generate_context! embeds the plugins' configuration as JSON; the stealth state reaches the title
 # bar as JSON too.
 serde = { version = "1", features = ["derive"] }
@@ -41,6 +40,11 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["N
 version = "0.61"
 features = [
     "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_System_SystemInformation",
     "Win32_UI_Shell",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",

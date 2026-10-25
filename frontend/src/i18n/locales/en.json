@@ -1077,6 +1077,17 @@
     "remove": "Remove"
   },
   "client": {
+    "meetingPrivacy": {
+      "label": "Hide meeting share overlays",
+      "hint": "Auto-detect sharing every second; off restores changes. Also hides the local taskbar entry. Requires a recorder that honors Windows capture exclusion.",
+      "applying": "Applying window changes…",
+      "disabled": "Off",
+      "waiting": "Waiting for WeMeet/VooV",
+      "idle": "Meeting detected; no recognized sharing windows",
+      "active": "{{windows}} windows excluded; {{taskbar}} taskbar entries hidden",
+      "partial": "Some meeting windows could not be changed",
+      "restoring": "Restoring meeting windows; retrying…"
+    },
     "connecting": "Finding the fastest server...",
     "unreachable": "Can't reach the server. Check your network and try again.",
     "sessionExpired": "Your previous session is no longer available. Paste a new invitation to join.",
@@ -1100,6 +1111,10 @@
       "disableClickThrough": "Disable click-through (Ctrl+Shift+F)",
       "stealth": "Camouflage",
       "windowSettings": "Window settings",
+      "hotkeyNative": "Native keyboard listener active",
+      "hotkeyFallback": "Global shortcut fallback active",
+      "hotkeyPermission": "Input monitoring permission is required",
+      "hotkeyUnavailable": "Shortcut listener unavailable",
       "stealthFailed": "Could not apply window settings. The controls now show the current state.",
       "stealthSummary": "{{count}} of 3 camouflage switches on",
       "stealthShortcut": "Ctrl+Shift+F toggles click-through from anywhere, even while the window takes no input.",

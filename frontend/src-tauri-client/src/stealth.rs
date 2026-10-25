@@ -9,7 +9,8 @@
 //!    keyboard focus; `WS_EX_TRANSPARENT` (on a layered window) makes hit testing fall through to
 //!    whatever is beneath. Both are needed: `NOACTIVATE` alone still swallows clicks, and
 //!    `TRANSPARENT` alone still lets a click activate the window. Together every mouse and
-//!    keyboard event reaches the app behind, and the client never steals focus.
+//!    future activation is blocked. Toggling does not select a foreground window; the user
+//!    keeps control of which application receives keyboard input.
 //! 3. **No taskbar identity.** `WS_EX_TOOLWINDOW` (with `WS_EX_APPWINDOW` cleared) keeps the window
 //!    out of the taskbar, out of Alt+Tab and out of the shell's window list;
 //!    `ITaskbarList::DeleteTab` (Tauri's `set_skip_taskbar`) removes a tab it may already have.
@@ -22,20 +23,17 @@
 
 #![cfg(windows)]
 
-use std::sync::atomic::{AtomicIsize, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use tauri::WebviewWindow;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::Input::KeyboardAndMouse::{IsWindowEnabled, SetFocus};
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass, SUBCLASSPROC};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetAncestor, GetForegroundWindow, GetWindow, GetWindowDisplayAffinity, GetWindowLongPtrW,
-    GetWindowThreadProcessId, IsWindow, IsWindowVisible, SetForegroundWindow,
-    SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, GA_ROOT, GWL_EXSTYLE, GW_HWNDNEXT,
-    STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_ACTIVATE, WM_MOUSEACTIVATE, WM_STYLECHANGED,
-    WM_STYLECHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TRANSPARENT,
+    GetWindowDisplayAffinity, GetWindowLongPtrW, SetWindowDisplayAffinity, SetWindowLongPtrW,
+    SetWindowPos, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, STYLESTRUCT, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+    WM_MOUSEACTIVATE, WM_STYLECHANGED, WM_STYLECHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
 use crate::StealthState;
@@ -52,7 +50,7 @@ const CLICK_THROUGH_BITS: u32 = WS_EX_NOACTIVATE.0 | WS_EX_TRANSPARENT.0 | WS_EX
 /// Runtime state, mirrored from the web view's persisted preferences. bit 0 click-through,
 /// bit 1 capture protection, bit 2 hide from taskbar.
 static STATE: AtomicU8 = AtomicU8::new(0b110);
-static PREVIOUS_FOREGROUND: AtomicIsize = AtomicIsize::new(0);
+static PINNED: AtomicBool = AtomicBool::new(false);
 
 pub fn state() -> StealthState {
     let bits = STATE.load(Ordering::Relaxed);
@@ -80,7 +78,11 @@ fn store(next: StealthState) {
 /// The extended-style bits a state asks for. The client is an overlay for one room, never a
 /// taskbar application while hidden. Restore `APPWINDOW` when a taskbar entry is requested.
 fn wanted_style(next: StealthState) -> u32 {
-    let mut bits = 0u32;
+    let mut bits = if PINNED.load(Ordering::Relaxed) {
+        WS_EX_TOPMOST.0
+    } else {
+        0
+    };
     if next.hide_from_taskbar {
         bits |= WS_EX_TOOLWINDOW.0;
     } else {
@@ -93,7 +95,7 @@ fn wanted_style(next: StealthState) -> u32 {
 }
 
 fn owned_bits() -> u32 {
-    TOOLWINDOW_BITS | CLICK_THROUGH_BITS
+    TOOLWINDOW_BITS | CLICK_THROUGH_BITS | WS_EX_TOPMOST.0
 }
 
 fn write_ex_style(hwnd: HWND, next: StealthState) {
@@ -148,12 +150,6 @@ unsafe extern "system" fn window_proc(
     _subclass_id: usize,
     _ref_data: usize,
 ) -> LRESULT {
-    if msg == WM_ACTIVATE && wparam.0 & 0xffff != 0 && lparam.0 != 0 {
-        let previous = HWND(lparam.0 as _);
-        if can_receive_input(previous, hwnd) {
-            PREVIOUS_FOREGROUND.store(lparam.0, Ordering::Relaxed);
-        }
-    }
     let about_ex_style = wparam.0 as i32 == GWL_EXSTYLE.0;
 
     if about_ex_style && msg == WM_STYLECHANGING {
@@ -183,36 +179,32 @@ fn hwnd_of(window: &WebviewWindow) -> Result<HWND, String> {
         .map_err(|error| error.to_string())
 }
 
-/// Skip our own shadow/helper HWNDs and other overlays when returning input to another app.
-unsafe fn can_receive_input(candidate: HWND, own: HWND) -> bool {
-    let mut own_pid = 0;
-    let mut candidate_pid = 0;
-    GetWindowThreadProcessId(own, Some(&mut own_pid));
-    GetWindowThreadProcessId(candidate, Some(&mut candidate_pid));
-    IsWindow(Some(candidate)).as_bool()
-        && IsWindowVisible(candidate).as_bool()
-        && IsWindowEnabled(candidate).as_bool()
-        && candidate_pid != own_pid
-        && GetWindowLongPtrW(candidate, GWL_EXSTYLE) as u32 & WS_EX_NOACTIVATE.0 == 0
+/// Use NOACTIVATE directly: Tao's generic flag setter calls ShowWindow(SW_SHOW),
+/// which may activate the window before applying the always-on-top flag.
+pub fn set_pinned(window: &WebviewWindow, pinned: bool) -> Result<(), String> {
+    let hwnd = hwnd_of(window)?;
+    let previous = PINNED.swap(pinned, Ordering::Relaxed);
+    let result = unsafe {
+        SetWindowPos(
+            hwnd,
+            Some(if pinned { HWND_TOPMOST } else { HWND_NOTOPMOST }),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        )
+    }
+    .map_err(|error| error.to_string());
+    if result.is_err() {
+        PINNED.store(previous, Ordering::Relaxed);
+    }
+    result
 }
 
-fn hand_off_foreground(hwnd: HWND) {
-    unsafe {
-        if GetAncestor(GetForegroundWindow(), GA_ROOT) != hwnd {
-            return;
-        }
-        let previous = HWND(PREVIOUS_FOREGROUND.load(Ordering::Relaxed) as _);
-        if can_receive_input(previous, hwnd) && SetForegroundWindow(previous).as_bool() {
-            return;
-        }
-        let mut candidate = GetWindow(hwnd, GW_HWNDNEXT).unwrap_or_default();
-        while !candidate.is_invalid() {
-            if can_receive_input(candidate, hwnd) && SetForegroundWindow(candidate).as_bool() {
-                return;
-            }
-            candidate = GetWindow(candidate, GW_HWNDNEXT).unwrap_or_default();
-        }
-    }
+pub fn is_pinned(window: &WebviewWindow) -> Result<bool, String> {
+    let hwnd = hwnd_of(window)?;
+    Ok(unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 } & WS_EX_TOPMOST.0 != 0)
 }
 
 /// Installs the window procedure (once per window; the subclass id replaces an earlier instance)
@@ -238,16 +230,14 @@ pub fn set(window: &WebviewWindow, next: StealthState) -> Result<StealthState, S
     let hwnd = hwnd_of(window)?;
     store(next);
     let result = (|| {
-        window
-            .set_focusable(!next.click_through)
-            .map_err(|error| error.to_string())?;
-        window
-            .set_ignore_cursor_events(next.click_through)
-            .map_err(|error| error.to_string())?;
+        // The subclass preserves these bits across Tao updates. Avoid its generic
+        // flag setter here, since that setter activates visible windows via SW_SHOW.
         apply(hwnd, next)?;
-        window
-            .set_skip_taskbar(next.hide_from_taskbar)
-            .map_err(|error| error.to_string())?;
+        if previous.hide_from_taskbar != next.hide_from_taskbar {
+            window
+                .set_skip_taskbar(next.hide_from_taskbar)
+                .map_err(|error| error.to_string())?;
+        }
         let observed = actual(window)?;
         if observed != next {
             return Err("Windows did not apply the requested window settings".into());
@@ -256,15 +246,8 @@ pub fn set(window: &WebviewWindow, next: StealthState) -> Result<StealthState, S
     })();
     if result.is_err() {
         store(previous);
-        let _ = window.set_focusable(!previous.click_through);
-        let _ = window.set_ignore_cursor_events(previous.click_through);
         let _ = apply(hwnd, previous);
         let _ = window.set_skip_taskbar(previous.hide_from_taskbar);
-    } else if next.click_through {
-        unsafe {
-            let _ = SetFocus(None);
-        }
-        hand_off_foreground(hwnd);
     }
     result
 }

@@ -1,7 +1,10 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+#[cfg(windows)]
+mod hotkey_windows;
+#[cfg(windows)]
+mod meeting_privacy;
 #[cfg(windows)]
 mod stealth;
 #[cfg(target_os = "macos")]
@@ -112,32 +115,42 @@ fn install(window: &WebviewWindow) -> Result<(), String> {
 
 /// Both the title-bar command and global shortcut use this path. Pin before making the
 /// window non-interactive; disabling click-through leaves pinning for the user to change.
-fn write_state(window: &WebviewWindow, next: StealthState) -> Result<StealthState, String> {
-    // An input-transparent Mac window has no tray recovery path. Never enter this
-    // state if another process owns the only shortcut (including saved preferences).
-    #[cfg(target_os = "macos")]
-    if next.click_through
-        && !window
-            .app_handle()
-            .global_shortcut()
-            .is_registered(Shortcut::new(
-                Some(Modifiers::CONTROL | Modifiers::SHIFT),
-                Code::KeyF,
-            ))
+fn set_pinned(window: &WebviewWindow, pinned: bool) -> Result<(), String> {
+    #[cfg(windows)]
     {
+        stealth::set_pinned(window, pinned)
+    }
+    #[cfg(not(windows))]
+    {
+        window
+            .set_always_on_top(pinned)
+            .map_err(|error| error.to_string())
+    }
+}
+
+fn is_pinned(window: &WebviewWindow) -> Result<bool, String> {
+    #[cfg(windows)]
+    {
+        stealth::is_pinned(window)
+    }
+    #[cfg(not(windows))]
+    {
+        window.is_always_on_top().map_err(|error| error.to_string())
+    }
+}
+
+fn write_state(window: &WebviewWindow, next: StealthState) -> Result<StealthState, String> {
+    #[cfg(windows)]
+    if next.click_through && !hotkey_windows::can_enable() {
         return Err("Ctrl+Shift+F is unavailable; click-through was not enabled".into());
     }
-    let was_pinned = window
-        .is_always_on_top()
-        .map_err(|error| error.to_string())?;
+    let was_pinned = is_pinned(window)?;
     if next.click_through && !was_pinned {
-        window
-            .set_always_on_top(true)
-            .map_err(|error| error.to_string())?;
+        set_pinned(window, true)?;
     }
     let result = write_platform_state(window, next);
     if result.is_err() && next.click_through && !was_pinned {
-        let _ = window.set_always_on_top(false);
+        let _ = set_pinned(window, false);
     }
     result
 }
@@ -160,6 +173,11 @@ async fn on_window_thread<T: Send + 'static>(
         .recv()
         .await
         .ok_or_else(|| "Window command was cancelled".to_string())?
+}
+
+#[tauri::command]
+async fn client_set_pinned(window: WebviewWindow, pinned: bool) -> Result<(), String> {
+    on_window_thread(window, move |window| set_pinned(window, pinned)).await
 }
 
 #[tauri::command]
@@ -208,61 +226,101 @@ async fn set_stealth_state(
 
 /// The global shortcut flips click-through natively: while the window takes no focus the web view
 /// never sees the key press, so the switch has to move here and the title bar is told afterwards.
-fn toggle_click_through(app: &AppHandle) {
-    let mut next = read_state();
-    next.click_through = !next.click_through;
-
+pub(crate) fn toggle_click_through(app: &AppHandle) {
+    #[cfg(windows)]
+    hotkey_windows::log_line("main toggle entry");
     if let Some(window) = app.get_webview_window("main") {
-        // The shortcut also recovers a minimized, taskbar-hidden window.
-        if window.is_minimized().unwrap_or(false) {
-            next.click_through = false;
-            let _ = window.unminimize();
-            let _ = window.show();
-        }
+        let mut next = match actual_state(&window) {
+            Ok(state) => state,
+            Err(error) => {
+                #[cfg(windows)]
+                hotkey_windows::log_line(format!("main toggle read failed: {error}"));
+                return;
+            }
+        };
+        #[cfg(windows)]
+        hotkey_windows::log_line(format!("main toggle actual before={next:?}"));
+        next.click_through = !next.click_through;
+        // Do not focus, restore or show a window as a side effect of the shortcut.
         if let Err(error) = write_state(&window, next) {
+            #[cfg(windows)]
+            hotkey_windows::log_line(format!("main toggle write failed: {}", error));
             eprintln!("sharecode client: could not toggle click-through: {error}");
             return;
         }
-        // Turning click-through off has to give the window its activation back, or the title bar
-        // switch and the room stay dead until the next launch.
-        if !next.click_through {
-            let _ = window.set_focus();
+        match actual_state(&window) {
+            Ok(observed) => {
+                #[cfg(windows)]
+                hotkey_windows::log_line(format!("main toggle actual after={observed:?}"));
+                let _ = app.emit("sharecode:stealth-state", observed);
+            }
+            Err(error) => {
+                #[cfg(windows)]
+                hotkey_windows::log_line(format!("main toggle verification failed: {error}"));
+            }
         }
     }
-
-    let _ = app.emit("sharecode:stealth-state", next);
 }
 
-/// Ctrl+Shift+F: the one shortcut the client registers. Works with zero UI focus, which is the
-/// point: it is the only way out of click-through.
-fn setup_shortcuts(app: &AppHandle) {
-    let toggle = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyF);
-    let result = app
-        .global_shortcut()
-        .on_shortcut(toggle, |app, _shortcut, event| {
-            // Act on the press only: handling the release too would toggle it straight back.
-            if event.state() == ShortcutState::Pressed {
-                let handle = app.clone();
-                let _ = app.run_on_main_thread(move || toggle_click_through(&handle));
-            }
-        });
-    // Another program holding the same chord must not stop the client from launching: the title
-    // bar switch is the fallback, and it needs the window to be there.
-    if let Err(error) = result {
-        eprintln!(
-            "sharecode client: Ctrl+Shift+F is taken, the title bar switch still works: {error}"
-        );
+#[tauri::command]
+fn get_hotkey_status() -> serde_json::Value {
+    #[cfg(windows)]
+    {
+        return hotkey_windows::status();
+    }
+    #[cfg(not(windows))]
+    serde_json::json!({
+        "nativeListener": false,
+        "globalShortcut": false,
+        "permissionRequired": false,
+        "error": serde_json::Value::Null,
+    })
+}
+
+#[tauri::command]
+fn get_meeting_privacy_status(app: AppHandle) -> Result<serde_json::Value, String> {
+    #[cfg(windows)]
+    {
+        serde_json::to_value(app.state::<meeting_privacy::Monitor>().status())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("Meeting-window privacy is available on Windows only".into())
+    }
+}
+
+#[tauri::command]
+async fn set_meeting_privacy_enabled(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    #[cfg(windows)]
+    {
+        serde_json::to_value(
+            app.state::<meeting_privacy::Monitor>()
+                .enable(enabled)
+                .await?,
+        )
+        .map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, enabled);
+        Err("Meeting-window privacy is available on Windows only".into())
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let handle = app.handle();
+            #[cfg(windows)]
+            app.manage(meeting_privacy::Monitor::start(handle)?);
 
             // The main window already exists (tauri.conf.json creates it). Install the window
             // procedure and the default state before the web view can touch any window flag.
@@ -283,15 +341,30 @@ pub fn run() {
                 }
             }
 
-            setup_shortcuts(handle);
+            #[cfg(windows)]
+            if let Err(error) = hotkey_windows::start(handle) {
+                eprintln!("sharecode client: could not start Windows keyboard listener: {error}");
+            }
             let _ = handle.emit("sharecode:stealth-state", read_state());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_stealth_state,
             set_stealth_state,
-            client_is_maximized
+            client_is_maximized,
+            client_set_pinned,
+            get_hotkey_status,
+            get_meeting_privacy_status,
+            set_meeting_privacy_enabled
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the ShareCode client");
+        .build(tauri::generate_context!())
+        .expect("error while building the ShareCode client")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                #[cfg(windows)]
+                app.state::<meeting_privacy::Monitor>().shutdown();
+                #[cfg(not(windows))]
+                let _ = app;
+            }
+        });
 }

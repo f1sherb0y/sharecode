@@ -496,3 +496,7 @@ body ::-webkit-scrollbar-button { display: none; }
   .client-toolbar-host .ui-button { height: 2.75rem; min-width: 2.75rem; }
   .client-toolbar-host .editor-room-navigation > span { max-width: 6rem; }
 }
+
+.client-hotkey-status[data-state="native"] { color: var(--color-success); }
+.client-hotkey-status[data-state="fallback"] { color: var(--color-emphasis); }
+.client-hotkey-status[data-state="error"] { color: var(--color-destructive); }

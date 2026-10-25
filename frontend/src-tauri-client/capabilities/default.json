@@ -19,7 +19,6 @@
     "core:window:allow-set-skip-taskbar",
     "core:window:allow-set-focus",
     "core:window:allow-set-title",
-    "global-shortcut:default",
     "updater:default",
     "process:allow-restart"
   ]

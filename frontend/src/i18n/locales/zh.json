@@ -1076,6 +1076,17 @@
     "remove": "移除"
   },
   "client": {
+    "meetingPrivacy": {
+      "label": "隐藏会议共享浮层",
+      "hint": "共享期间每秒检测 WeMeet/VooV，关闭后恢复；任务栏入口本地也会隐藏。录屏端需支持截图排除。",
+      "applying": "正在应用窗口设置…",
+      "disabled": "已关闭",
+      "waiting": "等待 WeMeet/VooV 启动",
+      "idle": "已检测到会议，未发现可识别的共享窗口",
+      "active": "已排除 {{windows}} 个窗口，隐藏 {{taskbar}} 个任务栏入口",
+      "partial": "部分会议窗口未能修改",
+      "restoring": "正在恢复会议窗口，将自动重试…"
+    },
     "connecting": "正在选择最快的节点...",
     "unreachable": "无法连接服务器，请检查网络后重试。",
     "sessionExpired": "之前的会话已失效，请粘贴新的邀请链接加入。",
@@ -1099,6 +1110,10 @@
       "disableClickThrough": "关闭鼠标键盘穿透（Ctrl+Shift+F）",
       "stealth": "隐蔽设置",
       "windowSettings": "窗口设置",
+      "hotkeyNative": "原生键盘监听已启用",
+      "hotkeyFallback": "正在使用系统快捷键回退",
+      "hotkeyPermission": "需要输入监控权限",
+      "hotkeyUnavailable": "快捷键监听不可用",
       "stealthFailed": "未能应用窗口设置，开关已恢复为当前状态。",
       "stealthSummary": "3 项隐蔽开关中已开启 {{count}} 项",
       "stealthShortcut": "按 Ctrl+Shift+F 可在任意位置切换穿透，即使窗口已不接收任何输入。",
