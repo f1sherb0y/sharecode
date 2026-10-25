@@ -305,14 +305,20 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                 if message.message == WM_TIMER && message.wParam.0 == timer {
                     if reconcile_keys() {
                         let handle = app.clone();
-                        let _ =
-                            app.run_on_main_thread(move || crate::toggle_click_through(&handle));
+                        let _ = app.run_on_main_thread(move || {
+                            if let Err(error) = crate::toggle_click_through(&handle) {
+                                log_line(format!("main toggle failed: {error}"));
+                            }
+                        });
                     }
                 } else if message.message == HOTKEY_MESSAGE {
                     log_line("toggle message received by hook thread");
                     let handle = app.clone();
-                    let result =
-                        app.run_on_main_thread(move || crate::toggle_click_through(&handle));
+                    let result = app.run_on_main_thread(move || {
+                        if let Err(error) = crate::toggle_click_through(&handle) {
+                            log_line(format!("main toggle failed: {error}"));
+                        }
+                    });
                     log_line(format!("posted main-thread toggle result={:?}", result));
                 } else {
                     unsafe {

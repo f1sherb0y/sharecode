@@ -51,20 +51,23 @@ after(async () => { await browser?.close(); await server?.close() })
 
 // The client is a Windows app in the baseline tests unless a Mac user agent is requested;
 // macOS assertions reuse the same open() with `mac: true`.
-async function open({ width = 1100, scale = 1, saved, locale = 'en', touch = false, mac = false } = {}) {
+async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en', touch = false, mac = false, hotkeyPhase = 'listening', savedStealth } = {}) {
   const context = await browser.newContext({
-    viewport: { width, height: 760 }, deviceScaleFactor: scale, hasTouch: touch, reducedMotion: 'reduce',
-    userAgent: mac ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15' : undefined,
+    viewport: { width, height }, deviceScaleFactor: scale, hasTouch: touch, reducedMotion: 'reduce',
+    userAgent: mac ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15'
+      : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
   })
-  await context.addInitScript(({ saved, locale }) => {
+  await context.addInitScript(({ saved, locale, mac, hotkeyPhase, savedStealth }) => {
     localStorage.setItem('i18nextLng', locale)
     if (saved && !localStorage.getItem('sharecode-client-window')) localStorage.setItem('sharecode-client-window', JSON.stringify(saved))
+    if (savedStealth) localStorage.setItem('sharecode-client-stealth', JSON.stringify({ state: savedStealth, version: 0 }))
     let id = 0
     const callbacks = new Map(), listeners = new Map()
     window.nativeCalls = []
     window.nativeState = { clickThrough: false, screenCaptureProtection: true, hideFromTaskbar: true }
     window.nativeFail = null // set a command name to make the next invoke of it reject
     window.nativeMaximized = false
+    window.nativeHotkey = { revision: 0, ready: hotkeyPhase === 'listening', phase: hotkeyPhase, received: 0, testing: false, lastAction: null, error: null }
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: event => listeners.delete(event) }
     window.__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
@@ -74,7 +77,22 @@ async function open({ width = 1100, scale = 1, saved, locale = 'en', touch = fal
         if (window.nativeFail === command) { window.nativeFail = null; throw new Error(`mock failure: ${command}`) }
         if (command === 'plugin:event|listen') { listeners.set(args.event, args.handler); return args.handler }
         if (command === 'get_stealth_state') return window.nativeState
-        if (command === 'set_stealth_state') return window.nativeState = args
+        if (command === 'set_stealth_state') {
+          if (mac) {
+            const next = args.changedField ? { ...window.nativeState, [args.changedField]: args[args.changedField] }
+              : { clickThrough: false, screenCaptureProtection: args.screenCaptureProtection, hideFromTaskbar: args.hideFromTaskbar }
+            if (next.clickThrough && window.nativeHotkey.phase !== 'listening') throw new Error('Input Monitoring required')
+            window.nativeState = next
+            if (window.deferStealthReply) {
+              window.deferStealthReply = false
+              await new Promise(resolve => { window.releaseStealthReply = resolve })
+            }
+            return next
+          }
+          return window.nativeState = args
+        }
+        if (command === 'get_client_hotkey_status') return window.nativeHotkey
+        if (command === 'test_client_hotkey') { window.hotkeyStatus({ testing: true, lastAction: null }); return null }
         if (command === 'client_is_maximized') return window.nativeMaximized
         if (command === 'plugin:window|is_maximized') return false
         return null
@@ -84,13 +102,18 @@ async function open({ width = 1100, scale = 1, saved, locale = 'en', touch = fal
       window.nativeState = { ...window.nativeState, clickThrough }
       callbacks.get(listeners.get('sharecode:stealth-state'))({ payload: window.nativeState })
     }
-  }, { saved, locale })
+    window.hotkeyStatus = patch => {
+      window.nativeHotkey = { ...window.nativeHotkey, ...(patch.phase ? { ready: patch.phase === 'listening' } : {}), ...patch, revision: window.nativeHotkey.revision + 1 }
+      callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: window.nativeHotkey })
+    }
+    window.staleHotkeyStatus = status => callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: status })
+  }, { saved, locale, mac, hotkeyPhase, savedStealth })
   await context.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin
     ? route.continue() : route.fulfill({ status: 404, body: '' }))
   const page = await context.newPage(), errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(base + 'client.html')
-  await page.waitForFunction(() => document.querySelector('[aria-keyshortcuts]')?.disabled === false)
+  await page.waitForFunction(async () => (await import('/src/client/window.ts')).useStealthPreferences.getState().ready)
   return { page, context, errors }
 }
 const opacity = page => page.evaluate(() => [
@@ -118,6 +141,98 @@ test('opacity defaults, old-default migration and custom preferences', async () 
     try { assert.deepEqual(await opacity(page), expected); assert.deepEqual(errors, []) }
     finally { await context.close() }
   }
+})
+
+test('macOS requires explicit Input Monitoring and never restores saved click-through', async () => {
+  const { page, context, errors } = await open({ mac: true, hotkeyPhase: 'permissionRequired',
+    savedStealth: { clickThrough: true, screenCaptureProtection: true, hideFromTaskbar: true } })
+  try {
+    await page.getByRole('button', { name: 'Window settings', exact: true }).click()
+    await page.getByTestId('hotkey-status').filter({ hasText: 'Input Monitoring permission required' }).waitFor()
+    assert.equal(await page.locator('[aria-keyshortcuts]').isDisabled(), true)
+    assert.equal(await page.locator('[data-control="minimize"]').isDisabled(), true)
+    assert.equal(await page.evaluate(() => window.nativeState.clickThrough), false)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'request_client_hotkey_permission')), false)
+    await page.getByRole('button', { name: 'Enable Input Monitoring', exact: true }).click()
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'request_client_hotkey_permission').length), 1)
+    await page.getByRole('button', { name: 'Input Monitoring settings', exact: true }).click()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_settings')), true)
+    // Grant is reported by native status, not assumed merely because the prompt was requested.
+    assert.equal(await page.locator('[aria-keyshortcuts]').isDisabled(), true)
+    await page.evaluate(() => window.hotkeyStatus({ phase: 'listening' }))
+    await page.waitForFunction(() => !document.querySelector('[aria-keyshortcuts]').disabled)
+    await page.keyboard.press('Escape')
+    await page.locator('[aria-keyshortcuts]').click()
+    await page.waitForFunction(() => window.nativeState.clickThrough)
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'set_stealth_state').at(-1).args.changedField), 'clickThrough')
+    await page.evaluate(() => { window.shortcutState(false); window.hotkeyStatus({ phase: 'permissionRequired' }) })
+    await page.waitForFunction(() => document.querySelector('[aria-keyshortcuts]').disabled)
+    assert.equal(await page.locator('[aria-keyshortcuts]').getAttribute('aria-pressed'), 'false')
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('macOS shortcut test reports delivery without toggling and ignores stale availability', async () => {
+  const { page, context, errors } = await open({ mac: true })
+  try {
+    await page.getByRole('button', { name: 'Window settings', exact: true }).click()
+    const status = page.getByTestId('hotkey-status')
+    await status.filter({ hasText: 'Native shortcut listener active' }).waitFor()
+    await page.getByRole('button', { name: 'Test shortcut', exact: true }).click()
+    await page.getByText('Press Ctrl + Shift + F within 15 seconds.', { exact: false }).waitFor()
+    await page.evaluate(() => window.hotkeyStatus({ testing: false, received: 1, lastAction: 'tested' }))
+    await page.getByText('Shortcut received. The window was not changed.', { exact: true }).waitFor()
+    assert.equal(await page.evaluate(() => window.nativeState.clickThrough), false)
+    for (const phase of ['secureInput', 'recovering', 'failed']) {
+      await page.evaluate(phase => window.hotkeyStatus({ phase }), phase)
+      await page.waitForFunction(() => document.querySelector('[aria-keyshortcuts]').disabled)
+      await page.evaluate(() => window.staleHotkeyStatus({ ...window.nativeHotkey, revision: 0, ready: true, phase: 'listening' }))
+      assert.equal(await page.locator('[aria-keyshortcuts]').isDisabled(), true)
+    }
+    await page.evaluate(() => window.hotkeyStatus({ phase: 'listening', lastAction: 'testTimedOut' }))
+    await page.getByText('No shortcut received. Check permission and try again.', { exact: true }).waitFor()
+    assert.deepEqual(errors, [])
+    await page.screenshot({ path: `.cache/client-chrome-${engine}/mac-native-hotkey.png` })
+  } finally { await context.close() }
+})
+
+test('macOS ignores an old setting response after a newer native shortcut event', async () => {
+  const { page, context, errors } = await open({ mac: true })
+  try {
+    await page.waitForFunction(async () => (await import('/src/client/hotkey.ts')).useMacHotkey.getState().ready)
+    await page.evaluate(async () => {
+      const { useStealthPreferences } = await import('/src/client/window.ts')
+      window.deferStealthReply = true
+      useStealthPreferences.getState().setScreenCaptureProtection(false)
+    })
+    await page.waitForFunction(() => typeof window.releaseStealthReply === 'function')
+    await page.evaluate(() => { window.shortcutState(true); window.releaseStealthReply() })
+    await page.waitForFunction(async () => !(await import('/src/client/window.ts')).useStealthPreferences.getState().busy)
+    const state = await page.evaluate(async () => {
+      const { clickThrough, screenCaptureProtection } = (await import('/src/client/window.ts')).useStealthPreferences.getState()
+      return { clickThrough, screenCaptureProtection }
+    })
+    assert.deepEqual(state, { clickThrough: true, screenCaptureProtection: false })
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('macOS shortcut controls fit a minimum-height window and keep in-app input focus', async () => {
+  const { page, context, errors } = await open({ mac: true, width: 480, height: 360 })
+  try {
+    const input = page.getByRole('textbox').first()
+    await input.fill('focus stays here')
+    await page.evaluate(() => window.shortcutState(true))
+    assert.equal(await input.evaluate(el => el === document.activeElement), true)
+    await page.evaluate(() => window.shortcutState(false))
+    assert.equal(await input.evaluate(el => el === document.activeElement), true)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'plugin:window|set_focus')), false)
+    await page.getByRole('button', { name: 'Window settings', exact: true }).click()
+    await page.getByRole('button', { name: 'Test shortcut', exact: true }).scrollIntoViewIfNeeded()
+    const box = await page.getByRole('dialog').boundingBox()
+    assert.ok(box.y >= 0 && box.y + box.height <= 360, JSON.stringify(box))
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
 })
 
 test('button and native shortcut sync pinning; disabling click-through preserves pin', async () => {

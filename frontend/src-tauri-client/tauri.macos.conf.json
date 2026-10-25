@@ -23,6 +23,6 @@
     ]
   },
   "bundle": {
-    "macOS": { "infoPlist": "Info.macos.plist" }
+    "macOS": { "infoPlist": "Info.macos.plist", "minimumSystemVersion": "10.15" }
   }
 }

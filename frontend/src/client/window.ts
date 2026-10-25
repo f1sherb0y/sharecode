@@ -87,7 +87,7 @@ export const useWindowPreferences = create<WindowPreferences>()(
 
 /** What the native window does with itself; the three switches below drive it. */
 export interface StealthState {
-  /** No mouse or keyboard focus: every event reaches the app behind the client. */
+  /** Mouse pass-through. The macOS shortcut preserves existing keyboard focus. */
   clickThrough: boolean
   /** Requests capture exclusion on Windows (`WDA_EXCLUDEFROMCAPTURE`). */
   screenCaptureProtection: boolean
@@ -112,7 +112,7 @@ interface StealthPreferences extends StealthState {
   setScreenCaptureProtection: (enabled: boolean) => void
   setHideFromTaskbar: (enabled: boolean) => void
   /** Pushes the current values to the native window. */
-  apply: () => Promise<void>
+  apply: (changedField?: keyof StealthState) => Promise<void>
   /** Reads the native window back (after a shortcut changed it natively). */
   sync: () => Promise<void>
 }
@@ -122,6 +122,9 @@ interface StealthPreferences extends StealthState {
  * native side is the authority because the global shortcut changes it while this window cannot
  * take focus and therefore cannot handle the key itself.
  */
+let nativeStealthEpoch = 0
+let restoredMacPreferences = false
+
 export const useStealthPreferences = create<StealthPreferences>()(
   persist(
     (set, get) => ({
@@ -138,20 +141,20 @@ export const useStealthPreferences = create<StealthPreferences>()(
       setClickThrough: (clickThrough) => {
         if (get().busy || !get().ready) return
         set({ clickThrough })
-        void get().apply()
+        void get().apply('clickThrough')
       },
       setScreenCaptureProtection: (screenCaptureProtection) => {
         if (get().busy || !get().ready) return
         set({ screenCaptureProtection })
-        void get().apply()
+        void get().apply('screenCaptureProtection')
       },
       setHideFromTaskbar: (hideFromTaskbar) => {
         if (get().busy || !get().ready) return
         set({ hideFromTaskbar })
-        void get().apply()
+        void get().apply('hideFromTaskbar')
       },
 
-      apply: async () => {
+      apply: async (changedField) => {
         if (get().busy) return
         set({ busy: true, error: null })
         if (!isTauri) {
@@ -160,12 +163,15 @@ export const useStealthPreferences = create<StealthPreferences>()(
           return
         }
         const { clickThrough, screenCaptureProtection, hideFromTaskbar } = get()
+        const epoch = nativeStealthEpoch
         try {
           const state = await invoke<StealthState>('set_stealth_state', {
             clickThrough,
             screenCaptureProtection,
             hideFromTaskbar,
+            ...(isMacOSClient ? { changedField } : {}),
           })
+          if (isMacOSClient && epoch !== nativeStealthEpoch) return
           if (state.clickThrough) useWindowPreferences.setState({ pinned: true })
           set({ ...state, ready: true })
         } catch (error) {
@@ -183,7 +189,9 @@ export const useStealthPreferences = create<StealthPreferences>()(
           return
         }
         try {
+          const epoch = nativeStealthEpoch
           const state = await invoke<StealthState>('get_stealth_state')
+          if (isMacOSClient && epoch !== nativeStealthEpoch) return
           if (state.clickThrough) useWindowPreferences.setState({ pinned: true })
           set({ ...state, ready: true })
         } catch (error) {
@@ -216,16 +224,21 @@ export function watchStealthShortcut(): () => void {
   let stop: (() => void) | undefined
   let stopStatus: (() => void) | undefined
   let cancelled = false
-  void listen<HotkeyStatus>('sharecode:hotkey-status', (event) => {
-    useStealthPreferences.setState({ hotkeyStatus: event.payload })
-  }).then((unlisten) => {
-    if (cancelled) void unlisten()
-    else stopStatus = unlisten
-  }).catch((error) => console.error('Failed to watch the hotkey status:', error))
-  void invoke<HotkeyStatus>('get_hotkey_status').then((hotkeyStatus) => {
-    useStealthPreferences.setState({ hotkeyStatus })
-  }).catch((error) => console.error('Failed to read the hotkey status:', error))
+  // macOS uses its revisioned status model and permission controls in hotkey.ts.
+  if (!isMacOSClient) {
+    void listen<HotkeyStatus>('sharecode:hotkey-status', (event) => {
+      useStealthPreferences.setState({ hotkeyStatus: event.payload })
+    }).then((unlisten) => {
+      if (cancelled) void unlisten()
+      else stopStatus = unlisten
+    }).catch((error) => console.error('Failed to watch the hotkey status:', error))
+    void invoke<HotkeyStatus>('get_hotkey_status').then((hotkeyStatus) => {
+      useStealthPreferences.setState({ hotkeyStatus })
+    }).catch((error) => console.error('Failed to read the hotkey status:', error))
+  }
   void listen<StealthState>('sharecode:stealth-state', (event) => {
+    if (cancelled) return
+    nativeStealthEpoch++
     if (event.payload.clickThrough) useWindowPreferences.setState({ pinned: true })
     useStealthPreferences.setState({ ...event.payload, ready: true })
   })
@@ -235,7 +248,11 @@ export function watchStealthShortcut(): () => void {
         stop = unlisten
         // Subscribe before applying saved settings so no shortcut event is lost on launch.
         const { apply, sync } = useStealthPreferences.getState()
-        void apply().then(sync)
+        if (isMacOSClient) {
+          // React remounts or a late subscription must not replay stale saved click-through.
+          if (restoredMacPreferences) void sync()
+          else { restoredMacPreferences = true; void apply().then(sync) }
+        } else void apply().then(sync)
       }
     })
     .catch((error) => console.error('Failed to watch the click-through shortcut:', error))
