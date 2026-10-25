@@ -8,7 +8,7 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-use crate::{auth::AuthUser, error::ApiError, state::AppState};
+use crate::{auth::AuthActor, error::ApiError, permissions::require_content_access, state::AppState};
 
 const CACHE_TTL: Duration = Duration::from_secs(60);
 
@@ -120,9 +120,15 @@ static RUNTIME_CACHE: std::sync::OnceLock<RwLock<Option<RuntimeCache>>> =
 
 pub async fn execute_code(
     State(state): State<AppState>,
-    _auth_user: AuthUser,
+    actor: AuthActor,
     Json(payload): Json<ExecuteRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Accounts run code anywhere; a share guest only in their room, and only while they can write to it.
+    if let AuthActor::Guest(guest) = &actor {
+        if !require_content_access(&state.db, &actor, &guest.room_id).await? {
+            return Err(ApiError::forbidden("Only people who can edit this room can run code"));
+        }
+    }
     let source_code = payload.source_code.unwrap_or_default();
     let language_id = payload.language_id.unwrap_or_default();
 

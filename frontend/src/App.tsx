@@ -17,6 +17,7 @@ import { useSessionRenewal } from '@/hooks/use-session-renewal'
 import { NotificationPopup } from '@/components/features/notification-popup'
 
 const LoginPage = lazy(() => import('@/pages/login').then(module => ({ default: module.LoginPage })))
+const LandingPage = lazy(() => import('@/pages/login').then(module => ({ default: module.LandingPage })))
 const RegisterPage = lazy(() => import('@/pages/register').then(module => ({ default: module.RegisterPage })))
 const RoomsPage = lazy(() => import('@/pages/rooms').then(module => ({ default: module.RoomsPage })))
 const EditorPage = lazy(() => import('@/pages/editor').then(module => ({ default: module.EditorPage })))
@@ -191,7 +192,7 @@ function AppRoutes() {
       />
 
       {/* Redirect root to rooms or login */}
-      <Route path="/" element={<Navigate to="/rooms" replace />} />
+      <Route path="/" element={<LandingPage />} />
 
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/rooms" replace />} />

@@ -38,6 +38,7 @@
 
 ### 2. User Management
 - **Username-based authentication**: Login with username; accounts and guests have no email
+- **Landing page** (`/`, `LandingPage` in `pages/login.tsx`): the login page for anyone not signed in (share guests included); signed-in accounts see only the logo (a link to the rooms) and the desktop client download
 - **Renaming**: anyone signed in changes their own username in Settings once a week (`PUT /api/auth/username`, `User.usernameChangedAt`); every new or changed name is trimmed and must be 2–32 characters without spaces or control characters (`utils/usernames.rs`, also on registration, admin-created accounts and new work tables) and unique whatever its case; everything refers to accounts by ID, so nothing else changes
 - **Role-based access control**: Three account roles: admin (超级管理员, shown as Super admin), agent (管理, shown as Manager) and tech (技术); the UI calls both staff roles 管理. Customers (客户) join through share links without an account
 - **Role-only permissions**: No per-account flags; rules live in `server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`
@@ -50,6 +51,7 @@
 - **Share-link membership**: The link a tech last joined through decides whether they can edit; the room stays in their list for replay after it ends
 - **Room ownership**: Owners rename, share and end their rooms; only admins delete rooms or create private ones
 - **Room language**: the owner and staff switch it, and so does anyone else who edits the live room (a tech on an editing link); read-only members and guests do not
+- **Running code** (`/api/code/execute`, Piston): any account, and share guests who can write to their room (`require_content_access`); read-only guests get 403
 - **Language support**: 8 programming languages with syntax highlighting
   - JavaScript, TypeScript, Python, Java, C++, Rust, Go, PHP
 - **Scheduled sessions**: Optional start time and duration

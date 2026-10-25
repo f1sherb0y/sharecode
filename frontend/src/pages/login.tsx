@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Settings } from 'lucide-react'
-import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
+import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle, Spinner } from '@/components/ui'
 import { AuthBrand, ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { DownloadApp } from '@/components/features/download-app'
 import { useAuthStore } from '@/stores'
@@ -179,6 +179,37 @@ export function LoginPage() {
                 </form>
               </>
             )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+/** The site's front page: the login page, or for someone signed in just the logo and the download. */
+export function LandingPage() {
+  const actorType = useAuthStore((state) => state.actorType)
+  const isLoading = useAuthStore((state) => state.isLoading)
+  const isInitialized = useAuthStore((state) => state.isInitialized)
+
+  if (!isInitialized || isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+  if (actorType !== 'user') return <LoginPage />
+
+  return (
+    <div className="min-h-screen flex bg-muted/30">
+      <div className="flex-1 flex items-center justify-center p-2">
+        <Card className="w-full max-w-sm border-0 bg-transparent shadow-none">
+          <Link to="/rooms" className="block w-fit">
+            <AuthBrand />
+          </Link>
+          <CardContent>
+            <DownloadApp />
           </CardContent>
         </Card>
       </div>
