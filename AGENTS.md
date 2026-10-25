@@ -38,7 +38,7 @@
 
 ### 2. User Management
 - **Username-based authentication**: Login with username; accounts and guests have no email
-- **Landing page** (`/`, `LandingPage` in `pages/login.tsx`): the login page for anyone not signed in (share guests included); signed-in accounts see only the logo (a link to the rooms) and the desktop client download
+- **Landing page** (`/`, `LandingPage` in `pages/login.tsx`): the login page for anyone not signed in (share guests included); signed-in accounts see the logo, **进入房间** and the desktop client download; the navbar logo leads back to it
 - **Renaming**: anyone signed in changes their own username in Settings once a week (`PUT /api/auth/username`, `User.usernameChangedAt`); every new or changed name is trimmed and must be 2–32 characters without spaces or control characters (`utils/usernames.rs`, also on registration, admin-created accounts and new work tables) and unique whatever its case; everything refers to accounts by ID, so nothing else changes
 - **Role-based access control**: Three account roles: admin (超级管理员, shown as Super admin), agent (管理, shown as Manager) and tech (技术); the UI calls both staff roles 管理. Customers (客户) join through share links without an account
 - **Role-only permissions**: No per-account flags; rules live in `server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`

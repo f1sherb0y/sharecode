@@ -2,7 +2,7 @@ import { translateError } from '@/i18n/errors'
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Settings } from 'lucide-react'
+import { ChevronRight, Settings } from 'lucide-react'
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle, Spinner } from '@/components/ui'
 import { AuthBrand, ThemeToggle, LanguageSwitcher } from '@/components/layout'
 import { DownloadApp } from '@/components/features/download-app'
@@ -186,8 +186,9 @@ export function LoginPage() {
   )
 }
 
-/** The site's front page: the login page, or for someone signed in just the logo and the download. */
+/** The site's front page: the login page, or for someone signed in the logo, the way to the rooms and the download. */
 export function LandingPage() {
+  const { t } = useTranslation()
   const actorType = useAuthStore((state) => state.actorType)
   const isLoading = useAuthStore((state) => state.isLoading)
   const isInitialized = useAuthStore((state) => state.isInitialized)
@@ -205,10 +206,14 @@ export function LandingPage() {
     <div className="min-h-screen flex bg-muted/30">
       <div className="flex-1 flex items-center justify-center p-2">
         <Card className="w-full max-w-sm border-0 bg-transparent shadow-none">
-          <Link to="/rooms" className="block w-fit">
-            <AuthBrand />
-          </Link>
+          <AuthBrand />
           <CardContent>
+            <Button asChild className="w-full">
+              <Link to="/rooms">
+                {t('rooms.goToRooms')}
+                <ChevronRight />
+              </Link>
+            </Button>
             <DownloadApp />
           </CardContent>
         </Card>

@@ -47,6 +47,7 @@
     "featureInstantDesc": "无需任何配置"
   },
   "rooms": {
+    "goToRooms": "进入房间",
     "workspaceTitle": "工作空间",
     "title": "所有房间",
     "welcome": "欢迎",

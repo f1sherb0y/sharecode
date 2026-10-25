@@ -47,6 +47,7 @@
     "featureInstantDesc": "No setup required"
   },
   "rooms": {
+    "goToRooms": "Go to rooms",
     "workspaceTitle": "Workspace",
     "title": "All Rooms",
     "welcome": "Welcome",
