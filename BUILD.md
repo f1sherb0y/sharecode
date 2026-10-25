@@ -375,3 +375,13 @@ Capture exclusion depends on the recording application honoring Windows display 
 meeting window layouts, mismatched architectures, elevated targets or blocked DLL loading can fail;
 the UI reports those failures. These paths have been compiled but require manual meeting and
 capture validation; no live meeting was modified during implementation.
+
+
+### Native client shortcuts
+
+Windows and macOS both provide `Ctrl+Shift+F` to toggle click-through and `Ctrl+Shift+Q`
+to quit, with either side's Ctrl and Shift keys. On Windows the hook and key-state recovery
+share independent F/Q press latches, so holding one key does not repeat the action or block
+the other shortcut. Quit uses Tauri's normal exit lifecycle, including the meeting-window
+restoration attempt, without focusing the client first. macOS's Input Monitoring requirements
+and existing quit handling are unchanged.

@@ -1136,7 +1136,7 @@
       "hotkeyUnavailable": "Shortcut listener unavailable",
       "stealthFailed": "Could not apply window settings. The controls now show the current state.",
       "stealthSummary": "{{count}} of 3 camouflage switches on",
-      "stealthShortcut": "Ctrl+Shift+F toggles click-through from anywhere, even while the window takes no input.",
+      "stealthShortcut": "Ctrl+Shift+F toggles click-through; Ctrl+Shift+Q quits, even while the window takes no input. Either Ctrl and Shift key works.",
       "screenCaptureProtection": "Hide from screen sharing",
       "screenCaptureProtectionHint": "Left out of screen capture and recording.",
       "clickThrough": "Click-through",

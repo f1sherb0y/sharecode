@@ -1135,7 +1135,7 @@
       "hotkeyUnavailable": "快捷键监听不可用",
       "stealthFailed": "未能应用窗口设置，开关已恢复为当前状态。",
       "stealthSummary": "3 项隐蔽开关中已开启 {{count}} 项",
-      "stealthShortcut": "按 Ctrl+Shift+F 可在任意位置切换穿透，即使窗口已不接收任何输入。",
+      "stealthShortcut": "Ctrl+Shift+F 切换穿透，Ctrl+Shift+Q 退出；窗口不接收输入时也可使用，左右 Ctrl/Shift 均可。",
       "screenCaptureProtection": "共享屏幕时隐藏",
       "screenCaptureProtectionHint": "不出现在录屏和屏幕共享画面里。",
       "clickThrough": "鼠标键盘穿透",

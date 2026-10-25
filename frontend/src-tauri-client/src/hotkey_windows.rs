@@ -1,4 +1,4 @@
-//! Dedicated Windows keyboard listener for Ctrl+Shift+F.
+//! Dedicated Windows keyboard listener: Ctrl+Shift+F toggles input, Ctrl+Shift+Q quits.
 //!
 //! The low-level hook observes the chord without claiming it or modifying it. The callback only
 //! updates thread-local shortcut state and posts a private message; all window work stays on the Tauri main thread.
@@ -82,6 +82,7 @@ const KEY_RECONCILE_MS: u32 = 30;
 const VK_CONTROL: u32 = 0x11;
 const VK_SHIFT: u32 = 0x10;
 const VK_F: u32 = 0x46;
+const VK_Q: u32 = 0x51;
 const VK_LSHIFT: u32 = 0xA0;
 const VK_RSHIFT: u32 = 0xA1;
 const VK_LCONTROL: u32 = 0xA2;
@@ -102,6 +103,7 @@ struct KeyState {
     shift_left: bool,
     shift_right: bool,
     f_down: bool,
+    q_down: bool,
 }
 
 impl KeyState {
@@ -120,9 +122,15 @@ impl KeyState {
             VK_CONTROL => self.ctrl_left = !released,
             VK_SHIFT if scan & 0xff == 0x36 => self.shift_right = !released,
             VK_SHIFT => self.shift_left = !released,
-            VK_F => {
-                let trigger = !released && !self.f_down && self.chord();
-                self.f_down = !released;
+            VK_F | VK_Q => {
+                let chord = self.chord();
+                let down = if vk == VK_Q {
+                    &mut self.q_down
+                } else {
+                    &mut self.f_down
+                };
+                let trigger = !released && !*down && chord;
+                *down = !released;
                 return trigger;
             }
             _ => {}
@@ -133,9 +141,9 @@ impl KeyState {
 
 /// Run outside the hook callback: asynchronous key state is updated after the hook
 /// returns. Reconcile missed releases after focus changes without a time debounce.
-/// Observe missed physical presses as well; never inject input. The same F-down latch
-/// is shared with the hook, so neither repeats nor duplicate observations toggle twice.
-fn reconcile_keys() -> bool {
+/// Observe missed physical presses as well; never inject input. Each target key has
+/// its own latch shared with the hook, so repeats or duplicate observations cannot act twice.
+fn reconcile_keys() -> Option<u32> {
     let down = |key: u32| unsafe { GetAsyncKeyState(key as i32) < 0 };
     let physical = KeyState {
         ctrl_left: down(VK_LCONTROL),
@@ -143,20 +151,33 @@ fn reconcile_keys() -> bool {
         shift_left: down(VK_LSHIFT),
         shift_right: down(VK_RSHIFT),
         f_down: down(VK_F),
+        q_down: down(VK_Q),
     };
     STATE.with(|slot| {
         let mut state = slot.borrow_mut();
         if state.f_down && !physical.f_down {
             log_line("recovered missed F release from OS key state");
         }
-        let missed_press = physical.f_down && !state.f_down && physical.chord();
+        if state.q_down && !physical.q_down {
+            log_line("recovered missed Q release from OS key state");
+        }
+        let missed_press = if physical.chord() && physical.q_down && !state.q_down {
+            Some(VK_Q)
+        } else if physical.chord() && physical.f_down && !state.f_down {
+            Some(VK_F)
+        } else {
+            None
+        };
         state.ctrl_left = physical.ctrl_left;
         state.ctrl_right = physical.ctrl_right;
         state.shift_left = physical.shift_left;
         state.shift_right = physical.shift_right;
         state.f_down = physical.f_down;
-        if missed_press {
-            log_line("native key-state sample detected shortcut press");
+        state.q_down = physical.q_down;
+        if let Some(key) = missed_press {
+            log_line(format!(
+                "native key-state sample detected shortcut vk=0x{key:02X}"
+            ));
         }
         missed_press
     })
@@ -176,21 +197,25 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             .contains(windows::Win32::UI::WindowsAndMessaging::LLKHF_EXTENDED);
         let relevant = matches!(
             event.vkCode,
-            VK_CONTROL | VK_SHIFT | VK_LCONTROL | VK_RCONTROL | VK_LSHIFT | VK_RSHIFT | VK_F
+            VK_CONTROL | VK_SHIFT | VK_LCONTROL | VK_RCONTROL | VK_LSHIFT | VK_RSHIFT | VK_F | VK_Q
         );
         if !relevant {
             return CallNextHookEx(None, code, wparam, lparam);
         }
-        let (trigger, chord, f_was_down) = STATE.with(|state| {
+        let (trigger, chord, key_was_down) = STATE.with(|state| {
             let mut state = state.borrow_mut();
-            let f_was_down = state.f_down;
+            let key_was_down = if event.vkCode == VK_Q {
+                state.q_down
+            } else {
+                state.f_down
+            };
             let trigger = state.update(event.vkCode, event.scanCode, extended, released);
-            (trigger, state.chord(), f_was_down)
+            (trigger, state.chord(), key_was_down)
         });
-        // Do not record ordinary typing, including F outside the shortcut chord.
-        if event.vkCode != VK_F || chord || (released && f_was_down) {
-            log_line(format!("hook shortcut vk=0x{:02X} scan=0x{:02X} extended={} released={} chord={} trigger={} f_was_down={}",
-                event.vkCode, event.scanCode, extended, released, chord, trigger, f_was_down));
+        // Do not record ordinary typing, including F/Q outside the shortcut chord.
+        if !matches!(event.vkCode, VK_F | VK_Q) || chord {
+            log_line(format!("hook shortcut vk=0x{:02X} scan=0x{:02X} extended={} released={} chord={} trigger={} key_was_down={}",
+                event.vkCode, event.scanCode, extended, released, chord, trigger, key_was_down));
         }
         if trigger {
             let mut foreground_pid = 0;
@@ -200,9 +225,14 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             );
             log_line(format!("shortcut foreground_pid={foreground_pid}"));
             if let Some(thread_id) = THREAD_ID.get() {
-                let result = PostThreadMessageW(*thread_id, HOTKEY_MESSAGE, WPARAM(0), LPARAM(0));
+                let result = PostThreadMessageW(
+                    *thread_id,
+                    HOTKEY_MESSAGE,
+                    WPARAM(event.vkCode as usize),
+                    LPARAM(0),
+                );
                 log_line(format!(
-                    "posted toggle message thread={} result={:?}",
+                    "posted shortcut message thread={} result={:?}",
                     thread_id, result
                 ));
             } else {
@@ -211,6 +241,26 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         }
     }
     CallNextHookEx(None, code, wparam, lparam)
+}
+
+fn dispatch(app: &AppHandle, key: u32) {
+    if !matches!(key, VK_F | VK_Q) {
+        return;
+    }
+    let handle = app.clone();
+    let result = app.run_on_main_thread(move || {
+        if key == VK_Q {
+            log_line("Ctrl+Shift+Q requested normal app exit");
+            // Tauri's normal Exit lifecycle restores the meeting-window changes.
+            // Do not focus the window or kill the process directly.
+            handle.exit(0);
+        } else if let Err(error) = crate::toggle_click_through(&handle) {
+            log_line(format!("main toggle failed: {error}"));
+        }
+    });
+    log_line(format!(
+        "posted main-thread shortcut vk=0x{key:02X} result={result:?}"
+    ));
 }
 
 pub fn can_enable() -> bool {
@@ -303,23 +353,11 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                     break;
                 }
                 if message.message == WM_TIMER && message.wParam.0 == timer {
-                    if reconcile_keys() {
-                        let handle = app.clone();
-                        let _ = app.run_on_main_thread(move || {
-                            if let Err(error) = crate::toggle_click_through(&handle) {
-                                log_line(format!("main toggle failed: {error}"));
-                            }
-                        });
+                    if let Some(key) = reconcile_keys() {
+                        dispatch(&app, key);
                     }
                 } else if message.message == HOTKEY_MESSAGE {
-                    log_line("toggle message received by hook thread");
-                    let handle = app.clone();
-                    let result = app.run_on_main_thread(move || {
-                        if let Err(error) = crate::toggle_click_through(&handle) {
-                            log_line(format!("main toggle failed: {error}"));
-                        }
-                    });
-                    log_line(format!("posted main-thread toggle result={:?}", result));
+                    dispatch(&app, message.wParam.0 as u32);
                 } else {
                     unsafe {
                         let _ = TranslateMessage(&message);
@@ -361,16 +399,32 @@ mod tests {
                 (VK_SHIFT, 0x2a),
                 (VK_SHIFT, 0x36),
             ] {
-                let mut state = KeyState::default();
-                assert!(!state.update(ctrl, 0x1d, extended, false));
-                assert!(!state.update(shift, scan, false, false));
-                assert!(state.update(VK_F, 0x21, false, false));
-                assert!(!state.update(VK_F, 0x21, false, false));
-                assert!(!state.update(VK_F, 0x21, false, true));
-                // No time debounce: a second distinct press must work immediately.
-                assert!(state.update(VK_F, 0x21, false, false));
+                for key in [VK_F, VK_Q] {
+                    let mut state = KeyState::default();
+                    assert!(!state.update(ctrl, 0x1d, extended, false));
+                    assert!(!state.update(shift, scan, false, false));
+                    assert!(state.update(key, 0, false, false));
+                    assert!(!state.update(key, 0, false, false));
+                    assert!(!state.update(key, 0, false, true));
+                    assert!(state.update(key, 0, false, false));
+                }
             }
         }
+    }
+
+    #[test]
+    fn quit_requires_modifiers_and_has_its_own_press_cycle() {
+        let mut state = KeyState::default();
+        assert!(!state.update(VK_Q, 0, false, false));
+        state.update(VK_Q, 0, false, true);
+        state.update(VK_RCONTROL, 0, false, false);
+        assert!(!state.update(VK_Q, 0, false, false));
+        state.update(VK_Q, 0, false, true);
+        state.update(VK_LSHIFT, 0, false, false);
+        assert!(state.update(VK_F, 0, false, false));
+        assert!(state.update(VK_Q, 0, false, false));
+        assert!(!state.update(VK_Q, 0, false, false));
+        assert!(!state.update(VK_F, 0, false, false));
     }
 
     #[test]
