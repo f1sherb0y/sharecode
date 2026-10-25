@@ -9,6 +9,8 @@ mod hotkey_chord;
 mod hotkey_log;
 #[cfg(target_os = "macos")]
 mod hotkey_macos;
+#[cfg(target_os = "macos")]
+mod input_monitoring_macos;
 
 #[cfg(windows)]
 mod hotkey_windows;
@@ -350,11 +352,45 @@ async fn request_client_hotkey_permission(window: WebviewWindow) -> Result<(), S
 #[tauri::command]
 fn open_client_hotkey_settings() -> Result<(), String> {
     // Fixed destination only; no caller-provided URLs or shell invocation.
-    std::process::Command::new("/usr/bin/open")
+    let status = std::process::Command::new("/usr/bin/open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
-        .spawn()
+        .status()
         .map_err(|e| e.to_string())?;
-    Ok(())
+    if status.success() {
+        Ok(())
+    } else {
+        Err("Could not open Input Monitoring settings".into())
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn open_client_hotkey_setup(
+    window: WebviewWindow,
+    language: Option<String>,
+) -> Result<(), String> {
+    on_window_thread(window, move |window| {
+        input_monitoring_macos::show(
+            window.app_handle(),
+            language
+                .as_deref()
+                .is_some_and(|lang| lang.starts_with("zh")),
+        )
+    })
+    .await?;
+    open_client_hotkey_settings()
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn get_client_application(app: AppHandle) -> input_monitoring_macos::Application {
+    input_monitoring_macos::application(&app)
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn drag_client_application(window: WebviewWindow) -> Result<(), String> {
+    on_window_thread(window, input_monitoring_macos::drag_application).await
 }
 
 #[cfg(target_os = "macos")]
@@ -499,6 +535,9 @@ pub fn run() {
         get_client_hotkey_status,
         request_client_hotkey_permission,
         open_client_hotkey_settings,
+        open_client_hotkey_setup,
+        get_client_application,
+        drag_client_application,
         test_client_hotkey
     ]);
     #[cfg(not(target_os = "macos"))]

@@ -210,8 +210,9 @@ workflow file of the tagged commit.
 ### macOS DMG without Apple Developer membership
 
 The macOS customer shortcut uses a native listen-only event tap (macOS 10.15+), with no
-global-hotkey fallback. Enable **Input Monitoring** from Window settings, then use **Test
-shortcut**. Ctrl+Shift+F accepts either modifier side and works inside/background to the app,
+global-hotkey fallback. On first launch without permission, the client opens Input Monitoring
+and a separate setup window. Drag the app from that window into the settings list, enable its
+switch, reopen if prompted, then use **Test shortcut**. Window settings can reopen the guide. Ctrl+Shift+F accepts either modifier side and works inside/background to the app,
 without changing keyboard focus or restoring a minimized window. Reopening the app restores
 its window. See `notes/client-hotkey-macos.md` for native acceptance checks.
 
@@ -227,8 +228,8 @@ This uses the committed `bun.lock` and Cargo lockfile, runs the client Rust test
 TypeScript/client build, bundles with the ad-hoc identity `-`, verifies the code signature and
 both CPU architectures, then creates and verifies a compressed DMG. Pinned `dmgbuild`
 dependencies are installed in the isolated `build/dmg-tools` environment. The Finder window
-uses a Retina background with two aligned icons, a drag arrow and a brief bilingual first-launch
-hint. It mounts the final image
+uses a 720 × 660 Retina background with two aligned icons, a drag arrow, a bilingual first-launch
+hint and Input Monitoring setup/test steps. It mounts the final image
 read-only and verifies the packaged app again. No Finder automation, system-wide security
 changes, installation, upload or publishing occurs.
 
@@ -285,8 +286,11 @@ credentials. Only the signing step receives them. No Apple membership or Apple s
 
 Ad-hoc signing is **not** Apple notarization. Users drag the app into Applications, try to open
 it, and if blocked use **System Settings → Privacy & Security → Open Anyway**. This short hint
-is on the DMG background. The optional detailed guide at `docs/macos/Install.html` is copied
-next to the DMG for anyone who needs more help.
+is on the DMG background, followed by **automatic Input Monitoring guide → drag the app into
+the list → enable its switch → reopen if prompted → Test shortcut → Ctrl+Shift+F within 15 seconds**. The test
+confirms delivery without toggling click-through. The optional detailed guide at
+`docs/macos/Install.html` includes adding a missing app, older macOS settings paths, and
+Ctrl+Shift+Q to quit; it is copied next to the DMG for anyone who needs more help.
 Managed Macs may require an administrator. Test an actual browser-downloaded DMG on a separate
 Mac before public distribution; local signature verification does not test Gatekeeper approval,
 Intel runtime behavior or the in-app update cycle.

@@ -28,10 +28,21 @@ The customer client uses a session-level `CGEventTap` with `listenOnly`; it neve
 
 ## Permission and diagnostic UI
 
-Open Window settings → Enable Input Monitoring. Only this explicit action calls
-`CGRequestListenEventAccess`; no automatic prompt, Accessibility request or global-hotkey
-fallback exists. The adjacent settings button opens macOS Input Monitoring. Enable the
-correct app there, then restart it if macOS requires it. Permission is never granted by the app.
+On the first launch without permission, the client opens **System Settings → Privacy & Security →
+Input Monitoring** and an opaque setup window. This guide is shown once per WebView profile;
+Window settings → Input Monitoring settings reopens it. The guide uses the running bundle's
+actual path/name, including an isolated test app's identity. Drag its icon into the system list,
+then enable that app's switch. If it is already present, simply enable it. The **+** picker is
+available as a fallback. Disk-image/translocated copies and unbundled development runs do not
+allow dragging; install and open the app from Applications first.
+
+The file drag is copy-only and carries a native file URL, not an HTML image. The helper has its
+own window and minimal event/close capabilities: no room restore, update checks, opacity or
+stealth initialization. Closing it does not close the room. Opening settings or completing a
+drop is not treated as a permission grant. Only native listener status enables the test button.
+Restart the installed app if macOS requests it. The existing **Enable Input Monitoring** button
+still explicitly calls `CGRequestListenEventAccess`; the automatic guide never calls that API.
+There is no Accessibility request or global-hotkey fallback.
 
 When the listener is active, **Test shortcut** arms a 15-second test. The next Ctrl+Shift+F
 reports receipt without changing click-through. Timeout, window operation errors, listener
@@ -57,8 +68,10 @@ client or reuse its profile. No production version/tag/release is needed for thi
 
 Manual macOS acceptance (still required on the installed test app):
 
-1. Initially denied: no startup permission prompt; click-through and hidden-Dock minimize
-   disabled. Request permission explicitly, then test both denial and grant/relaunch.
+1. Initially denied: the setup guide and Input Monitoring page open once, without an OS
+   permission-request dialog. Click-through and hidden-Dock minimize remain disabled. Drag
+   the actual test app into the list, manually grant or deny, then verify grant/relaunch. Close
+   and reopen the guide from Window settings; no duplicate guide and no main-window changes.
 2. Test left Ctrl/left Shift, left/right, right/left, right/right, both sides held and generic
    modifier input. Verify one action for a long hold and two actions for two quick presses.
 3. Verify foreground/background, Chinese input, minimized and Dock-hidden windows; read the
@@ -113,3 +126,26 @@ TypeScript/Vite, the isolated native app bundle and strict ad-hoc signature veri
 On relaunch, persistent logs captured `permission: false`, `secureInput: false`, then
 `permissionRequired`. The updated ad-hoc build needs Input Monitoring approval again; live Q
 shutdown verification is pending that approval. Evidence is saved under `build/hotkey-debug/`.
+
+## Drag-to-settings setup guide — 2026-10-26
+
+- The fixed `Privacy_ListenEvent` system-settings URL opens **Input Monitoring** directly.
+  Verified on this Mac: the System Settings window title was 输入监控, alongside the native
+  setup helper. The helper's button and Window settings entry reuse this destination.
+- Native drag uses `drag` 2.1.1 on macOS only, with a fixed running-app path and copy mode.
+  No filesystem path or destination URL is accepted from the WebView.
+- Ten Rust tests passed, including app-bundle identity/path checks. Thirteen client UI tests
+  passed in each of Chromium, Firefox and WebKit (39 total): one-time startup, manual reopen,
+  drag gesture, no automatic permission request, readiness gates, failures and Chinese layout.
+- TypeScript/client production build, isolated debug `.app` build and strict ad-hoc signature
+  verification passed. Test identity: `dev.sharecode.client.setup-test`, ShareCode Setup Test.
+  Its updater endpoints are empty. No production installation, version bump or publication.
+- Native UI inspection confirmed the guide and direct settings page. After restart, native
+  logs reported `permission: true`, `phase: listening`, `ready: true`. The user confirmed
+  that dragging into the list and the test button both work. Automated UI input did not
+  independently verify a physical chord; that is not implied by the browser mock tests.
+- Updated SVG and 1×/2× PNGs: 720 × 660 / 1440 × 1320. A layout-only DMG using an existing
+  app bundle passed `hdiutil verify` and mounted Finder metadata checks (background alias,
+  720 × 692 window, icon positions, visible contents). This is layout evidence, not a newly
+  released installer. Logs: `/tmp/sharecode-input-monitoring-{chromium,firefox,webkit}.log`
+  and `/tmp/sharecode-input-monitoring-native-build.log`.

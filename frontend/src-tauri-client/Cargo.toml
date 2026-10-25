@@ -2,7 +2,7 @@
 name = "sharecode-client"
 # The app's only version (tauri.conf.json sets none): the installers, the updater and the exe's
 # file properties all use it. Raise it for every release (see BUILD.md).
-version = "0.2.1"
+version = "0.2.2"
 description = "ShareCode desktop client for customers: join a session from an invitation"
 edition = "2021"
 rust-version = "1.77.2"
@@ -34,6 +34,7 @@ objc2 = "0.6.3"
 block2 = "0.6.2"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSWindow", "NSScreen", "NSWorkspace", "NSRunningApplication"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSNotification", "NSOperation", "NSObject", "NSString", "block2"] }
+drag = "=2.1.1"
 
 # Camouflage on Windows needs the window manager directly: capture exclusion, the extended style
 # bits that make the window unfocusable and click-through, and a window procedure that keeps those

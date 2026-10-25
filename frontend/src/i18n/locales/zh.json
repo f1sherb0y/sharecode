@@ -1095,6 +1095,20 @@
     "nodeUnreachable": "无法连接",
     "nodeLatency": "{{ms}} ms",
     "nodeChosen": "{{ms}} ms · 最快",
+    "inputMonitoring": {
+      "title": "开启键盘快捷键",
+      "description": "在其他应用位于前台时，也能使用快捷键。",
+      "openStep": "打开“隐私与安全性 → 输入监控”。",
+      "openSettings": "打开输入监控",
+      "dragStep": "把下方应用拖到系统设置的应用列表中。",
+      "dragApp": "将 {{name}} 拖入输入监控",
+      "dragHint": "按住图标，拖入应用列表",
+      "fallback": "已在列表中？直接开启即可。也可点 +，在“应用程序”中选择 {{name}}。",
+      "enableStep": "打开应用旁的开关。如系统提示，退出并重新打开应用，再测试下方快捷键。",
+      "installFirst": "请先将应用移到“应用程序”，再打开安装后的副本。磁盘镜像或开发模式下不能拖拽授权。",
+      "later": "稍后设置",
+      "done": "完成"
+    },
     "hotkey": {
       "title": "原生快捷键",
       "clickThroughHint": "鼠标点击穿透；快捷键保持当前键盘焦点不变。",
@@ -1115,6 +1129,7 @@
       "testTimedOut": "未收到快捷键，请检查权限后重试。"
     },
     "titleBar": {
+      "windowControls": "窗口控制",
       "server": "节点",
       "serverLatency": "{{host}} · {{ms}} ms",
       "opacity": "窗口透明度",

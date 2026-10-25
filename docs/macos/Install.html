@@ -14,7 +14,7 @@
 <h1>Welcome to ShareCode</h1>
 <p>For Apple silicon and Intel Macs. No Terminal commands needed.</p>
 <div class="steps" aria-label="Installation overview">
-  <span>① Open the DMG</span> → <span>② Drag to Applications</span> → <span>③ Open ShareCode</span>
+  <span>① Open the DMG</span> → <span>② Drag to Applications</span> → <span>③ Open ShareCode</span> → <span>④ Enable shortcuts</span>
 </div>
 <ol>
   <li>Open the downloaded <strong>ShareCode Client.dmg</strong>.</li>
@@ -24,13 +24,23 @@
   <li>Paste your invitation link or code into ShareCode. You can now eject the ShareCode disk in Finder.</li>
 </ol>
 <p class="note">This build is not notarized by Apple. Only approve the copy you downloaded from your trusted ShareCode provider. A company-managed Mac may require your IT administrator to approve it. If macOS reports malware or a damaged app, ask your provider for help instead of following the approval steps above.</p>
-<p class="note">The app starts without a Dock icon. To show it, open the window’s Ghost/settings button and turn off “Hide from Dock”. Enable <strong>Input Monitoring</strong> there to use <strong>Control + Shift + F</strong> for click-through; either Ctrl/Shift key works. The shortcut keeps keyboard focus unchanged. To restore a minimized window, open the installed app again.</p>
+<h2>Enable keyboard shortcuts</h2>
+<ol>
+  <li>On the first launch without permission, ShareCode opens <strong>Input Monitoring</strong> and a setup window automatically. To reopen them later, click the <strong>ghost icon → Window settings → Input Monitoring settings</strong>.</li>
+  <li>Drag the app icon from the setup window into the list in <strong>System Settings → Privacy &amp; Security → Input Monitoring</strong>, then enable its switch. If already listed, just enable it. If dragging is unavailable, click <strong>+</strong> and choose <strong>Applications → ShareCode Client</strong>. Approve the change if macOS asks. On macOS 12 or earlier, the path is <strong>System Preferences → Security &amp; Privacy → Privacy → Input Monitoring</strong>.</li>
+  <li>If macOS asks you to quit and reopen, follow that prompt, then open <strong>ShareCode Client from Applications</strong> again. Closing its window alone does not quit the app.</li>
+  <li>In the setup window or <strong>Window settings</strong>, once the listener is active, click <strong>Test shortcut</strong> and press <strong>Control + Shift + F within 15 seconds</strong>. A received-shortcut message confirms the test; this test does not toggle click-through.</li>
+</ol>
+<p><strong>Control + Shift + F</strong> toggles click-through. <strong>Control + Shift + Q</strong> quits the app. Use Control (⌃), not Command (⌘); either left or right Ctrl/Shift works. If the test times out, check the permission for the installed copy and restart the app before trying again.</p>
+<p class="note">Input Monitoring lets the native listener receive these shortcuts while another app is active. ShareCode does not record ordinary keystrokes or typed text. Click-through stays unavailable until the listener is ready.</p>
+<p class="note">The app starts without a Dock icon. To show it, open Window settings and turn off “Hide from Dock”. To restore a minimized window, open the installed app again.</p>
+<p><a href="https://support.apple.com/guide/mac-help/mchl4cedafb6/mac">Apple’s Input Monitoring instructions</a></p>
 <p><a href="https://support.apple.com/en-us/102445">Apple’s official first-launch instructions</a></p>
 <hr>
 <section lang="zh-CN">
 <h2>安装 ShareCode</h2>
 <p>支持 Apple 芯片和 Intel Mac，无需输入终端命令。</p>
-<div class="steps" aria-label="安装步骤"><span>① 打开 DMG</span> → <span>② 拖入应用程序</span> → <span>③ 打开 ShareCode</span></div>
+<div class="steps" aria-label="安装步骤"><span>① 打开 DMG</span> → <span>② 拖入应用程序</span> → <span>③ 打开 ShareCode</span> → <span>④ 开启快捷键</span></div>
 <ol>
   <li>打开下载的 <strong>ShareCode Client.dmg</strong>。</li>
   <li>将 <strong>ShareCode Client</strong> 拖到磁盘窗口中的 <strong>Applications（应用程序）</strong> 快捷方式上，等待复制完成。</li>
@@ -39,7 +49,17 @@
   <li>在 ShareCode 中粘贴邀请链接或邀请码即可。安装后可以在访达中推出 ShareCode 磁盘。</li>
 </ol>
 <p class="note">此版本未经 Apple 公证。请仅批准来自可信 ShareCode 提供方的应用。公司管理的 Mac 可能需要 IT 管理员批准。如果系统提示恶意软件或应用已损坏，请联系提供方，不要按上述步骤放行。</p>
-<p class="note">应用默认不显示程序坞图标。在标题栏的幽灵/窗口设置按钮中关闭“程序坞隐藏”即可显示。在这里开启<strong>输入监控</strong>权限后，可用 <strong>Control + Shift + F</strong> 切换穿透，左右 Ctrl/Shift 均可，键盘焦点保持不变。恢复最小化窗口时，请重新打开已安装的应用。</p>
+<h2>开启键盘快捷键</h2>
+<ol>
+  <li>首次启动且尚未授权时，应用会自动打开<strong>输入监控</strong>页面和授权引导窗口。以后可从标题栏的<strong>幽灵图标（窗影）→ 输入监控设置</strong>再次打开。</li>
+  <li>将引导窗口中的应用图标拖进<strong>系统设置 → 隐私与安全性 → 输入监控</strong>的列表，再打开应用旁的开关。已在列表中时直接开启即可；无法拖入时可点 <strong>+</strong>，选择<strong>应用程序 → ShareCode Client</strong>，按系统提示验证身份。macOS 12 及更早版本的路径为<strong>系统偏好设置 → 安全性与隐私 → 隐私 → 输入监控</strong>。</li>
+  <li>如果系统提示退出并重新打开，请按提示操作，然后从<strong>应用程序</strong>重新打开 ShareCode Client。只关闭窗口不等于退出应用。</li>
+  <li>在引导窗口或<strong>窗影</strong>中，等待显示<strong>原生快捷键监听已启用</strong>，点击<strong>测试快捷键</strong>，在 <strong>15 秒内按 Control + Shift + F</strong>。看到“已收到快捷键”即测试成功；这次测试不会切换穿透。</li>
+</ol>
+<p><strong>Control + Shift + F</strong> 切换穿透，<strong>Control + Shift + Q</strong> 退出应用。使用 Control（⌃），不是 Command（⌘）；左右 Ctrl/Shift 均可。测试超时时，请确认开启的是已安装应用的权限，重启应用后重试。</p>
+<p class="note">输入监控用于在其他应用位于前台时接收这些快捷键。ShareCode 不记录普通按键或输入文字。监听就绪后才能开启穿透。</p>
+<p class="note">应用默认不显示程序坞图标。在窗影中关闭“程序坞隐藏”即可显示。恢复最小化窗口时，请重新打开已安装的应用。</p>
+<p><a href="https://support.apple.com/zh-cn/guide/mac-help/mchl4cedafb6/mac">Apple 官方输入监控说明</a></p>
 <p><a href="https://support.apple.com/zh-cn/102445">Apple 官方首次打开说明</a></p>
 </section>
 </html>

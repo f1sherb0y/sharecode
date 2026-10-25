@@ -160,7 +160,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
       {/* Keep the macOS controls in their native order and position. The custom title bar is
           borderless, so these three controls provide the familiar red/yellow/green affordance. */}
       {isMacOSClient && (
-        <div className="client-traffic-lights" role="group" aria-label="Window controls">
+        <div className="client-traffic-lights" role="group" aria-label={t('client.titleBar.windowControls')}>
           <button
             type="button"
             className="client-traffic-light"
@@ -316,7 +316,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
                     </button>
                   )}
                   <button type="button" disabled={hotkey.busy} className="rounded border px-2 py-1 text-xs"
-                    onClick={() => void hotkey.run('open_client_hotkey_settings')}>
+                    onClick={() => void hotkey.run('open_client_hotkey_setup')}>
                     {t('client.hotkey.settings')}
                   </button>
                   <button type="button" disabled={hotkey.busy || shortcutUnavailable || hotkey.testing} className="rounded border px-2 py-1 text-xs"

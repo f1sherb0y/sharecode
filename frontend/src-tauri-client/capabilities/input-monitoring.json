@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "input-monitoring",
+  "description": "Read native shortcut status and close the macOS setup helper",
+  "platforms": ["macOS"],
+  "windows": ["input-monitoring"],
+  "permissions": ["core:default", "core:window:allow-close"]
+}

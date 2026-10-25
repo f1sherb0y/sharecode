@@ -14,6 +14,7 @@ import { TitleBar } from './title-bar'
 import { EditorToolbarTarget } from '@/components/features/editor-toolbar'
 import { startUpdateChecks } from './updater'
 import { useWindowPreferences } from './window'
+import { InputMonitoringSetup, useInputMonitoringSetup } from './input-monitoring'
 
 // The web app's own share and room pages, so the room stays identical to the site.
 const SharePage = lazy(() => import('@/pages/share').then((module) => ({ default: module.SharePage })))
@@ -105,6 +106,7 @@ function useSavedSessionRestore(setNotice: (notice: HomeNotice) => void): boolea
 }
 
 function ClientShell() {
+  useInputMonitoringSetup()
   const theme = useThemeStore((state) => state.theme)
   const textOpacity = useWindowPreferences((state) => state.textOpacity)
   const backgroundOpacity = useWindowPreferences((state) => state.backgroundOpacity)
@@ -156,7 +158,10 @@ export function ClientApp() {
     <QueryClientProvider client={queryClient}>
       <HashRouter>
         <TooltipProvider>
-          <ClientShell />
+          <Routes>
+            <Route path="/input-monitoring" element={<InputMonitoringSetup />} />
+            <Route path="*" element={<ClientShell />} />
+          </Routes>
           <Toaster />
         </TooltipProvider>
       </HashRouter>

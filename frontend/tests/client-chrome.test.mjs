@@ -51,13 +51,13 @@ after(async () => { await browser?.close(); await server?.close() })
 
 // The client is a Windows app in the baseline tests unless a Mac user agent is requested;
 // macOS assertions reuse the same open() with `mac: true`.
-async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en', touch = false, mac = false, hotkeyPhase = 'listening', savedStealth } = {}) {
+async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en', touch = false, mac = false, hotkeyPhase = 'listening', savedStealth, setup = false, canDrag = true } = {}) {
   const context = await browser.newContext({
     viewport: { width, height }, deviceScaleFactor: scale, hasTouch: touch, reducedMotion: 'reduce',
     userAgent: mac ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15'
       : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
   })
-  await context.addInitScript(({ saved, locale, mac, hotkeyPhase, savedStealth }) => {
+  await context.addInitScript(({ saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag }) => {
     localStorage.setItem('i18nextLng', locale)
     if (saved && !localStorage.getItem('sharecode-client-window')) localStorage.setItem('sharecode-client-window', JSON.stringify(saved))
     if (savedStealth) localStorage.setItem('sharecode-client-stealth', JSON.stringify({ state: savedStealth, version: 0 }))
@@ -70,7 +70,7 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
     window.nativeHotkey = { revision: 0, ready: hotkeyPhase === 'listening', phase: hotkeyPhase, received: 0, testing: false, lastAction: null, error: null }
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: event => listeners.delete(event) }
     window.__TAURI_INTERNALS__ = {
-      metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
+      metadata: { currentWindow: { label: setup ? 'input-monitoring' : 'main' }, currentWebview: { label: setup ? 'input-monitoring' : 'main' } },
       transformCallback: handler => { callbacks.set(++id, handler); return id },
       invoke: async (command, args = {}) => {
         window.nativeCalls.push({ command, args })
@@ -92,6 +92,7 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
           return window.nativeState = args
         }
         if (command === 'get_client_hotkey_status') return window.nativeHotkey
+        if (command === 'get_client_application') return { name: 'ShareCode Setup Test', path: '/Applications/ShareCode Setup Test.app', canDrag }
         if (command === 'test_client_hotkey') { window.hotkeyStatus({ testing: true, lastAction: null }); return null }
         if (command === 'client_is_maximized') return window.nativeMaximized
         if (command === 'plugin:window|is_maximized') return false
@@ -107,13 +108,14 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
       callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: window.nativeHotkey })
     }
     window.staleHotkeyStatus = status => callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: status })
-  }, { saved, locale, mac, hotkeyPhase, savedStealth })
+  }, { saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag })
   await context.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin
     ? route.continue() : route.fulfill({ status: 404, body: '' }))
   const page = await context.newPage(), errors = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.goto(base + 'client.html')
-  await page.waitForFunction(async () => (await import('/src/client/window.ts')).useStealthPreferences.getState().ready)
+  await page.goto(base + 'client.html' + (setup ? '#/input-monitoring' : ''))
+  if (setup) await page.getByTestId('setup-status').waitFor()
+  else await page.waitForFunction(async () => (await import('/src/client/window.ts')).useStealthPreferences.getState().ready)
   return { page, context, errors }
 }
 const opacity = page => page.evaluate(() => [
@@ -156,7 +158,7 @@ test('macOS requires explicit Input Monitoring and never restores saved click-th
     await page.getByRole('button', { name: 'Enable Input Monitoring', exact: true }).click()
     assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'request_client_hotkey_permission').length), 1)
     await page.getByRole('button', { name: 'Input Monitoring settings', exact: true }).click()
-    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_settings')), true)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_setup')), true)
     // Grant is reported by native status, not assumed merely because the prompt was requested.
     assert.equal(await page.locator('[aria-keyshortcuts]').isDisabled(), true)
     await page.evaluate(() => window.hotkeyStatus({ phase: 'listening' }))
@@ -454,6 +456,67 @@ test('real Canvas toolbar, zoom/history controls and menu stay translucent after
       await page.screenshot({ path: `.cache/client-chrome-${engine}/canvas-transparent-${theme}.png`, omitBackground: engine !== 'firefox' })
       await page.keyboard.press('Escape')
     }
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('macOS opens setup once without automatically requesting permission; manual reopen remains available', async () => {
+  const { page, context, errors } = await open({ mac: true, hotkeyPhase: 'permissionRequired' })
+  try {
+    await page.waitForFunction(() => localStorage.getItem('sharecode-input-monitoring-guide-shown') === '1')
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'open_client_hotkey_setup').length), 1)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'request_client_hotkey_permission')), false)
+    await page.reload()
+    await page.getByRole('button', { name: 'Window settings', exact: true }).click()
+    await page.getByTestId('hotkey-status').filter({ hasText: 'Input Monitoring permission required' }).waitFor()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_setup')), false)
+    await page.getByRole('button', { name: 'Input Monitoring settings', exact: true }).click()
+    await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_setup'))
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('setup helper drags the actual app only on a drag gesture and gates testing on native readiness', async () => {
+  const { page, context, errors } = await open({ mac: true, hotkeyPhase: 'permissionRequired', setup: true, width: 420, height: 570 })
+  try {
+    const app = page.getByTestId('setup-drag-app')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="setup-drag-app"]').disabled)
+    await app.click()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'drag_client_application')), false)
+    const box = await app.boundingBox()
+    await page.mouse.move(box.x + 40, box.y + 30)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 65, box.y + 30, { steps: 4 })
+    await page.mouse.up()
+    await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'drag_client_application'))
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'drag_client_application').length), 1)
+    assert.equal(await page.getByRole('button', { name: 'Test shortcut', exact: true }).isDisabled(), true)
+    await page.getByRole('button', { name: 'Open Input Monitoring', exact: true }).click()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_settings')), true)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => ['set_stealth_state', 'request_client_hotkey_permission', 'plugin:updater|check'].includes(c.command))), false)
+    await page.evaluate(() => window.hotkeyStatus({ phase: 'listening' }))
+    await page.getByRole('button', { name: 'Test shortcut', exact: true }).click()
+    await page.evaluate(() => window.hotkeyStatus({ testing: false, lastAction: 'tested' }))
+    await page.getByText('Shortcut received. The window was not changed.', { exact: true }).waitFor()
+    await page.evaluate(() => window.hotkeyStatus({ phase: 'permissionRequired' }))
+    await page.waitForFunction(() => document.querySelector('.input-monitoring-primary').disabled)
+    await page.screenshot({ path: `.cache/client-chrome-${engine}/input-monitoring-en.png` })
+    await page.getByRole('button', { name: 'Later', exact: true }).click()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'plugin:window|close')), true)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('setup handles an uninstalled app and command failures, with readable Chinese instructions', async () => {
+  const { page, context, errors } = await open({ mac: true, hotkeyPhase: 'permissionRequired', setup: true, canDrag: false, locale: 'zh', width: 420, height: 570 })
+  try {
+    await page.getByRole('alert').filter({ hasText: '请先将应用移到' }).waitFor()
+    assert.equal(await page.getByTestId('setup-drag-app').isDisabled(), true)
+    await page.evaluate(() => { window.nativeFail = 'open_client_hotkey_settings' })
+    await page.getByRole('button', { name: '打开输入监控', exact: true }).click()
+    await page.getByRole('alert').filter({ hasText: 'mock failure' }).waitFor()
+    assert.equal(await page.evaluate(() => document.querySelector('.input-monitoring-setup').scrollWidth <= innerWidth), true)
+    await page.screenshot({ path: `.cache/client-chrome-${engine}/input-monitoring-zh.png` })
     assert.deepEqual(errors, [])
   } finally { await context.close() }
 })

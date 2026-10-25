@@ -1096,6 +1096,20 @@
     "nodeUnreachable": "Unreachable",
     "nodeLatency": "{{ms}} ms",
     "nodeChosen": "{{ms}} ms · fastest",
+    "inputMonitoring": {
+      "title": "Enable keyboard shortcuts",
+      "description": "Keep shortcuts working while another app is in front.",
+      "openStep": "Open Privacy & Security → Input Monitoring.",
+      "openSettings": "Open Input Monitoring",
+      "dragStep": "Drag this app into the list in System Settings.",
+      "dragApp": "Drag {{name}} into Input Monitoring",
+      "dragHint": "Drag into the app list",
+      "fallback": "Already listed? Just enable it. Or use + to select {{name}} in Applications.",
+      "enableStep": "Turn on the switch next to the app. Quit and reopen if macOS asks, then test the shortcut below.",
+      "installFirst": "Move the app to Applications and open that copy first. Drag setup is unavailable in a disk image or development run.",
+      "later": "Later",
+      "done": "Done"
+    },
     "hotkey": {
       "title": "Native shortcut",
       "clickThroughHint": "Mouse clicks pass through. The shortcut keeps the current keyboard focus.",
@@ -1116,6 +1130,7 @@
       "testTimedOut": "No shortcut received. Check permission and try again."
     },
     "titleBar": {
+      "windowControls": "Window controls",
       "server": "Server",
       "serverLatency": "{{host}} · {{ms}} ms",
       "opacity": "Window opacity",

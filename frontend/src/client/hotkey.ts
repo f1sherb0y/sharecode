@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { create } from 'zustand'
 import { isMacOSClient } from './window'
+import i18n from '@/i18n'
 
 export type HotkeyPhase = 'starting' | 'permissionRequired' | 'listening' | 'recovering' | 'secureInput' | 'failed'
 export interface HotkeyStatus {
@@ -17,7 +18,7 @@ export interface HotkeyStatus {
 interface HotkeyStore extends HotkeyStatus {
   busy: boolean
   commandError: string | null
-  run: (command: 'request_client_hotkey_permission' | 'open_client_hotkey_settings' | 'test_client_hotkey') => Promise<void>
+  run: (command: 'request_client_hotkey_permission' | 'open_client_hotkey_settings' | 'open_client_hotkey_setup' | 'test_client_hotkey') => Promise<void>
 }
 
 function accept(status: HotkeyStatus) {
@@ -32,7 +33,7 @@ export const useMacHotkey = create<HotkeyStore>((set, get) => ({
     if (!isMacOSClient || get().busy) return
     set({ busy: true, commandError: null })
     try {
-      await invoke(command)
+      await invoke(command, command === 'open_client_hotkey_setup' ? { language: i18n.language } : undefined)
       accept(await invoke<HotkeyStatus>('get_client_hotkey_status'))
     } catch (error) {
       set({ commandError: String(error) })

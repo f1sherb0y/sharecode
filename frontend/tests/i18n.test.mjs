@@ -9,8 +9,31 @@ const flatten = (object, prefix = '') => Object.fromEntries(
     ? Object.entries(flatten(value, `${prefix}${key}.`))
     : [[prefix + key, value]])
 )
+const params = text => [...text.matchAll(/{{\s*([^}]+?)\s*}}/g)].map(match => match[1]).sort()
+function normalizePlurals(values, locale) {
+  const result = {}
+  const groups = new Map()
+  for (const [key, value] of Object.entries(values)) {
+    assert.ok(value.trim(), `${locale}: ${key}`)
+    const match = key.match(/^(.*)_(zero|one|two|few|many|other)$/)
+    if (!match) { result[key] = value; continue }
+    const [, base, category] = match
+    if (!groups.has(base)) groups.set(base, new Map())
+    groups.get(base).set(category, value)
+  }
+  for (const [base, variants] of groups) {
+    for (const category of new Intl.PluralRules(locale).resolvedOptions().pluralCategories) {
+      assert.ok(variants.has(category), `${locale}: ${base}_${category} is missing`)
+    }
+    const reference = variants.get('other')
+    for (const value of variants.values()) assert.deepEqual(params(value), params(reference), base)
+    if (base in result) assert.deepEqual(params(result[base]), params(reference), base)
+    result[base] = reference
+  }
+  return result
+}
 const locales = Object.fromEntries(['en', 'zh'].map(locale => [locale,
-  flatten(JSON.parse(readFileSync(new URL(`i18n/locales/${locale}.json`, root), 'utf8'))),
+  normalizePlurals(flatten(JSON.parse(readFileSync(new URL(`i18n/locales/${locale}.json`, root), 'utf8'))), locale),
 ]))
 const sources = readdirSync(root, { recursive: true })
   .filter(file => /\.tsx?$/.test(file))
@@ -18,11 +41,17 @@ const sources = readdirSync(root, { recursive: true })
 
 test('English and Chinese cover the same keys and interpolation parameters', () => {
   assert.deepEqual(Object.keys(locales.en).sort(), Object.keys(locales.zh).sort())
-  const params = text => [...text.matchAll(/{{\s*([^}]+?)\s*}}/g)].map(match => match[1]).sort()
   for (const [key, value] of Object.entries(locales.en)) {
     assert.ok(value.trim() && locales.zh[key].trim(), key)
     assert.deepEqual(params(value), params(locales.zh[key]), key)
   }
+})
+
+test('plural validation requires every locale category and matching interpolation', () => {
+  assert.deepEqual(normalizePlurals({ count_one: '{{count}} item', count_other: '{{count}} items' }, 'en'), { count: '{{count}} items' })
+  assert.throws(() => normalizePlurals({ count_one: '{{count}} item' }, 'en'), /count_other is missing/)
+  assert.throws(() => normalizePlurals({ count_other: '{{count}} items' }, 'en'), /count_one is missing/)
+  assert.throws(() => normalizePlurals({ count_one: '{{count}} item', count_other: '{{total}} items' }, 'en'))
 })
 
 test('literal translation keys in app code exist in both languages', () => {
