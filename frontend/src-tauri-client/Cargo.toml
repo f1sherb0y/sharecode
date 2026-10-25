@@ -21,11 +21,13 @@ tauri = { version = "~2.10.3", features = ["macos-private-api"] }
 # Signed in-app updates (see plugins.updater in tauri.conf.json) and the restart after one.
 tauri-plugin-updater = "~2.10.1"
 tauri-plugin-process = "~2.3.1"
-tauri-plugin-global-shortcut = "~2.3.1"
 # generate_context! embeds the plugins' configuration as JSON; the stealth state reaches the title
 # bar as JSON too.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-global-shortcut = "~2.3.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"

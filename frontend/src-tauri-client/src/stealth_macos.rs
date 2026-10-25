@@ -132,7 +132,34 @@ fn hand_off_focus(window: &NSWindow) -> Result<(), String> {
 }
 
 pub fn set(window: &WebviewWindow, next: StealthState) -> Result<StealthState, String> {
+    set_with_focus_policy(window, next, false)
+}
+
+/// The native shortcut must leave the user's current keyboard destination alone. Changing
+/// focusable only prevents *future* activation; it does not resign an already-key NSWindow.
+/// No activate, resign, makeKey, orderFront or set_focus calls are made on this path.
+pub fn set_preserving_focus(
+    window: &WebviewWindow,
+    next: StealthState,
+) -> Result<StealthState, String> {
+    set_with_focus_policy(window, next, true)
+}
+
+fn set_with_focus_policy(
+    window: &WebviewWindow,
+    next: StealthState,
+    preserve_focus: bool,
+) -> Result<StealthState, String> {
     let previous = actual(window)?;
+    let focus_before = if preserve_focus {
+        Some((
+            native_window(window)?.isKeyWindow(),
+            native_window(window)?.isMainWindow(),
+            application()?.isActive(),
+        ))
+    } else {
+        None
+    };
     remember_frontmost();
     let result = (|| {
         apply(window, next)?;
@@ -140,9 +167,21 @@ pub fn set(window: &WebviewWindow, next: StealthState) -> Result<StealthState, S
         if observed != next {
             return Err("macOS did not apply the requested window settings".into());
         }
-        if next.click_through {
+        if let Some(before) = focus_before {
+            let after = (
+                native_window(window)?.isKeyWindow(),
+                native_window(window)?.isMainWindow(),
+                application()?.isActive(),
+            );
+            if before != after {
+                return Err(
+                    "macOS unexpectedly changed window focus while applying click-through".into(),
+                );
+            }
+        }
+        if next.click_through && !preserve_focus {
             hand_off_focus(native_window(window)?)?;
-        } else if previous.click_through {
+        } else if previous.click_through && !next.click_through && !preserve_focus {
             window.set_focus().map_err(|error| error.to_string())?;
         }
         Ok(observed)

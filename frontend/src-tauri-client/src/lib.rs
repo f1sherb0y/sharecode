@@ -1,6 +1,14 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+#[cfg(not(target_os = "macos"))]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+#[cfg(any(target_os = "macos", test))]
+mod hotkey_chord;
+#[cfg(target_os = "macos")]
+mod hotkey_log;
+#[cfg(target_os = "macos")]
+mod hotkey_macos;
 
 #[cfg(windows)]
 mod stealth;
@@ -12,7 +20,8 @@ mod stealth;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StealthState {
-    /// The window takes no mouse or keyboard focus; every event reaches the app behind it.
+    /// Mouse input passes through and future activation is disabled. A macOS shortcut
+    /// preserves existing keyboard focus; the mouse-operated switch hands focus off.
     pub click_through: bool,
     /// Requests exclusion from capture tools that honor the operating system setting.
     pub screen_capture_protection: bool,
@@ -113,19 +122,20 @@ fn install(window: &WebviewWindow) -> Result<(), String> {
 /// Both the title-bar command and global shortcut use this path. Pin before making the
 /// window non-interactive; disabling click-through leaves pinning for the user to change.
 fn write_state(window: &WebviewWindow, next: StealthState) -> Result<StealthState, String> {
-    // An input-transparent Mac window has no tray recovery path. Never enter this
-    // state if another process owns the only shortcut (including saved preferences).
+    write_state_with_focus_policy(window, next, false)
+}
+
+fn write_state_with_focus_policy(
+    window: &WebviewWindow,
+    next: StealthState,
+    preserve_focus: bool,
+) -> Result<StealthState, String> {
+    // A hidden, input-transparent Mac window must have a functioning native listener.
     #[cfg(target_os = "macos")]
-    if next.click_through
-        && !window
-            .app_handle()
-            .global_shortcut()
-            .is_registered(Shortcut::new(
-                Some(Modifiers::CONTROL | Modifiers::SHIFT),
-                Code::KeyF,
-            ))
-    {
-        return Err("Ctrl+Shift+F is unavailable; click-through was not enabled".into());
+    if next.click_through && !window.state::<hotkey_macos::Hotkey>().available() {
+        return Err(
+            "The native shortcut needs Input Monitoring; click-through was not enabled".into(),
+        );
     }
     let was_pinned = window
         .is_always_on_top()
@@ -135,7 +145,17 @@ fn write_state(window: &WebviewWindow, next: StealthState) -> Result<StealthStat
             .set_always_on_top(true)
             .map_err(|error| error.to_string())?;
     }
-    let result = write_platform_state(window, next);
+    #[cfg(target_os = "macos")]
+    let result = if preserve_focus {
+        stealth::set_preserving_focus(window, next)
+    } else {
+        write_platform_state(window, next)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let result = {
+        let _ = preserve_focus;
+        write_platform_state(window, next)
+    };
     if result.is_err() && next.click_through && !was_pinned {
         let _ = window.set_always_on_top(false);
     }
@@ -192,49 +212,132 @@ async fn set_stealth_state(
     click_through: bool,
     screen_capture_protection: bool,
     hide_from_taskbar: bool,
+    changed_field: Option<String>,
 ) -> Result<StealthState, String> {
     on_window_thread(window, move |window| {
-        write_state(
-            window,
-            StealthState {
-                click_through,
-                screen_capture_protection,
-                hide_from_taskbar,
-            },
-        )
+        let mut next = StealthState {
+            click_through,
+            screen_capture_protection,
+            hide_from_taskbar,
+        };
+        #[cfg(target_os = "macos")]
+        {
+            // A UI setting must not overwrite a shortcut's newer native state. Only apply the
+            // field the user changed; on startup restore appearance/privacy, never click-through.
+            if let Some(field) = changed_field.as_deref() {
+                let actual = actual_state(window)?;
+                next = match field {
+                    "clickThrough" => StealthState {
+                        click_through,
+                        ..actual
+                    },
+                    "screenCaptureProtection" => StealthState {
+                        screen_capture_protection,
+                        ..actual
+                    },
+                    "hideFromTaskbar" => StealthState {
+                        hide_from_taskbar,
+                        ..actual
+                    },
+                    _ => return Err("Unknown window setting".into()),
+                };
+            } else {
+                next.click_through = false;
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = changed_field;
+        write_state(window, next)
     })
     .await
 }
 
 /// The global shortcut flips click-through natively: while the window takes no focus the web view
 /// never sees the key press, so the switch has to move here and the title bar is told afterwards.
-fn toggle_click_through(app: &AppHandle) {
-    let mut next = read_state();
+fn toggle_click_through(app: &AppHandle) -> Result<StealthState, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Client window is unavailable")?;
+    let mut next = actual_state(&window)?;
     next.click_through = !next.click_through;
-
-    if let Some(window) = app.get_webview_window("main") {
-        // The shortcut also recovers a minimized, taskbar-hidden window.
-        if window.is_minimized().unwrap_or(false) {
-            next.click_through = false;
-            let _ = window.unminimize();
-            let _ = window.show();
-        }
-        if let Err(error) = write_state(&window, next) {
-            eprintln!("sharecode client: could not toggle click-through: {error}");
-            return;
-        }
-        // Turning click-through off has to give the window its activation back, or the title bar
-        // switch and the room stay dead until the next launch.
-        if !next.click_through {
-            let _ = window.set_focus();
-        }
+    // Windows retains its existing restore/focus behavior. On macOS the shortcut must
+    // preserve focus even when the client is active, in the background or minimized.
+    #[cfg(not(target_os = "macos"))]
+    if window.is_minimized().map_err(|e| e.to_string())? {
+        next.click_through = false;
+        window.unminimize().map_err(|e| e.to_string())?;
+        window.show().map_err(|e| e.to_string())?;
     }
+    let observed = write_state_with_focus_policy(&window, next, cfg!(target_os = "macos"))?;
+    let _ = app.emit("sharecode:stealth-state", observed);
+    // Turning click-through off has to give the window its activation back, or the title bar
+    // switch and the room stay dead until the next launch.
+    #[cfg(not(target_os = "macos"))]
+    if !observed.click_through {
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(observed)
+}
 
-    let _ = app.emit("sharecode:stealth-state", next);
+#[cfg(target_os = "macos")]
+fn recover_hotkey_window(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Client window is unavailable")?;
+    let previous = actual_state(&window).unwrap_or_else(|_| read_state());
+    // Apply false even when a partial OS failure makes the composite readback ambiguous.
+    let observed = write_state(
+        &window,
+        StealthState {
+            click_through: false,
+            ..previous
+        },
+    )?;
+    let _ = app.emit("sharecode:stealth-state", observed);
+    if previous.click_through || window.is_minimized().map_err(|e| e.to_string())? {
+        window.unminimize().map_err(|e| e.to_string())?;
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn get_client_hotkey_status(app: AppHandle) -> hotkey_macos::Status {
+    app.state::<hotkey_macos::Hotkey>().status()
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn request_client_hotkey_permission(window: WebviewWindow) -> Result<(), String> {
+    on_window_thread(window, |window| {
+        window.state::<hotkey_macos::Hotkey>().request_permission();
+        Ok(())
+    })
+    .await
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn open_client_hotkey_settings() -> Result<(), String> {
+    // Fixed destination only; no caller-provided URLs or shell invocation.
+    std::process::Command::new("/usr/bin/open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn test_client_hotkey(app: AppHandle) -> Result<(), String> {
+    app.state::<hotkey_macos::Hotkey>().test(&app)
 }
 
 /// Ctrl+Shift+F: the one shortcut the client registers. Works with zero UI focus, which is the
 /// point: it is the only way out of click-through.
+#[cfg(not(target_os = "macos"))]
 fn setup_shortcuts(app: &AppHandle) {
     let toggle = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyF);
     let result = app
@@ -243,7 +346,11 @@ fn setup_shortcuts(app: &AppHandle) {
             // Act on the press only: handling the release too would toggle it straight back.
             if event.state() == ShortcutState::Pressed {
                 let handle = app.clone();
-                let _ = app.run_on_main_thread(move || toggle_click_through(&handle));
+                let _ = app.run_on_main_thread(move || {
+                    if let Err(error) = toggle_click_through(&handle) {
+                        eprintln!("sharecode client: could not toggle click-through: {error}");
+                    }
+                });
             }
         });
     // Another program holding the same chord must not stop the client from launching: the title
@@ -257,12 +364,16 @@ fn setup_shortcuts(app: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    let builder = tauri::Builder::default();
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let handle = app.handle();
+            #[cfg(target_os = "macos")]
+            handle.manage(hotkey_macos::Hotkey::new(handle)?);
 
             // The main window already exists (tauri.conf.json creates it). Install the window
             // procedure and the default state before the web view can touch any window flag.
@@ -283,15 +394,53 @@ pub fn run() {
                 }
             }
 
+            #[cfg(not(target_os = "macos"))]
             setup_shortcuts(handle);
+            #[cfg(target_os = "macos")]
+            handle
+                .state::<hotkey_macos::Hotkey>()
+                .start(handle.clone())?;
             let _ = handle.emit("sharecode:stealth-state", read_state());
             Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            get_stealth_state,
-            set_stealth_state,
-            client_is_maximized
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running the ShareCode client");
+        });
+    #[cfg(target_os = "macos")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        get_stealth_state,
+        set_stealth_state,
+        client_is_maximized,
+        get_client_hotkey_status,
+        request_client_hotkey_permission,
+        open_client_hotkey_settings,
+        test_client_hotkey
+    ]);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        get_stealth_state,
+        set_stealth_state,
+        client_is_maximized
+    ]);
+    builder
+        .build(tauri::generate_context!())
+        .expect("error while building the ShareCode client")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<hotkey_macos::Hotkey>().stop();
+            }
+            #[cfg(target_os = "macos")]
+            if matches!(event, tauri::RunEvent::Reopen { .. }) {
+                // Explicitly opening the app again is a recovery action, unlike the
+                // focus-neutral shortcut (which leaves a minimized window minimized).
+                if let Err(error) = recover_hotkey_window(app) {
+                    eprintln!("sharecode client: reopen recovery failed: {error}");
+                }
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

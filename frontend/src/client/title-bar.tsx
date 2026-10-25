@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { useConnectionStore } from './connection'
 import { nodeHost } from './nodes'
 import { installUpdate, useUpdateStore } from './updater'
+import { useMacHotkey, watchMacHotkey } from './hotkey'
 import {
   appWindow,
   isMacOSClient,
@@ -120,6 +121,9 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
     recommended: t('client.titleBar.presetRecommended'),
   }
   const [isMaximized, setIsMaximized] = useState(false)
+  const hotkey = useMacHotkey()
+  const shortcutUnavailable = isMacOSClient && !hotkey.ready
+  const cannotEnableClickThrough = shortcutUnavailable && !clickThrough
 
   // Applies the saved pin on launch as well as every change.
   useEffect(() => {
@@ -128,6 +132,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
 
   // The native shortcut works without UI focus; subscribe before restoring saved preferences.
   useEffect(() => watchStealthShortcut(), [])
+  useEffect(() => watchMacHotkey(), [])
 
   useEffect(() => {
     if (error) toast.error(t('client.titleBar.stealthFailed'))
@@ -166,6 +171,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
             type="button"
             className="client-traffic-light"
             data-control="minimize"
+            disabled={shortcutUnavailable && hideFromTaskbar}
             onClick={() => void appWindow.minimize()}
             aria-label={t('client.titleBar.minimize')}
             title={t('client.titleBar.minimize')}
@@ -209,7 +215,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
           type="button"
           className="client-title-button"
           data-active={clickThrough}
-          disabled={!ready || busy}
+          disabled={!ready || busy || cannotEnableClickThrough}
           aria-keyshortcuts="Control+Shift+F"
           aria-pressed={clickThrough}
           onClick={() => setClickThrough(!clickThrough)}
@@ -231,7 +237,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
               <Ghost className="h-3.5 w-3.5" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-72 space-y-1 p-2">
+          <PopoverContent align="end" className="max-h-[var(--radix-popover-content-available-height)] w-72 space-y-1 overflow-y-auto p-2">
             <p className="px-1 pb-0.5 text-xs font-medium">{t('client.titleBar.windowSettings')}</p>
             <StealthRow
               icon={<EyeOff className="h-3.5 w-3.5" />}
@@ -244,8 +250,8 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
             <StealthRow
               icon={<MousePointer2Off className="h-3.5 w-3.5" />}
               label={t('client.titleBar.clickThrough')}
-              description={t('client.titleBar.clickThroughHint')}
-              disabled={!ready || busy}
+              description={isMacOSClient ? t('client.hotkey.clickThroughHint') : t('client.titleBar.clickThroughHint')}
+              disabled={!ready || busy || cannotEnableClickThrough}
               enabled={clickThrough}
               onToggle={() => setClickThrough(!clickThrough)}
             />
@@ -260,6 +266,36 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
             <p className="px-1 pt-0.5 text-[11px] leading-tight text-muted-foreground">
               {t('client.titleBar.stealthShortcut')}
             </p>
+            {isMacOSClient && (
+              <section aria-label={t('client.hotkey.title')} className="space-y-2 border-t border-border px-1 py-2">
+                <p role="status" data-testid="hotkey-status" className="text-xs font-medium">
+                  {t(`client.hotkey.${hotkey.phase === 'listening' && !hotkey.ready ? 'recovering' : hotkey.phase}`)}
+                </p>
+                <p className="text-[11px] leading-tight text-muted-foreground">{t('client.hotkey.hint')}</p>
+                <div className="flex flex-wrap gap-2">
+                  {hotkey.phase === 'permissionRequired' && (
+                    <button type="button" disabled={hotkey.busy} className="rounded border px-2 py-1 text-xs"
+                      onClick={() => void hotkey.run('request_client_hotkey_permission')}>
+                      {t('client.hotkey.enable')}
+                    </button>
+                  )}
+                  <button type="button" disabled={hotkey.busy} className="rounded border px-2 py-1 text-xs"
+                    onClick={() => void hotkey.run('open_client_hotkey_settings')}>
+                    {t('client.hotkey.settings')}
+                  </button>
+                  <button type="button" disabled={hotkey.busy || shortcutUnavailable || hotkey.testing} className="rounded border px-2 py-1 text-xs"
+                    onClick={() => void hotkey.run('test_client_hotkey')}>
+                    {t('client.hotkey.test')}
+                  </button>
+                </div>
+                {(hotkey.testing || hotkey.lastAction) && (
+                  <p role="status" className="text-[11px]">{t(`client.hotkey.${hotkey.testing ? 'testing' : hotkey.lastAction}`)}</p>
+                )}
+                {(hotkey.error || hotkey.commandError) && (
+                  <p role="alert" className="break-words text-[11px] text-destructive">{hotkey.commandError ?? hotkey.error}</p>
+                )}
+              </section>
+            )}
             <div className="space-y-2.5 border-t border-border px-1 pt-2">
               <p className="flex items-center gap-1 text-xs font-medium"><Blend className="h-3.5 w-3.5" />{t('client.titleBar.opacity')}</p>
               <div className="grid grid-cols-2 gap-1">

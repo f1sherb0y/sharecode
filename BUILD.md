@@ -209,6 +209,12 @@ workflow file of the tagged commit.
 
 ### macOS DMG without Apple Developer membership
 
+The macOS customer shortcut uses a native listen-only event tap (macOS 10.15+), with no
+global-hotkey fallback. Enable **Input Monitoring** from Window settings, then use **Test
+shortcut**. Ctrl+Shift+F accepts either modifier side and works inside/background to the app,
+without changing keyboard focus or restoring a minimized window. Reopening the app restores
+its window. See `notes/client-hotkey-macos.md` for native acceptance checks.
+
 Build a candidate universal installer (Apple silicon + Intel) on a Mac with the Command Line
 Tools, Rust, Python 3.10+ and Bun 1.3.14 installed:
 
