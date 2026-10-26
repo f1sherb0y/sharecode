@@ -29,8 +29,14 @@ The customer client uses a session-level `CGEventTap` with `listenOnly`; it neve
 ## Permission and diagnostic UI
 
 On the first launch without permission, the client opens **System Settings → Privacy & Security →
-Input Monitoring** and an opaque setup window. This guide is shown once per WebView profile;
-Window settings → Input Monitoring settings reopens it. The guide uses the running bundle's
+Input Monitoring** and an opaque setup window. Next (or Later to skip this step) proceeds to
+Screen Recording in the same window and opens that system settings page. The
+`sharecode-macos-permission-setup-v1` progress marker survives an OS-requested restart; completed
+permissions are skipped. Native permissions are rechecked on every launch, even after Done.
+The macOS main window stays hidden until both are ready (Screen Recording on 12.3+).
+Later closes the guide without opening the main window; reopening the app resumes setup.
+Window settings → Input Monitoring settings reopens the first step; Shared screen → Recording
+permission reopens the second step and its settings page. The guide uses the running bundle's
 actual path/name, including an isolated test app's identity. Drag its icon into the system list,
 then enable that app's switch. If it is already present, simply enable it. The **+** picker is
 available as a fallback. Disk-image/translocated copies and unbundled development runs do not
@@ -149,3 +155,138 @@ shutdown verification is pending that approval. Evidence is saved under `build/h
   720 × 692 window, icon positions, visible contents). This is layout evidence, not a newly
   released installer. Logs: `/tmp/sharecode-input-monitoring-{chromium,firefox,webkit}.log`
   and `/tmp/sharecode-input-monitoring-native-build.log`.
+
+## Sequential recording permission guide — 2026-10-26
+
+The same compact 360×350 helper serves both steps; its URL records the active step so WebView reloads
+also preserve it. No new app path can be supplied by the frontend. Screen Recording uses the
+same native copy-only file drag and installed-copy guard. The helper can only read capture
+status, never start capture. A successful drop or settings navigation never marks permission
+granted; status comes from the native preflight check. macOS below 12.3 skips the second step.
+The offline bilingual installation help describes both steps; the compact DMG background
+only shows the drag instruction and first-launch hint.
+
+Both steps use a compact card: step indicator, Settings shortcut, a prominent drag instruction
+with a hand-drawn curved arrow pointing outward, away from the app icon, one enable/restart hint, native status
+and footer actions. The arrow cannot intercept pointer events. English and Chinese normal states fit without scrolling;
+exceptional errors can scroll. The opaque helper remains independently movable.
+
+`PermissionPlacement.swift` reads System Settings' compositor bounds once, 0.6 seconds after
+opening a permission step. It places the guide beside Settings, trying above/below or another
+display when needed. There is no repeating position timer, so subsequent manual placement
+is preserved. This needs no Accessibility or Screen Recording permission, and
+never moves/resizes Settings. If no disjoint space exists (for example, full-screen Settings on
+a single display), it uses the on-screen corner with least overlap instead. Geometry tests
+cover all four sides, negative display coordinates, a second display and that fallback.
+
+## Permission gate and installer polish — 2026-10-26
+
+Resumed the interrupted 08:59 session's four requests. The installer background is now
+720×420 (with a 1440×840 Retina image): drag instruction, two icons and the first-launch hint.
+The guide's arrowhead is separated from the outward curve. Placement runs once per opened
+permission step, with no recurring position updates.
+
+The main window is initially hidden on macOS. Both launch and Finder reopen pass native
+permission checks; saved `done` progress cannot bypass them or prevent a permitted launch.
+Completing recording returns to Input Monitoring if that permission is still missing. Failed
+native checks leave the guide open. Shortcut toggling/recovery cannot reveal the main window
+before its first successful permission check; recovery after normal use remains available.
+
+Verification: 10 Rust tests, Swift policy/placement tests and both architecture typechecks,
+TypeScript/client production build, 4 i18n tests, and 23 UI tests in each of Chromium, Firefox
+and WebKit passed. Native isolated app `dev.sharecode.client.permission-gate-test` confirmed
+Input Monitoring denied and only the 360×350 guide visible; the 1100×761 main window stayed
+hidden both on launch and on Finder reopen. The isolated app was then stopped. Permission
+grants and real capture remain manual acceptance steps.
+
+Universal candidate: `build/macos-dist/0.2.2-universal-manual.nqwi0A/`. Both CPU architectures,
+ad-hoc signature, mounted app signature, DMG checksum and Finder layout verified. No version
+bump, commit, tag or publication was performed.
+
+
+## Pinning above other apps' native full-screen Spaces (2026-10-26)
+
+`native/WindowPinning.swift` prepares only the hidden customer main window as a nonactivating
+`NSPanel` before WebKit is attached and before its first show. `main_window_macos.rs` builds
+the native window from the existing config, prepares it, then attaches an auto-resizing WebView
+with the same label. This uses Tauri's macOS-only `unstable` child-WebView API; existing
+WebviewWindow commands and IPC retain their labels. Other platforms keep normal creation.
+The same Tauri-owned native object and delegate are retained.
+The runtime panel class preserves Tao 0.34's `focusable` Boolean at the exact original offset,
+plus its key/main eligibility and `sendEvent:` implementations (including background drag).
+Conversion requires a direct NSWindow subclass with exactly that one Boolean ivar, equal
+NSWindow/NSPanel base sizes, matching ivar offset and total instance size; an unexpected layout
+fails instead of reinterpreting incompatible memory. The permission guide and shared output
+are not converted. The panel style is installed once; toggling it on/off on a live window is
+avoided because AppKit's nonactivation/keyboard behavior is sensitive to that transition.
+
+The shared `set_pinned` path now uses this native controller on macOS for both the title-bar
+button and automatic pinning before click-through. It sets the floating level, all-Spaces and
+full-screen auxiliary collection flags, disallows full-screen tiling, and on macOS 13+ permits
+joining other applications. Conflicting collection flags are removed. It saves the prior
+collection behavior and level once, restores both on unpin, and verifies native state plus
+unchanged key/main/application activation and minimized state. Failed updates roll back.
+There is no activate/makeKey/orderFront call in a pin/unpin operation, no new global shortcut,
+no periodic focus enforcement and no added Accessibility permission. Existing Dock visibility
+remains independently controlled. `is_pinned` reads the actual panel, style, level and flags.
+
+Live verification on macOS 26.6.2 used two separate application identities from
+`bash frontend/scripts/build-fullscreen-pin-test-macos.sh`. The host entered an actual native
+full-screen Space (`styleMask.fullScreen == true`). The overlay exercises the production
+controller after converting a Tao-shaped NSWindow with a real focusable ivar and overrides.
+Its `isOnActiveSpace == true`, visible occlusion state, and pinned level/flags were confirmed
+while the other app remained frontmost/key. Pin/unpin restored the original flags and level;
+repeated pin/unpin preserved the host's focus. Both Regular (Dock shown) and Accessory (Dock
+hidden) policies passed. Click-through disabled mouse input and both key/main eligibility;
+restoring interaction restored them. Clicking and typing `fullscreen input works` into the
+overlay succeeded without taking the host out of its native full-screen Space. Reports are
+local ignored artifacts in `build/fullscreen-pin-test/`. This is native integration evidence,
+not just flag/type checks; other macOS versions, Stage Manager, multiple monitors and actual
+Tauri WebView/IME interaction across fullscreen apps still need broader manual coverage.
+
+Reproduction: launch the two built apps, put **Full-screen Test Host** into native full screen
+using its green control, and inspect **ShareCode Pin Test** above it. The overlay accepts
+`pin`, `unpin`, `accessory`, `regular`, `through`, `interactive`, `minimize`, `restore`, `quit`
+through `/tmp/sharecode-fullscreen-pin-test/command`. Current state is written to `host.json`
+and `overlay.json` there. These controls exist only in the separate native test executable,
+not the production client. Close both test processes after use.
+
+Reference: Apple's guidance distinguishes a nonactivating NSPanel from an ordinary NSWindow:
+https://developer.apple.com/forums/thread/826308 . The test confirmed the panel was necessary;
+flags and even a higher level on an ordinary NSWindow were insufficient. The floating level
+(3) sufficed in this test, so production does not use the screen-saver level (1000).
+
+### Real Tauri regression and fix (2026-10-27)
+
+The installed client's log recorded all eight Ctrl+Shift+F presses with a healthy event tap,
+then failed the automatic pin operation before click-through. A local real Tauri/WebKit probe
+reproduced the cause: attaching WebKit first wraps `TaoWindow` in `NSKVONotifying_TaoWindow`.
+The safe native-layout guard correctly refused that observed subclass. Earlier synthetic
+Tao-shaped tests had no WebKit and missed this lifecycle difference.
+
+Staging native creation before WebKit also exposed a separate optimized-Swift failure:
+`window as? NSPanel` after `object_setClass` reused the preceding negative type check.
+The object had changed class, but installation returned false before setting the style.
+After the layout-checked conversion we now reborrow the same pointer as NSPanel explicitly.
+We do not remove observers, copy KVO internals, match an OS-generated class name, or toggle
+nonactivation on an already-visible window. Runtime layout validation remains in place.
+
+`bash frontend/scripts/test-pinning-macos.sh --visible` reproduces the old-order failure and
+tests the production creation/controller paths with real WebKit IPC and optimized Swift.
+It cycles pin/unpin and focus-preserving click-through while hidden, shown, focused, resized,
+minimized/restored and in both Dock policies, then exits normally. The fixture uses
+`dev.sharecode.pinning-probe`, bundled local HTML and no event tap or privacy permissions.
+The standalone synthetic host/overlay is now compiled with `-O` as well.
+
+The real Tauri probe also passed above a separate native full-screen host on macOS 26.6.2:
+`--fullscreen-check` verified active-Space membership and visible occlusion while the host
+remained frontmost/key, then exercised pin/click-through without changing focus. The host's
+native full-screen style was read back before and after. Evidence: local build artifacts
+`pinning-fullscreen-real-tauri.log` and `pinning-fullscreen-host.json`. Test processes exited;
+no privacy permissions were requested. Actual physical shortcut delivery in the new packaged
+client remains a manual acceptance check (the installed old client's tap already received it).
+
+Native diagnostics include actual class/layout, style/collection flags, level, key/main/
+activation/minimized state and the precise failure branch (including pre-rollback state).
+The rotating hotkey log records initialization and the window before a recognized shortcut;
+native failures include these diagnostics. No ordinary keys or window contents are logged.

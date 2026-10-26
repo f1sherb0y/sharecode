@@ -41,6 +41,36 @@ fn application() -> Result<Retained<NSApplication>, String> {
     Ok(NSApplication::sharedApplication(main))
 }
 
+extern "C" {
+    fn sharecode_window_install_panel(window: *mut std::ffi::c_void) -> bool;
+    fn sharecode_window_set_pinned(window: *mut std::ffi::c_void, pinned: bool) -> bool;
+    fn sharecode_window_is_pinned(window: *mut std::ffi::c_void) -> bool;
+}
+
+pub fn set_pinned(window: &WebviewWindow, pinned: bool) -> Result<(), String> {
+    let native = native_window(window)?;
+    // SAFETY: native_window verifies main-thread access and Tauri keeps the NSWindow alive.
+    let applied = unsafe {
+        sharecode_window_set_pinned(native as *const NSWindow as *mut std::ffi::c_void, pinned)
+    };
+    if applied {
+        Ok(())
+    } else {
+        Err(format!(
+            "macOS panel pinning failed: {}",
+            crate::main_window_macos::diagnostics(
+                native as *const NSWindow as *mut std::ffi::c_void
+            )
+        ))
+    }
+}
+
+pub fn is_pinned(window: &WebviewWindow) -> Result<bool, String> {
+    let native = native_window(window)?;
+    // SAFETY: same lifetime and main-thread guarantee as set_pinned.
+    Ok(unsafe { sharecode_window_is_pinned(native as *const NSWindow as *mut std::ffi::c_void) })
+}
+
 fn remember_frontmost() {
     if let Some(app) = NSWorkspace::sharedWorkspace().frontmostApplication() {
         if app != NSRunningApplication::currentApplication() && !app.isTerminated() {
@@ -51,6 +81,18 @@ fn remember_frontmost() {
 
 pub fn attach(window: &WebviewWindow) -> Result<(), String> {
     let native = native_window(window)?;
+    // SAFETY: only the hidden main Tauri window is converted, on AppKit's thread.
+    // Native code checks the object layout and preserves Tao's focusable ivar/methods.
+    if !unsafe {
+        sharecode_window_install_panel(native as *const NSWindow as *mut std::ffi::c_void)
+    } {
+        return Err(format!(
+            "Unable to prepare the native full-screen overlay panel: {}",
+            crate::main_window_macos::diagnostics(
+                native as *const NSWindow as *mut std::ffi::c_void
+            )
+        ));
+    }
     // Drag without activating first: the JS drag region only sees events once the
     // window is key, so an inactive window needed one click before it could move.
     // Window-background dragging happens in AppKit on the very first press.

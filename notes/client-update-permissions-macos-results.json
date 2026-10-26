@@ -1,0 +1,244 @@
+{
+  "date": "2026-10-26",
+  "os": "macOS 26.6.2 (25G83)",
+  "architecture": "arm64",
+  "testIdentifier": "dev.sharecode.client.update-permission-test",
+  "productionTouched": false,
+  "updater": "tauri-plugin-updater 2.10.1",
+  "identityChecks": {
+    "adhoc": {
+      "requirementA": "cdhash H\"1f121b42d1879a88b4ed3e9bc86647ca8dbc849a\"",
+      "bMatchesA": false,
+      "output": "test-requirement: code failed to satisfy specified code requirement(s)\n"
+    },
+    "selfsigned": {
+      "requirementA": "identifier \"dev.sharecode.client.update-permission-test\" and certificate leaf = H\"3e2ddc0395dc2954339e89c8f0d973ce2da298e6\"",
+      "bMatchesA": true,
+      "output": ""
+    }
+  },
+  "samples": [
+    {
+      "version": "0.2.2",
+      "label": "main",
+      "application": {
+        "name": "ShareCode Update Permission Test",
+        "path": "/Users/admin/Code/sharecode/build/update-permission-test/installed/ShareCode Update Permission Test.app",
+        "canDrag": true
+      },
+      "hotkey": {
+        "revision": 1,
+        "ready": true,
+        "phase": "listening",
+        "received": 0,
+        "testing": false,
+        "lastAction": null,
+        "error": null
+      },
+      "recording": {
+        "displays": [],
+        "permission": true,
+        "phase": "idle",
+        "running": false,
+        "supported": true
+      },
+      "timestamp": 1793020831406,
+      "signingMode": "adhoc"
+    },
+    {
+      "version": "0.2.3",
+      "label": "main",
+      "application": {
+        "name": "ShareCode Update Permission Test",
+        "path": "/Users/admin/Code/sharecode/build/update-permission-test/installed/ShareCode Update Permission Test.app",
+        "canDrag": true
+      },
+      "hotkey": {
+        "revision": 1,
+        "ready": false,
+        "phase": "permissionRequired",
+        "received": 0,
+        "testing": false,
+        "lastAction": null,
+        "error": null
+      },
+      "recording": {
+        "displays": [],
+        "permission": false,
+        "phase": "permissionRequired",
+        "running": false,
+        "supported": true
+      },
+      "timestamp": 1793020839665,
+      "signingMode": "adhoc"
+    },
+    {
+      "version": "0.2.2",
+      "label": "main",
+      "application": {
+        "name": "ShareCode Update Permission Test",
+        "path": "/Users/admin/Code/sharecode/build/update-permission-test/installed/ShareCode Update Permission Test.app",
+        "canDrag": true
+      },
+      "hotkey": {
+        "revision": 1,
+        "ready": true,
+        "phase": "listening",
+        "received": 0,
+        "testing": false,
+        "lastAction": null,
+        "error": null
+      },
+      "recording": {
+        "displays": [],
+        "permission": true,
+        "phase": "idle",
+        "running": false,
+        "supported": true
+      },
+      "timestamp": 1793021024500,
+      "signingMode": "selfsigned"
+    },
+    {
+      "version": "0.2.3",
+      "label": "main",
+      "application": {
+        "name": "ShareCode Update Permission Test",
+        "path": "/Users/admin/Code/sharecode/build/update-permission-test/installed/ShareCode Update Permission Test.app",
+        "canDrag": true
+      },
+      "hotkey": {
+        "revision": 1,
+        "ready": true,
+        "phase": "listening",
+        "received": 0,
+        "testing": false,
+        "lastAction": null,
+        "error": null
+      },
+      "recording": {
+        "displays": [],
+        "permission": true,
+        "phase": "idle",
+        "running": false,
+        "supported": true
+      },
+      "timestamp": 1793021053755,
+      "signingMode": "selfsigned"
+    }
+  ],
+  "nativeStartups": [
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": false,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 31707,
+      "unixMs": 1793018971523
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": true,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 32216,
+      "unixMs": 1793020703993
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": true,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 32232,
+      "unixMs": 1793020776543
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": true,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 32243,
+      "unixMs": 1793020802992
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": false,
+        "secureInput": false,
+        "version": "0.2.3"
+      },
+      "event": "startup",
+      "pid": 32267,
+      "unixMs": 1793020832997
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": false,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 32290,
+      "unixMs": 1793020878144
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": true,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 32312,
+      "unixMs": 1793020934996
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": true,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 32324,
+      "unixMs": 1793020983019
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": true,
+        "secureInput": false,
+        "version": "0.2.2"
+      },
+      "event": "startup",
+      "pid": 32332,
+      "unixMs": 1793021004520
+    },
+    {
+      "details": {
+        "identifier": "dev.sharecode.client.update-permission-test",
+        "permission": true,
+        "secureInput": false,
+        "version": "0.2.3"
+      },
+      "event": "startup",
+      "pid": 32354,
+      "unixMs": 1793021026423
+    }
+  ],
+  "cleanupPermissionReset": "Successfully reset All approval status for dev.sharecode.client.update-permission-test\nSuccessfully reset All approval status for dev.sharecode.client.update-permission-test\nSuccessfully reset All approval status for dev.sharecode.client.update-permission-test\nSuccessfully reset All approval status for dev.sharecode.client.update-permission-test\nSuccessfully reset All approval status for dev.sharecode.client.update-permission-test\nSuccessfully reset All approval status for dev.sharecode.client.update-permission-test\nSuccessfully reset All approval status for dev.sharecode.client.update-permission-test",
+  "cleanupArchive": "/Users/admin/.Trash/ShareCode-Update-Permission-Test-20261026-212440"
+}

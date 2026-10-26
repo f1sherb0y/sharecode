@@ -1,6 +1,8 @@
 import { useEffect, useState, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { ScreenShare } from 'lucide-react'
+import { ScreenShareMenu } from './screen-share'
 import { ArrowDownToLine, Blend, Copy, EyeOff, Ghost, Maximize2, Minus, MonitorOff, MousePointer2, MousePointer2Off, Pin, Square, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ShareCodeLogo } from '@/components/share-code-logo'
@@ -212,6 +214,20 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
       <div ref={toolbarRef} className="client-toolbar-host" />
       <div className="client-window-controls flex h-full shrink-0 items-center">
         <UpdateButton />
+
+        {isMacOSClient && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" className="client-title-button"
+                aria-label={t('client.titleBar.screenShare')} title={t('client.titleBar.screenShare')}>
+                <ScreenShare className="h-3.5 w-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 max-h-[calc(100dvh-3rem)] overflow-y-auto p-2">
+              <ScreenShareMenu />
+            </PopoverContent>
+          </Popover>
+        )}
 
         {/* Click-through lives directly on the bar: it is the switch used most, and the one whose
             state has to be visible at a glance once the window stops taking input. */}

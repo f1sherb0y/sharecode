@@ -14,7 +14,7 @@ with DSStore.open(str(volume / ".DS_Store"), "r") as store:
     assert alias.target.filename == ".background.tiff", "Background alias must point inside the DMG"
     assert (volume / alias.target.filename).is_file(), "Background is missing"
     assert view["iconSize"] == 96 and view["arrangeBy"] == "none"
-    assert window["WindowBounds"] == "{{160, 60}, {720, 692}}"
+    assert window["WindowBounds"] == "{{160, 60}, {720, 452}}"
     for key in ["ShowStatusBar", "ShowToolbar", "ShowSidebar", "ShowPathbar", "ShowTabView"]:
         assert not window[key], f"Unexpected Finder chrome: {key}"
     assert store["ShareCode Client.app"]["Iloc"] == (190, 210)

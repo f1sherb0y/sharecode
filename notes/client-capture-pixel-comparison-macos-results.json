@@ -1,0 +1,110 @@
+[
+  {
+    "cpuMsPerComparison": 0.39014000000000004,
+    "height": 1080,
+    "iterations": 100,
+    "method": "memcmp",
+    "scenario": "identical",
+    "wallMsPerComparison": 0.39010541629977524,
+    "width": 1920
+  },
+  {
+    "cpuMsPerComparison": 0.06217,
+    "height": 1080,
+    "iterations": 100,
+    "method": "Metal",
+    "scenario": "identical",
+    "wallMsPerComparison": 0.5547583330189809,
+    "width": 1920
+  },
+  {
+    "cpuMsPerComparison": 0.002360000000000001,
+    "height": 1080,
+    "iterations": 100,
+    "method": "memcmp",
+    "scenario": "first-pixel",
+    "wallMsPerComparison": 0.0023612496443092823,
+    "width": 1920
+  },
+  {
+    "cpuMsPerComparison": 0.05935999999999996,
+    "height": 1080,
+    "iterations": 100,
+    "method": "Metal",
+    "scenario": "first-pixel",
+    "wallMsPerComparison": 0.567601666552946,
+    "width": 1920
+  },
+  {
+    "cpuMsPerComparison": 0.39228999999999997,
+    "height": 1080,
+    "iterations": 100,
+    "method": "memcmp",
+    "scenario": "last-pixel",
+    "wallMsPerComparison": 0.3925187501590699,
+    "width": 1920
+  },
+  {
+    "cpuMsPerComparison": 0.05962000000000023,
+    "height": 1080,
+    "iterations": 100,
+    "method": "Metal",
+    "scenario": "last-pixel",
+    "wallMsPerComparison": 0.5178974999580532,
+    "width": 1920
+  },
+  {
+    "cpuMsPerComparison": 1.65926,
+    "height": 2160,
+    "iterations": 100,
+    "method": "memcmp",
+    "scenario": "identical",
+    "wallMsPerComparison": 1.6596237500198185,
+    "width": 3840
+  },
+  {
+    "cpuMsPerComparison": 0.10048999999999975,
+    "height": 2160,
+    "iterations": 100,
+    "method": "Metal",
+    "scenario": "identical",
+    "wallMsPerComparison": 1.5527070831740275,
+    "width": 3840
+  },
+  {
+    "cpuMsPerComparison": 0.003920000000000035,
+    "height": 2160,
+    "iterations": 100,
+    "method": "memcmp",
+    "scenario": "first-pixel",
+    "wallMsPerComparison": 0.003911666572093964,
+    "width": 3840
+  },
+  {
+    "cpuMsPerComparison": 0.11653000000000023,
+    "height": 2160,
+    "iterations": 100,
+    "method": "Metal",
+    "scenario": "first-pixel",
+    "wallMsPerComparison": 1.9277495832648128,
+    "width": 3840
+  },
+  {
+    "cpuMsPerComparison": 2.6192900000000003,
+    "height": 2160,
+    "iterations": 100,
+    "method": "memcmp",
+    "scenario": "last-pixel",
+    "wallMsPerComparison": 2.653895000112243,
+    "width": 3840
+  },
+  {
+    "cpuMsPerComparison": 0.12683,
+    "height": 2160,
+    "iterations": 100,
+    "method": "Metal",
+    "scenario": "last-pixel",
+    "wallMsPerComparison": 1.5346687502460554,
+    "width": 3840
+  }
+]

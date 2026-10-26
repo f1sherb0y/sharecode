@@ -3,7 +3,8 @@ name: Client release
 # A client-v<version> tag builds the customer client for Windows and macOS, signs its updates and
 # uploads the files to that version's draft in 管理后台 → 客户端发布. Publishing stays a manual
 # click there: the CI token can open drafts and add files to them, nothing else.
-# Run by hand, it builds the same installers unsigned as artifacts and uploads nothing.
+# Run by hand, it omits minisign updater artifacts and uploads nothing to the release server.
+# macOS app code signatures always use the fixed certificate.
 on:
   push:
     tags: ['client-v*']
@@ -81,6 +82,8 @@ jobs:
           python-version: '3.13'
       - name: Build the universal DMG
         env:
+          SHARECODE_MACOS_CERTIFICATE_BASE64: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_BASE64 }}
+          SHARECODE_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_PASSWORD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         run: scripts/build-client-macos.sh ${{ github.event_name == 'push' && '--signed-updates' || '' }}

@@ -1,0 +1,7 @@
+{
+  "productName": "ShareCode Pinning Probe",
+  "identifier": "dev.sharecode.pinning-probe",
+  "build": { "frontendDist": "web" },
+  "app": { "windows": [], "macOSPrivateApi": true },
+  "bundle": { "active": false, "icon": ["../../../../src-tauri/icons/32x32.png"] }
+}

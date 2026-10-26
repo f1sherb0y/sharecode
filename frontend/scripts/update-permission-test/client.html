@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>ShareCode 本机更新权限实验</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost http://127.0.0.1:18766">
+<style>body{font:14px system-ui;background:#fff;color:#171717;padding:12px}button{padding:8px;margin:3px}pre{white-space:pre-wrap;font-size:12px}p{overflow-wrap:anywhere}</style>
+<b>ShareCode 本机更新权限实验</b>
+<p id="version"></p><p id="path"></p>
+<button id="input">输入监控设置</button><button id="recording">录屏设置</button>
+<button id="main">显示测试主窗口</button><button id="update">安装本机 B 版本</button>
+<pre id="status">读取实际客户端原生状态…</pre><pre id="error"></pre>
+<script type="module" src="./probe.js"></script>

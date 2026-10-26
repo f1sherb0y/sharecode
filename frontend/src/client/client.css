@@ -2,34 +2,61 @@
 .input-monitoring-setup {
   height: 100dvh;
   overflow-y: auto;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
   background: var(--client-base-background);
   color: var(--client-base-foreground);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
 }
-.input-monitoring-setup header { margin-bottom: 20px; }
-.input-monitoring-symbol { display: inline-flex; padding: 8px; border-radius: 12px; background: var(--client-base-muted); }
-.input-monitoring-setup h1 { margin: 10px 0 6px; font-size: 21px; font-weight: 650; letter-spacing: -.5px; }
-.input-monitoring-setup header p, .input-monitoring-fallback { color: var(--client-base-muted-foreground); }
-.input-monitoring-steps { margin: 14px 0; list-style: none; padding: 0; }
-.input-monitoring-steps li { display: flex; gap: 10px; margin: 12px 0; }
-.input-monitoring-steps li > span { display: grid; place-content: center; flex: 0 0 22px; height: 22px; border-radius: 50%; background: var(--client-base-muted); font-size: 11px; font-weight: 650; }
-.input-monitoring-steps button { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--client-base-primary); font-weight: 600; }
-.input-monitoring-app { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; border: 1px dashed var(--client-border-solid); border-radius: 16px; background: var(--client-base-muted); cursor: grab; touch-action: none; user-select: none; }
+.permission-setup-progress { display: flex; gap: 8px; margin-bottom: 6px; color: var(--client-base-muted-foreground); font-size: 11px; }
+.permission-setup-progress [data-active="true"] { color: var(--client-base-foreground); font-weight: 600; }
+.permission-setup-heading { display: flex; align-items: center; gap: 7px; }
+.input-monitoring-symbol { display: inline-flex; flex-shrink: 0; }
+.input-monitoring-setup h1 { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.3px; }
+.permission-setup-open { display: flex; align-items: center; gap: 2px; flex-shrink: 0; color: var(--client-base-muted-foreground); font-size: 11px; }
+.permission-setup-path { margin-top: 5px; color: var(--client-base-muted-foreground); font-size: 11px; }
+.permission-setup-drag { position: relative; }
+.permission-setup-drag-instruction { display: flex; align-items: center; min-height: 38px; margin: 0 0 9px 52px; color: #a34616; font-size: 13px; line-height: 1.45; font-weight: 650; }
+[data-theme="dark"] .permission-setup-drag-instruction { color: #ffb080; }
+.permission-setup-drag-arrow { position: absolute; left: 11px; top: 2px; width: 40px; height: 58px; pointer-events: none; color: #bf581f; }
+[data-theme="dark"] .permission-setup-drag-arrow { color: #ffb080; }
+.permission-setup-drag-arrow path { fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+.input-monitoring-app { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px; border: 1px dashed var(--client-border-solid); border-radius: 10px; background: var(--client-base-muted); cursor: grab; touch-action: none; user-select: none; }
 .input-monitoring-app:active { cursor: grabbing; }
-.input-monitoring-app > span { flex: 1; text-align: left; overflow-wrap: anywhere; }
+.input-monitoring-app > span { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
 .input-monitoring-app strong { display: block; font-weight: 600; }
-.input-monitoring-app small { display: block; margin-top: 3px; color: var(--client-base-muted-foreground); }
-.input-monitoring-fallback { margin-top: 8px; font-size: 12px; }
-.input-monitoring-status { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-radius: 10px; background: var(--client-base-muted); font-weight: 500; }
-.input-monitoring-result, .input-monitoring-setup [role="alert"] { margin-top: 8px; overflow-wrap: anywhere; }
+.input-monitoring-app small { display: block; margin-top: 2px; color: var(--client-base-muted-foreground); font-size: 11px; }
+.input-monitoring-fallback { color: var(--client-base-muted-foreground); font-size: 11px; }
+.input-monitoring-status { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.input-monitoring-status svg { flex-shrink: 0; }
+.input-monitoring-result, .input-monitoring-setup [role="alert"] { font-size: 11px; overflow-wrap: anywhere; }
 .input-monitoring-setup [role="alert"] { color: var(--client-base-destructive); }
-.input-monitoring-setup footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-.input-monitoring-setup footer button { padding: 8px 14px; border: 1px solid var(--client-border-solid); border-radius: 9px; }
+.input-monitoring-setup footer { display: flex; justify-content: flex-end; gap: 6px; margin-top: auto; padding-top: 2px; }
+.input-monitoring-setup footer button { padding: 6px 9px; border: 1px solid var(--client-border-solid); border-radius: 7px; font-size: 11px; white-space: nowrap; }
 .input-monitoring-setup footer .input-monitoring-primary { background: var(--client-base-primary); color: var(--client-base-primary-foreground); border-color: transparent; }
 .input-monitoring-setup button:disabled { opacity: .5; cursor: default; }
-.input-monitoring-setup button:focus-visible { outline: 2px solid var(--client-base-primary); outline-offset: 3px; }
+.input-monitoring-setup button:focus-visible { outline: 2px solid var(--client-base-primary); outline-offset: 2px; }
+
+.screen-share-menu { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.screen-share-menu h2 { margin: 0 0 5px; font-size: 12px; font-weight: 500; }
+.screen-share-menu header p, .screen-share-detail { color: var(--color-muted-foreground); line-height: 1.5; }
+.screen-share-exclusions { align-items: flex-start; }
+.screen-share-exclusions svg { flex-shrink: 0; margin-top: 2px; }
+.screen-share-exclusions strong { font-weight: 500; }
+.screen-share-exclusions p { margin-top: 3px; font-size: 11px; color: var(--color-muted-foreground); }
+.screen-share-display label { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-weight: 500; }
+.screen-share-display > div { display: flex; gap: 6px; }
+.screen-share-display-options { max-height: var(--radix-select-content-available-height); }
+.screen-share-detail { margin: 0; font-size: 11px; }
+.screen-share-status { display: flex; align-items: center; gap: 7px; padding: 4px; font-size: 11px; }
+.screen-share-status > span { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.screen-share-status[data-live="true"] > span { color: #22a06b; }
+.screen-share-menu [role="alert"] { color: var(--color-destructive); overflow-wrap: anywhere; }
+.screen-share-menu footer { display: flex; gap: 6px; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 9px; }
+
 
 /* The native window is transparent so the client can fade, text and background independently
    (title bar opacity control; app.tsx sets --client-text-alpha and --client-bg-alpha on <body>,

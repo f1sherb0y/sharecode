@@ -3,6 +3,11 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# Import only the pinned identity, in a temporary keychain owned by this invocation.
+if [[ -z "${SHARECODE_SIGNING_KEYCHAIN:-}" ]]; then
+  exec python3 "$root/scripts/macos-signing.py" run -- bash "$0" "$@"
+fi
+identity=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha1"])' "$root/docs/macos/signing-identity.json")
 target=universal-apple-darwin
 updates=false
 while [[ $# -gt 0 ]]; do
@@ -33,9 +38,9 @@ packaging_env="$root/build/dmg-tools"
 "$packaging_env/bin/python" -m pip install --disable-pip-version-check -r "$root/scripts/macos-dmg-requirements.txt"
 rustup target add "${targets[@]}"
 
-# This pipeline is explicitly ad-hoc. Never pick up Apple credentials from a local shell.
+# Use the fixed self-signed certificate. No Apple account or notarization credentials.
 unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_PATH
-export APPLE_SIGNING_IDENTITY=-
+export APPLE_SIGNING_IDENTITY="$identity"
 export CARGO_TARGET_DIR="$root/frontend/src-tauri-client/target"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 cd "$root/frontend"
@@ -43,12 +48,12 @@ bun install --frozen-lockfile
 cargo test --locked --manifest-path src-tauri-client/Cargo.toml
 # beforeBuildCommand runs the complete TypeScript + client production build (including scope guard).
 bun run client:tauri build --ci --target "$target" --bundles app \
-  --config "{\"bundle\":{\"createUpdaterArtifacts\":$updates,\"macOS\":{\"signingIdentity\":\"-\"}}}" -- --locked
+  --config "{\"bundle\":{\"createUpdaterArtifacts\":$updates,\"macOS\":{\"signingIdentity\":\"$identity\"}}}" -- --locked
 
 bundle="$CARGO_TARGET_DIR/$target/release/bundle/macos"
 app="$bundle/ShareCode Client.app"
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
-codesign --verify --deep --strict --verbose=2 "$app"
+python3 "$root/scripts/macos-signing.py" verify "$app"
 # Check the native architectures, not just the filename.
 for cpu in "${targets[@]}"; do
   case "$cpu" in aarch64-*) cpu=arm64 ;; x86_64-*) cpu=x86_64 ;; esac
@@ -74,7 +79,7 @@ dmg="$work/artifacts/$name.dmg"
 hdiutil verify "$dmg"
 hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg" >/dev/null
 mounted=true
-codesign --verify --deep --strict --verbose=2 "$mountpoint/ShareCode Client.app"
+python3 "$root/scripts/macos-signing.py" verify "$mountpoint/ShareCode Client.app"
 [[ -f "$mountpoint/.background.tiff" && -f "$mountpoint/.DS_Store" && "$(readlink "$mountpoint/Applications")" == /Applications ]]
 "$packaging_env/bin/python" "$root/scripts/verify-macos-dmg.py" "$mountpoint"
 hdiutil detach "$mountpoint" >/dev/null
@@ -84,6 +89,10 @@ if [[ "$updates" == true ]]; then
   # Tauri creates the signed .app.tar.gz. The release server also requires a .sig for the DMG.
   cp "$bundle/ShareCode Client.app.tar.gz" "$work/artifacts/$name.app.tar.gz"
   cp "$bundle/ShareCode Client.app.tar.gz.sig" "$work/artifacts/$name.app.tar.gz.sig"
+  # Also verify the exact app inside the updater archive, after minisign generation.
+  mkdir "$work/update-check"
+  tar -xzf "$work/artifacts/$name.app.tar.gz" -C "$work/update-check"
+  python3 "$root/scripts/macos-signing.py" verify "$work/update-check/ShareCode Client.app"
   bun run tauri signer sign "$dmg"
 fi
 cd "$root"
@@ -95,7 +104,7 @@ ShareCode Client $version
 Target: $target
 Source commit: $commit
 Working tree has changes: $dirty
-Apple signature: ad-hoc (not notarized; first launch needs Open Anyway)
+macOS signature: fixed self-signed certificate $identity (not notarized; first launch needs Open Anyway)
 Updater artifacts: $updates
 Built at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')
 Candidate build only. Run just predeploy before publishing/deploying.

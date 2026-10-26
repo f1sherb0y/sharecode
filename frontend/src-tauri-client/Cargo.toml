@@ -30,6 +30,8 @@ serde_json = "1.0"
 tauri-plugin-global-shortcut = "~2.3.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# Build the native panel before attaching WebKit and its KVO observers.
+tauri = { version = "~2.10.3", features = ["unstable"] }
 objc2 = "0.6.3"
 block2 = "0.6.2"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSWindow", "NSScreen", "NSWorkspace", "NSRunningApplication"] }

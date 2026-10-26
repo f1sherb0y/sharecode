@@ -60,6 +60,9 @@
     "windows": {
       "certificateThumbprint": null,
       "timestampUrl": null
+    },
+    "macOS": {
+      "signingIdentity": "66B574D33D84596E3E1CC1BEA26DAF42570BA472"
     }
   },
   "plugins": {

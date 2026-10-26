@@ -1,0 +1,152 @@
+{
+  "machine": "Apple M2",
+  "os": "macOS 26.6.2",
+  "titlebarObservations": {
+    "apps": "purple sharing control",
+    "windows": "purple sharing control",
+    "apps-menu": "purple sharing control",
+    "exclude": "normal traffic lights",
+    "snapshot": "normal traffic lights",
+    "production": "normal traffic lights"
+  },
+  "observedBy": "Native app screenshots through CUA during capture",
+  "runs": {
+    "apps": {
+      "frames": 458,
+      "fps": 28.865090996149657,
+      "errors": 0,
+      "greenSamples": 2420,
+      "excludedMagentaSamples": 0
+    },
+    "exclude": {
+      "frames": 590,
+      "fps": 28.095602047805976,
+      "errors": 0,
+      "greenSamples": 2421,
+      "excludedMagentaSamples": 0
+    },
+    "windows": {
+      "frames": 6372,
+      "fps": 29.24247398528306,
+      "errors": 0,
+      "greenSamples": 2417,
+      "excludedMagentaSamples": 0
+    },
+    "apps-menu": {
+      "frames": 1484,
+      "fps": 29.21241672388266,
+      "errors": 0,
+      "greenSamples": 2418,
+      "excludedMagentaSamples": 0
+    },
+    "snapshot-long": {
+      "frames": 3201,
+      "fps": 29.91694806468931,
+      "errors": 0,
+      "greenSamples": 2419,
+      "excludedMagentaSamples": 0
+    },
+    "snapshot-4k": {
+      "frames": 2080,
+      "fps": 29.160296720425695,
+      "errors": 0,
+      "greenSamples": 4127,
+      "excludedMagentaSamples": 0,
+      "distinctOutputSamples": 137,
+      "maximumExcludedMagenta": 0,
+      "production": {}
+    },
+    "production-wemeet": {
+      "frames": 44,
+      "fps": 0.9523758203393371,
+      "errors": 0,
+      "greenSamples": 4149,
+      "excludedMagentaSamples": 0,
+      "distinctOutputSamples": 44,
+      "maximumExcludedMagenta": 0,
+      "production": {
+        "displays": [
+          {
+            "height": 1112,
+            "id": 1,
+            "width": 1710
+          }
+        ],
+        "outputDisplay": 35,
+        "outputHeight": 2160,
+        "outputWidth": 3320,
+        "permission": true,
+        "phase": "sharing",
+        "running": true,
+        "selectedDisplay": 1,
+        "supported": true,
+        "virtualDisplaySupported": true
+      }
+    },
+    "production-restarted": {
+      "frames": 58,
+      "fps": 0.959731041665567,
+      "errors": 0,
+      "greenSamples": 4142,
+      "excludedMagentaSamples": 0,
+      "distinctOutputSamples": 58,
+      "maximumExcludedMagenta": 0,
+      "production": {
+        "displays": [
+          {
+            "height": 1112,
+            "id": 1,
+            "width": 1710
+          }
+        ],
+        "outputDisplay": 36,
+        "outputHeight": 2160,
+        "outputWidth": 3320,
+        "permission": true,
+        "phase": "sharing",
+        "running": true,
+        "selectedDisplay": 1,
+        "supported": true,
+        "virtualDisplaySupported": true
+      }
+    },
+    "production-revoked": {
+      "frames": 12,
+      "fps": 0.35784588636170767,
+      "errors": 0,
+      "greenSamples": 4142,
+      "excludedMagentaSamples": 0,
+      "distinctOutputSamples": 12,
+      "maximumExcludedMagenta": 0,
+      "production": {
+        "displays": [
+          {
+            "height": 1112,
+            "id": 1,
+            "width": 1710
+          }
+        ],
+        "error": "用户拒绝了应用程序、窗口、显示器捕捉的TCC",
+        "permission": true,
+        "phase": "error",
+        "running": false,
+        "selectedDisplay": 1,
+        "supported": true,
+        "virtualDisplaySupported": true
+      }
+    }
+  },
+  "cleanup": {
+    "screenRecordingReset": "dev.sharecode.capture-filter-test",
+    "bundlesMovedToTrash": [
+      "ShareCode Capture Filter Test.app",
+      "ShareCode Filter Source.app",
+      "Synthetic Excluded Meeting Helper.app"
+    ],
+    "trashPath": "/Users/admin/.Trash/ShareCode-Capture-Indicator-Tests-20261026-232426",
+    "onlineDisplaysAfterStop": [
+      1
+    ],
+    "settingsVerifiedNoTestEntry": true
+  }
+}

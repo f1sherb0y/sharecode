@@ -38,12 +38,17 @@ jobs:
           for engine in chromium firefox webkit; do
             UI_BROWSER="$engine" node --test tests/client-chrome.test.mjs
           done
-      - name: Build ad-hoc-signed universal DMG
+      - name: Build universal DMG with fixed certificate
         if: ${{ !inputs.signed_updates }}
+        env:
+          SHARECODE_MACOS_CERTIFICATE_BASE64: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_BASE64 }}
+          SHARECODE_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_PASSWORD }}
         run: scripts/build-client-macos.sh
       - name: Build DMG and signed updater artifacts
         if: ${{ inputs.signed_updates }}
         env:
+          SHARECODE_MACOS_CERTIFICATE_BASE64: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_BASE64 }}
+          SHARECODE_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_PASSWORD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: scripts/build-client-macos.sh --signed-updates

@@ -1076,6 +1076,56 @@
     "remove": "移除"
   },
   "client": {
+    "permissionSetup": {
+      "settings": "设置",
+      "inputPath": "隐私与安全性 → 输入监控",
+      "recordingPath": "隐私与安全性 → 录屏与系统录音",
+      "enableHint": "打开 App 旁的开关，按提示重启。无法拖入时可点 + 添加。",
+      "dragInstruction": "把下方应用图标拖入系统设置的权限列表",
+      "progress": "权限设置进度",
+      "inputStep": "1 输入监控",
+      "recordingStep": "2 屏幕录制",
+      "next": "下一步",
+      "back": "上一步"
+    },
+    "recordingSetup": {
+      "title": "开启屏幕共享",
+      "description": "允许此应用生成排除指定窗口的共享画面。",
+      "openStep": "打开“隐私与安全性 → 录屏与系统录音”（旧版系统为“屏幕录制”）。",
+      "openSettings": "打开录屏权限",
+      "dragApp": "将 {{name}} 拖入屏幕录制",
+      "enableStep": "打开应用旁的开关。按系统提示退出并重新打开，重启后会继续引导。",
+      "ready": "屏幕录制权限已开启",
+      "required": "需要屏幕录制权限"
+    },
+    "screenShare": {
+      "title": "共享画面",
+      "instructions": "在会议软件中共享屏幕，选择 secondary monitor。",
+      "excluded": "始终排除",
+      "apps": "腾讯会议 · VooV Meeting · ShareCode",
+      "display": "屏幕",
+      "noDisplays": "刷新以查找屏幕",
+      "displayOption": "屏幕 {{number}} · {{width}} × {{height}}",
+      "refresh": "刷新屏幕",
+      "format": "最高 4K · 30 fps · 无音频",
+      "background": "过滤画面在虚拟显示器上全屏输出，不占用当前屏幕。停止共享会移除虚拟显示器。",
+      "permissionHint": "在录屏权限设置中允许当前应用，然后按 macOS 提示重启。",
+      "settings": "录屏权限",
+      "start": "开始共享",
+      "stop": "停止共享",
+      "phase": {
+        "idle": "已就绪",
+        "loading": "正在查找屏幕…",
+        "permissionRequired": "需要屏幕录制权限",
+        "starting": "正在准备过滤画面…",
+        "sharing": "正在输出过滤画面",
+        "stopped": "已停止，虚拟显示器已移除。",
+        "error": "采集已停止",
+        "unsupported": "需要 macOS 12.3 或更新版本"
+      },
+      "virtualUnavailable": "此系统无法创建虚拟显示器。",
+      "formatLive": "{{width}} × {{height}} · 30 fps · 无音频"
+    },
     "meetingPrivacy": {
       "label": "隐藏会议共享浮层",
       "hint": "共享期间每秒检测 WeMeet/VooV，关闭后恢复；任务栏入口本地也会隐藏。录屏端需支持截图排除。",
@@ -1129,6 +1179,7 @@
       "testTimedOut": "未收到快捷键，请检查权限后重试。"
     },
     "titleBar": {
+      "screenShare": "共享画面",
       "windowControls": "窗口控制",
       "server": "节点",
       "serverLatency": "{{host}} · {{ms}} ms",

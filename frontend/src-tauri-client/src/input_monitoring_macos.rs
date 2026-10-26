@@ -2,11 +2,13 @@
 //! Opening Settings is not a permission grant; only the event-tap status proves readiness.
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use tauri::{
-    AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const LABEL: &str = "input-monitoring";
+
+extern "C" {
+    fn sharecode_permission_guide_track(window: *mut std::ffi::c_void);
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,7 +55,7 @@ pub fn application(app: &AppHandle) -> Application {
 
 /// Called on the main thread. Keep this window independent of the room's opacity,
 /// click-through, pinning, saved session, updater and toolbar initialization.
-pub fn show(app: &AppHandle, chinese: bool) -> Result<(), String> {
+pub fn show(app: &AppHandle, chinese: bool, recording: bool) -> Result<(), String> {
     let window = if let Some(window) = app.get_webview_window(LABEL) {
         window.unminimize().map_err(|error| error.to_string())?;
         window
@@ -61,14 +63,18 @@ pub fn show(app: &AppHandle, chinese: bool) -> Result<(), String> {
         let window = WebviewWindowBuilder::new(
             app,
             LABEL,
-            WebviewUrl::App("client.html#/input-monitoring".into()),
+            WebviewUrl::App(if recording {
+                "client.html#/input-monitoring?recording=1".into()
+            } else {
+                "client.html#/input-monitoring".into()
+            }),
         )
         .title(if chinese {
-            "开启键盘快捷键"
+            "权限设置"
         } else {
-            "Enable keyboard shortcuts"
+            "Permission setup"
         })
-        .inner_size(420.0, 570.0)
+        .inner_size(360.0, 350.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -76,22 +82,21 @@ pub fn show(app: &AppHandle, chinese: bool) -> Result<(), String> {
         .visible(false)
         .build()
         .map_err(|error| error.to_string())?;
-        if let Some(monitor) = app
-            .get_webview_window("main")
-            .and_then(|main| main.current_monitor().ok().flatten())
-        {
-            let scale = monitor.scale_factor();
-            let position = monitor.position();
-            let size = monitor.size();
-            // Place the movable helper at the right edge, leaving Settings room to its left.
-            let x = position.x + (size.width as f64 - 444.0 * scale).max(0.0) as i32;
-            let y = position.y + (32.0 * scale) as i32;
-            let _ = window.set_position(PhysicalPosition::new(x, y));
-        }
         window
     };
+    window
+        .emit("sharecode:permission-step", recording)
+        .map_err(|e| e.to_string())?;
     window.show().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())
+}
+
+/// Schedule the one positioning pass after System Settings has been opened.
+pub fn track(window: &WebviewWindow) -> Result<(), String> {
+    let pointer = window.ns_window().map_err(|error| error.to_string())?;
+    // This reads compositor bounds only, without requesting recording/accessibility access.
+    unsafe { sharecode_permission_guide_track(pointer) };
+    Ok(())
 }
 
 pub fn drag_application(window: &WebviewWindow) -> Result<(), String> {

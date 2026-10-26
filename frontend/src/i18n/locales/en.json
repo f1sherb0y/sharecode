@@ -1077,6 +1077,56 @@
     "remove": "Remove"
   },
   "client": {
+    "permissionSetup": {
+      "settings": "Settings",
+      "inputPath": "Privacy & Security → Input Monitoring",
+      "recordingPath": "Privacy & Security → Screen & System Audio Recording",
+      "enableHint": "Enable the app’s switch, then restart if asked. Use + if dragging is unavailable.",
+      "dragInstruction": "Drag the app icon below into the Settings permission list.",
+      "progress": "Permission setup progress",
+      "inputStep": "1 Input Monitoring",
+      "recordingStep": "2 Screen Recording",
+      "next": "Next",
+      "back": "Back"
+    },
+    "recordingSetup": {
+      "title": "Enable screen sharing",
+      "description": "Allow this app to create the filtered shared screen.",
+      "openStep": "Open Privacy & Security → Screen & System Audio Recording (Screen Recording on older macOS).",
+      "openSettings": "Open Screen Recording",
+      "dragApp": "Drag {{name}} into Screen Recording",
+      "enableStep": "Turn on the switch next to the app. Quit and reopen if macOS asks; setup will resume after restart.",
+      "ready": "Screen Recording permission granted",
+      "required": "Screen Recording permission required"
+    },
+    "screenShare": {
+      "title": "Shared screen",
+      "instructions": "In your meeting app, share the display named secondary monitor.",
+      "excluded": "Always excluded",
+      "apps": "Tencent Meeting · VooV Meeting · ShareCode",
+      "display": "Display",
+      "noDisplays": "Refresh to find displays",
+      "displayOption": "Display {{number}} · {{width}} × {{height}}",
+      "refresh": "Refresh displays",
+      "format": "Up to 4K · 30 fps · no audio",
+      "background": "The filtered view fills a virtual display, leaving your screen free. Stopping removes the virtual display.",
+      "permissionHint": "Allow this app in Screen Recording settings, then restart if macOS requests it.",
+      "settings": "Recording permission",
+      "start": "Start sharing",
+      "stop": "Stop sharing",
+      "phase": {
+        "idle": "Ready to share",
+        "loading": "Finding displays…",
+        "permissionRequired": "Screen Recording permission required",
+        "starting": "Preparing filtered screen…",
+        "sharing": "Filtered screen is live",
+        "stopped": "Stopped. Virtual display removed.",
+        "error": "Capture stopped",
+        "unsupported": "Requires macOS 12.3 or newer"
+      },
+      "virtualUnavailable": "This system cannot create a virtual display.",
+      "formatLive": "{{width}} × {{height}} · 30 fps · no audio"
+    },
     "meetingPrivacy": {
       "label": "Hide meeting share overlays",
       "hint": "Auto-detect sharing every second; off restores changes. Also hides the local taskbar entry. Requires a recorder that honors Windows capture exclusion.",
@@ -1130,6 +1180,7 @@
       "testTimedOut": "No shortcut received. Check permission and try again."
     },
     "titleBar": {
+      "screenShare": "Shared screen",
       "windowControls": "Window controls",
       "server": "Server",
       "serverLatency": "{{host}} · {{ms}} ms",

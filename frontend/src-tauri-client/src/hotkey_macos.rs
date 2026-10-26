@@ -111,6 +111,13 @@ impl Hotkey {
             "permission": unsafe { CGPreflightListenEventAccess() },
             "secureInput": unsafe { IsSecureEventInputEnabled() != 0 }}),
         );
+        if let Some(window) = app.get_webview_window("main") {
+            if let Ok(pointer) = window.ns_window() {
+                log.record("nativeWindowPrepared", json!({
+                    "window": crate::main_window_macos::diagnostics(pointer)
+                }));
+            }
+        }
         Ok(Self {
             shared: Arc::new(Shared {
                 log,
@@ -377,6 +384,13 @@ impl Shared {
                 .unwrap()
                 .take()
                 .is_some_and(|until| Instant::now() < until);
+            if let Some(window) = app2.get_webview_window("main") {
+                if let Ok(pointer) = window.ns_window() {
+                    shared.log.record("nativeWindowBeforeShortcut", json!({
+                        "window": crate::main_window_macos::diagnostics(pointer)
+                    }));
+                }
+            }
             let result = if testing {
                 Ok("tested")
             } else {

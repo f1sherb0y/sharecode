@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><title>ShareCode window visibility test</title>
+<style>body{font:16px system-ui;background:#16181d;color:#eee;margin:24px}button{font:inherit;padding:12px;margin-right:8px}video{display:block;width:640px;max-width:90vw;background:#000;margin-top:20px}pre{white-space:pre-wrap}</style>
+<h1>共享窗口可见性测试（仅本机）</h1>
+<p>请选择窗口「ShareCode Visibility Test」。采集与统计仅保存在本机，不连接会议。</p>
+<button id="capture">选择测试窗口</button><button id="run" disabled>运行六种状态测试（88 秒）</button><button id="stop">停止采集</button>
+<video id="video" autoplay muted playsinline></video><pre id="status">尚未采集</pre>
+<script>
+let stream, track, frames = 0, changes = 0, lastHash, busy = false;
+const captureButton=document.getElementById('capture'), runButton=document.getElementById('run'), stopButton=document.getElementById('stop'), statusText=document.getElementById('status'), video=document.getElementById('video');
+const canvas = document.createElement('canvas'); canvas.width=64; canvas.height=36;
+const ctx=canvas.getContext('2d',{willReadFrequently:true});
+captureButton.onclick=async()=>{try{
+  stream?.getTracks().forEach(t=>t.stop());
+  stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:10},audio:false});
+  track=stream.getVideoTracks()[0]; video.srcObject=stream; await video.play(); runButton.disabled=false;
+}catch(e){statusText.textContent=String(e)}};
+runButton.onclick=()=>fetch('/run',{method:'POST'});
+stopButton.onclick=()=>{stream?.getTracks().forEach(t=>t.stop());runButton.disabled=true};
+function frame(){frames++;video.requestVideoFrameCallback(frame)}video.requestVideoFrameCallback(frame);
+setInterval(async()=>{
+ if(busy)return;busy=true;
+ try{
+ const current=await(await fetch('/status')).json();
+ let hash=null, center=null;
+ if(video.readyState>=2){
+   ctx.drawImage(video,0,0,64,36);const pixels=ctx.getImageData(0,0,64,36).data;
+   hash=2166136261;for(let i=0;i<pixels.length;i++)hash=Math.imul(hash^pixels[i],16777619)>>>0;
+   center=Array.from(pixels.slice((27*64+32)*4,(27*64+32)*4+4));
+   if(lastHash!==undefined&&hash!==lastHash)changes++;lastHash=hash;
+ }
+ const sample={time:Date.now(),...current,frames,changes,hash,center,track:track?{state:track.readyState,muted:track.muted,settings:track.getSettings()}:null};
+ document.getElementById('status').textContent=JSON.stringify(sample,null,2);
+ if(track)await fetch('/sample',{method:'POST',body:JSON.stringify(sample)});
+ }finally{busy=false}
+},250);
+</script>

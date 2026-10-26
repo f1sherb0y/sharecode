@@ -11,6 +11,16 @@ mod hotkey_log;
 mod hotkey_macos;
 #[cfg(target_os = "macos")]
 mod input_monitoring_macos;
+#[cfg(target_os = "macos")]
+mod main_window_macos;
+
+#[cfg(target_os = "macos")]
+mod screen_share_macos;
+#[cfg(target_os = "macos")]
+use screen_share_macos::client_screen_share;
+
+#[cfg(target_os = "macos")]
+static MAIN_OPENED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(windows)]
 mod hotkey_windows;
@@ -128,11 +138,11 @@ fn install(window: &WebviewWindow) -> Result<(), String> {
 /// Both the title-bar command and global shortcut use this path. Pin before making the
 /// window non-interactive; disabling click-through leaves pinning for the user to change.
 fn set_pinned(window: &WebviewWindow, pinned: bool) -> Result<(), String> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         stealth::set_pinned(window, pinned)
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         window
             .set_always_on_top(pinned)
@@ -141,11 +151,11 @@ fn set_pinned(window: &WebviewWindow, pinned: bool) -> Result<(), String> {
 }
 
 fn is_pinned(window: &WebviewWindow) -> Result<bool, String> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     {
         stealth::is_pinned(window)
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         window.is_always_on_top().map_err(|error| error.to_string())
     }
@@ -166,7 +176,10 @@ fn write_state_with_focus_policy(
     }
     // A hidden, input-transparent Mac window must have a functioning native listener.
     #[cfg(target_os = "macos")]
-    if next.click_through && !window.state::<hotkey_macos::Hotkey>().available() {
+    if next.click_through
+        && (!MAIN_OPENED.load(std::sync::atomic::Ordering::Acquire)
+            || !window.state::<hotkey_macos::Hotkey>().available())
+    {
         return Err(
             "The native shortcut needs Input Monitoring; click-through was not enabled".into(),
         );
@@ -324,7 +337,9 @@ fn recover_hotkey_window(app: &AppHandle) -> Result<(), String> {
         },
     )?;
     let _ = app.emit("sharecode:stealth-state", observed);
-    if previous.click_through || window.is_minimized().map_err(|e| e.to_string())? {
+    if MAIN_OPENED.load(std::sync::atomic::Ordering::Acquire)
+        && (previous.click_through || window.is_minimized().map_err(|e| e.to_string())?)
+    {
         window.unminimize().map_err(|e| e.to_string())?;
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
@@ -369,16 +384,86 @@ async fn open_client_hotkey_setup(
     window: WebviewWindow,
     language: Option<String>,
 ) -> Result<(), String> {
+    let app = window.app_handle().clone();
     on_window_thread(window, move |window| {
         input_monitoring_macos::show(
             window.app_handle(),
             language
                 .as_deref()
                 .is_some_and(|lang| lang.starts_with("zh")),
+            false,
         )
     })
     .await?;
-    open_client_hotkey_settings()
+    open_client_hotkey_settings()?;
+    let guide = app
+        .get_webview_window(input_monitoring_macos::LABEL)
+        .ok_or("Permission setup window is unavailable")?;
+    on_window_thread(guide, |window| input_monitoring_macos::track(&window)).await
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn open_client_recording_settings() -> Result<(), String> {
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        .status()
+        .map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("Could not open Screen Recording settings".into())
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn open_client_recording_setup(
+    window: WebviewWindow,
+    language: String,
+) -> Result<(), String> {
+    if !matches!(window.label(), "main" | "input-monitoring") {
+        return Err("Permission setup is unavailable in this window".into());
+    }
+    let app = window.app_handle().clone();
+    on_window_thread(window, move |window| {
+        input_monitoring_macos::show(window.app_handle(), language.starts_with("zh"), true)
+    })
+    .await?;
+    open_client_recording_settings()?;
+    let guide = app
+        .get_webview_window(input_monitoring_macos::LABEL)
+        .ok_or("Permission setup window is unavailable")?;
+    on_window_thread(guide, |window| input_monitoring_macos::track(&window)).await
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn show_client_main(window: WebviewWindow) -> Result<(), String> {
+    if !matches!(window.label(), "main" | "input-monitoring") {
+        return Err("The client window is unavailable".into());
+    }
+    let main = window
+        .app_handle()
+        .get_webview_window("main")
+        .ok_or("Client window is unavailable")?;
+    on_window_thread(main, |window| {
+        if !window.state::<hotkey_macos::Hotkey>().available() {
+            return Err("Input Monitoring permission is required before opening ShareCode".into());
+        }
+        let (supported, permission) = screen_share_macos::recording_permission()?;
+        if supported && !permission {
+            return Err("Screen Recording permission is required before opening ShareCode".into());
+        }
+        window.unminimize().map_err(|error| error.to_string())?;
+        window.show().map_err(|error| error.to_string())?;
+        MAIN_OPENED.store(true, std::sync::atomic::Ordering::Release);
+        if !read_state().click_through {
+            let _ = window.set_focus();
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(target_os = "macos")]
@@ -488,6 +573,13 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                let config = app.config().app.windows.iter()
+                    .find(|config| config.label == "main")
+                    .expect("main window configuration").clone();
+                main_window_macos::create(app, &config)?;
+            }
             let handle = app.handle();
             #[cfg(windows)]
             handle.manage(meeting_privacy::Monitor::start(handle)?);
@@ -505,6 +597,7 @@ pub fn run() {
                 }
                 // The window is created hidden (tauri.windows.conf.json) so it never flashes into
                 // the taskbar or into a running screen share; show it now that the flags are on.
+                #[cfg(not(target_os = "macos"))]
                 if let Err(error) = window.show() {
                     eprintln!("sharecode client: could not show the window: {error}");
                 } else if !read_state().click_through {
@@ -536,9 +629,13 @@ pub fn run() {
         request_client_hotkey_permission,
         open_client_hotkey_settings,
         open_client_hotkey_setup,
+        open_client_recording_setup,
+        open_client_recording_settings,
         get_client_application,
         drag_client_application,
-        test_client_hotkey
+        test_client_hotkey,
+        show_client_main,
+        client_screen_share
     ]);
     #[cfg(not(target_os = "macos"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -561,6 +658,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if matches!(event, tauri::RunEvent::Exit) {
                 app.state::<hotkey_macos::Hotkey>().stop();
+                screen_share_macos::stop();
             }
             #[cfg(target_os = "macos")]
             if matches!(event, tauri::RunEvent::Reopen { .. }) {
@@ -570,9 +668,18 @@ pub fn run() {
                     eprintln!("sharecode client: reopen recovery failed: {error}");
                 }
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                    tauri::async_runtime::spawn(async move {
+                        if show_client_main(window.clone()).await.is_err() {
+                            let result = if window.state::<hotkey_macos::Hotkey>().available() {
+                                open_client_recording_setup(window, String::new()).await
+                            } else {
+                                open_client_hotkey_setup(window, None).await
+                            };
+                            if let Err(error) = result {
+                                eprintln!("sharecode client: reopen setup failed: {error}");
+                            }
+                        }
+                    });
                 }
             }
             #[cfg(not(target_os = "macos"))]

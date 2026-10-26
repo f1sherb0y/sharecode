@@ -10,8 +10,8 @@ symlinks = {"Applications": "/Applications"}
 # Do not set FinderInfo on the signed .app: even hiding its extension breaks codesign.
 hide_extensions = []
 background = str(root / "docs/macos/dmg-background.png")  # @2x becomes a Retina TIFF
-# Leave room for Finder's title bar above the 720 × 660 artwork.
-window_rect = ((160, 60), (720, 692))
+# Leave room for Finder's title bar above the 720 × 420 artwork.
+window_rect = ((160, 60), (720, 452))
 default_view = "icon-view"
 show_status_bar = False
 show_tab_view = False

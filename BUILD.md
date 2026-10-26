@@ -33,6 +33,11 @@ brew install rust
 brew install oven-sh/bun/bun
 ```
 
+The customer client's filtered shared-window feature uses Swift and ScreenCaptureKit. Build
+with Xcode/Command Line Tools supplying a macOS 12.3+ SDK. It is available at runtime on macOS
+12.3+, while the rest of the app keeps its 10.15 minimum. See
+[capture behavior and native acceptance](notes/client-screen-share-macos.md).
+
 ## Building
 
 ### Web Only
@@ -212,7 +217,14 @@ workflow file of the tagged commit.
 The macOS customer shortcut uses a native listen-only event tap (macOS 10.15+), with no
 global-hotkey fallback. On first launch without permission, the client opens Input Monitoring
 and a separate setup window. Drag the app from that window into the settings list, enable its
-switch, reopen if prompted, then use **Test shortcut**. Window settings can reopen the guide. Ctrl+Shift+F accepts either modifier side and works inside/background to the app,
+switch, reopen if prompted, then use **Test shortcut**. **Next** opens the second step,
+Screen Recording, with the same app drag and its corresponding settings page. Progress survives
+restart; already-granted permissions are skipped. Window settings reopens Input Monitoring;
+**Shared screen → Recording permission** reopens the recording drag guide and Settings together.
+Both guides share a compact 360×350 window that positions itself beside System Settings and
+avoids it again when the windows collide. If a full-screen Settings window leaves no free
+space on any display, the guide stays on-screen at the least-overlapping corner.
+Permission setup does not start capture. Ctrl+Shift+F accepts either modifier side and works inside/background to the app,
 without changing keyboard focus or restoring a minimized window. Reopening the app restores
 its window. See `notes/client-hotkey-macos.md` for native acceptance checks.
 
@@ -220,16 +232,16 @@ Build a candidate universal installer (Apple silicon + Intel) on a Mac with the 
 Tools, Rust, Python 3.10+ and Bun 1.3.14 installed:
 
 ```bash
-# From the repository root; no Apple account or updater private key required.
+# From the repository root; fixed code-signing identity required, no Apple account.
 scripts/build-client-macos.sh
 ```
 
 This uses the committed `bun.lock` and Cargo lockfile, runs the client Rust tests and the full
-TypeScript/client build, bundles with the ad-hoc identity `-`, verifies the code signature and
+TypeScript/client build, signs with the fixed self-signed certificate, verifies its pinned certificate, designated requirement and
 both CPU architectures, then creates and verifies a compressed DMG. Pinned `dmgbuild`
 dependencies are installed in the isolated `build/dmg-tools` environment. The Finder window
-uses a 720 × 660 Retina background with two aligned icons, a drag arrow, a bilingual first-launch
-hint and Input Monitoring setup/test steps. It mounts the final image
+uses a compact 720 × 420 Retina background with two aligned icons, a drag arrow and a
+bilingual first-launch hint. The in-app guide handles Input Monitoring → Screen Recording. It mounts the final image
 read-only and verifies the packaged app again. No Finder automation, system-wide security
 changes, installation, upload or publishing occurs.
 
@@ -269,11 +281,59 @@ the same installer and update files under both `darwin-aarch64` and `darwin-x86_
 Raise the Cargo version before publishing a new update. Run `just predeploy` against the exact
 source before publishing/deploying; building a candidate installer does not replace that gate.
 
+#### Fixed macOS code-signing identity
+
+Input Monitoring and Screen Recording permissions depend on the app's code identity.
+Our local native A→B test lost both under ad-hoc signing and retained both when signing
+with the same self-signed certificate. See `notes/client-update-permissions-macos.md`.
+
+The permanent identity is stored outside the repository in
+`~/.tauri/sharecode-macos/identity.p12` (encrypted) and `password` (both mode 600,
+directory mode 700). **Back up both securely. Never regenerate the certificate per
+build or per machine.** The committed `docs/macos/signing-identity.json` pins its
+SHA-256 certificate fingerprint and SHA-1 codesign selector; only these public values
+belong in Git. Initialization (`python3 scripts/macos-signing.py init`) has already
+been done and refuses to overwrite an existing identity/pin. A new machine must
+restore the existing encrypted identity and password, not initialize another one.
+
+`scripts/macos-signing.py run -- COMMAND` imports it into a temporary keychain,
+checks the committed fingerprint, serializes keychain search-list changes, executes
+the build, restores the original search list and removes the temporary keychain.
+It never marks the certificate trusted. Missing/mismatched credentials fail the
+build rather than falling back to ad-hoc. The `.app`, the mounted DMG's app, and
+(if requested) the app extracted from the updater archive are verified against the
+pin and the exact stable designated requirement for **both** CPU architectures.
+The Tauri config also selects this identity, so direct app bundling cannot silently
+choose ad-hoc. Native test builds must explicitly override it with their isolated
+signing configuration.
+
+Both macOS GitHub workflows require these Actions secrets on the build step:
+
+- `SHARECODE_MACOS_CERTIFICATE_BASE64`: base64 of the **existing** `identity.p12`.
+- `SHARECODE_MACOS_CERTIFICATE_PASSWORD`: contents of its `password` file.
+
+These are separate from the unchanged `TAURI_SIGNING_PRIVATE_KEY` minisign key.
+The workflows never generate a code-signing identity. Secret values are not stored
+in the repository or artifacts. Configuring repository secrets is a separate action;
+editing the workflows does not upload the local private key. On an authorized machine,
+use stdin (not terminal output) to configure them:
+
+```bash
+base64 < ~/.tauri/sharecode-macos/identity.p12 | tr -d '\n' | gh secret set SHARECODE_MACOS_CERTIFICATE_BASE64
+gh secret set SHARECODE_MACOS_CERTIFICATE_PASSWORD < ~/.tauri/sharecode-macos/password
+```
+
+The first transition from old ad-hoc releases changes identity: prepare users to
+re-add the app in Input Monitoring and Screen Recording and relaunch it. A stale ON
+switch is not proof of authorization. Subsequent builds must keep this certificate,
+bundle identifier and designated requirement. This does not provide Developer ID
+notarization or eliminate first-install Gatekeeper warnings.
+
 #### GitHub Actions
 
 Merge `.github/workflows/client-macos.yml` into the repository's default branch so GitHub
 registers the manual workflow, then open **Actions → Build macOS client DMG → Run workflow**,
-choosing the branch to build (which must also contain the workflow). The default needs no secrets. It runs the client UI
+choosing the branch to build (which must also contain the workflow). Both modes need the fixed macOS certificate secrets described below. It runs the client UI
 suite in Chromium, Firefox and WebKit, then uses the same local build script. Download
 `sharecode-client-macos-universal` from the completed run's artifacts and extract the DMG.
 It does not create a GitHub Release or publish to production. Artifacts are retained for 30 days.
@@ -284,7 +344,7 @@ credentials. Only the signing step receives them. No Apple membership or Apple s
 
 #### First launch
 
-Ad-hoc signing is **not** Apple notarization. Users drag the app into Applications, try to open
+Self-signing is **not** Apple notarization. Users drag the app into Applications, try to open
 it, and if blocked use **System Settings → Privacy & Security → Open Anyway**. This short hint
 is on the DMG background, followed by **automatic Input Monitoring guide → drag the app into
 the list → enable its switch → reopen if prompted → Test shortcut → Ctrl+Shift+F within 15 seconds**. The test

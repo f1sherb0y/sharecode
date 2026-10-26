@@ -3,6 +3,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "ShareCode",
         "url": "client.html",
         "width": 1100,

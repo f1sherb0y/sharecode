@@ -51,20 +51,23 @@ after(async () => { await browser?.close(); await server?.close() })
 
 // The client is a Windows app in the baseline tests unless a Mac user agent is requested;
 // macOS assertions reuse the same open() with `mac: true`.
-async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en', touch = false, mac = false, hotkeyPhase = 'listening', savedStealth, setup = false, canDrag = true } = {}) {
+async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en', touch = false, mac = false, hotkeyPhase = 'listening', savedStealth, setup = false, canDrag = true, sharing = false, capturePermission = true, setupRecording = false, setupProgress } = {}) {
   const context = await browser.newContext({
     viewport: { width, height }, deviceScaleFactor: scale, hasTouch: touch, reducedMotion: 'reduce',
     userAgent: mac ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15'
       : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
   })
-  await context.addInitScript(({ saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag }) => {
+  await context.addInitScript(({ saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag, sharing, capturePermission, setupRecording, setupProgress }) => {
     localStorage.setItem('i18nextLng', locale)
+    if (setupProgress && !localStorage.getItem('sharecode-macos-permission-setup-v1')) localStorage.setItem('sharecode-macos-permission-setup-v1', setupProgress)
     if (saved && !localStorage.getItem('sharecode-client-window')) localStorage.setItem('sharecode-client-window', JSON.stringify(saved))
     if (savedStealth) localStorage.setItem('sharecode-client-stealth', JSON.stringify({ state: savedStealth, version: 0 }))
     let id = 0
     const callbacks = new Map(), listeners = new Map()
     window.nativeCalls = []
     window.nativeState = { clickThrough: false, screenCaptureProtection: true, hideFromTaskbar: true }
+    window.captureState = { supported: true, permission: capturePermission, running: false,
+      phase: capturePermission ? 'idle' : 'permissionRequired', displays: capturePermission ? [{ id: 7, width: 1920, height: 1080 }, { id: 9, width: 1440, height: 900 }] : [] }
     window.nativeFail = null // set a command name to make the next invoke of it reject
     window.nativeMaximized = false
     window.nativeHotkey = { revision: 0, ready: hotkeyPhase === 'listening', phase: hotkeyPhase, received: 0, testing: false, lastAction: null, error: null }
@@ -76,6 +79,15 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
         window.nativeCalls.push({ command, args })
         if (window.nativeFail === command) { window.nativeFail = null; throw new Error(`mock failure: ${command}`) }
         if (command === 'plugin:event|listen') { listeners.set(args.event, args.handler); return args.handler }
+        if (['open_client_recording_setup', 'open_client_hotkey_setup'].includes(command)) {
+          callbacks.get(listeners.get('sharecode:permission-step'))?.({ payload: command === 'open_client_recording_setup' })
+          return null
+        }
+        if (command === 'client_screen_share') {
+          if (args.action === 'start' && window.captureState.permission) window.captureState = { ...window.captureState, phase: 'sharing', running: true, selectedDisplay: args.displayId }
+          if (args.action === 'stop') window.captureState = { ...window.captureState, phase: 'stopped', running: false }
+          return structuredClone(window.captureState)
+        }
         if (command === 'get_stealth_state') return window.nativeState
         if (command === 'set_stealth_state') {
           if (mac) {
@@ -92,6 +104,10 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
           return window.nativeState = args
         }
         if (command === 'get_client_hotkey_status') return window.nativeHotkey
+        if (command === 'show_client_main') {
+          if (!window.nativeHotkey.ready || (window.captureState.supported && !window.captureState.permission)) throw new Error('Native permissions required')
+          return null
+        }
         if (command === 'get_client_application') return { name: 'ShareCode Setup Test', path: '/Applications/ShareCode Setup Test.app', canDrag }
         if (command === 'test_client_hotkey') { window.hotkeyStatus({ testing: true, lastAction: null }); return null }
         if (command === 'client_is_maximized') return window.nativeMaximized
@@ -108,14 +124,18 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
       callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: window.nativeHotkey })
     }
     window.staleHotkeyStatus = status => callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: status })
-  }, { saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag })
+  }, { saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag, sharing, capturePermission, setupRecording, setupProgress })
   await context.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin
     ? route.continue() : route.fulfill({ status: 404, body: '' }))
   const page = await context.newPage(), errors = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.goto(base + 'client.html' + (setup ? '#/input-monitoring' : ''))
+  await page.goto(base + 'client.html' + (setup ? '#/input-monitoring' + (setupRecording ? '?recording=1' : '') : ''))
   if (setup) await page.getByTestId('setup-status').waitFor()
   else await page.waitForFunction(async () => (await import('/src/client/window.ts')).useStealthPreferences.getState().ready)
+  if (sharing) {
+    await page.getByRole('button', { name: locale === 'zh' ? '共享画面' : 'Shared screen', exact: true }).click()
+    await page.locator('.screen-share-status').filter({ hasText: capturePermission ? /已就绪|Ready to share/ : /需要屏幕录制权限|Screen Recording permission required/ }).waitFor()
+  }
   return { page, context, errors }
 }
 const opacity = page => page.evaluate(() => [
@@ -460,7 +480,7 @@ test('real Canvas toolbar, zoom/history controls and menu stay translucent after
   } finally { await context.close() }
 })
 
-test('macOS opens setup once without automatically requesting permission; manual reopen remains available', async () => {
+test('macOS resumes unfinished setup without automatically requesting permission; manual reopen remains available', async () => {
   const { page, context, errors } = await open({ mac: true, hotkeyPhase: 'permissionRequired' })
   try {
     await page.waitForFunction(() => localStorage.getItem('sharecode-input-monitoring-guide-shown') === '1')
@@ -469,11 +489,30 @@ test('macOS opens setup once without automatically requesting permission; manual
     await page.reload()
     await page.getByRole('button', { name: 'Window settings', exact: true }).click()
     await page.getByTestId('hotkey-status').filter({ hasText: 'Input Monitoring permission required' }).waitFor()
-    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_setup')), false)
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'open_client_hotkey_setup').length), 1)
     await page.getByRole('button', { name: 'Input Monitoring settings', exact: true }).click()
     await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'open_client_hotkey_setup'))
     assert.deepEqual(errors, [])
   } finally { await context.close() }
+})
+
+test('filtered screen source is a macOS-only in-app popover', async () => {
+  for (const mac of [false, true]) {
+    const { page, context, errors } = await open({ mac, locale: 'zh' })
+    try {
+      const button = page.getByRole('button', { name: '共享画面', exact: true })
+      assert.equal(await button.count(), mac ? 1 : 0)
+      assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_screen_share')), false)
+      if (mac) {
+        await button.click()
+        await page.locator('.screen-share-menu').waitFor()
+        assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_screen_share')), false)
+        await page.keyboard.press('Escape')
+        assert.equal(await page.locator('.screen-share-menu').count(), 0)
+      }
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  }
 })
 
 test('setup helper drags the actual app only on a drag gesture and gates testing on native readiness', async () => {
@@ -503,6 +542,7 @@ test('setup helper drags the actual app only on a drag gesture and gates testing
     await page.screenshot({ path: `.cache/client-chrome-${engine}/input-monitoring-en.png` })
     await page.getByRole('button', { name: 'Later', exact: true }).click()
     assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'plugin:window|close')), true)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'show_client_main')), false)
     assert.deepEqual(errors, [])
   } finally { await context.close() }
 })
@@ -519,4 +559,220 @@ test('setup handles an uninstalled app and command failures, with readable Chine
     await page.screenshot({ path: `.cache/client-chrome-${engine}/input-monitoring-zh.png` })
     assert.deepEqual(errors, [])
   } finally { await context.close() }
+})
+
+
+test('share popover selects a display and preserves capture across dismissal', async () => {
+  const { page, context, errors } = await open({ mac: true, sharing: true, locale: 'zh', width: 600, height: 650 })
+  try {
+    await page.getByText('在会议软件中共享屏幕，选择 secondary monitor。', { exact: true }).waitFor()
+    await page.getByRole('combobox', { name: '屏幕', exact: true }).click()
+    await page.getByRole('option', { name: '屏幕 2 · 1440 × 900', exact: true }).click()
+    await page.getByRole('button', { name: '开始共享', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: '正在输出过滤画面' }).waitFor()
+    assert.equal(await page.getByLabel('屏幕', { exact: true }).isDisabled(), true)
+    assert.equal(await page.evaluate(() => window.nativeCalls.find(c => c.command === 'client_screen_share' && c.args.action === 'start').args.displayId), 9)
+    await page.keyboard.press('Escape')
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'client_screen_share' && c.args.action === 'stop')), false)
+    await page.getByRole('button', { name: '共享画面', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: '正在输出过滤画面' }).waitFor()
+    assert.equal(await page.getByRole('combobox', { name: '屏幕', exact: true }).innerText(), '屏幕 2 · 1440 × 900')
+    await page.screenshot({ path: `.cache/client-chrome-${engine}/screen-share-zh.png`, animations: 'disabled' })
+    await page.getByRole('button', { name: '停止共享', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: '已停止' }).waitFor()
+    assert.equal(await page.getByLabel('屏幕', { exact: true }).isDisabled(), false)
+    await page.evaluate(() => { window.nativeFail = 'open_client_recording_setup' })
+    await page.getByRole('button', { name: '录屏权限', exact: true }).click()
+    await page.getByRole('alert').filter({ hasText: 'mock failure' }).waitFor()
+    assert.equal(await page.evaluate(() => document.querySelector('.screen-share-menu').scrollWidth <= innerWidth), true)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('share popover never prompts on open and shows denied and unsupported native states', async () => {
+  const { page, context, errors } = await open({ mac: true, sharing: true, capturePermission: false, width: 600, height: 650 })
+  try {
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'client_screen_share').every(c => c.args.action === 'status')), true)
+    await page.getByRole('button', { name: 'Start sharing', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: 'Screen Recording permission required' }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Stop sharing', exact: true }).count(), 0)
+    await page.screenshot({ path: `.cache/client-chrome-${engine}/screen-share-en.png`, animations: 'disabled' })
+    await page.evaluate(() => { window.captureState = { ...window.captureState, supported: false, phase: 'unsupported' } })
+    await page.getByRole('status').filter({ hasText: 'Requires macOS 12.3' }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Start sharing', exact: true }).isDisabled(), true)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('share popover reports negotiated output pixels and unavailable virtual display API', async () => {
+  const { page, context, errors } = await open({ mac: true, sharing: true, width: 600, height: 650 })
+  try {
+    await page.evaluate(() => { window.captureState = { ...window.captureState, virtualDisplaySupported: false } })
+    await page.getByRole('alert').filter({ hasText: 'This system cannot create a virtual display.' }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Start sharing', exact: true }).isDisabled(), true)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'client_screen_share' && c.args.action === 'start')), false)
+    await page.evaluate(() => { window.captureState = { ...window.captureState, virtualDisplaySupported: true,
+      running: true, phase: 'sharing', outputDisplay: 123, outputWidth: 1920, outputHeight: 1080 } })
+    await page.getByText('1920 × 1080 · 30 fps · no audio', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Stop sharing', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: 'Virtual display removed.' }).waitFor()
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+
+test('share and Ghost popovers use identical surfaces in both themes and fit minimum height', async () => {
+  const { page, context, errors } = await open({ mac: true, locale: 'zh', width: 600, height: 650 })
+  const surface = () => page.locator('[data-radix-popper-content-wrapper] > [data-state="open"]').evaluate(node => {
+    const style = getComputedStyle(node)
+    return [style.width, style.padding, style.borderRadius, style.backgroundColor, style.color, style.boxShadow]
+  })
+  try {
+    for (const theme of ['light', 'dark']) {
+      await appearance(page, theme, 0.35)
+      await page.getByRole('button', { name: '共享画面', exact: true }).click()
+      await page.locator('.screen-share-menu').waitFor()
+      const share = await surface()
+      await page.getByRole('combobox', { name: '屏幕', exact: true }).click()
+      const options = page.getByRole('listbox')
+      await options.waitFor()
+      near((await paintedColor(options, 'background-color'))[3], 0.35 * 255, `${theme}: display options follow background opacity`)
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/display-options-${theme}.png`, animations: 'disabled' })
+      await page.keyboard.press('Escape')
+      assert.equal(await page.locator('.screen-share-menu').isVisible(), true)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: '窗口设置', exact: true }).click()
+      assert.deepEqual(await surface(), share, `${theme}: shared width, padding, rounding, opacity and colours`)
+      await page.keyboard.press('Escape')
+    }
+    await page.setViewportSize({ width: 480, height: 360 })
+    await page.getByRole('button', { name: '共享画面', exact: true }).click()
+    const panel = page.locator('[data-radix-popper-content-wrapper] > [data-state="open"]')
+    await panel.waitFor()
+    const box = await panel.boundingBox()
+    assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= 480 && box.y + box.height <= 360)
+    await page.getByRole('button', { name: '开始共享', exact: true }).scrollIntoViewIfNeeded()
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+
+test('permission setup progresses to recording, drags the running app and resumes its page after reload', async () => {
+  const { page, context, errors } = await open({ mac: true, setup: true, hotkeyPhase: 'permissionRequired', capturePermission: false, width: 360, height: 318 })
+  try {
+    await page.getByRole('button', { name: 'Later', exact: true }).click()
+    await page.getByRole('heading', { name: 'Enable screen sharing', exact: true }).waitFor()
+    assert.equal(await page.evaluate(() => localStorage.getItem('sharecode-macos-permission-setup-v1')), 'recording')
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_recording_setup')), true)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'client_screen_share' && c.args.action !== 'status')), false)
+    await page.reload()
+    await page.getByRole('heading', { name: 'Enable screen sharing', exact: true }).waitFor()
+    const app = page.getByRole('button', { name: 'Drag ShareCode Setup Test into Screen Recording', exact: true })
+    await page.waitForFunction(() => !document.querySelector('[data-testid="setup-drag-app"]').disabled)
+    const box = await app.boundingBox()
+    await page.mouse.move(box.x + 30, box.y + 30)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 65, box.y + 30, { steps: 4 })
+    await page.mouse.up()
+    await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'drag_client_application'))
+    await page.getByTestId('setup-status').filter({ hasText: 'Screen Recording permission required' }).waitFor()
+    await page.getByRole('button', { name: 'Open Screen Recording', exact: true }).click()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'open_client_recording_settings')), true)
+    await page.screenshot({ path: `.cache/client-chrome-${engine}/recording-setup-en.png`, animations: 'disabled' })
+    await page.evaluate(() => { window.captureState.permission = true; window.hotkeyStatus({ phase: 'listening' }) })
+    await page.getByTestId('setup-status').filter({ hasText: 'Screen Recording permission granted' }).waitFor()
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    assert.equal(await page.evaluate(() => localStorage.getItem('sharecode-macos-permission-setup-v1')), 'done')
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'plugin:window|close')), true)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('startup rechecks native permissions even after setup was previously completed', async () => {
+  for (const setupProgress of ['recording', 'done']) {
+    const { page, context, errors } = await open({ mac: true, capturePermission: false, setupProgress })
+    try {
+      await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'open_client_recording_setup'))
+      assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'show_client_main')), false)
+      await page.getByRole('button', { name: 'Shared screen', exact: true }).click()
+      await page.getByRole('button', { name: 'Recording permission', exact: true }).click()
+      await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'open_client_recording_setup'))
+      assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'client_screen_share' && c.args.action === 'settings')), false)
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  }
+})
+
+test('completed setup shows the main window on every permitted launch, but missing input permission reopens setup', async () => {
+  for (const hotkeyPhase of ['listening', 'permissionRequired']) {
+    const { page, context, errors } = await open({ mac: true, hotkeyPhase, setupProgress: 'done' })
+    try {
+      for (let launch = 0; launch < 2; launch++) {
+        if (launch) await page.reload()
+        const expected = hotkeyPhase === 'listening' ? 'show_client_main' : 'open_client_hotkey_setup'
+        await page.waitForFunction(command => window.nativeCalls.some(c => c.command === command), expected)
+        assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'show_client_main')), hotkeyPhase === 'listening')
+      }
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  }
+})
+
+test('recording completion returns to missing input permission and does not close on a failed native gate', async () => {
+  const { page, context, errors } = await open({ mac: true, setup: true, setupRecording: true, hotkeyPhase: 'permissionRequired' })
+  try {
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await page.getByRole('heading', { name: 'Enable keyboard shortcuts', exact: true }).waitFor()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'show_client_main')), false)
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'plugin:window|close')), false)
+    await page.evaluate(() => { window.hotkeyStatus({ phase: 'listening' }); window.nativeFail = 'show_client_main' })
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('alert').filter({ hasText: 'mock failure' }).waitFor()
+    assert.equal(await page.evaluate(() => localStorage.getItem('sharecode-macos-permission-setup-v1')), 'input')
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => c.command === 'plugin:window|close')), false)
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'plugin:window|close'))
+    assert.equal(await page.evaluate(() => localStorage.getItem('sharecode-macos-permission-setup-v1')), 'done')
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('recording guide has Chinese steps and cannot drag an uninstalled app', async () => {
+  const { page, context, errors } = await open({ mac: true, setup: true, setupRecording: true, capturePermission: false, canDrag: false, locale: 'zh', width: 360, height: 318 })
+  try {
+    await page.getByRole('heading', { name: '开启屏幕共享', exact: true }).waitFor()
+    assert.equal(await page.getByTestId('setup-drag-app').isDisabled(), true)
+    await page.getByRole('alert').filter({ hasText: '请先将应用移到' }).waitFor()
+    await page.screenshot({ path: `.cache/client-chrome-${engine}/recording-setup-zh.png`, animations: 'disabled' })
+    await page.getByRole('button', { name: '上一步', exact: true }).click()
+    await page.getByRole('heading', { name: '开启键盘快捷键', exact: true }).waitFor()
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+
+test('compact permission cards fit both steps and both languages without ordinary-state scrolling', async () => {
+  for (const locale of ['en', 'zh']) {
+    for (const setupRecording of [false, true]) {
+      // Reserve 32 px for native window chrome within the 360×350 guide.
+      const { page, context, errors } = await open({ mac: true, setup: true, setupRecording, locale,
+        hotkeyPhase: 'permissionRequired', capturePermission: false, width: 360, height: 318 })
+      try {
+        await page.waitForFunction(() => !document.querySelector('[data-testid="setup-drag-app"]').disabled)
+        assert.equal(await page.getByTestId('setup-drag-instruction').isVisible(), true)
+        assert.equal(await page.getByTestId('setup-drag-instruction').innerText(), locale === 'zh'
+          ? '把下方应用图标拖入系统设置的权限列表'
+          : 'Drag the app icon below into the Settings permission list.')
+        assert.equal(await page.locator('.permission-setup-drag-arrow').evaluate(node => getComputedStyle(node).pointerEvents), 'none', 'arrow must not intercept the drag')
+        const layout = await page.locator('.input-monitoring-setup').evaluate(node => ({
+          width: node.scrollWidth, height: node.scrollHeight, viewport: node.clientHeight,
+          numberedSteps: node.querySelectorAll('ol').length,
+        }))
+        assert.ok(layout.width <= 360 && layout.height <= layout.viewport, `${locale}/${setupRecording}: ${JSON.stringify(layout)}`)
+        assert.equal(layout.numberedSteps, 0, 'no redundant multi-paragraph numbered instructions')
+        await page.screenshot({ path: `.cache/client-chrome-${engine}/compact-${setupRecording ? 'recording' : 'input'}-${locale}.png`, animations: 'disabled' })
+        assert.deepEqual(errors, [])
+      } finally { await context.close() }
+    }
+  }
 })
