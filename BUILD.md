@@ -76,7 +76,7 @@ On Windows the client also carries three camouflage switches, in the title bar's
 (`frontend/src-tauri-client/src/stealth.rs`): 共享隐藏 keeps the window out of every screen capture
 and screen share (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`), 穿透 makes it take no mouse or
 keyboard focus so every event reaches the app behind it (`WS_EX_NOACTIVATE | WS_EX_TRANSPARENT |
-WS_EX_LAYERED`, flipped with `Ctrl+Shift+F` because a click-through window never sees the key press),
+WS_EX_LAYERED`, flipped with native Option/Alt+Shift+F because a click-through window never sees the key press),
 and 任务栏隐藏 removes the taskbar button and the Alt+Tab entry (`WS_EX_TOOLWINDOW`, `WS_EX_APPWINDOW`
 cleared, `set_skip_taskbar`); the client has no tray icon. tao rewrites the whole `GWL_EXSTYLE` on
 every window state change, so `stealth.rs` subclasses the window: it rewrites `styleNew` in
@@ -124,7 +124,7 @@ Tauri plugins on the minor version of their `@tauri-apps/plugin-*` packages.
 
 The customer client uses one combined window/editor toolbar. Window settings include the
 opacity controls; new windows default to 90% text and 65% background opacity. Custom saved
-opacity is preserved. Enabling click-through (button or Ctrl+Shift+F) also pins the window;
+opacity is preserved. Enabling click-through (button or Option/Alt+Shift+F) also pins the window;
 disabling click-through keeps it pinned until it is explicitly unpinned.
 As background opacity decreases, gray labels and borders move toward the theme foreground.
 Menus, dialogs and Canvas controls use the same background opacity; text remains independently
@@ -224,7 +224,7 @@ restart; already-granted permissions are skipped. Window settings reopens Input 
 Both guides share a compact 360×350 window that positions itself beside System Settings and
 avoids it again when the windows collide. If a full-screen Settings window leaves no free
 space on any display, the guide stays on-screen at the least-overlapping corner.
-Permission setup does not start capture. Ctrl+Shift+F accepts either modifier side and works inside/background to the app,
+Permission setup does not start capture. Option/Alt+Shift+F accepts either modifier side and works inside/background to the app,
 without changing keyboard focus or restoring a minimized window. Reopening the app restores
 its window. See `notes/client-hotkey-macos.md` for native acceptance checks.
 
@@ -347,10 +347,10 @@ credentials. Only the signing step receives them. No Apple membership or Apple s
 Self-signing is **not** Apple notarization. Users drag the app into Applications, try to open
 it, and if blocked use **System Settings → Privacy & Security → Open Anyway**. This short hint
 is on the DMG background, followed by **automatic Input Monitoring guide → drag the app into
-the list → enable its switch → reopen if prompted → Test shortcut → Ctrl+Shift+F within 15 seconds**. The test
+the list → enable its switch → reopen if prompted → Test shortcut → Option+Shift+F within 15 seconds**. The test
 confirms delivery without toggling click-through. The optional detailed guide at
 `docs/macos/Install.html` includes adding a missing app, older macOS settings paths, and
-Ctrl+Shift+Q to quit; it is copied next to the DMG for anyone who needs more help.
+Option+Shift+Q to quit; it is copied next to the DMG for anyone who needs more help.
 Managed Macs may require an administrator. Test an actual browser-downloaded DMG on a separate
 Mac before public distribution; local signature verification does not test Gatekeeper approval,
 Intel runtime behavior or the in-app update cycle.
@@ -443,9 +443,10 @@ capture validation; no live meeting was modified during implementation.
 
 ### Native client shortcuts
 
-Windows and macOS both provide `Ctrl+Shift+F` to toggle click-through and `Ctrl+Shift+Q`
-to quit, with either side's Ctrl and Shift keys. On Windows the hook and key-state recovery
-share independent F/Q press latches, so holding one key does not repeat the action or block
+Windows uses Alt+Shift and macOS uses Option+Shift. On both platforms H hides/shows the
+window, F toggles click-through, Q quits normally, and T toggles always-on-top; either side
+of Alt/Option and Shift works. On Windows the hook and key-state recovery
+share independent H/F/Q/T press latches, so holding one key does not repeat the action or block
 the other shortcut. Quit uses Tauri's normal exit lifecycle, including the meeting-window
 restoration attempt, without focusing the client first. macOS's Input Monitoring requirements
 and existing quit handling are unchanged.

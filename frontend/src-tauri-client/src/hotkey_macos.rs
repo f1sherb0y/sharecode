@@ -113,9 +113,12 @@ impl Hotkey {
         );
         if let Some(window) = app.get_webview_window("main") {
             if let Ok(pointer) = window.ns_window() {
-                log.record("nativeWindowPrepared", json!({
-                    "window": crate::main_window_macos::diagnostics(pointer)
-                }));
+                log.record(
+                    "nativeWindowPrepared",
+                    json!({
+                        "window": crate::main_window_macos::diagnostics(pointer)
+                    }),
+                );
             }
         }
         Ok(Self {
@@ -386,21 +389,43 @@ impl Shared {
                 .is_some_and(|until| Instant::now() < until);
             if let Some(window) = app2.get_webview_window("main") {
                 if let Ok(pointer) = window.ns_window() {
-                    shared.log.record("nativeWindowBeforeShortcut", json!({
-                        "window": crate::main_window_macos::diagnostics(pointer)
-                    }));
+                    shared.log.record(
+                        "nativeWindowBeforeShortcut",
+                        json!({
+                            "window": crate::main_window_macos::diagnostics(pointer)
+                        }),
+                    );
                 }
             }
-            let result = if testing {
+            let result = if testing && action == Action::ToggleClickThrough {
                 Ok("tested")
             } else {
-                crate::toggle_click_through(&app2).map(|state| {
-                    if state.click_through {
-                        "enabled"
-                    } else {
-                        "disabled"
+                match action {
+                    Action::ToggleClickThrough => crate::toggle_click_through(&app2).map(|state| {
+                        if state.click_through {
+                            "enabled"
+                        } else {
+                            "disabled"
+                        }
+                    }),
+                    Action::ToggleVisibility => {
+                        crate::toggle_window_visibility(&app2).map(|visible| {
+                            if visible {
+                                "shown"
+                            } else {
+                                "hidden"
+                            }
+                        })
                     }
-                })
+                    Action::ToggleAlwaysOnTop => crate::toggle_always_on_top(&app2).map(|pinned| {
+                        if pinned {
+                            "pinned"
+                        } else {
+                            "unpinned"
+                        }
+                    }),
+                    Action::Quit => unreachable!("quit is handled before the test state"),
+                }
             };
             shared.update(&app2, |s| {
                 s.received += 1;

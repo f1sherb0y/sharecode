@@ -29,11 +29,12 @@ use tauri::WebviewWindow;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass, SUBCLASSPROC};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowDisplayAffinity, GetWindowLongPtrW, SetWindowDisplayAffinity, SetWindowLongPtrW,
-    SetWindowPos, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, STYLESTRUCT, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
-    WM_MOUSEACTIVATE, WM_STYLECHANGED, WM_STYLECHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    GetWindowDisplayAffinity, GetWindowLongPtrW, IsWindowVisible, SetWindowDisplayAffinity,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST,
+    STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE,
+    SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_MOUSEACTIVATE, WM_STYLECHANGED,
+    WM_STYLECHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
 use crate::StealthState;
@@ -181,6 +182,18 @@ fn hwnd_of(window: &WebviewWindow) -> Result<HWND, String> {
 
 /// Use NOACTIVATE directly: Tao's generic flag setter calls ShowWindow(SW_SHOW),
 /// which may activate the window before applying the always-on-top flag.
+pub fn toggle_visibility(window: &WebviewWindow) -> Result<bool, String> {
+    let hwnd = hwnd_of(window)?;
+    unsafe {
+        if IsWindowVisible(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        } else {
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        }
+        Ok(IsWindowVisible(hwnd).as_bool())
+    }
+}
+
 pub fn set_pinned(window: &WebviewWindow, pinned: bool) -> Result<(), String> {
     let hwnd = hwnd_of(window)?;
     let previous = PINNED.swap(pinned, Ordering::Relaxed);

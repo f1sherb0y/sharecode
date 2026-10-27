@@ -1,12 +1,10 @@
 # macOS native shortcut
 
 The customer client uses a session-level `CGEventTap` with `listenOnly`; it never registers
-`RegisterEventHotKey` on macOS. Windows is unchanged. Minimum macOS version: 10.15.
+`RegisterEventHotKey` on macOS; Windows uses the same key map through its native keyboard hook. Minimum macOS version: 10.15.
 
-- Ctrl + Shift + physical F toggles click-through; Ctrl + Shift + physical Q quits via
-  Tauri’s normal exit lifecycle. Q always quits, even when the F-only diagnostic test is armed.
-  Both shortcuts accept left/right/mixed/generic modifiers. Caps Lock is ignored;
-  Option/Command are excluded. Autorepeats and identical event delivery are ignored, without
+- Option/Alt + Shift + physical H hides/shows; F toggles click-through; Q quits; T toggles pinning. Q quits via Tauri’s normal exit lifecycle. The 15-second diagnostic test consumes F only; H/Q/T remain active.
+  Either Option and Shift side works, including mixed sides. Control/Command are excluded. Caps Lock is ignored. Autorepeats and identical event delivery are ignored, without
   a debounce interval that could discard rapid consecutive presses. No ordinary keys/text are
   retained, logged, emitted or transmitted.
 - The callback queues only recognized chords in a bounded channel. A separate run loop checks
@@ -15,7 +13,7 @@ The customer client uses a session-level `CGEventTap` with `listenOnly`; it neve
   A successful listener alone does not prove key delivery: use the physical-key test.
 - All window changes run on the main thread, start from native readback and report their actual
   result. Setting a UI property merges only that property into the current native state.
-- On macOS Ctrl+Shift+F never activates, resigns, focuses or restores a window. The same event
+- On macOS Option+Shift+F never activates, resigns, focuses or restores a window. The same event
   tap receives the chord inside the app and in the background. An already-focused client keeps
   keyboard focus when pass-through is enabled (new mouse clicks pass through, and it cannot
   acquire focus again while pass-through is on). A minimized window stays minimized. The
@@ -50,7 +48,7 @@ Restart the installed app if macOS requests it. The existing **Enable Input Moni
 still explicitly calls `CGRequestListenEventAccess`; the automatic guide never calls that API.
 There is no Accessibility request or global-hotkey fallback.
 
-When the listener is active, **Test shortcut** arms a 15-second test. The next Ctrl+Shift+F
+When the listener is active, **Test shortcut** arms a 15-second test. The next Option+Shift+F
 reports receipt without changing click-through. Timeout, window operation errors, listener
 loss and Secure Input have distinct feedback. Secure Input and OS permissions can still block
 delivery; this is not a promise to override macOS restrictions.
@@ -122,7 +120,7 @@ actions/results, discarded stale actions, recovery and shutdown. Two rotating fi
 to about 256 KiB each. No ordinary keystrokes, text or room content are recorded. All file I/O
 runs outside the event-tap callback. Finder-launched apps keep these logs even without a terminal.
 
-Ctrl+Shift+Q uses the same listen-only event tap and permission as Ctrl+Shift+F. It calls normal
+Option+Shift+Q uses the same listen-only event tap and permission as Option+Shift+F. It calls normal
 Tauri exit (joining the native listener threads), without first focusing or restoring the window.
 There is no alternate shortcut listener. Test the new build with Q inside/outside the app and
 while click-through is on; reopening it starts with click-through off as before.
@@ -258,7 +256,7 @@ flags and even a higher level on an ordinary NSWindow were insufficient. The flo
 
 ### Real Tauri regression and fix (2026-10-27)
 
-The installed client's log recorded all eight Ctrl+Shift+F presses with a healthy event tap,
+The installed client's log recorded all eight Option+Shift+F presses with a healthy event tap,
 then failed the automatic pin operation before click-through. A local real Tauri/WebKit probe
 reproduced the cause: attaching WebKit first wraps `TaoWindow` in `NSKVONotifying_TaoWindow`.
 The safe native-layout guard correctly refused that observed subclass. Earlier synthetic

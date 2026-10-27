@@ -223,6 +223,7 @@ export function watchStealthShortcut(): () => void {
   }
   let stop: (() => void) | undefined
   let stopStatus: (() => void) | undefined
+  let stopPin: (() => void) | undefined
   let cancelled = false
   // macOS uses its revisioned status model and permission controls in hotkey.ts.
   if (!isMacOSClient) {
@@ -236,6 +237,12 @@ export function watchStealthShortcut(): () => void {
       useStealthPreferences.setState({ hotkeyStatus })
     }).catch((error) => console.error('Failed to read the hotkey status:', error))
   }
+  void listen<boolean>('sharecode:pin-state', (event) => {
+    useWindowPreferences.getState().setPinned(event.payload)
+  }).then((unlisten) => {
+    if (cancelled) unlisten()
+    else stopPin = unlisten
+  }).catch((error) => console.error('Failed to watch native pin shortcut:', error))
   void listen<StealthState>('sharecode:stealth-state', (event) => {
     if (cancelled) return
     nativeStealthEpoch++
@@ -260,5 +267,6 @@ export function watchStealthShortcut(): () => void {
     cancelled = true
     stop?.()
     stopStatus?.()
+    stopPin?.()
   }
 }

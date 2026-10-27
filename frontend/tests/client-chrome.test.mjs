@@ -119,6 +119,7 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
       window.nativeState = { ...window.nativeState, clickThrough }
       callbacks.get(listeners.get('sharecode:stealth-state'))({ payload: window.nativeState })
     }
+    window.nativeEvent = (name, payload) => callbacks.get(listeners.get(name))?.({ payload })
     window.hotkeyStatus = patch => {
       window.nativeHotkey = { ...window.nativeHotkey, ...(patch.phase ? { ready: patch.phase === 'listening' } : {}), ...patch, revision: window.nativeHotkey.revision + 1 }
       callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: window.nativeHotkey })
@@ -201,7 +202,7 @@ test('macOS shortcut test reports delivery without toggling and ignores stale av
     const status = page.getByTestId('hotkey-status')
     await status.filter({ hasText: 'Native shortcut listener active' }).waitFor()
     await page.getByRole('button', { name: 'Test shortcut', exact: true }).click()
-    await page.getByText('Press Ctrl + Shift + F within 15 seconds.', { exact: false }).waitFor()
+    await page.getByText('Press Alt + Shift + F within 15 seconds.', { exact: false }).waitFor()
     await page.evaluate(() => window.hotkeyStatus({ testing: false, received: 1, lastAction: 'tested' }))
     await page.getByText('Shortcut received. The window was not changed.', { exact: true }).waitFor()
     assert.equal(await page.evaluate(() => window.nativeState.clickThrough), false)
@@ -269,6 +270,8 @@ test('button and native shortcut sync pinning; disabling click-through preserves
     await page.evaluate(async () => { const { useWindowPreferences } = await import('/src/client/window.ts'); useWindowPreferences.getState().setPinned(false) })
     await page.evaluate(() => window.shortcutState(true))
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('sharecode-client-window')).state.pinned)
+    await page.evaluate(() => window.nativeEvent('sharecode:pin-state', false))
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('sharecode-client-window')).state.pinned === false)
     assert.deepEqual(errors, [])
   } finally { await context.close() }
 })

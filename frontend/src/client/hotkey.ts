@@ -11,7 +11,7 @@ export interface HotkeyStatus {
   phase: HotkeyPhase
   received: number
   testing: boolean
-  lastAction: 'tested' | 'enabled' | 'disabled' | 'failed' | 'testTimedOut' | null
+  lastAction: 'tested' | 'enabled' | 'disabled' | 'shown' | 'hidden' | 'pinned' | 'unpinned' | 'failed' | 'testTimedOut' | null
   error: string | null
 }
 

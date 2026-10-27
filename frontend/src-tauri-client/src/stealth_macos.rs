@@ -45,6 +45,7 @@ extern "C" {
     fn sharecode_window_install_panel(window: *mut std::ffi::c_void) -> bool;
     fn sharecode_window_set_pinned(window: *mut std::ffi::c_void, pinned: bool) -> bool;
     fn sharecode_window_is_pinned(window: *mut std::ffi::c_void) -> bool;
+    fn sharecode_window_toggle_visibility(window: *mut std::ffi::c_void) -> bool;
 }
 
 pub fn set_pinned(window: &WebviewWindow, pinned: bool) -> Result<(), String> {
@@ -69,6 +70,14 @@ pub fn is_pinned(window: &WebviewWindow) -> Result<bool, String> {
     let native = native_window(window)?;
     // SAFETY: same lifetime and main-thread guarantee as set_pinned.
     Ok(unsafe { sharecode_window_is_pinned(native as *const NSWindow as *mut std::ffi::c_void) })
+}
+
+pub fn toggle_visibility(window: &WebviewWindow) -> Result<bool, String> {
+    let native = native_window(window)?;
+    // Native orderFrontRegardless does not activate the app or take keyboard focus.
+    Ok(unsafe {
+        sharecode_window_toggle_visibility(native as *const NSWindow as *mut std::ffi::c_void)
+    })
 }
 
 fn remember_frontmost() {

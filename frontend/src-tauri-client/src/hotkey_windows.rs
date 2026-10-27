@@ -1,4 +1,4 @@
-//! Dedicated Windows keyboard listener: Ctrl+Shift+F toggles input, Ctrl+Shift+Q quits.
+//! Dedicated Windows keyboard listener for Alt+Shift+H/F/Q/T.
 //!
 //! The low-level hook observes the chord without claiming it or modifying it. The callback only
 //! updates thread-local shortcut state and posts a private message; all window work stays on the Tauri main thread.
@@ -79,14 +79,16 @@ pub fn log_line(message: impl AsRef<str>) {
 
 const HOTKEY_MESSAGE: u32 = WM_APP + 0x534;
 const KEY_RECONCILE_MS: u32 = 30;
-const VK_CONTROL: u32 = 0x11;
+const VK_MENU: u32 = 0x12;
 const VK_SHIFT: u32 = 0x10;
+const VK_H: u32 = 0x48;
 const VK_F: u32 = 0x46;
 const VK_Q: u32 = 0x51;
+const VK_T: u32 = 0x54;
 const VK_LSHIFT: u32 = 0xA0;
 const VK_RSHIFT: u32 = 0xA1;
-const VK_LCONTROL: u32 = 0xA2;
-const VK_RCONTROL: u32 = 0xA3;
+const VK_LMENU: u32 = 0xA4;
+const VK_RMENU: u32 = 0xA5;
 
 static THREAD_ID: OnceLock<u32> = OnceLock::new();
 thread_local! {
@@ -98,36 +100,38 @@ static ERROR: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None
 
 #[derive(Default, Debug, PartialEq, Eq)]
 struct KeyState {
-    ctrl_left: bool,
-    ctrl_right: bool,
+    alt_left: bool,
+    alt_right: bool,
     shift_left: bool,
     shift_right: bool,
+    h_down: bool,
     f_down: bool,
     q_down: bool,
+    t_down: bool,
 }
 
 impl KeyState {
     fn chord(&self) -> bool {
-        (self.ctrl_left || self.ctrl_right) && (self.shift_left || self.shift_right)
+        (self.alt_left || self.alt_right) && (self.shift_left || self.shift_right)
     }
 
     fn update(&mut self, vk: u32, scan: u32, extended: bool, released: bool) -> bool {
         match vk {
-            VK_LCONTROL => self.ctrl_left = !released,
-            VK_RCONTROL => self.ctrl_right = !released,
+            VK_LMENU => self.alt_left = !released,
+            VK_RMENU => self.alt_right = !released,
+            VK_MENU if extended => self.alt_right = !released,
+            VK_MENU => self.alt_left = !released,
             VK_LSHIFT => self.shift_left = !released,
             VK_RSHIFT => self.shift_right = !released,
-            // Also accept generic modifier codes from input providers.
-            VK_CONTROL if extended => self.ctrl_right = !released,
-            VK_CONTROL => self.ctrl_left = !released,
             VK_SHIFT if scan & 0xff == 0x36 => self.shift_right = !released,
             VK_SHIFT => self.shift_left = !released,
-            VK_F | VK_Q => {
+            VK_H | VK_F | VK_Q | VK_T => {
                 let chord = self.chord();
-                let down = if vk == VK_Q {
-                    &mut self.q_down
-                } else {
-                    &mut self.f_down
+                let down = match vk {
+                    VK_H => &mut self.h_down,
+                    VK_Q => &mut self.q_down,
+                    VK_T => &mut self.t_down,
+                    _ => &mut self.f_down,
                 };
                 let trigger = !released && !*down && chord;
                 *down = !released;
@@ -146,12 +150,14 @@ impl KeyState {
 fn reconcile_keys() -> Option<u32> {
     let down = |key: u32| unsafe { GetAsyncKeyState(key as i32) < 0 };
     let physical = KeyState {
-        ctrl_left: down(VK_LCONTROL),
-        ctrl_right: down(VK_RCONTROL),
+        alt_left: down(VK_LMENU),
+        alt_right: down(VK_RMENU),
         shift_left: down(VK_LSHIFT),
         shift_right: down(VK_RSHIFT),
+        h_down: down(VK_H),
         f_down: down(VK_F),
         q_down: down(VK_Q),
+        t_down: down(VK_T),
     };
     STATE.with(|slot| {
         let mut state = slot.borrow_mut();
@@ -161,19 +167,27 @@ fn reconcile_keys() -> Option<u32> {
         if state.q_down && !physical.q_down {
             log_line("recovered missed Q release from OS key state");
         }
-        let missed_press = if physical.chord() && physical.q_down && !state.q_down {
-            Some(VK_Q)
-        } else if physical.chord() && physical.f_down && !state.f_down {
+        let missed_press = if !physical.chord() {
+            None
+        } else if physical.h_down && !state.h_down {
+            Some(VK_H)
+        } else if physical.f_down && !state.f_down {
             Some(VK_F)
+        } else if physical.q_down && !state.q_down {
+            Some(VK_Q)
+        } else if physical.t_down && !state.t_down {
+            Some(VK_T)
         } else {
             None
         };
-        state.ctrl_left = physical.ctrl_left;
-        state.ctrl_right = physical.ctrl_right;
+        state.alt_left = physical.alt_left;
+        state.alt_right = physical.alt_right;
         state.shift_left = physical.shift_left;
         state.shift_right = physical.shift_right;
+        state.h_down = physical.h_down;
         state.f_down = physical.f_down;
         state.q_down = physical.q_down;
+        state.t_down = physical.t_down;
         if let Some(key) = missed_press {
             log_line(format!(
                 "native key-state sample detected shortcut vk=0x{key:02X}"
@@ -197,23 +211,33 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             .contains(windows::Win32::UI::WindowsAndMessaging::LLKHF_EXTENDED);
         let relevant = matches!(
             event.vkCode,
-            VK_CONTROL | VK_SHIFT | VK_LCONTROL | VK_RCONTROL | VK_LSHIFT | VK_RSHIFT | VK_F | VK_Q
+            VK_MENU
+                | VK_SHIFT
+                | VK_LMENU
+                | VK_RMENU
+                | VK_LSHIFT
+                | VK_RSHIFT
+                | VK_H
+                | VK_F
+                | VK_Q
+                | VK_T
         );
         if !relevant {
             return CallNextHookEx(None, code, wparam, lparam);
         }
         let (trigger, chord, key_was_down) = STATE.with(|state| {
             let mut state = state.borrow_mut();
-            let key_was_down = if event.vkCode == VK_Q {
-                state.q_down
-            } else {
-                state.f_down
+            let key_was_down = match event.vkCode {
+                VK_H => state.h_down,
+                VK_Q => state.q_down,
+                VK_T => state.t_down,
+                _ => state.f_down,
             };
             let trigger = state.update(event.vkCode, event.scanCode, extended, released);
             (trigger, state.chord(), key_was_down)
         });
         // Do not record ordinary typing, including F/Q outside the shortcut chord.
-        if !matches!(event.vkCode, VK_F | VK_Q) || chord {
+        if !matches!(event.vkCode, VK_H | VK_F | VK_Q | VK_T) || chord {
             log_line(format!("hook shortcut vk=0x{:02X} scan=0x{:02X} extended={} released={} chord={} trigger={} key_was_down={}",
                 event.vkCode, event.scanCode, extended, released, chord, trigger, key_was_down));
         }
@@ -244,18 +268,33 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 }
 
 fn dispatch(app: &AppHandle, key: u32) {
-    if !matches!(key, VK_F | VK_Q) {
+    if !matches!(key, VK_H | VK_F | VK_Q | VK_T) {
         return;
     }
     let handle = app.clone();
     let result = app.run_on_main_thread(move || {
-        if key == VK_Q {
-            log_line("Ctrl+Shift+Q requested normal app exit");
-            // Tauri's normal Exit lifecycle restores the meeting-window changes.
-            // Do not focus the window or kill the process directly.
-            handle.exit(0);
-        } else if let Err(error) = crate::toggle_click_through(&handle) {
-            log_line(format!("main toggle failed: {error}"));
+        let result = match key {
+            VK_H => crate::toggle_window_visibility(&handle).map(|visible| {
+                log_line(format!("Alt+Shift+H visibility now={visible}"));
+            }),
+            VK_F => crate::toggle_click_through(&handle).map(|state| {
+                log_line(format!(
+                    "Alt+Shift+F click-through now={}",
+                    state.click_through
+                ));
+            }),
+            VK_T => crate::toggle_always_on_top(&handle).map(|pinned| {
+                log_line(format!("Alt+Shift+T always-on-top now={pinned}"));
+            }),
+            VK_Q => {
+                log_line("Alt+Shift+Q requested normal app exit");
+                handle.exit(0);
+                Ok(())
+            }
+            _ => unreachable!(),
+        };
+        if let Err(error) = result {
+            log_line(format!("native shortcut action failed: {error}"));
         }
     });
     log_line(format!(
@@ -387,11 +426,11 @@ mod tests {
 
     #[test]
     fn all_left_right_combinations_and_generic_codes() {
-        for (ctrl, extended) in [
-            (VK_LCONTROL, false),
-            (VK_RCONTROL, true),
-            (VK_CONTROL, false),
-            (VK_CONTROL, true),
+        for (alt, extended) in [
+            (VK_LMENU, false),
+            (VK_RMENU, true),
+            (VK_MENU, false),
+            (VK_MENU, true),
         ] {
             for (shift, scan) in [
                 (VK_LSHIFT, 0x2a),
@@ -399,9 +438,9 @@ mod tests {
                 (VK_SHIFT, 0x2a),
                 (VK_SHIFT, 0x36),
             ] {
-                for key in [VK_F, VK_Q] {
+                for key in [VK_H, VK_F, VK_Q, VK_T] {
                     let mut state = KeyState::default();
-                    assert!(!state.update(ctrl, 0x1d, extended, false));
+                    assert!(!state.update(alt, 0x38, extended, false));
                     assert!(!state.update(shift, scan, false, false));
                     assert!(state.update(key, 0, false, false));
                     assert!(!state.update(key, 0, false, false));
@@ -417,9 +456,10 @@ mod tests {
         let mut state = KeyState::default();
         assert!(!state.update(VK_Q, 0, false, false));
         state.update(VK_Q, 0, false, true);
-        state.update(VK_RCONTROL, 0, false, false);
+        state.update(VK_RSHIFT, 0, false, false);
         assert!(!state.update(VK_Q, 0, false, false));
         state.update(VK_Q, 0, false, true);
+        state.update(VK_RMENU, 0, false, false);
         state.update(VK_LSHIFT, 0, false, false);
         assert!(state.update(VK_F, 0, false, false));
         assert!(state.update(VK_Q, 0, false, false));
@@ -428,19 +468,39 @@ mod tests {
     }
 
     #[test]
+    fn control_shift_alone_never_triggers() {
+        let mut state = KeyState::default();
+        state.update(0xA2, 0, false, false); // left Ctrl is not Alt
+        state.update(VK_LSHIFT, 0, false, false);
+        for key in [VK_H, VK_F, VK_Q, VK_T] {
+            assert!(!state.update(key, 0, false, false));
+        }
+    }
+
+    #[test]
+    fn ctrl_shift_is_not_a_binding_anymore() {
+        let mut state = KeyState::default();
+        state.update(0xA2, 0x1d, false, false); // Ctrl, not Alt
+        state.update(VK_LSHIFT, 0x2a, false, false);
+        for key in [VK_H, VK_F, VK_Q, VK_T] {
+            assert!(!state.update(key, 0, false, false));
+        }
+    }
+
+    #[test]
     fn releasing_one_side_preserves_other_side_and_f_repeat_latch() {
         let mut state = KeyState::default();
-        for key in [VK_LCONTROL, VK_RCONTROL, VK_LSHIFT, VK_RSHIFT] {
+        for key in [VK_LMENU, VK_RMENU, VK_LSHIFT, VK_RSHIFT] {
             state.update(key, 0, false, false);
         }
-        state.update(VK_LCONTROL, 0, false, true);
+        state.update(VK_LMENU, 0, false, true);
         state.update(VK_LSHIFT, 0, false, true);
         assert!(state.update(VK_F, 0, false, false));
         state.update(VK_RSHIFT, 0, false, true);
         state.update(VK_RSHIFT, 0, false, false);
         assert!(!state.update(VK_F, 0, false, false));
         state.update(VK_F, 0, false, true);
-        state.update(VK_RCONTROL, 0, false, true);
+        state.update(VK_RMENU, 0, false, true);
         assert!(!state.update(VK_F, 0, false, false));
     }
 }

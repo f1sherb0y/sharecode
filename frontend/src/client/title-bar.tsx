@@ -240,7 +240,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
           aria-pressed={clickThrough}
           onClick={() => setClickThrough(!clickThrough)}
           aria-label={clickThrough ? t('client.titleBar.disableClickThrough') : t('client.titleBar.enableClickThrough')}
-          title={`${clickThrough ? t('client.titleBar.disableClickThrough') : t('client.titleBar.enableClickThrough')} (Ctrl+Shift+F)`}
+          title={`${clickThrough ? t('client.titleBar.disableClickThrough') : t('client.titleBar.enableClickThrough')} (Alt+Shift+F)`}
         >
           {clickThrough ? <MousePointer2Off className="h-3.5 w-3.5" /> : <MousePointer2 className="h-3.5 w-3.5" />}
         </button>

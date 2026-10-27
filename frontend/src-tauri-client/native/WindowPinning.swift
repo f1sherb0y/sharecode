@@ -179,3 +179,12 @@ func sharecodeWindowIsPinned(_ pointer: UnsafeMutableRawPointer) -> Bool {
     guard Thread.isMainThread else { return false }
     return WindowPinning.isPinned(Unmanaged<NSWindow>.fromOpaque(pointer).takeUnretainedValue())
 }
+
+@_cdecl("sharecode_window_toggle_visibility")
+func sharecodeWindowToggleVisibility(_ pointer: UnsafeMutableRawPointer) -> Bool {
+    guard Thread.isMainThread else { return false }
+    let window = Unmanaged<NSWindow>.fromOpaque(pointer).takeUnretainedValue()
+    if window.isVisible { window.orderOut(nil) }
+    else { window.orderFrontRegardless() }
+    return window.isVisible
+}

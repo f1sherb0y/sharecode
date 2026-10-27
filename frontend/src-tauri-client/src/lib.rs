@@ -172,7 +172,7 @@ fn write_state_with_focus_policy(
 ) -> Result<StealthState, String> {
     #[cfg(windows)]
     if next.click_through && !hotkey_windows::can_enable() {
-        return Err("Ctrl+Shift+F is unavailable; click-through was not enabled".into());
+        return Err("Alt+Shift+F is unavailable; click-through was not enabled".into());
     }
     // A hidden, input-transparent Mac window must have a functioning native listener.
     #[cfg(target_os = "macos")]
@@ -300,6 +300,37 @@ async fn set_stealth_state(
         write_state(window, next)
     })
     .await
+}
+
+fn toggle_window_visibility(app: &AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Client window is unavailable")?;
+    #[cfg(windows)]
+    let visible = stealth::toggle_visibility(&window)?;
+    #[cfg(target_os = "macos")]
+    let visible = stealth::toggle_visibility(&window)?;
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let visible = {
+        if window.is_visible().map_err(|e| e.to_string())? {
+            window.hide().map_err(|e| e.to_string())?;
+            false
+        } else {
+            window.show().map_err(|e| e.to_string())?;
+            true
+        }
+    };
+    Ok(visible)
+}
+
+fn toggle_always_on_top(app: &AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Client window is unavailable")?;
+    let pinned = !is_pinned(&window)?;
+    set_pinned(&window, pinned)?;
+    let _ = app.emit("sharecode:pin-state", pinned);
+    Ok(pinned)
 }
 
 /// The global shortcut flips click-through natively: while the window takes no focus the web view
@@ -537,8 +568,7 @@ async fn set_meeting_privacy_enabled(
     }
 }
 
-/// Ctrl+Shift+F: the one shortcut the client registers. Works with zero UI focus, which is the
-/// point: it is the only way out of click-through.
+/// Native Alt+Shift shortcut dispatch is implemented by each platform listener.
 #[cfg(not(any(windows, target_os = "macos")))]
 fn setup_shortcuts(app: &AppHandle) {
     let toggle = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyF);
@@ -575,9 +605,14 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
-                let config = app.config().app.windows.iter()
+                let config = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
                     .find(|config| config.label == "main")
-                    .expect("main window configuration").clone();
+                    .expect("main window configuration")
+                    .clone();
                 main_window_macos::create(app, &config)?;
             }
             let handle = app.handle();
