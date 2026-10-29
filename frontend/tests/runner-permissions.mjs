@@ -41,12 +41,24 @@ try {
     if (actor !== 'member') assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python' }, actors[actor].token)).status, 404)
     assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'python', name:'not allowed' }, actors[actor].token)).status, 404)
   }
+  // Share guests follow their link too: a guest who edits switches the language and nothing else.
+  for (const canEdit of [true, false]) {
+    const { shareLink } = await ok(`/api/rooms/${room.id}/share-links`, 'POST', { canEdit }, actors.owner.token)
+    actors[canEdit ? 'guestWriter' : 'guestReader'] = await ok(`/api/share/${shareLink.token}/join`, 'POST', { username: canEdit ? 'Editing guest' : 'Viewing guest' })
+  }
+  const updated = await ok('/api/rooms/' + room.id, 'PUT', { language:'go' }, actors.guestWriter.token)
+  assert.equal(updated.room.language, 'go'); assert.equal(updated.room.owner, undefined)
+  await wait(() => messages.at(-1)?.language === 'go')
+  for (const [actor, body] of [['guestWriter', { language:'python', name:'not allowed' }], ['guestWriter', { company:'not allowed' }], ['guestReader', { language:'python' }]])
+    assert.equal((await request('/api/rooms/' + room.id, 'PUT', body, actors[actor].token)).status, 403)
+  await ok('/api/rooms/' + room.id, 'PUT', { language:'javascript' }, actors.owner.token)
+  await wait(() => messages.at(-1)?.language === 'javascript')
   assert.equal((await request('/api/rooms/' + room.id, 'PUT', { language:'bogus' }, root)).status, 400)
   peer.destroy(); messages.length=0
   peer = new HocuspocusProvider({ url: API.replace('http','ws')+'/api/ws', name: room.id, document:doc, token:actors.readonly.token, onStateless:({payload})=>messages.push(JSON.parse(payload)) })
   await wait(() => messages.some(m=>m.type==='room-language' && m.language==='javascript'))
   assert.equal(peer.authorizedScope, 'readonly')
-  console.log('PASS owner/agent/admin and editing link members switch the language; read-only members and outsiders denied; read-only live sync and reconnect')
+  console.log('PASS owner/agent/admin, editing link members and editing guests switch the language; read-only members and guests and outsiders denied; read-only live sync and reconnect')
   const samples = [
     ['python', 'print(input())'],
     ['java', 'public class Main { public static void main(String[] args) { System.out.println(new java.util.Scanner(System.in).nextLine()); } }'],
@@ -74,7 +86,7 @@ try {
   await web.listen()
   const browser = await chromium.launch()
   try {
-    for (const actor of ['agent','readonly','member']) {
+    for (const actor of ['agent','readonly','member','guestReader','guestWriter']) {
       const context = await browser.newContext()
       await context.addInitScript(token=>{
         sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}))
@@ -85,9 +97,9 @@ try {
       await page.goto('http://127.0.0.1:55461/room/'+room.id)
       await page.locator('.monaco-editor').waitFor()
       const picker=page.getByRole('combobox',{name:'Language',exact:true})
-      if(actor==='readonly') assert.equal(await picker.count(),0)
+      if(actor==='readonly'||actor==='guestReader') assert.equal(await picker.count(),0)
       else {
-        const language = actor==='agent' ? 'python' : 'java'
+        const language = { agent:'python', member:'java', guestWriter:'rust' }[actor]
         await picker.click()
         await page.getByRole('option',{name:language,exact:true}).click()
         await page.waitForFunction(language=>document.querySelector('.editor-statusbar [role=combobox]')?.textContent===language,language)
@@ -96,7 +108,7 @@ try {
       assert.deepEqual(errors,[])
       await context.close()
     }
-    console.log('PASS browser language picker: agent and editing link member change it; read-only member does not see it')
+    console.log('PASS browser language picker: agent, editing link member and editing guest change it; read-only member and guest do not see it')
   } finally { await browser.close(); await web.close() }
 
 } finally { peer.destroy(); doc.destroy() }

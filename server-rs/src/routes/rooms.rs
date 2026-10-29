@@ -10,13 +10,13 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    auth::{AuthUser, StaffUser},
+    auth::{AuthActor, AuthUser, StaffUser},
     db::db_error,
     error::ApiError,
     models::{RoomParticipantWithUserRow, RoomWithOwnerRow, UserSimpleRow},
     permissions::{
         can_delete_room, can_edit_room, can_end_room, can_manage_room, has_global_read, is_admin,
-        require_room_access, ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL,
+        require_content_access, require_room_access, ROOM_PLAYBACK_SQL, ROOM_VISIBILITY_SQL,
     },
     state::AppState,
     utils::time::{to_iso_string, to_iso_string_opt},
@@ -464,13 +464,29 @@ pub async fn get_room_by_document_id(
 pub async fn update_room(
     State(state): State<AppState>,
     client: ClientInfo,
-    auth_user: AuthUser,
+    actor: AuthActor,
     Path(room_id): Path<String>,
     Json(payload): Json<UpdateRoomPayload>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // Order setting updates with WebSocket authentication/reconnect snapshots.
     let _access = state.ws.access.write().await;
-    require_room_access(&state.db, &auth_user, &room_id).await?;
+    let language_only = payload.language.is_some()
+        && payload.name.is_none()
+        && payload.company.is_none()
+        && payload.position.is_none();
+    match &actor {
+        AuthActor::User(user) => {
+            require_room_access(&state.db, user, &room_id).await?;
+        }
+        // A share guest who can write to the live room switches its language, nothing else.
+        AuthActor::Guest(_) => {
+            if !require_content_access(&state.db, &actor, &room_id).await? || !language_only {
+                return Err(ApiError::forbidden(
+                    "Only people who can edit this room can change its language",
+                ));
+            }
+        }
+    }
     let room = sqlx::query_as::<_, RoomWithOwnerRow>(
         r#"
         SELECT
@@ -507,17 +523,20 @@ pub async fn update_room(
         None => return Err(ApiError::not_found("Room not found")),
     };
 
-    let participants = fetch_participants(&state, &room.id).await?;
-    let participant = participants.iter().find(|p| p.user_id == auth_user.id);
-    let can_edit = can_edit_room(&auth_user, &room, participant);
-    // Settings stay with the owner and staff; whoever edits the live room, a member who
-    // joined through an editing link included, also switches its language.
-    let can_change_settings = can_manage_room(&auth_user, &room.owner_id);
+    // Settings stay with the owner and staff; whoever edits the live room, a member or
+    // share guest who joined through an editing link included, also switches its language.
+    let (can_edit, can_change_settings) = match &actor {
+        AuthActor::User(auth_user) => {
+            let participants = fetch_participants(&state, &room.id).await?;
+            let participant = participants.iter().find(|p| p.user_id == auth_user.id);
+            (
+                can_edit_room(auth_user, &room, participant),
+                can_manage_room(auth_user, &room.owner_id),
+            )
+        }
+        AuthActor::Guest(_) => (true, false),
+    };
     let can_change_language = can_change_settings || can_edit;
-    let language_only = payload.language.is_some()
-        && payload.name.is_none()
-        && payload.company.is_none()
-        && payload.position.is_none();
     let language_permission = language_only && can_change_language;
 
     if !can_edit && !language_permission {
@@ -593,7 +612,7 @@ pub async fn update_room(
     .await
     .map_err(|err| db_error(err, "Failed to update room"))?;
 
-    audit::record_details(&mut *tx, &client, "room.updated", Some(&auth_user.id), Some(&auth_user.username), Some(&room_id), true, None, Some(&room_id), json!({"language":{"before":room.language,"after":updated.language},"nameChanged":rename_requested,"companyChanged":room.company != updated.company,"positionChanged":room.position != updated.position})).await?;
+    audit::record_details(&mut *tx, &client, "room.updated", Some(actor.id()), Some(actor.username()), Some(&room_id), true, None, Some(&room_id), json!({"language":{"before":room.language,"after":updated.language},"nameChanged":rename_requested,"companyChanged":room.company != updated.company,"positionChanged":room.position != updated.position})).await?;
     tx.commit()
         .await
         .map_err(|e| db_error(e, "Failed to commit audited operation"))?;
@@ -602,6 +621,14 @@ pub async fn update_room(
             .ws
             .broadcast_room_language(&room_id, &updated.language)
             .await;
+    }
+    if let AuthActor::Guest(_) = actor {
+        // Guests get the room as the share link showed it, without its owner or schedule.
+        return Ok(Json(json!({ "room": {
+            "id": updated.id, "name": updated.name, "language": updated.language,
+            "allowEdit": updated.allow_edit, "isEnded": updated.is_ended,
+            "endedAt": to_iso_string_opt(updated.ended_at),
+        } })));
     }
     Ok(Json(json!({ "room": room_to_json_owner(&updated) })))
 }

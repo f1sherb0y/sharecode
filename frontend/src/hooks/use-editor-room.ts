@@ -120,10 +120,13 @@ export function useEditorRoom(): EditorRoomState {
   }, [isGuestMode, guestProfile])
 
   const isOwner = !isGuestMode && (effectiveRoom?.isOwner ?? effectiveRoom?.ownerId === user?.id)
-  const canChangeLanguage = !isGuestMode && canChangeRoomLanguage(user, effectiveRoom)
   const canEdit = isGuestMode
     ? (guestProfile?.guest.canEdit ?? false)
     : effectiveRoom?.canEdit === true
+  // A share guest who can edit the live room switches its language too.
+  const canChangeLanguage = isGuestMode
+    ? canEdit && !!effectiveRoom && !effectiveRoom.isEnded
+    : canChangeRoomLanguage(user, effectiveRoom)
   const canManageRoom =
     !isGuestMode && canManageRoomShares(user, effectiveRoom?.ownerId)
   const canEndRoom = !isGuestMode && canEndRoomByMatrix(user, effectiveRoom?.ownerId)
@@ -155,6 +158,23 @@ export function useEditorRoom(): EditorRoomState {
     }
   }, [roomId, canEndRoom, navigate])
 
+  // setRoom wrapper: for guest mode updates (e.g. language from Yjs), update guestRoom state
+  const setRoomWithGuestUpdate: React.Dispatch<React.SetStateAction<Room | null>> = useCallback(
+    (value) => {
+      if (isGuestMode) {
+        setGuestRoom((prev) => {
+          if (!prev) return prev
+          const next = typeof value === 'function' ? value(effectiveRoom) : value
+          if (!next) return prev
+          return { ...prev, language: next.language, name: next.name, isEnded: next.isEnded, endedAt: next.endedAt }
+        })
+      } else {
+        setRoom(value)
+      }
+    },
+    [isGuestMode, effectiveRoom]
+  )
+
   const handleLanguageChange = useCallback(
     async (language: Language, ymeta: unknown) => {
       if (!roomId || !canChangeLanguage) return
@@ -175,30 +195,13 @@ export function useEditorRoom(): EditorRoomState {
           })
         }
         const { room: updated } = await api.updateRoom(roomId, { language })
-        setRoom(prev => prev ? { ...prev, ...updated } : updated)
+        setRoomWithGuestUpdate(prev => prev ? { ...prev, ...updated } : updated)
         meta?.set('language', language)
       } catch (err) {
         throw err
       }
     },
-    [roomId, canChangeLanguage, effectiveRoom?.language]
-  )
-
-  // setRoom wrapper: for guest mode updates (e.g. language from Yjs), update guestRoom state
-  const setRoomWithGuestUpdate: React.Dispatch<React.SetStateAction<Room | null>> = useCallback(
-    (value) => {
-      if (isGuestMode) {
-        setGuestRoom((prev) => {
-          if (!prev) return prev
-          const next = typeof value === 'function' ? value(effectiveRoom) : value
-          if (!next) return prev
-          return { ...prev, language: next.language, name: next.name, isEnded: next.isEnded, endedAt: next.endedAt }
-        })
-      } else {
-        setRoom(value)
-      }
-    },
-    [isGuestMode, effectiveRoom]
+    [roomId, canChangeLanguage, effectiveRoom?.language, setRoomWithGuestUpdate]
   )
 
   return {

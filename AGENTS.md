@@ -54,7 +54,7 @@ macOS pinning lifecycle: `frontend/src-tauri-client/src/main_window_macos.rs` cr
 - **Room visibility**: Techs see their own rooms, live pinned rooms (read-only) and rooms they joined by share link; agents and admins see and edit every standard room
 - **Share-link membership**: The link a tech last joined through decides whether they can edit; the room stays in their list for replay after it ends
 - **Room ownership**: Owners rename, share and end their rooms; only admins delete rooms or create private ones
-- **Room language**: the owner and staff switch it, and so does anyone else who edits the live room (a tech on an editing link); read-only members and guests do not
+- **Room language**: the owner and staff switch it, and so does anyone else who edits the live room (a tech or a share guest on an editing link; guests change nothing else through `PUT /api/rooms/{id}`); read-only members and guests do not
 - **Running code** (`/api/code/execute`, Piston): any account, and share guests who can write to their room (`require_content_access`); read-only guests get 403
 - **Language support**: 8 programming languages with syntax highlighting
   - JavaScript, TypeScript, Python, Java, C++, Rust, Go, PHP

@@ -136,8 +136,8 @@ pub fn can_edit_room_content(
     !is_ended && (is_owner || staff || participant_can_edit.unwrap_or(false))
 }
 
-/// Share links and the room name belong to the owner and staff; members who joined
-/// through a link edit content and, when that link lets them edit, the language.
+/// Share links and the room name belong to the owner and staff; members and share guests
+/// who joined through a link edit content and, when that link lets them edit, the language.
 pub fn can_manage_room(user: &AuthUser, room_owner_id: &str) -> bool {
     user.id == room_owner_id || is_staff(&user.role)
 }
