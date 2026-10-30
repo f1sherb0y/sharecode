@@ -48,7 +48,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       PORT: 3001
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:4173}
-      # Other domains / the public IP serving the same app, e.g. https://kode666.com,https://64.186.229.171
+      # Other domains / the public IP serving the same app, e.g. https://kode666.com,https://154.17.21.29
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}

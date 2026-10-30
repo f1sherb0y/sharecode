@@ -227,7 +227,7 @@ APP_URL="http://localhost:5173"
 
 # Extra origins serving the same app (other domains, public IP), comma separated.
 # Login and session renewal are rejected from any origin not listed here.
-# ALLOWED_ORIGINS="https://kode666.com,https://64.186.229.171"
+# ALLOWED_ORIGINS="https://kode666.com,https://154.17.21.29"
 
 # WebSocket router mode for desktop apps (HashRouter)
 FRONTEND_HASH_ROUTER=false
