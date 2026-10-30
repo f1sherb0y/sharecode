@@ -71,6 +71,17 @@ export function pickDownload(downloads: ClientDownload[], platform: ClientPlatfo
   return find(platform) ?? find(FALLBACKS[platform]) ?? null
 }
 
+/** The one-line install command for the platform's system, which fetches this site's install
+ * script (server-rs/src/routes/client_install) and runs it: zsh in Terminal on macOS, Windows
+ * PowerShell 5.1 (every Windows 10 and 11 has it) from Win+R, cmd or PowerShell on Windows. */
+export function installCommand(platform: ClientPlatform, origin: string): string | null {
+  if (platform.startsWith('darwin-')) return `/bin/zsh -c "$(curl -fsSL ${origin}/api/client/install.sh)"`
+  if (platform.startsWith('windows-')) {
+    return `powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=3072;irm -UseBasicParsing ${origin}/api/client/install.ps1|iex"`
+  }
+  return null
+}
+
 export function sortByPlatform<T extends { platform: ClientPlatform }>(items: T[]): T[] {
   return [...items].sort((a, b) => CLIENT_PLATFORMS.indexOf(a.platform) - CLIENT_PLATFORMS.indexOf(b.platform))
 }

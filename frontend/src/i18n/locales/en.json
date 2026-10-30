@@ -1249,6 +1249,16 @@
     "details": "{{arch}} · version {{version}} · {{size}}",
     "otherPlatforms": "Other systems",
     "choose": "Download the desktop client",
-    "menuItem": "{{platform}} · {{version}}"
+    "menuItem": "{{platform}} · {{version}}",
+    "command": {
+      "show": "Install with a command",
+      "hint": {
+        "darwin": "Recommended: open Terminal (press ⌘ Space, type Terminal, press Return), paste this command, press Return and enter your Mac password when asked.",
+        "windows": "Press Win + R, paste this command and press Enter."
+      },
+      "copy": "Copy command",
+      "copied": "Command copied",
+      "copyFailed": "Could not copy the command"
+    }
   }
 }

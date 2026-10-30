@@ -158,6 +158,9 @@ pub fn router(state: AppState) -> Router {
         // The release workflow opens a draft here; its files go to the admin upload route above.
         .route("/api/ci/client-releases/{version}", put(client_releases::open_ci_draft))
         .route("/api/client/releases/latest", get(client_releases::latest_downloads))
+        // The download page's one-line install commands.
+        .route("/api/client/install.sh", get(client_releases::macos_install_script))
+        .route("/api/client/install.ps1", get(client_releases::windows_install_script))
         .route(
             "/api/client/update/{target}/{arch}/{currentVersion}",
             get(client_releases::update_check),

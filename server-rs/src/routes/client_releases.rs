@@ -799,31 +799,106 @@ pub struct CiDraftPayload {
 
 // ----- Public -----
 
+/// A platform's newest published installer.
+fn latest_installer<'a>(releases: &'a [ReleaseRow], assets: &'a [AssetRow], platform: &str) -> Option<(&'a ReleaseRow, &'a AssetRow)> {
+    releases.iter().find_map(|release| {
+        assets
+            .iter()
+            .find(|a| a.release_id == release.id && a.platform == platform && a.kind == "installer")
+            .map(|asset| (release, asset))
+    })
+}
+
 /// Each platform's newest published installer, for the download button.
 pub async fn latest_downloads(State(state): State<AppState>) -> Result<Response, ApiError> {
     let (releases, assets) = load_releases(&state, true).await?;
     let downloads: Vec<Value> = PLATFORMS
         .iter()
         .filter_map(|platform| {
-            releases.iter().find_map(|release| {
-                assets
-                    .iter()
-                    .find(|a| a.release_id == release.id && a.platform == *platform && a.kind == "installer")
-                    .map(|asset| {
-                        json!({
-                            "platform": platform,
-                            "version": release.version,
-                            "publishedAt": to_iso_string_opt(release.published_at),
-                            "fileName": asset.file_name,
-                            "size": asset.size,
-                            "sha256": asset.sha256,
-                            "url": download_path(asset),
-                        })
-                    })
+            latest_installer(&releases, &assets, platform).map(|(release, asset)| {
+                json!({
+                    "platform": platform,
+                    "version": release.version,
+                    "publishedAt": to_iso_string_opt(release.published_at),
+                    "fileName": asset.file_name,
+                    "size": asset.size,
+                    "sha256": asset.sha256,
+                    "url": download_path(asset),
+                })
             })
         })
         .collect();
     Ok(([(header::CACHE_CONTROL, "no-cache")], Json(json!({ "downloads": downloads }))).into_response())
+}
+
+// ----- Install scripts -----
+
+// The download page's one-line install commands fetch these and run them: zsh on macOS, where
+// a browser download of the self-signed app is quarantined and Gatekeeper refuses it, and
+// Windows PowerShell 5.1 on Windows. Each is rendered with this node's origin and the newest
+// installer for both architectures (an Arm machine falls back to the x64/Intel build, as the
+// download button does), so the script itself needs no JSON parsing. Running the command again
+// updates or repairs an install; the client also keeps updating itself.
+const MACOS_INSTALL_SCRIPT: &str = include_str!("client_install/install.zsh");
+const WINDOWS_INSTALL_SCRIPT: &str = include_str!("client_install/install.ps1");
+
+fn render_install_script(
+    template: &str,
+    origin: &str,
+    releases: &[ReleaseRow],
+    assets: &[AssetRow],
+    os: &str,
+) -> Result<String, ApiError> {
+    let installer = |arch: &str| latest_installer(releases, assets, &format!("{os}-{arch}"));
+    let x64 = installer("x86_64");
+    let arm64 = installer("aarch64").or(x64);
+    let mut values = vec![("ORIGIN".to_string(), origin.to_string())];
+    for (arch, picked) in [("ARM64", arm64), ("X64", x64)] {
+        let (version, url, sha256) = picked
+            .map(|(release, asset)| (release.version.clone(), download_path(asset), asset.sha256.clone()))
+            .unwrap_or_default();
+        values.push((format!("{arch}_VERSION"), version));
+        values.push((format!("{arch}_URL"), url));
+        values.push((format!("{arch}_SHA256"), sha256));
+    }
+    let mut script = template.replace("\r\n", "\n");
+    for (name, value) in values {
+        // Every value lands inside single quotes; none of them can hold one (origins are
+        // serialized URLs, paths are percent-encoded, versions semantic, digests hex).
+        if value.contains(['\'', '\n', '\r']) {
+            tracing::error!(placeholder = %name, "install script value cannot be quoted");
+            return Err(ApiError::internal("The install script is not available"));
+        }
+        script = script.replace(&format!("{{{{{name}}}}}"), &value);
+    }
+    Ok(script)
+}
+
+async fn install_script(state: &AppState, headers: &HeaderMap, template: &str, os: &str) -> Result<Response, ApiError> {
+    let origin = public_origin(&state.config, headers).ok_or_else(|| {
+        tracing::error!("APP_URL is required to serve the client install scripts");
+        ApiError::service_unavailable("The install script is not available")
+    })?;
+    let (releases, assets) = load_releases(state, true).await?;
+    let script = render_install_script(template, &origin, &releases, &assets, os)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        script,
+    )
+        .into_response())
+}
+
+/// `/bin/zsh -c "$(curl -fsSL <origin>/api/client/install.sh)"`
+pub async fn macos_install_script(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
+    install_script(&state, &headers, MACOS_INSTALL_SCRIPT, "darwin").await
+}
+
+/// `powershell … "irm -UseBasicParsing <origin>/api/client/install.ps1|iex"`
+pub async fn windows_install_script(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
+    install_script(&state, &headers, WINDOWS_INSTALL_SCRIPT, "windows").await
 }
 
 /// A platform's update: the newest published release with a signed update bundle, or on
@@ -1058,6 +1133,36 @@ mod tests {
         // Unknown hosts get the main origin, never their own.
         assert_eq!(public_origin(&config, &headers("evil.invalid")).as_deref(), Some("https://collabcode.cc"));
         assert_eq!(public_origin(&config, &HeaderMap::new()).as_deref(), Some("https://collabcode.cc"));
+    }
+
+    #[test]
+    fn install_scripts_carry_the_newest_installer_per_architecture() {
+        let releases = vec![release("r2", "0.2.0"), release("r1", "0.1.0")];
+        let mut assets = vec![
+            asset("r2", "darwin-x86_64", "installer", true),
+            asset("r1", "darwin-aarch64", "installer", true),
+            // Update bundles are never what the scripts install.
+            asset("r2", "darwin-aarch64", "update", true),
+            asset("r2", "windows-x86_64", "installer", true),
+        ];
+        for a in &mut assets {
+            a.sha256 = format!("{:0>64}", a.release_id);
+        }
+        let render = |template, os| render_install_script(template, "https://kode666.com", &releases, &assets, os).unwrap();
+        for script in [render(MACOS_INSTALL_SCRIPT, "darwin"), render(WINDOWS_INSTALL_SCRIPT, "windows")] {
+            assert!(!script.contains("{{") && !script.contains('\r'), "unfilled placeholder or CR");
+            assert!(script.contains("https://kode666.com/api/client/install."));
+        }
+        let mac = render(MACOS_INSTALL_SCRIPT, "darwin");
+        // Apple silicon gets its own newest installer (0.1.0) even though Intel has 0.2.0.
+        assert!(mac.contains("version='0.1.0' url='/api/client/downloads/r1-darwin-aarch64-installer/file'"));
+        assert!(mac.contains("version='0.2.0' url='/api/client/downloads/r2-darwin-x86_64-installer/file'"));
+        assert!(mac.contains("ORIGIN='https://kode666.com'"));
+        // Windows on Arm falls back to the x64 installer; nothing published leaves the URL empty.
+        let windows = render(WINDOWS_INSTALL_SCRIPT, "windows");
+        assert_eq!(windows.matches("$url = '/api/client/downloads/r2-windows-x86_64-installer/file'").count(), 2);
+        let empty = render_install_script(WINDOWS_INSTALL_SCRIPT, "https://kode666.com", &releases, &[], "windows").unwrap();
+        assert_eq!(empty.matches("$url = ''").count(), 2);
     }
 
     #[test]
