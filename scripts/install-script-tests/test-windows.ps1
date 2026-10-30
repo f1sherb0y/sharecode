@@ -28,13 +28,13 @@ function Check([string]$name, [bool]$ok, [string]$output) {
 try {
   Start-Sleep -Seconds 2
   $out = Run 55470
-  Check 'installs passively and restarts the client' ((Get-Content $record -ErrorAction SilentlyContinue) -eq '/P /R' -and $out -match '安装完成 / Installed: ShareCode Client 9.9.9') $out
+  Check 'installs passively and restarts the client' ((Get-Content $record -ErrorAction SilentlyContinue) -eq '/P /R' -and $out -match 'Installed ShareCode Client 9\.9\.9\.') $out
   $out = Run 55471
-  Check 'refuses a corrupted download' (-not (Test-Path $record) -and $out -match '下载的文件不完整') $out
+  Check 'refuses a corrupted download' (-not (Test-Path $record) -and $out -match 'Download was incomplete') $out
   $env:FAKE_EXIT = '2'
   $out = Run 55470
   Remove-Item Env:FAKE_EXIT
-  Check 'reports a failed installer' ($out -match '安装程序没有完成（代码 2）') $out
+  Check 'reports a failed installer' ($out -match 'The installer failed \(code 2\)') $out
   $left = @(Get-ChildItem $env:TEMP -Directory -Filter 'sharecode-install-*' | Where-Object { $_.FullName -ne $work })
   Check 'leaves no temporary files' ($left.Count -eq 0) ($left.FullName -join "`n")
 } finally {

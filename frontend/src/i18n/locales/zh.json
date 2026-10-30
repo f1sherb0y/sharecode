@@ -1246,15 +1246,12 @@
     "title": "桌面客户端",
     "button": "下载 {{os}} 桌面客户端",
     "details": "{{arch}} · 版本 {{version}} · {{size}}",
+    "installer": "下载安装包",
     "otherPlatforms": "其他系统",
     "choose": "下载桌面客户端",
     "menuItem": "{{platform}} · {{version}}",
     "command": {
       "show": "命令安装",
-      "hint": {
-        "darwin": "推荐：打开「终端」（按 ⌘ 空格，输入“终端”后回车），粘贴下面的命令并按回车，再按提示输入开机密码。",
-        "windows": "按 Win + R，粘贴下面的命令并按回车。"
-      },
       "copy": "复制命令",
       "copied": "命令已复制",
       "copyFailed": "无法复制命令"

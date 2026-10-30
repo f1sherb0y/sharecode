@@ -295,8 +295,8 @@ try {
   const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
   const cases = [
     { name: 'Windows (client hints)', type: chromium, path: '/login', userAgent: windowsChrome, hints: windowsHints, button: 'Download the desktop client for Windows', details: 'x64 · version 0.4.0', file: setupName, content: WINDOWS_030 },
-    { name: 'Apple silicon Mac (client hints)', type: chromium, path: '/join', hints: { platform: 'macOS', architecture: 'arm' }, button: 'Download the desktop client for macOS', details: 'Apple silicon · version 0.2.0', file: 'ShareCode Client_0.2.0_aarch64.dmg', content: dmg },
-    { name: 'Mac Safari (user agent)', type: webkit, path: '/login', userAgent: macSafari, button: 'Download the desktop client for macOS', details: 'Apple silicon · version 0.2.0' },
+    { name: 'Apple silicon Mac (client hints)', type: chromium, path: '/join', hints: { platform: 'macOS', architecture: 'arm' }, button: 'Download installer', command: true, details: 'Apple silicon · version 0.2.0', file: 'ShareCode Client_0.2.0_aarch64.dmg', content: dmg },
+    { name: 'Mac Safari (user agent)', type: webkit, path: '/login', userAgent: macSafari, button: 'Download installer', command: true, details: 'Apple silicon · version 0.2.0' },
     { name: 'Linux (nothing published)', type: firefox, path: '/login', userAgent: linuxFirefox, menu: 'Download the desktop client' },
     { name: 'Chinese', type: chromium, path: '/login', locale: 'zh', userAgent: windowsChrome, hints: windowsHints, button: '下载 Windows 桌面客户端', details: 'x64 · 版本 0.4.0' },
     { name: 'phone', type: webkit, path: '/login', userAgent: iphone, hidden: true },
@@ -329,6 +329,9 @@ try {
       const link = section.getByRole('link', { name: item.button })
       await link.waitFor()
       assert.ok((await section.textContent()).includes(item.details), `${item.name}: ${await section.textContent()}`)
+      // macOS leads with the install command and keeps the installer as a link; Windows shows its command on request.
+      assert.equal(await section.locator('code').count(), item.command ? 1 : 0, item.name)
+      if (item.command) assert.equal(await section.locator('code').textContent(), `/bin/zsh -c "$(curl -fsSL ${WEB}/api/client/install.sh)"`, item.name)
       if (item.file) {
         const [file] = await Promise.all([page.waitForEvent('download'), link.click()])
         assert.equal(file.suggestedFilename(), item.file, item.name)

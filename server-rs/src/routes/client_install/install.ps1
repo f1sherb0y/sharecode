@@ -20,23 +20,19 @@
     $version = '{{X64_VERSION}}'; $url = '{{X64_URL}}'; $sha256 = '{{X64_SHA256}}'
   }
 
-  function Step([string]$text) { Write-Host ''; Write-Host "==> $text" -ForegroundColor Cyan }
-  function Say([string]$text) { Write-Host "    $text" }
-
   $dir = $null
   try {
-    Write-Host 'ShareCode Client'
-    if (-not $url) { throw '暂时没有适用于这台电脑的版本。 / No version is available for this PC yet.' }
+    if (-not $url) { throw 'No version is available for this PC yet.' }
 
     $dir = Join-Path ([IO.Path]::GetTempPath()) ('sharecode-install-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $dir | Out-Null
     $file = Join-Path $dir 'ShareCode-Client-setup.exe'
 
-    Step "下载 $version / Downloading $version"
+    Write-Host "Downloading ShareCode Client $version..."
     try {
       (New-Object Net.WebClient).DownloadFile($origin + $url, $file)
     } catch {
-      throw '下载失败，请检查网络后重新运行这条命令。 / The download failed. Check your connection and run the command again.'
+      throw 'Download failed. Check your connection and try again.'
     }
     $stream = [IO.File]::OpenRead($file)
     try {
@@ -44,28 +40,19 @@
     } finally {
       $stream.Dispose()
     }
-    if ($hash -ne $sha256) { throw '下载的文件不完整，请重新运行这条命令。 / The download is incomplete. Run the command again.' }
+    if ($hash -ne $sha256) { throw 'Download was incomplete. Try again.' }
 
-    Step '安装 / Installing'
-    Say '安装时会自动关闭正在运行的客户端。 / A running client is closed while installing.'
-    # Wait for the installer only: the client it starts again (/R) keeps running.
+    # The installer closes a running client. Wait for the installer only: the client it starts
+    # again (/R) keeps running.
     $installer = [Diagnostics.Process]::Start($file, '/P /R')
     $installer.WaitForExit()
-    if ($installer.ExitCode -ne 0) {
-      throw "安装程序没有完成（代码 $($installer.ExitCode)）。 / The installer did not finish (code $($installer.ExitCode))."
-    }
+    if ($installer.ExitCode -ne 0) { throw "The installer failed (code $($installer.ExitCode))." }
 
-    Write-Host ''
-    Write-Host "安装完成 / Installed: ShareCode Client $version" -ForegroundColor Green
-    Say '客户端会自动更新；也可以随时重新运行这条命令来更新或修复安装。'
-    Say 'The client updates itself; run this command again any time to update or repair it.'
+    Write-Host "Installed ShareCode Client $version." -ForegroundColor Green
     Start-Sleep -Seconds 3
   } catch {
-    Write-Host ''
-    Write-Host '安装失败 / Installation failed' -ForegroundColor Red
-    Say $_.Exception.Message
-    Write-Host ''
-    Read-Host '按回车键关闭 / Press Enter to close' | Out-Null
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host 'Press Enter to close' | Out-Null
   } finally {
     if ($dir) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
   }

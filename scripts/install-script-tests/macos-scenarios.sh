@@ -33,8 +33,9 @@ check 'disk image detached' 'grep -q "hdiutil detach" $LOG'
 check 'no staging left' '[ ! -e "/Applications/.ShareCode Client.app.installing" ]'
 check 'temp removed' '! ls -d /tmp/sharecode-install.* >/dev/null 2>&1'
 check 'sudo forgotten' 'grep -q "sudo -k" $LOG'
-check 'password explained' 'grep -q "不会显示任何字符" /tmp/out && grep -q "Password:" /tmp/out'
-check 'reports success' 'grep -q "Installed: ShareCode Client 9.9.9" /tmp/out'
+check 'asks for the password' 'grep -q "Mac password (typing is hidden): " /tmp/out'
+check 'reports success' 'grep -q "Installed ShareCode Client 9.9.9." /tmp/out'
+check 'English only' '! LC_ALL=C grep -q "[^ -~]" /tmp/out'
 
 scenario 'update over a running older version on Intel'
 mkdir -p "$APP/Contents/MacOS"; echo old > "$APP/Contents/MacOS/sharecode-client"
@@ -42,42 +43,43 @@ printf 'CFBundleIdentifier=dev.sharecode.client\nCFBundleShortVersionString=0.1.
 touch /tmp/running
 ARM=0 run
 check 'exits 0' '[ "$(cat /tmp/code)" = 0 ]'
-check 'mentions the installed version' 'grep -q "Installed: 0.1.0, installing: 9.9.8" /tmp/out'
 check 'downloads the Intel build' 'grep -q "curl .*/b/intel.dmg" $LOG'
 check 'quits the client' 'grep -q "pkill -x sharecode-client" $LOG'
 check 'replaced' '[ "$(cat "$APP/Contents/MacOS/sharecode-client")" = new-binary ]'
 
 scenario 'corrupted download'
 SHA=0000 run
-check 'fails' '[ "$(cat /tmp/code)" = 1 ] && grep -q "下载的文件不完整" /tmp/out'
+check 'fails' '[ "$(cat /tmp/code)" = 1 ] && grep -q "Download was incomplete" /tmp/out'
 check 'never asks for the password' '! grep -q "sudo -v" $LOG'
 check 'nothing installed' '[ ! -e "$APP" ]'
 check 'temp removed' '! ls -d /tmp/sharecode-install.* >/dev/null 2>&1'
 
 scenario 'download fails'
 CURL_FAIL=1 run
-check 'fails with the network message' '[ "$(cat /tmp/code)" = 1 ] && grep -q "下载失败" /tmp/out'
+check 'fails with the network message' '[ "$(cat /tmp/code)" = 1 ] && grep -q "Download failed" /tmp/out'
 
 scenario 'not an administrator'
+touch /tmp/running
 SUDO_FAIL=1 run
-check 'fails with the admin message' '[ "$(cat /tmp/code)" = 1 ] && grep -q "没有获得管理员权限" /tmp/out'
+check 'leaves the running client alone' '! grep -q pkill $LOG'
+check 'fails with the admin message' '[ "$(cat /tmp/code)" = 1 ] && grep -q "Administrator password required" /tmp/out'
 check 'nothing installed' '[ ! -e "$APP" ] && [ ! -e "/Applications/.ShareCode Client.app.installing" ]'
 check 'disk image detached' 'grep -q "hdiutil detach" $LOG'
 
 scenario 'installed app cannot be moved (App Management)'
 mkdir -p "$APP/Contents/MacOS"; echo old > "$APP/Contents/MacOS/sharecode-client"
 MV_FAIL=1 run
-check 'fails with the Finder hint' '[ "$(cat /tmp/code)" = 1 ] && grep -q "移到废纸篓" /tmp/out'
+check 'fails with the Finder hint' '[ "$(cat /tmp/code)" = 1 ] && grep -q "to the Trash" /tmp/out'
 check 'old app kept' '[ "$(cat "$APP/Contents/MacOS/sharecode-client")" = old ]'
 check 'no staging left' '[ ! -e "/Applications/.ShareCode Client.app.installing" ]'
 
 scenario 'macOS too old'
 SW_VERS=10.14.6 run
-check 'refuses' '[ "$(cat /tmp/code)" = 1 ] && grep -q "需要 macOS 10.15" /tmp/out'
+check 'refuses' '[ "$(cat /tmp/code)" = 1 ] && grep -q "Requires macOS 10.15" /tmp/out'
 
 scenario 'nothing published for this Mac'
 X64_URL='' ARM=0 run
-check 'Intel Mac without a build is told so' '[ "$(cat /tmp/code)" = 1 ] && grep -q "暂时没有适用于这台 Mac 的版本" /tmp/out'
+check 'Intel Mac without a build is told so' '[ "$(cat /tmp/code)" = 1 ] && grep -q "No version is available for this Mac" /tmp/out'
 
 echo
 echo "passed $pass, failed $failed"

@@ -29,9 +29,12 @@ function PlatformMenu({ downloads, trigger }: { downloads: ClientDownload[]; tri
   )
 }
 
-/** The one-line install command and how to run it. On macOS it is the way to install: a
- * browser download of the self-signed app is quarantined and Gatekeeper refuses to open it. */
-function InstallCommand({ platform }: { platform: ClientPlatform }) {
+const textButton =
+  'inline-flex items-center gap-0.5 rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+
+/** The one-line install command. On macOS it is the way to install: a browser download of
+ * the self-signed app is quarantined and Gatekeeper refuses to open it. */
+function InstallCommand({ platform, className }: { platform: ClientPlatform; className?: string }) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const command = installCommand(platform, window.location.origin)
@@ -47,14 +50,11 @@ function InstallCommand({ platform }: { platform: ClientPlatform }) {
     }
   }
   return (
-    <div className="mt-2 text-left">
-      <p className="text-xs text-muted-foreground">{t(`download.command.hint.${platform.split('-')[0]}`)}</p>
-      <div className="mt-1 flex items-center rounded-md border bg-muted/50 pl-2">
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap py-1.5 font-mono text-xs">{command}</code>
-        <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={t('download.command.copy')} onClick={() => void copy()}>
-          {copied ? <Check /> : <Copy />}
-        </Button>
-      </div>
+    <div className={cn('flex items-center rounded-md border bg-muted/50 pl-2 text-left', className)}>
+      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap py-1.5 font-mono text-xs">{command}</code>
+      <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={t('download.command.copy')} onClick={() => void copy()}>
+        {copied ? <Check /> : <Copy />}
+      </Button>
     </div>
   )
 }
@@ -88,32 +88,38 @@ export function DownloadApp() {
   if (inApp || platform === undefined || platform === 'mobile' || downloads.length === 0) return null
   const primary = pickDownload(downloads, platform)
   const others = downloads.filter((download) => download !== primary)
-  // macOS always shows the command; on Windows the installer works as downloaded.
-  const alwaysShowCommand = primary?.platform.startsWith('darwin-') ?? false
   const hasCommand = !!primary && installCommand(primary.platform, window.location.origin) !== null
+  // On macOS the command leads and the installer is only a link; on Windows the installer
+  // works as downloaded and the command waits behind a toggle.
+  const commandFirst = hasCommand && primary.platform.startsWith('darwin-')
 
   return (
     <section aria-label={t('download.title')} className="mt-3 border-t pt-3">
       {primary ? (
         <>
-          <Button asChild variant="outline" className="w-full">
-            <a href={primary.url} download={primary.fileName}>
-              <Download />
-              {t('download.button', { os: osLabel(t, primary.platform) })}
-            </a>
-          </Button>
+          {commandFirst ? (
+            <InstallCommand platform={primary.platform} />
+          ) : (
+            <Button asChild variant="outline" className="w-full">
+              <a href={primary.url} download={primary.fileName}>
+                <Download />
+                {t('download.button', { os: osLabel(t, primary.platform) })}
+              </a>
+            </Button>
+          )}
           <p className="mt-1 flex flex-wrap items-center justify-center gap-x-1 text-xs text-muted-foreground">
             <span>
               {t('download.details', { arch: archLabel(t, primary.platform), version: primary.version, size: formatBytes(primary.size) })}
             </span>
-            {hasCommand && !alwaysShowCommand && <span aria-hidden="true">·</span>}
-            {hasCommand && !alwaysShowCommand && (
-              <button
-                type="button"
-                aria-expanded={showCommand}
-                onClick={() => setShowCommand((shown) => !shown)}
-                className="inline-flex items-center gap-0.5 rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
+            {commandFirst && <span aria-hidden="true">·</span>}
+            {commandFirst && (
+              <a href={primary.url} download={primary.fileName} className={textButton}>
+                {t('download.installer')}
+              </a>
+            )}
+            {hasCommand && !commandFirst && <span aria-hidden="true">·</span>}
+            {hasCommand && !commandFirst && (
+              <button type="button" aria-expanded={showCommand} onClick={() => setShowCommand((shown) => !shown)} className={textButton}>
                 {t('download.command.show')}
                 <ChevronDown className={cn('h-3 w-3 transition-transform', showCommand && 'rotate-180')} />
               </button>
@@ -123,7 +129,7 @@ export function DownloadApp() {
               <PlatformMenu
                 downloads={others}
                 trigger={
-                  <button type="button" className="inline-flex items-center gap-0.5 rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                  <button type="button" className={textButton}>
                     {t('download.otherPlatforms')}
                     <ChevronDown className="h-3 w-3" />
                   </button>
@@ -131,7 +137,7 @@ export function DownloadApp() {
               />
             )}
           </p>
-          {hasCommand && (alwaysShowCommand || showCommand) && <InstallCommand platform={primary.platform} />}
+          {hasCommand && !commandFirst && showCommand && <InstallCommand platform={primary.platform} className="mt-2" />}
         </>
       ) : (
         <PlatformMenu
