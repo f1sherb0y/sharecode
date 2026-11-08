@@ -1219,6 +1219,8 @@
       "maximize": "Maximize",
       "restore": "Restore",
       "close": "Close",
+      "downloading": "Downloading update",
+      "downloadingUpdate": "Downloading version {{version}}. You can restart to update once it finishes.",
       "update": "Restart to update",
       "updating": "Updating...",
       "updateReady": "Version {{version}} is ready. Restart to finish updating; your room reopens afterwards.",

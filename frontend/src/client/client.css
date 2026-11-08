@@ -526,6 +526,54 @@ body ::-webkit-scrollbar-button { display: none; }
   outline-offset: 1px;
 }
 
+/* Downloading: a lighter band fills the pill from the left as the update arrives (the text stays
+   on the solid pill); without a known size the band sweeps across it instead. */
+.client-update-button[data-state='downloading'] {
+  position: relative;
+  overflow: hidden;
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+  isolation: isolate;
+}
+
+.client-update-button[data-state='downloading']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: var(--update-progress, 35%);
+  background-color: color-mix(in srgb, var(--color-primary-foreground) 35%, transparent);
+  transition: width 200ms linear;
+}
+
+.client-update-button[data-state='downloading']:not([style*='--update-progress'])::before {
+  animation: client-update-sweep 1.2s ease-in-out infinite;
+}
+
+.client-update-button[data-state='downloading'] > b {
+  font-weight: 600;
+}
+
+/* Ready: a soft pulse until the user restarts. */
+.client-update-button[data-state='ready'] {
+  animation: client-update-ready 2s ease-in-out infinite;
+}
+
+@keyframes client-update-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(290%); }
+}
+
+@keyframes client-update-ready {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--client-primary-surface) 60%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--client-primary-surface) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .client-update-button[data-state] { animation: none; }
+  .client-update-button[data-state='downloading']::before { animation: none; transition: none; }
+}
+
 /* The site's pages size themselves to the viewport (h-screen, min-h-screen and the room's
    measured height); inside the client they fill the area below the title bar instead. */
 .client-content {

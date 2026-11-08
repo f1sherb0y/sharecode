@@ -259,6 +259,34 @@ test('macOS shortcut controls fit a minimum-height window and keep in-app input 
   } finally { await context.close() }
 })
 
+test('update download shows progress, then becomes the restart button', async () => {
+  for (const locale of ['en', 'zh']) {
+    const { page, context, errors } = await open({ locale })
+    try {
+      const set = state => page.evaluate(async state => (await import('/src/client/updater.ts')).useUpdateStore.setState(state), state)
+      const progress = page.getByRole('progressbar')
+      await set({ downloading: { version: '9.9.9', received: 0, total: null } })
+      await progress.waitFor()
+      assert.equal(await progress.getAttribute('aria-valuenow'), null)
+      await progress.filter({ hasText: locale === 'zh' ? '正在下载更新' : 'Downloading update' }).waitFor()
+      await set({ downloading: { version: '9.9.9', received: 420, total: 1000 } })
+      await progress.filter({ hasText: '42%' }).waitFor()
+      assert.equal(await progress.getAttribute('aria-valuenow'), '42')
+      assert.match(await progress.getAttribute('style'), /--update-progress:\s*42%/)
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/update-progress-${locale}.png`, clip: { x: 700, y: 0, width: 400, height: 32 } })
+      await set({ downloading: null, ready: { version: '9.9.9' } })
+      await progress.waitFor({ state: 'detached' })
+      await page.getByRole('button', { name: locale === 'zh' ? '重启以更新' : 'Restart to update', exact: true }).waitFor()
+      // Narrow windows keep the percentage while the label is hidden.
+      await set({ ready: null, downloading: { version: '9.9.9', received: 5, total: 10 } })
+      await page.setViewportSize({ width: 700, height: 500 })
+      assert.equal(await progress.locator('b').textContent(), '50%')
+      assert.equal(await progress.locator('b').isVisible(), true)
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  }
+})
+
 test('the page never acts on the native Alt+Shift chords but keeps every other key', async () => {
   for (const mac of [false, true]) {
     const { page, context, errors } = await open({ mac })

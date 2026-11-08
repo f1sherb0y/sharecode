@@ -1,9 +1,9 @@
-import { useEffect, useState, type Ref } from 'react'
+import { useEffect, useState, type CSSProperties, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ScreenShare } from 'lucide-react'
 import { ScreenShareMenu } from './screen-share'
-import { ArrowDownToLine, Blend, Copy, EyeOff, Ghost, Maximize2, Minus, MonitorOff, MousePointer2, MousePointer2Off, Pin, Square, X } from 'lucide-react'
+import { ArrowDownToLine, Blend, Copy, EyeOff, Ghost, Maximize2, Minus, MonitorOff, MousePointer2, MousePointer2Off, Pin, RotateCw, Square, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ShareCodeLogo } from '@/components/share-code-logo'
 import { cn } from '@/lib/utils'
@@ -23,21 +23,43 @@ import {
   watchStealthShortcut,
 } from './window'
 
-/** Shown once an update has downloaded; restarting installs it (the room reopens after). */
+/** While an update downloads, its progress; once it has downloaded, restarting installs it (the
+ *  room reopens after). */
 function UpdateButton() {
   const { t } = useTranslation()
-  const { ready, installing, failed } = useUpdateStore()
+  const { downloading, ready, installing, failed } = useUpdateStore()
+  if (downloading) {
+    const percent = downloading.total ? Math.min(100, Math.floor((downloading.received / downloading.total) * 100)) : null
+    return (
+      <div
+        className="client-update-button"
+        data-state="downloading"
+        role="progressbar"
+        aria-label={t('client.titleBar.downloadingUpdate', { version: downloading.version })}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent ?? undefined}
+        title={t('client.titleBar.downloadingUpdate', { version: downloading.version })}
+        style={{ '--update-progress': percent === null ? undefined : `${percent}%` } as CSSProperties}
+      >
+        <ArrowDownToLine className="h-3 w-3" />
+        <span>{t('client.titleBar.downloading')}</span>
+        {percent !== null && <b>{percent}%</b>}
+      </div>
+    )
+  }
   if (!ready) return null
   const label = installing ? t('client.titleBar.updating') : t('client.titleBar.update')
   return (
     <button
       type="button"
       className="client-update-button"
+      data-state={installing ? 'installing' : 'ready'}
       onClick={() => void installUpdate()}
       disabled={installing}
       title={failed ? t('client.titleBar.updateFailed') : t('client.titleBar.updateReady', { version: ready.version })}
     >
-      <ArrowDownToLine className="h-3 w-3" />
+      <RotateCw className="h-3 w-3" />
       <span>{label}</span>
     </button>
   )

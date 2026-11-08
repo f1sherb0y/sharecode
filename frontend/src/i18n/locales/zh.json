@@ -1218,6 +1218,8 @@
       "maximize": "最大化",
       "restore": "还原",
       "close": "关闭",
+      "downloading": "正在下载更新",
+      "downloadingUpdate": "正在下载新版本 {{version}}，完成后可重启更新。",
       "update": "重启以更新",
       "updating": "正在更新...",
       "updateReady": "新版本 {{version}} 已下载。重启应用即可完成更新，房间会自动重新打开。",
