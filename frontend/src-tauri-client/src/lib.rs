@@ -333,6 +333,88 @@ fn toggle_always_on_top(app: &AppHandle) -> Result<bool, String> {
     Ok(pinned)
 }
 
+/// Logical pixels per Alt+Shift+arrow press; holding the arrow repeats it.
+#[cfg(any(windows, target_os = "macos"))]
+const MOVE_STEP: f64 = 20.0;
+
+/// Alt+Shift+arrow keys move the window one step (`dx`, `dy` are -1, 0 or 1) without focusing it.
+/// It may cross onto another screen but never moves further outside all screens' work areas.
+#[cfg(any(windows, target_os = "macos"))]
+pub(crate) fn move_window(app: &AppHandle, dx: i32, dy: i32) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Client window is unavailable")?;
+    let error = |e: tauri::Error| e.to_string();
+    if !window.is_visible().map_err(error)? || window.is_minimized().map_err(error)? {
+        return Ok(());
+    }
+    let step = (MOVE_STEP * window.scale_factor().map_err(error)?).round() as i32;
+    let position = window.outer_position().map_err(error)?;
+    let size = window.outer_size().map_err(error)?;
+    let mut bounds: Option<(i32, i32, i32, i32)> = None;
+    for monitor in window.available_monitors().map_err(error)? {
+        let area = monitor.work_area();
+        let (left, top) = (area.position.x, area.position.y);
+        let (right, bottom) = (left + area.size.width as i32, top + area.size.height as i32);
+        bounds = Some(match bounds {
+            None => (left, top, right, bottom),
+            Some((l, t, r, b)) => (l.min(left), t.min(top), r.max(right), b.max(bottom)),
+        });
+    }
+    let (left, top, right, bottom) =
+        bounds.unwrap_or((i32::MIN / 2, i32::MIN / 2, i32::MAX / 2, i32::MAX / 2));
+    let x = step_axis(position.x, dx * step, size.width as i32, left, right);
+    let y = step_axis(position.y, dy * step, size.height as i32, top, bottom);
+    if (x, y) != (position.x, position.y) {
+        window
+            .set_position(tauri::PhysicalPosition::new(x, y))
+            .map_err(error)?;
+    }
+    Ok(())
+}
+
+/// Moves `start` by `delta` within `[low, high - length]`, but never pulls a window that is already
+/// partly outside back in (only a move outward is limited).
+#[cfg(any(windows, target_os = "macos", test))]
+fn step_axis(start: i32, delta: i32, length: i32, low: i32, high: i32) -> i32 {
+    let target = start.saturating_add(delta);
+    if delta < 0 {
+        target.max(low.min(start))
+    } else if delta > 0 {
+        target.min((high - length).max(start))
+    } else {
+        start
+    }
+}
+
+#[cfg(test)]
+mod move_tests {
+    use super::step_axis;
+
+    #[test]
+    fn steps_stop_at_the_work_area_edges() {
+        // 0..1000 work area, 300 wide window.
+        assert_eq!(step_axis(100, 20, 300, 0, 1000), 120);
+        assert_eq!(step_axis(100, -20, 300, 0, 1000), 80);
+        assert_eq!(step_axis(10, -20, 300, 0, 1000), 0);
+        assert_eq!(step_axis(0, -20, 300, 0, 1000), 0);
+        assert_eq!(step_axis(690, 20, 300, 0, 1000), 700);
+        assert_eq!(step_axis(700, 20, 300, 0, 1000), 700);
+        assert_eq!(step_axis(500, 0, 300, 0, 1000), 500);
+    }
+
+    #[test]
+    fn a_window_already_outside_is_not_pulled_back() {
+        assert_eq!(step_axis(-50, -20, 300, 0, 1000), -50);
+        assert_eq!(step_axis(-50, 20, 300, 0, 1000), -30);
+        assert_eq!(step_axis(900, 20, 300, 0, 1000), 900);
+        assert_eq!(step_axis(900, -20, 300, 0, 1000), 880);
+        // Larger than the work area: it can still move inward, never outward.
+        assert_eq!(step_axis(0, 20, 1200, 0, 1000), 0);
+        assert_eq!(step_axis(0, -20, 1200, 0, 1000), 0);
+    }
+}
+
 /// The global shortcut flips click-through natively: while the window takes no focus the web view
 /// never sees the key press, so the switch has to move here and the title bar is told afterwards.
 pub(crate) fn toggle_click_through(app: &AppHandle) -> Result<StealthState, String> {
@@ -648,9 +730,11 @@ pub fn run() {
             #[cfg(not(any(windows, target_os = "macos")))]
             setup_shortcuts(handle);
             #[cfg(target_os = "macos")]
-            handle
-                .state::<hotkey_macos::Hotkey>()
-                .start(handle.clone())?;
+            {
+                let hotkey = handle.state::<hotkey_macos::Hotkey>();
+                hotkey.start(handle.clone())?;
+                hotkey.absorb_chords();
+            }
             let _ = handle.emit("sharecode:stealth-state", read_state());
             Ok(())
         });

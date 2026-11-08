@@ -236,7 +236,7 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
           className="client-title-button"
           data-active={clickThrough}
           disabled={!ready || busy || cannotEnableClickThrough}
-          aria-keyshortcuts="Control+Shift+F"
+          aria-keyshortcuts="Alt+Shift+F"
           aria-pressed={clickThrough}
           onClick={() => setClickThrough(!clickThrough)}
           aria-label={clickThrough ? t('client.titleBar.disableClickThrough') : t('client.titleBar.enableClickThrough')}

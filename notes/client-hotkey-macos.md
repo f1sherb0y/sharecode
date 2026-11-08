@@ -1,7 +1,7 @@
 # macOS native shortcut
 
-The customer client uses a session-level `CGEventTap` with `listenOnly`; it never registers
-`RegisterEventHotKey` on macOS; Windows uses the same key map through its native keyboard hook. Minimum macOS version: 10.15.
+The customer client uses a session-level `CGEventTap` with `listenOnly`; it alone acts on the
+shortcuts. Windows uses the same key map through its native keyboard hook. Minimum macOS version: 10.15.
 
 - Option/Alt + Shift + physical H hides/shows; F toggles click-through; Q quits; T toggles pinning. Q quits via Tauri’s normal exit lifecycle. The 15-second diagnostic test consumes F only; H/Q/T remain active.
   Either Option and Shift side works, including mixed sides. Control/Command are excluded. Caps Lock is ignored. Autorepeats and identical event delivery are ignored, without
@@ -288,3 +288,31 @@ Native diagnostics include actual class/layout, style/collection flags, level, k
 activation/minimized state and the precise failure branch (including pre-rollback state).
 The rotating hotkey log records initialization and the window before a recognized shortcut;
 native failures include these diagnostics. No ordinary keys or window contents are logged.
+
+## Moving the window and absorbing the chords (2026-11-08)
+
+Option/Alt+Shift+arrow keys move the window 20 logical px per press and repeat while the arrow
+is held (the only chord that acts on autorepeats); `move_window` in `lib.rs` keeps the window
+unfocused, skips a hidden or minimized one, may cross onto another screen and never moves it
+further outside the union of the screens' work areas (one already outside is not pulled back).
+Repeats and moves are not logged and do not end the F-only test.
+
+All eight chords (H/F/Q/T and the arrows) are now absorbed, so the app in front no longer
+receives them (Option+Shift+F/T/H/Q used to type Ï/ˇ/Ó/Œ there; Alt+Shift+Up/Down copies lines
+in VS Code-style editors). The listeners still decide and act; absorption is separate:
+
+- macOS: `Hotkey::absorb_chords` registers each chord with Carbon `RegisterEventHotKey` on the
+  main thread at startup and installs no handler. It needs no permission. A listen-only tap
+  cannot drop events, and a default tap that can would need Accessibility.
+- Windows: the hook thread registers each chord with `RegisterHotKey` (no `MOD_NOREPEAT`, so
+  held arrows are absorbed too) and ignores `WM_HOTKEY`. The hook itself still passes every key
+  on: dropping the target key there would leave Windows seeing Alt+Shift pressed and released
+  alone and switch the input language.
+- A chord another program has registered is logged and still acts, without being absorbed;
+  the client page (`absorbNativeChords` in `src/client/hotkey.ts`) ignores the chords so that
+  Monaco does not also act on one.
+
+Needs real-machine checks: macOS — that the session listen-only tap still receives chords that
+are registered as Carbon hot keys, that held arrows are absorbed, and moving across Spaces/
+screens; Windows — no input-language switch or menu-bar activation after an absorbed chord,
+and behaviour while an elevated window is in front.

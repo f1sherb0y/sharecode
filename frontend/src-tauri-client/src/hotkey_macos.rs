@@ -59,10 +59,27 @@ extern "C" {
     fn CFMachPortInvalidate(port: Ref);
     fn CFRelease(object: Ref);
 }
+#[repr(C)]
+struct EventHotKeyID {
+    signature: u32,
+    id: u32,
+}
 #[link(name = "Carbon", kind = "framework")]
 extern "C" {
     fn IsSecureEventInputEnabled() -> u8;
+    fn GetApplicationEventTarget() -> Ref;
+    fn RegisterEventHotKey(
+        code: u32,
+        modifiers: u32,
+        id: EventHotKeyID,
+        target: Ref,
+        options: u32,
+        out: *mut Ref,
+    ) -> i32;
 }
+// Carbon hot-key modifiers (Events.h): optionKey, shiftKey.
+const CARBON_OPTION: u32 = 1 << 11;
+const CARBON_SHIFT: u32 = 1 << 9;
 extern "C" {
     fn flock(fd: i32, operation: i32) -> i32;
 }
@@ -188,6 +205,44 @@ impl Hotkey {
             .map_err(|e| e.to_string())?;
         self.threads.lock().unwrap().push(watchdog);
         Ok(())
+    }
+
+    /// Registers every Option+Shift chord as a Carbon hot key only so that macOS consumes it: the
+    /// app in front no longer types Ï, ˇ, Ó or Œ or acts on the arrows, and neither does our own
+    /// web view. The listen-only tap still decides and performs every action and the hot-key
+    /// events are left unhandled. A listen-only tap cannot drop events, and a tap that can needs
+    /// Accessibility. Needs no permission; a chord another app holds is used, just not absorbed.
+    /// Call on the main thread; registrations last for the process lifetime.
+    pub fn absorb_chords(&self) {
+        use crate::hotkey_chord::*;
+        let mut failed = Vec::new();
+        for (id, key) in [
+            H_KEY, F_KEY, Q_KEY, T_KEY, LEFT_KEY, RIGHT_KEY, DOWN_KEY, UP_KEY,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut reference: Ref = ptr::null();
+            let status = unsafe {
+                RegisterEventHotKey(
+                    key as u32,
+                    CARBON_OPTION | CARBON_SHIFT,
+                    EventHotKeyID {
+                        signature: u32::from_be_bytes(*b"SCcl"),
+                        id: id as u32 + 1,
+                    },
+                    GetApplicationEventTarget(),
+                    0,
+                    &mut reference,
+                )
+            };
+            if status != 0 {
+                failed.push(json!({"key": key, "status": status}));
+            }
+        }
+        self.shared
+            .log
+            .record("absorbChords", json!({"notAbsorbed": failed}));
     }
 
     pub fn available(&self) -> bool {
@@ -360,8 +415,11 @@ impl Shared {
     }
 
     fn dispatch(self: &Arc<Self>, app: &AppHandle, action: Action) {
-        self.log
-            .record("shortcutReceived", json!({"action": format!("{action:?}")}));
+        // A held arrow repeats many times a second; only failures of a move are recorded.
+        if !matches!(action, Action::Move(..)) {
+            self.log
+                .record("shortcutReceived", json!({"action": format!("{action:?}")}));
+        }
         let generation = self.generation.load(Ordering::Acquire);
         let shared = self.clone();
         let app2 = app.clone();
@@ -379,6 +437,19 @@ impl Shared {
             if action == Action::Quit {
                 shared.log.record("quitRequested", json!({}));
                 app2.exit(0);
+                return;
+            }
+            // Moving neither ends the F-only test nor counts as a received shortcut.
+            if let Action::Move(dx, dy) = action {
+                if let Err(error) = crate::move_window(&app2, dx, dy) {
+                    shared
+                        .log
+                        .record("moveFailed", json!({"error": error.clone()}));
+                    shared.update(&app2, |s| {
+                        s.last_action = Some("failed");
+                        s.error = Some(error);
+                    });
+                }
                 return;
             }
             let testing = shared
@@ -424,7 +495,9 @@ impl Shared {
                             "unpinned"
                         }
                     }),
-                    Action::Quit => unreachable!("quit is handled before the test state"),
+                    Action::Quit | Action::Move(..) => {
+                        unreachable!("quit and move are handled before the test state")
+                    }
                 }
             };
             shared.update(&app2, |s| {

@@ -1,8 +1,12 @@
-//! Only H/F/Q/T and their required modifiers are recognized; no text is retained.
+//! Only H/F/Q/T, the arrow keys and their required modifiers are recognized; no text is retained.
 pub const H_KEY: i64 = 4;
 pub const F_KEY: i64 = 3;
 pub const Q_KEY: i64 = 12;
 pub const T_KEY: i64 = 17;
+pub const LEFT_KEY: i64 = 123;
+pub const RIGHT_KEY: i64 = 124;
+pub const DOWN_KEY: i64 = 125;
+pub const UP_KEY: i64 = 126;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -10,6 +14,8 @@ pub enum Action {
     ToggleClickThrough,
     Quit,
     ToggleAlwaysOnTop,
+    /// One step in the given direction (-1, 0 or 1 per axis); repeats while the arrow is held.
+    Move(i32, i32),
 }
 pub const SHIFT: u64 = 1 << 17;
 pub const OPTION: u64 = 1 << 19;
@@ -32,14 +38,21 @@ impl Chord {
             F_KEY => Action::ToggleClickThrough,
             Q_KEY => Action::Quit,
             T_KEY => Action::ToggleAlwaysOnTop,
+            LEFT_KEY => Action::Move(-1, 0),
+            RIGHT_KEY => Action::Move(1, 0),
+            UP_KEY => Action::Move(0, -1),
+            DOWN_KEY => Action::Move(0, 1),
             _ => return None,
         };
-        if repeat || self.last_down == Some((key, timestamp)) {
+        // Holding an arrow keeps moving the window; every other action is one per press.
+        let repeats = matches!(action, Action::Move(..));
+        if (repeat && !repeats) || self.last_down == Some((key, timestamp)) {
             return None;
         }
         // CG marks held-key repeats explicitly. A fresh nonrepeat is a new press even if
         // its preceding key-up was lost during a permission/wake transition. No time debounce:
         // two fast physical presses must both work. One tap is the sole event source.
+        // Arrow events also carry the numeric-pad and Fn flags, which the mask ignores.
         self.last_down = Some((key, timestamp));
         (flags & (CONTROL | SHIFT | OPTION | COMMAND) == OPTION | SHIFT).then_some(action)
     }
@@ -123,6 +136,40 @@ mod tests {
         chord.reset();
         assert!(chord.press(F_KEY, OPTION | SHIFT, true, 10).is_none());
         assert!(chord.press(F_KEY, OPTION | SHIFT, false, 11).is_some());
+    }
+}
+
+#[cfg(test)]
+mod move_tests {
+    use super::*;
+
+    #[test]
+    fn arrows_move_and_repeat_while_held() {
+        // kCGEventFlagMaskNumericPad | kCGEventFlagMaskSecondaryFn accompany arrow keys.
+        let arrow = (1 << 21) | (1 << 23);
+        for (key, action) in [
+            (LEFT_KEY, Action::Move(-1, 0)),
+            (RIGHT_KEY, Action::Move(1, 0)),
+            (UP_KEY, Action::Move(0, -1)),
+            (DOWN_KEY, Action::Move(0, 1)),
+        ] {
+            let mut chord = Chord::default();
+            let flags = OPTION | SHIFT | arrow;
+            assert_eq!(chord.press(key, flags, false, 1), Some(action));
+            assert_eq!(chord.press(key, flags, false, 1), None);
+            assert_eq!(chord.press(key, flags, true, 2), Some(action));
+            assert_eq!(chord.press(key, flags, true, 3), Some(action));
+            for flags in [
+                arrow,
+                OPTION | arrow,
+                SHIFT | arrow,
+                OPTION | SHIFT | CONTROL | arrow,
+                OPTION | SHIFT | COMMAND | arrow,
+            ] {
+                assert_eq!(Chord::default().press(key, flags, false, 4), None);
+                assert_eq!(Chord::default().press(key, flags, true, 4), None);
+            }
+        }
     }
 }
 

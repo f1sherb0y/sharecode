@@ -43,6 +43,22 @@ export const useMacHotkey = create<HotkeyStore>((set, get) => ({
   },
 }))
 
+const NATIVE_CHORD_KEYS = new Set(['KeyH', 'KeyF', 'KeyQ', 'KeyT', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'])
+
+/** The native listeners act on Alt+Shift+H/F/Q/T and the arrow keys, and the OS absorbs them. When
+ *  another program holds one the OS cannot, so the page must still not act on it as well (Monaco
+ *  formats on Alt+Shift+F and copies lines on Alt+Shift+Up/Down). */
+export function absorbNativeChords() {
+  window.addEventListener('keydown', (event) => {
+    // macOS acts on exactly Option+Shift; Windows also with Ctrl (AltGr layouts send Ctrl+Alt).
+    if (event.altKey && event.shiftKey && !event.metaKey && !(isMacOSClient && event.ctrlKey)
+      && NATIVE_CHORD_KEYS.has(event.code)) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+  }, true)
+}
+
 export function watchMacHotkey(): () => void {
   if (!isMacOSClient) return () => {}
   let cancelled = false

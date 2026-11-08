@@ -258,6 +258,30 @@ test('macOS shortcut controls fit a minimum-height window and keep in-app input 
   } finally { await context.close() }
 })
 
+test('the page never acts on the native Alt+Shift chords but keeps every other key', async () => {
+  for (const mac of [false, true]) {
+    const { page, context, errors } = await open({ mac })
+    try {
+      const input = page.getByRole('textbox').first()
+      await input.fill('keys')
+      await input.evaluate(el => { window.reached = []; el.addEventListener('keydown', e => window.reached.push(e.code)) })
+      for (const key of ['KeyH', 'KeyF', 'KeyQ', 'KeyT', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
+        await page.keyboard.press(`Alt+Shift+${key}`)
+      }
+      assert.deepEqual(await page.evaluate(() => window.reached.filter(code => !code.startsWith('Alt') && !code.startsWith('Shift'))), [])
+      await page.keyboard.press('Alt+Shift+KeyA')
+      await page.keyboard.press('Shift+ArrowLeft')
+      await page.keyboard.press('Alt+ArrowLeft')
+      // macOS acts on exactly Option+Shift, so Control+Option+Shift is left to the page there.
+      await page.keyboard.press('Control+Alt+Shift+ArrowLeft')
+      assert.deepEqual(await page.evaluate(() => window.reached.filter(code => !/^(Alt|Shift|Control)/.test(code))),
+        ['KeyA', 'ArrowLeft', 'ArrowLeft', ...(mac ? ['ArrowLeft'] : [])])
+      assert.equal(await input.inputValue(), 'keys')
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  }
+})
+
 test('button and native shortcut sync pinning; disabling click-through preserves pin', async () => {
   const { page, context, errors } = await open()
   try {
