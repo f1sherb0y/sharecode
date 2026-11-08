@@ -102,10 +102,11 @@ pub fn attach(window: &WebviewWindow) -> Result<(), String> {
             )
         ));
     }
-    // Drag without activating first: the JS drag region only sees events once the
-    // window is key, so an inactive window needed one click before it could move.
-    // Window-background dragging happens in AppKit on the very first press.
-    native.setMovableByWindowBackground(true);
+    // Never movable by background: Tao then starts a window drag on every mouse-down, so
+    // sliders, text selection and drawing moved the window. `acceptFirstMouse` in
+    // tauri.macos.conf.json lets the first press on an inactive window reach the page instead,
+    // where only `data-tauri-drag-region` elements drag.
+    native.setMovableByWindowBackground(false);
     native.setMovable(true);
     remember_frontmost();
     ACTIVATION_OBSERVER.with(|slot| {

@@ -120,6 +120,7 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
       callbacks.get(listeners.get('sharecode:stealth-state'))({ payload: window.nativeState })
     }
     window.nativeEvent = (name, payload) => callbacks.get(listeners.get(name))?.({ payload })
+    window.nativeListening = name => listeners.has(name)
     window.hotkeyStatus = patch => {
       window.nativeHotkey = { ...window.nativeHotkey, ...(patch.phase ? { ready: patch.phase === 'listening' } : {}), ...patch, revision: window.nativeHotkey.revision + 1 }
       callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: window.nativeHotkey })
@@ -265,7 +266,7 @@ test('the page never acts on the native Alt+Shift chords but keeps every other k
       const input = page.getByRole('textbox').first()
       await input.fill('keys')
       await input.evaluate(el => { window.reached = []; el.addEventListener('keydown', e => window.reached.push(e.code)) })
-      for (const key of ['KeyH', 'KeyF', 'KeyQ', 'KeyT', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
+      for (const key of ['KeyH', 'KeyF', 'KeyQ', 'KeyT', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'BracketLeft', 'BracketRight']) {
         await page.keyboard.press(`Alt+Shift+${key}`)
       }
       assert.deepEqual(await page.evaluate(() => window.reached.filter(code => !code.startsWith('Alt') && !code.startsWith('Shift'))), [])
@@ -280,6 +281,31 @@ test('the page never acts on the native Alt+Shift chords but keeps every other k
       assert.deepEqual(errors, [])
     } finally { await context.close() }
   }
+})
+
+test('native Alt+Shift+[ and ] step only the background opacity, within its range and back onto the preset', async () => {
+  const { page, context, errors } = await open()
+  try {
+    const saved = () => page.evaluate(() => {
+      const { textOpacity, backgroundOpacity } = JSON.parse(localStorage.getItem('sharecode-client-window')).state
+      return [textOpacity, backgroundOpacity]
+    })
+    const step = async (direction, times = 1) => {
+      for (let i = 0; i < times; i++) await page.evaluate((d) => window.nativeEvent('sharecode:opacity-step', d), direction)
+    }
+    await page.waitForFunction(() => window.nativeListening('sharecode:opacity-step'))
+    await step(-1)
+    assert.deepEqual(await saved(), [0.9, 0.55])
+    await step(-1, 10)
+    assert.deepEqual(await saved(), [0.9, 0.1])
+    await step(1, 10)
+    assert.deepEqual(await saved(), [0.9, 1])
+    await page.evaluate(async () => { const { useWindowPreferences } = await import('/src/client/window.ts'); useWindowPreferences.getState().setOpacity(0.9, 0.65) })
+    await step(-1, 2)
+    await step(1, 2)
+    assert.deepEqual(await saved(), [0.9, 0.65])
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
 })
 
 test('button and native shortcut sync pinning; disabling click-through preserves pin', async () => {

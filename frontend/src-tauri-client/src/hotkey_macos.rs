@@ -208,7 +208,7 @@ impl Hotkey {
     }
 
     /// Registers every Option+Shift chord as a Carbon hot key only so that macOS consumes it: the
-    /// app in front no longer types Ï, ˇ, Ó or Œ or acts on the arrows, and neither does our own
+    /// app in front no longer types Ï, ˇ, Ó, Œ, ” or ’ or acts on the arrows, and neither does our own
     /// web view. The listen-only tap still decides and performs every action and the hot-key
     /// events are left unhandled. A listen-only tap cannot drop events, and a tap that can needs
     /// Accessibility. Needs no permission; a chord another app holds is used, just not absorbed.
@@ -217,7 +217,16 @@ impl Hotkey {
         use crate::hotkey_chord::*;
         let mut failed = Vec::new();
         for (id, key) in [
-            H_KEY, F_KEY, Q_KEY, T_KEY, LEFT_KEY, RIGHT_KEY, DOWN_KEY, UP_KEY,
+            H_KEY,
+            F_KEY,
+            Q_KEY,
+            T_KEY,
+            LEFT_KEY,
+            RIGHT_KEY,
+            DOWN_KEY,
+            UP_KEY,
+            LEFT_BRACKET_KEY,
+            RIGHT_BRACKET_KEY,
         ]
         .into_iter()
         .enumerate()
@@ -452,6 +461,11 @@ impl Shared {
                 }
                 return;
             }
+            // Likewise for opacity: the page applies and saves the step.
+            if let Action::Opacity(direction) = action {
+                crate::step_opacity(&app2, direction);
+                return;
+            }
             let testing = shared
                 .test_until
                 .lock()
@@ -495,8 +509,8 @@ impl Shared {
                             "unpinned"
                         }
                     }),
-                    Action::Quit | Action::Move(..) => {
-                        unreachable!("quit and move are handled before the test state")
+                    Action::Quit | Action::Move(..) | Action::Opacity(..) => {
+                        unreachable!("quit, move and opacity are handled before the test state")
                     }
                 }
             };

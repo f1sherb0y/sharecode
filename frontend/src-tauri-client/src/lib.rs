@@ -333,9 +333,16 @@ fn toggle_always_on_top(app: &AppHandle) -> Result<bool, String> {
     Ok(pinned)
 }
 
+/// Alt+Shift+[ and ] step the opacity down (-1) or up (1). The page owns and saves the opacity
+/// preferences, so it applies the step.
+#[cfg(any(windows, target_os = "macos"))]
+pub(crate) fn step_opacity(app: &AppHandle, direction: i32) {
+    let _ = app.emit("sharecode:opacity-step", direction);
+}
+
 /// Logical pixels per Alt+Shift+arrow press; holding the arrow repeats it.
 #[cfg(any(windows, target_os = "macos"))]
-const MOVE_STEP: f64 = 20.0;
+const MOVE_STEP: f64 = 60.0;
 
 /// Alt+Shift+arrow keys move the window one step (`dx`, `dy` are -1, 0 or 1) without focusing it.
 /// It may cross onto another screen but never moves further outside all screens' work areas.

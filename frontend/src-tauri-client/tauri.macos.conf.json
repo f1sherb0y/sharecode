@@ -19,7 +19,8 @@
         "visible": false,
         "focus": false,
         "contentProtected": true,
-        "maximizable": false
+        "maximizable": false,
+        "acceptFirstMouse": true
       }
     ]
   },

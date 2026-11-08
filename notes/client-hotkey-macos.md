@@ -291,7 +291,7 @@ native failures include these diagnostics. No ordinary keys or window contents a
 
 ## Moving the window and absorbing the chords (2026-11-08)
 
-Option/Alt+Shift+arrow keys move the window 20 logical px per press and repeat while the arrow
+Option/Alt+Shift+arrow keys move the window 60 logical px per press and repeat while the arrow
 is held (the only chord that acts on autorepeats); `move_window` in `lib.rs` keeps the window
 unfocused, skips a hidden or minimized one, may cross onto another screen and never moves it
 further outside the union of the screens' work areas (one already outside is not pulled back).
@@ -316,3 +316,26 @@ Needs real-machine checks: macOS — that the session listen-only tap still rece
 are registered as Carbon hot keys, that held arrows are absorbed, and moving across Spaces/
 screens; Windows — no input-language switch or menu-bar activation after an absorbed chord,
 and behaviour while an elevated window is in front.
+
+## Opacity chords and a larger move step (2026-11-08)
+
+On the first real-Mac run the listen-only tap still received every chord registered as a Carbon
+hot key, so absorption and the actions work together. The move step is now 60 logical px.
+
+Option/Alt+Shift+[ and ] lower and raise the background opacity by 10 points per press, within
+its slider range (10–100 %); the text opacity is left alone. Held keys do not repeat. Values are rounded to whole percent, so stepping away and back returns exactly to a
+preset. The native side only emits `sharecode:opacity-step` (-1 or 1); the page owns and saves
+the preferences. macOS uses the physical ANSI bracket keys (33/30), Windows `VK_OEM_4`/`VK_OEM_6`
+(the bracket keys on US layouts). Both are absorbed like the other chords (Option+Shift+[ and ]
+type ” and ’ on a US layout).
+
+## Window dragging only from the title bar (2026-11-08)
+
+The main panel used to be movable by window background so that an inactive window could be
+dragged on the first press. Tao's `sendEvent:` override then calls `performWindowDragWithEvent`
+on every left mouse-down anywhere in the window, so dragging the opacity sliders (and selecting
+text or drawing) moved the window instead. It is no longer movable by background; instead
+`acceptFirstMouse` (in `tauri.macos.conf.json`) makes WKWebView deliver the first press on an
+inactive window to the page, where Tauri's drag script starts a window drag only on elements
+with `data-tauri-drag-region`. Needs a real-machine check: dragging the title bar of an inactive
+window on the first press, sliders, text selection and Canvas drawing without moving the window.

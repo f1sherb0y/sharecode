@@ -1,4 +1,5 @@
-//! Only H/F/Q/T, the arrow keys and their required modifiers are recognized; no text is retained.
+//! Only H/F/Q/T, the arrow keys, [ and ] and their required modifiers are recognized; no text is
+//! retained.
 pub const H_KEY: i64 = 4;
 pub const F_KEY: i64 = 3;
 pub const Q_KEY: i64 = 12;
@@ -7,6 +8,9 @@ pub const LEFT_KEY: i64 = 123;
 pub const RIGHT_KEY: i64 = 124;
 pub const DOWN_KEY: i64 = 125;
 pub const UP_KEY: i64 = 126;
+// Physical ANSI [ and ] (kVK_ANSI_LeftBracket, kVK_ANSI_RightBracket).
+pub const LEFT_BRACKET_KEY: i64 = 33;
+pub const RIGHT_BRACKET_KEY: i64 = 30;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -16,6 +20,8 @@ pub enum Action {
     ToggleAlwaysOnTop,
     /// One step in the given direction (-1, 0 or 1 per axis); repeats while the arrow is held.
     Move(i32, i32),
+    /// One opacity step down (-1) or up (1); one per press.
+    Opacity(i32),
 }
 pub const SHIFT: u64 = 1 << 17;
 pub const OPTION: u64 = 1 << 19;
@@ -42,6 +48,8 @@ impl Chord {
             RIGHT_KEY => Action::Move(1, 0),
             UP_KEY => Action::Move(0, -1),
             DOWN_KEY => Action::Move(0, 1),
+            LEFT_BRACKET_KEY => Action::Opacity(-1),
+            RIGHT_BRACKET_KEY => Action::Opacity(1),
             _ => return None,
         };
         // Holding an arrow keeps moving the window; every other action is one per press.
@@ -85,6 +93,8 @@ mod tests {
             (F_KEY, Action::ToggleClickThrough),
             (Q_KEY, Action::Quit),
             (T_KEY, Action::ToggleAlwaysOnTop),
+            (LEFT_BRACKET_KEY, Action::Opacity(-1)),
+            (RIGHT_BRACKET_KEY, Action::Opacity(1)),
         ] {
             assert_eq!(
                 Chord::default().press(key, OPTION | SHIFT, false, key as u64),
@@ -168,6 +178,33 @@ mod move_tests {
             ] {
                 assert_eq!(Chord::default().press(key, flags, false, 4), None);
                 assert_eq!(Chord::default().press(key, flags, true, 4), None);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod opacity_tests {
+    use super::*;
+
+    #[test]
+    fn brackets_step_opacity_once_per_press() {
+        for (key, action) in [
+            (LEFT_BRACKET_KEY, Action::Opacity(-1)),
+            (RIGHT_BRACKET_KEY, Action::Opacity(1)),
+        ] {
+            let mut chord = Chord::default();
+            assert_eq!(chord.press(key, OPTION | SHIFT, false, 1), Some(action));
+            assert_eq!(chord.press(key, OPTION | SHIFT, true, 2), None);
+            assert_eq!(chord.press(key, OPTION | SHIFT, false, 3), Some(action));
+            for flags in [
+                0,
+                OPTION,
+                SHIFT,
+                OPTION | SHIFT | CONTROL,
+                OPTION | SHIFT | COMMAND,
+            ] {
+                assert_eq!(Chord::default().press(key, flags, false, 4), None);
             }
         }
     }

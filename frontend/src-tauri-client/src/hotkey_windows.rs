@@ -91,6 +91,9 @@ const VK_LEFT: u32 = 0x25;
 const VK_UP: u32 = 0x26;
 const VK_RIGHT: u32 = 0x27;
 const VK_DOWN: u32 = 0x28;
+// [ and ] on US layouts.
+const VK_OEM_4: u32 = 0xDB;
+const VK_OEM_6: u32 = 0xDD;
 const VK_LSHIFT: u32 = 0xA0;
 const VK_RSHIFT: u32 = 0xA1;
 const VK_LMENU: u32 = 0xA4;
@@ -118,11 +121,14 @@ struct KeyState {
     up_down: bool,
     right_down: bool,
     down_down: bool,
+    left_bracket_down: bool,
+    right_bracket_down: bool,
 }
 
-/// The keys that act while Alt+Shift is held. Arrows move the window and repeat while held.
+/// The keys that act while Alt+Shift is held. Arrows move the window and repeat while held;
+/// [ and ] step the opacity once per press.
 fn is_target(vk: u32) -> bool {
-    matches!(vk, VK_H | VK_F | VK_Q | VK_T) || is_arrow(vk)
+    matches!(vk, VK_H | VK_F | VK_Q | VK_T | VK_OEM_4 | VK_OEM_6) || is_arrow(vk)
 }
 
 fn is_arrow(vk: u32) -> bool {
@@ -144,6 +150,8 @@ impl KeyState {
             VK_UP => &mut self.up_down,
             VK_RIGHT => &mut self.right_down,
             VK_DOWN => &mut self.down_down,
+            VK_OEM_4 => &mut self.left_bracket_down,
+            VK_OEM_6 => &mut self.right_bracket_down,
             _ => return None,
         })
     }
@@ -191,6 +199,8 @@ fn reconcile_keys() -> Option<u32> {
         up_down: down(VK_UP),
         right_down: down(VK_RIGHT),
         down_down: down(VK_DOWN),
+        left_bracket_down: down(VK_OEM_4),
+        right_bracket_down: down(VK_OEM_6),
     };
     STATE.with(|slot| {
         let mut state = slot.borrow_mut();
@@ -218,6 +228,10 @@ fn reconcile_keys() -> Option<u32> {
             Some(VK_RIGHT)
         } else if physical.down_down && !state.down_down {
             Some(VK_DOWN)
+        } else if physical.left_bracket_down && !state.left_bracket_down {
+            Some(VK_OEM_4)
+        } else if physical.right_bracket_down && !state.right_bracket_down {
+            Some(VK_OEM_6)
         } else {
             None
         };
@@ -233,6 +247,8 @@ fn reconcile_keys() -> Option<u32> {
         state.up_down = physical.up_down;
         state.right_down = physical.right_down;
         state.down_down = physical.down_down;
+        state.left_bracket_down = physical.left_bracket_down;
+        state.right_bracket_down = physical.right_bracket_down;
         if let Some(key) = missed_press {
             log_line(format!(
                 "native key-state sample detected shortcut vk=0x{key:02X}"
@@ -333,6 +349,14 @@ fn dispatch(app: &AppHandle, key: u32) {
             VK_RIGHT => crate::move_window(&handle, 1, 0),
             VK_UP => crate::move_window(&handle, 0, -1),
             VK_DOWN => crate::move_window(&handle, 0, 1),
+            VK_OEM_4 => {
+                crate::step_opacity(&handle, -1);
+                Ok(())
+            }
+            VK_OEM_6 => {
+                crate::step_opacity(&handle, 1);
+                Ok(())
+            }
             _ => unreachable!(),
         };
         if let Err(error) = result {
@@ -353,9 +377,11 @@ fn dispatch(app: &AppHandle, key: u32) {
 /// and released alone and switch the input language. Returns the registered ids for cleanup.
 fn absorb_chords() -> Vec<i32> {
     let mut registered = Vec::new();
-    for (id, key) in [VK_H, VK_F, VK_Q, VK_T, VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN]
-        .into_iter()
-        .enumerate()
+    for (id, key) in [
+        VK_H, VK_F, VK_Q, VK_T, VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN, VK_OEM_4, VK_OEM_6,
+    ]
+    .into_iter()
+    .enumerate()
     {
         let id = id as i32 + 1;
         // No MOD_NOREPEAT: the autorepeats of a held arrow have to be absorbed as well.
@@ -511,7 +537,7 @@ mod tests {
                 (VK_SHIFT, 0x2a),
                 (VK_SHIFT, 0x36),
             ] {
-                for key in [VK_H, VK_F, VK_Q, VK_T] {
+                for key in [VK_H, VK_F, VK_Q, VK_T, VK_OEM_4, VK_OEM_6] {
                     let mut state = KeyState::default();
                     assert!(!state.update(alt, 0x38, extended, false));
                     assert!(!state.update(shift, scan, false, false));
@@ -545,7 +571,7 @@ mod tests {
         let mut state = KeyState::default();
         state.update(0xA2, 0, false, false); // left Ctrl is not Alt
         state.update(VK_LSHIFT, 0, false, false);
-        for key in [VK_H, VK_F, VK_Q, VK_T] {
+        for key in [VK_H, VK_F, VK_Q, VK_T, VK_OEM_4, VK_OEM_6] {
             assert!(!state.update(key, 0, false, false));
         }
     }
@@ -555,7 +581,7 @@ mod tests {
         let mut state = KeyState::default();
         state.update(0xA2, 0x1d, false, false); // Ctrl, not Alt
         state.update(VK_LSHIFT, 0x2a, false, false);
-        for key in [VK_H, VK_F, VK_Q, VK_T] {
+        for key in [VK_H, VK_F, VK_Q, VK_T, VK_OEM_4, VK_OEM_6] {
             assert!(!state.update(key, 0, false, false));
         }
     }

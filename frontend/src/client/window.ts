@@ -36,12 +36,16 @@ export const MIN_BACKGROUND_OPACITY = 0.1
 export const DEFAULT_TEXT_OPACITY = 0.9
 export const DEFAULT_BACKGROUND_OPACITY = 0.65
 
+// Alt+Shift+[ and ] move the background opacity by this much; the text opacity stays.
+export const OPACITY_STEP = 0.1
+
 export const OPACITY_PRESETS = [
   { id: 'opaque', text: 1, background: 1 },
   { id: 'recommended', text: DEFAULT_TEXT_OPACITY, background: DEFAULT_BACKGROUND_OPACITY },
 ] as const
 
-const clamp = (value: number, min: number) => Math.min(1, Math.max(min, value))
+// Rounded so that repeated steps land exactly on the slider's and presets' values.
+const clamp = (value: number, min: number) => Math.round(Math.min(1, Math.max(min, value)) * 100) / 100
 
 interface WindowPreferences {
   pinned: boolean
@@ -51,6 +55,8 @@ interface WindowPreferences {
   setTextOpacity: (opacity: number) => void
   setBackgroundOpacity: (opacity: number) => void
   setOpacity: (text: number, background: number) => void
+  /** One Alt+Shift+[ (-1) or ] (1) step of the background opacity. */
+  stepOpacity: (direction: number) => void
 }
 
 export const useWindowPreferences = create<WindowPreferences>()(
@@ -64,6 +70,10 @@ export const useWindowPreferences = create<WindowPreferences>()(
       setBackgroundOpacity: (opacity) => set({ backgroundOpacity: clamp(opacity, MIN_BACKGROUND_OPACITY) }),
       setOpacity: (text, background) =>
         set({ textOpacity: clamp(text, MIN_TEXT_OPACITY), backgroundOpacity: clamp(background, MIN_BACKGROUND_OPACITY) }),
+      stepOpacity: (direction) =>
+        set(({ backgroundOpacity }) => ({
+          backgroundOpacity: clamp(backgroundOpacity + direction * OPACITY_STEP, MIN_BACKGROUND_OPACITY),
+        })),
     }),
     {
       name: 'sharecode-client-window',
@@ -224,6 +234,7 @@ export function watchStealthShortcut(): () => void {
   let stop: (() => void) | undefined
   let stopStatus: (() => void) | undefined
   let stopPin: (() => void) | undefined
+  let stopOpacity: (() => void) | undefined
   let cancelled = false
   // macOS uses its revisioned status model and permission controls in hotkey.ts.
   if (!isMacOSClient) {
@@ -243,6 +254,12 @@ export function watchStealthShortcut(): () => void {
     if (cancelled) unlisten()
     else stopPin = unlisten
   }).catch((error) => console.error('Failed to watch native pin shortcut:', error))
+  void listen<number>('sharecode:opacity-step', (event) => {
+    useWindowPreferences.getState().stepOpacity(event.payload)
+  }).then((unlisten) => {
+    if (cancelled) unlisten()
+    else stopOpacity = unlisten
+  }).catch((error) => console.error('Failed to watch native opacity shortcut:', error))
   void listen<StealthState>('sharecode:stealth-state', (event) => {
     if (cancelled) return
     nativeStealthEpoch++
@@ -268,5 +285,6 @@ export function watchStealthShortcut(): () => void {
     stop?.()
     stopStatus?.()
     stopPin?.()
+    stopOpacity?.()
   }
 }
