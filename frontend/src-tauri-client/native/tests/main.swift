@@ -20,6 +20,25 @@ for id in ["com.apple.Safari", "com.tencent.qq", "us.zoom.xos", "com.tencent.mee
     precondition(!excluded(id), "Unrelated app excluded: \(id)")
 }
 precondition(!excluded("notes.app", "Tencent Meeting Notes"), "Do not match partial names or document titles")
+// Identities extracted from six Tencent/VooV DMGs (2.16/3.7/3.43/3.47,
+// Intel and Apple silicon). Generic updater IDs must require containment.
+for id in ["com.tencent.tencentmeeting", "com.tencent.meeting.services.wmexternal",
+           "com.tencent.tencentmeeting.services.wmexternal", "com.tencent.voov.VooVLauncher",
+           "com.tencent.meeting.TranscodeBridge", "com.tencent.wemeet.FileDelta"] {
+    precondition(excluded(id), "Audited helper must be excluded: \(id)")
+}
+for (helperID, parentID) in [("com.tencent.UpdateService", "com.tencent.meeting"),
+                           ("com.tencent.VooVUpdateService", "com.tencent.tencentmeeting")] {
+    let parent = "/Applications/Renamed conference.app"
+    let helper = parent + "/Contents/Frameworks/WeMeetFramework.framework/Versions/3/XPCServices/UpdateService.xpc/Contents/MacOS/UpdateService"
+    precondition(!excluded(helperID, "UpdateService"), "Do not exclude a generic updater globally")
+    precondition(CapturePolicy.excludes(bundleID: helperID, name: "UpdateService", path: helper,
+        pid: 42, ownBundleID: "dev.sharecode.capture-test", ownPID: 99,
+        bundleIDAtPath: { $0 == parent ? parentID : nil }), "Renamed meeting bundle must contain its helpers")
+    precondition(!CapturePolicy.excludes(bundleID: helperID, name: "UpdateService", path: helper,
+        pid: 42, ownBundleID: "dev.sharecode.capture-test", ownPID: 99,
+        bundleIDAtPath: { _ in "com.tencent.meeting-notes" }), "Unrelated parent must stay allowed")
+}
 let landscape = CapturePolicy.dimensions(width: 5120, height: 2880)
 precondition(landscape.0 == 3840 && landscape.1 == 2160)
 let portrait = CapturePolicy.dimensions(width: 2160, height: 3840)

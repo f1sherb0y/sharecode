@@ -3,26 +3,48 @@ import Foundation
 // Pure policy, also compiled by the native regression test. Do not match window titles:
 // a document mentioning a meeting is not a meeting application.
 enum CapturePolicy {
-    static func excludes(bundleID: String, name: String, path: String, pid: Int32,
-                         ownBundleID: String, ownPID: Int32) -> Bool {
+    private static let meetingBundleRoots = [
+        "com.tencent.meeting", "com.tencent.voov", "com.tencent.voovmeeting",
+        "com.tencent.wemeet", "com.tencent.tencentmeeting"
+    ]
+
+    private static func isMeetingBundle(_ bundleID: String) -> Bool {
         let id = bundleID.lowercased()
-        let roots = ["com.tencent.meeting", "com.tencent.voov", "com.tencent.voovmeeting",
-                     "com.tencent.wemeet", "com.tencent.tencentmeeting", "dev.sharecode.client"]
+        return meetingBundleRoots.contains { id == $0 || id.hasPrefix($0 + ".") }
+    }
+
+    static func excludes(bundleID: String, name: String, path: String, pid: Int32,
+                         ownBundleID: String, ownPID: Int32,
+                         bundleIDAtPath: (String) -> String? = { _ in nil }) -> Bool {
+        let id = bundleID.lowercased()
         if pid == ownPID || (!ownBundleID.isEmpty &&
             (id == ownBundleID.lowercased() || id.hasPrefix(ownBundleID.lowercased() + "."))) {
             return true
         }
-        if roots.contains(where: { id == $0 || id.hasPrefix($0 + ".") }) { return true }
+        if isMeetingBundle(id) || id == "dev.sharecode.client" ||
+            id.hasPrefix("dev.sharecode.client.") { return true }
         let normalize: (String) -> String = {
             $0.lowercased().filter { !$0.isWhitespace && $0 != "-" && $0 != "_" }
         }
         let names = ["tencentmeeting", "voovmeeting", "wemeet", "腾讯会议"]
         if names.contains(normalize(name)) { return true }
-        // Helpers nested in a meeting's app bundle must be excluded as well.
-        return URL(fileURLWithPath: path).pathComponents.contains { component in
-            let part = normalize(component)
-            return names.contains { part == $0 + ".app" }
+        // Real packages contain helpers outside the meeting ID namespaces, e.g.
+        // com.tencent.UpdateService and com.tencent.VooVUpdateService. Identify
+        // their enclosing app too, including renamed copies. Never exclude all
+        // Tencent helpers or generic names like UpdateService/Transcode globally.
+        guard !path.isEmpty, path.hasPrefix("/") else { return false }
+        var url = URL(fileURLWithPath: path).standardizedFileURL
+        while url.path != "/" {
+            if url.pathExtension.lowercased() == "app" {
+                let part = normalize(url.lastPathComponent)
+                if names.contains(where: { part == $0 + ".app" }) { return true }
+                if let enclosingID = bundleIDAtPath(url.path), isMeetingBundle(enclosingID) {
+                    return true
+                }
+            }
+            url.deleteLastPathComponent()
         }
+        return false
     }
 
     // Device-independent ladder: retain source aspect, never upscale, and avoid

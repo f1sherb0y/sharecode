@@ -196,12 +196,20 @@ private final class ScreenShare: NSObject, NSWindowDelegate, SCStreamOutput, SCS
 
     private func allowed(_ app: SCRunningApplication) -> Bool {
         let native = NSRunningApplication(processIdentifier: app.processID)
-        if let path = native?.bundleURL?.standardizedFileURL.path,
-           path == Bundle.main.bundleURL.standardizedFileURL.path ||
-            path.hasPrefix(Bundle.main.bundleURL.standardizedFileURL.path + "/") { return false }
-        return !CapturePolicy.excludes(bundleID: app.bundleIdentifier, name: app.applicationName,
-            path: native?.bundleURL?.path ?? native?.executableURL?.path ?? "", pid: app.processID,
-            ownBundleID: Bundle.main.bundleIdentifier ?? "", ownPID: ProcessInfo.processInfo.processIdentifier)
+        let ownPath = Bundle.main.bundleURL.standardizedFileURL.path
+        // A helper's bundle URL can describe only its inner bundle. Its executable
+        // path supplies the enclosing installation when that metadata is missing.
+        let paths = Set([native?.bundleURL, native?.executableURL].compactMap {
+            $0?.standardizedFileURL.path
+        })
+        for path in paths.isEmpty ? Set([""]) : paths {
+            if path == ownPath || path.hasPrefix(ownPath + "/") { return false }
+            if CapturePolicy.excludes(bundleID: app.bundleIdentifier, name: app.applicationName,
+                path: path, pid: app.processID, ownBundleID: Bundle.main.bundleIdentifier ?? "",
+                ownPID: ProcessInfo.processInfo.processIdentifier,
+                bundleIDAtPath: { Bundle(path: $0)?.bundleIdentifier }) { return false }
+        }
+        return true
     }
 
     private func refreshCapture() {

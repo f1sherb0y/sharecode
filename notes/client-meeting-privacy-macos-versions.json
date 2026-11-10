@@ -1,0 +1,475 @@
+{
+  "auditedAt": "2026-11-10T16:17:34.069140+00:00",
+  "method": "SHA-256 against Homebrew cask; 7-Zip extraction; plist and main Mach-O inspection",
+  "limitations": "Static inspection only; Apple signatures and live capture not verified.",
+  "packages": [
+    {
+      "product": "tencent-meeting",
+      "version": "3.47.2.407",
+      "arch": "arm64",
+      "url": "https://updatecdn.meeting.qq.com/cos/8f792a0af699fd29e5a7f6b461a4c2ee/TencentMeeting_0300000000_3.47.2.407.publish.arm64.officialwebsite.dmg",
+      "sha256": "f8b6a2c5c1d86af42718517130600f56c3a22d61fcc48eda025058fc8a583835",
+      "source": "https://raw.githubusercontent.com/Homebrew/homebrew-cask/fd586f627e4c825dc921132f0fa170bbd770c773/Casks/t/tencent-meeting.rb",
+      "size": 251840374,
+      "verifiedSha256": "f8b6a2c5c1d86af42718517130600f56c3a22d61fcc48eda025058fc8a583835",
+      "mainArchitectures": [
+        "arm64"
+      ],
+      "bundles": [
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/UpdateServer.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.UpdateServer",
+          "name": "UpdateServer",
+          "executable": "UpdateServer",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/FileDelta.app/Contents/Info.plist",
+          "bundleID": "com.tencent.wemeet.FileDelta",
+          "name": "FileDelta",
+          "executable": "FileDelta",
+          "version": "999.999.999",
+          "build": "999",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/Transcode.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.Transcode",
+          "name": "Transcode",
+          "executable": "Transcode",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/TranscodeBridge.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.TranscodeBridge",
+          "name": "TranscodeBridge",
+          "executable": "TranscodeBridge",
+          "version": "1.0",
+          "build": "1",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/WemeetLauncher.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.WemeetLauncher",
+          "name": "WemeetLauncher",
+          "executable": "WemeetLauncher",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/wmexternal.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.services.wmexternal",
+          "name": "wmexternal",
+          "executable": "wmexternal",
+          "version": null,
+          "build": null,
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/XPCServices/UpdateService.xpc/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.UpdateService",
+          "name": "UpdateService",
+          "executable": "UpdateService",
+          "version": "1.0",
+          "build": "1",
+          "type": "XPC!"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.arm64/TencentMeeting.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting",
+          "name": "腾讯会议",
+          "executable": "TencentMeeting",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        }
+      ]
+    },
+    {
+      "product": "tencent-meeting",
+      "version": "3.47.2.407",
+      "arch": "x86_64",
+      "url": "https://updatecdn.meeting.qq.com/cos/270f990dec24a6387576fcce1f8dd2cd/TencentMeeting_0300000000_3.47.2.407.publish.x86_64.officialwebsite.dmg",
+      "sha256": "7a7b07f1dfde0e4fe428bc43f0f260156a77ca8dc81e525067bc7d770e13f386",
+      "source": "https://raw.githubusercontent.com/Homebrew/homebrew-cask/fd586f627e4c825dc921132f0fa170bbd770c773/Casks/t/tencent-meeting.rb",
+      "size": 274540209,
+      "verifiedSha256": "7a7b07f1dfde0e4fe428bc43f0f260156a77ca8dc81e525067bc7d770e13f386",
+      "mainArchitectures": [
+        "x86_64"
+      ],
+      "bundles": [
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/UpdateServer.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.UpdateServer",
+          "name": "UpdateServer",
+          "executable": "UpdateServer",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/FileDelta.app/Contents/Info.plist",
+          "bundleID": "com.tencent.wemeet.FileDelta",
+          "name": "FileDelta",
+          "executable": "FileDelta",
+          "version": "999.999.999",
+          "build": "999",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/Transcode.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.Transcode",
+          "name": "Transcode",
+          "executable": "Transcode",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/TranscodeBridge.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.TranscodeBridge",
+          "name": "TranscodeBridge",
+          "executable": "TranscodeBridge",
+          "version": "1.0",
+          "build": "1",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/WeMeet.framework/Versions/A/Resources/WemeetLauncher.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.WemeetLauncher",
+          "name": "WemeetLauncher",
+          "executable": "WemeetLauncher",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/Frameworks/wmexternal.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.services.wmexternal",
+          "name": "wmexternal",
+          "executable": "wmexternal",
+          "version": null,
+          "build": null,
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.47.2.407/XPCServices/UpdateService.xpc/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.UpdateService",
+          "name": "UpdateService",
+          "executable": "UpdateService",
+          "version": "1.0",
+          "build": "1",
+          "type": "XPC!"
+        },
+        {
+          "path": "TencentMeeting_0300000000_3.47.2.407.publish.x86_64/TencentMeeting.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting",
+          "name": "腾讯会议",
+          "executable": "TencentMeeting",
+          "version": "3.47.2",
+          "build": "407",
+          "type": "APPL"
+        }
+      ]
+    },
+    {
+      "product": "voov-meeting",
+      "version": "3.43.0.510",
+      "arch": "arm64",
+      "url": "https://updatecdn.meeting.qq.com/cos/676602c370071da9c30765f945f41b83/VooVMeeting_1410000198_3.43.0.510.publish.arm64.dmg",
+      "sha256": "e0b770f1770557f72ac2869395304c1cc901bc519c93ccddb096349891467de7",
+      "source": "https://raw.githubusercontent.com/Homebrew/homebrew-cask/44f827752034827fc48f06d6c047448cb1615cd8/Casks/v/voov-meeting.rb",
+      "size": 224657717,
+      "verifiedSha256": "e0b770f1770557f72ac2869395304c1cc901bc519c93ccddb096349891467de7",
+      "mainArchitectures": [
+        "arm64"
+      ],
+      "bundles": [
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/UpdateServer.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.UpdateServer",
+          "name": "UpdateServer",
+          "executable": "UpdateServer",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/FileDelta.app/Contents/Info.plist",
+          "bundleID": "com.tencent.wemeet.FileDelta",
+          "name": "FileDelta",
+          "executable": "FileDelta",
+          "version": "999.999.999",
+          "build": "999",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/Transcode.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting.Transcode",
+          "name": "Transcode",
+          "executable": "Transcode",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/TranscodeBridge.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting.TranscodeBridge",
+          "name": "TranscodeBridge",
+          "executable": "TranscodeBridge",
+          "version": "1.0",
+          "build": "1",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/VooVLauncher.app/Contents/Info.plist",
+          "bundleID": "com.tencent.voov.VooVLauncher",
+          "name": "VooVLauncher",
+          "executable": "VooVLauncher",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/wmexternal.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting.services.wmexternal",
+          "name": "wmexternal",
+          "executable": "wmexternal",
+          "version": null,
+          "build": null,
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/XPCServices/VooVUpdateService.xpc/Contents/Info.plist",
+          "bundleID": "com.tencent.VooVUpdateService",
+          "name": "VooVUpdateService",
+          "executable": "VooVUpdateService",
+          "version": "1.0",
+          "build": "1",
+          "type": "XPC!"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.arm64/VooV Meeting.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting",
+          "name": "腾讯会议",
+          "executable": "VooV Meeting",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        }
+      ]
+    },
+    {
+      "product": "voov-meeting",
+      "version": "3.43.0.510",
+      "arch": "x86_64",
+      "url": "https://updatecdn.meeting.qq.com/cos/09ec308a02c61e0ede83ffac486e5cea/VooVMeeting_1410000198_3.43.0.510.publish.x86_64.dmg",
+      "sha256": "fa46b369a658468e77a3a11eb65b48ab5c9668dd05376e64821e82d4c2721685",
+      "source": "https://raw.githubusercontent.com/Homebrew/homebrew-cask/44f827752034827fc48f06d6c047448cb1615cd8/Casks/v/voov-meeting.rb",
+      "size": 245494002,
+      "verifiedSha256": "fa46b369a658468e77a3a11eb65b48ab5c9668dd05376e64821e82d4c2721685",
+      "mainArchitectures": [
+        "x86_64"
+      ],
+      "bundles": [
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/UpdateServer.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.UpdateServer",
+          "name": "UpdateServer",
+          "executable": "UpdateServer",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/FileDelta.app/Contents/Info.plist",
+          "bundleID": "com.tencent.wemeet.FileDelta",
+          "name": "FileDelta",
+          "executable": "FileDelta",
+          "version": "999.999.999",
+          "build": "999",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/Transcode.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting.Transcode",
+          "name": "Transcode",
+          "executable": "Transcode",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/TranscodeBridge.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting.TranscodeBridge",
+          "name": "TranscodeBridge",
+          "executable": "TranscodeBridge",
+          "version": "1.0",
+          "build": "1",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/WeMeet.framework/Versions/A/Resources/VooVLauncher.app/Contents/Info.plist",
+          "bundleID": "com.tencent.voov.VooVLauncher",
+          "name": "VooVLauncher",
+          "executable": "VooVLauncher",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/Frameworks/wmexternal.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting.services.wmexternal",
+          "name": "wmexternal",
+          "executable": "wmexternal",
+          "version": null,
+          "build": null,
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.43.0.510/XPCServices/VooVUpdateService.xpc/Contents/Info.plist",
+          "bundleID": "com.tencent.VooVUpdateService",
+          "name": "VooVUpdateService",
+          "executable": "VooVUpdateService",
+          "version": "1.0",
+          "build": "1",
+          "type": "XPC!"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.43.0.510.publish.x86_64/VooV Meeting.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting",
+          "name": "腾讯会议",
+          "executable": "VooV Meeting",
+          "version": "3.43.0",
+          "build": "510",
+          "type": "APPL"
+        }
+      ]
+    },
+    {
+      "product": "tencent-meeting",
+      "version": "2.16.2.420",
+      "arch": "x86_64",
+      "url": "https://updatecdn.meeting.qq.com/b4acf9b3b84361f9c0e51937f23bbde5/TencentMeeting_0300000000_2.16.2.420.publish.x86_64.dmg",
+      "sha256": "c97533d1cff73ec29977c682ad2708b34319f21c5595f27e9b0db12d967bebcf",
+      "source": "https://raw.githubusercontent.com/Homebrew/homebrew-cask/90fdaf7f73ac54bbacbe16e5de0717358ec3b83b/Casks/tencent-meeting.rb",
+      "size": 107904194,
+      "verifiedSha256": "c97533d1cff73ec29977c682ad2708b34319f21c5595f27e9b0db12d967bebcf",
+      "mainArchitectures": [
+        "x86_64"
+      ],
+      "bundles": [
+        {
+          "path": "TencentMeeting_0300000000_2.16.2.420.publish/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/2.16.2.420/Frameworks/WeMeet.framework/Versions/A/Resources/Transcode.app/Contents/Info.plist",
+          "bundleID": "com.tencent.wemeet.Transcode",
+          "name": "Transcode",
+          "executable": "Transcode",
+          "version": "2.16.2",
+          "build": "420",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_2.16.2.420.publish/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/2.16.2.420/Frameworks/WeMeet.framework/Versions/A/Resources/WemeetLauncher.app/Contents/Info.plist",
+          "bundleID": "com.tencent.wemeet.WemeetLauncher",
+          "name": "WemeetLauncher",
+          "executable": "WemeetLauncher",
+          "version": "2.16.2",
+          "build": "420",
+          "type": "APPL"
+        },
+        {
+          "path": "TencentMeeting_0300000000_2.16.2.420.publish/TencentMeeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/2.16.2.420/XPCServices/UpdateService.xpc/Contents/Info.plist",
+          "bundleID": "com.tencent.UpdateService",
+          "name": "UpdateService",
+          "executable": "UpdateService",
+          "version": "1.0",
+          "build": "1",
+          "type": "XPC!"
+        },
+        {
+          "path": "TencentMeeting_0300000000_2.16.2.420.publish/TencentMeeting.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting",
+          "name": "腾讯会议",
+          "executable": "TencentMeeting",
+          "version": "2.16.2",
+          "build": "420",
+          "type": "APPL"
+        }
+      ]
+    },
+    {
+      "product": "voov-meeting",
+      "version": "3.7.0.590",
+      "arch": "x86_64",
+      "url": "https://updatecdn.meeting.qq.com/be624b69a9db9410195acc9ec0686885/VooVMeeting_1410000198_3.7.0.590.publish.x86_64.dmg",
+      "sha256": "be5016805e02e668111d70ea84109cc5b2388cfd72f5236239ace4e8bc1ab1aa",
+      "source": "https://raw.githubusercontent.com/Homebrew/homebrew-cask/5a532e81bb74d60e5e1ff15b08ffc0436d9b70c6/Casks/voov-meeting.rb",
+      "size": 154833002,
+      "verifiedSha256": "be5016805e02e668111d70ea84109cc5b2388cfd72f5236239ace4e8bc1ab1aa",
+      "mainArchitectures": [
+        "x86_64"
+      ],
+      "bundles": [
+        {
+          "path": "VooVMeeting_1410000198_3.7.0.590.publish/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.7.0.590/Frameworks/WeMeet.framework/Versions/A/Resources/FileDelta.app/Contents/Info.plist",
+          "bundleID": "com.tencent.wemeet.FileDelta",
+          "name": "FileDelta",
+          "executable": "FileDelta",
+          "version": "999.999.999",
+          "build": "999",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.7.0.590.publish/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.7.0.590/Frameworks/WeMeet.framework/Versions/A/Resources/Transcode.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.Transcode",
+          "name": "Transcode",
+          "executable": "Transcode",
+          "version": "3.7.0",
+          "build": "590",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.7.0.590.publish/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.7.0.590/Frameworks/WeMeet.framework/Versions/A/Resources/TranscodeBridge.app/Contents/Info.plist",
+          "bundleID": "com.tencent.meeting.TranscodeBridge",
+          "name": "TranscodeBridge",
+          "executable": "TranscodeBridge",
+          "version": "1.0",
+          "build": "1",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.7.0.590.publish/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.7.0.590/Frameworks/WeMeet.framework/Versions/A/Resources/VooVLauncher.app/Contents/Info.plist",
+          "bundleID": "com.tencent.voov.VooVLauncher",
+          "name": "VooVLauncher",
+          "executable": "VooVLauncher",
+          "version": "3.7.0",
+          "build": "590",
+          "type": "APPL"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.7.0.590.publish/VooV Meeting.app/Contents/Frameworks/WeMeetFramework.framework/Versions/3.7.0.590/XPCServices/VooVUpdateService.xpc/Contents/Info.plist",
+          "bundleID": "com.tencent.VooVUpdateService",
+          "name": "VooVUpdateService",
+          "executable": "VooVUpdateService",
+          "version": "1.0",
+          "build": "1",
+          "type": "XPC!"
+        },
+        {
+          "path": "VooVMeeting_1410000198_3.7.0.590.publish/VooV Meeting.app/Contents/Info.plist",
+          "bundleID": "com.tencent.tencentmeeting",
+          "name": "腾讯会议",
+          "executable": "VooV Meeting",
+          "version": "3.7.0",
+          "build": "590",
+          "type": "APPL"
+        }
+      ]
+    }
+  ]
+}
