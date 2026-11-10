@@ -142,12 +142,17 @@ node --test tests/client-chrome.test.mjs
 
 #### Releases and updates
 
-Installed clients update themselves with Tauri's updater (`tauri-plugin-updater`). Five seconds
-after launch and then every six hours they ask
-`/api/client/update/{target}/{arch}/{version}` on kode666.com, then collabcode.cc. A newer signed
-release downloads in the background and a 重启以更新 button appears in the title bar; it installs
-the update and restarts (Windows runs the installer passively), and the saved seat reopens the
-room. Nothing installs on its own in the middle of a session.
+Installed clients check immediately at launch, then every six hours and on reconnect, using
+Tauri's updater (`tauri-plugin-updater`) and `/api/client/update/{target}/{arch}/{version}` on
+kode666.com, then collabcode.cc. The launch check runs before session restoration or room UI.
+A newer release replaces the entire client with **Update Needed / 需要下载更新**, downloads
+automatically with a progress bar, and offers **重启以更新** only after signature verification.
+That button installs and restarts (Windows runs the installer passively); the saved seat then
+reopens the room. A launch-check or download failure keeps the gate closed with a retry button.
+An explicit no-update response releases the gate, including after a release is withdrawn.
+The native gate disables click-through and stops sharing/filtering; on macOS it can show the
+update page before permissions, while the normal UI still requires the permission setup.
+See `notes/client-mandatory-update.md` for the test scope.
 
 Updates are signed with a minisign key pair. The public key is `plugins.updater.pubkey` in
 `src-tauri-client/tauri.conf.json` and `CLIENT_UPDATER_PUBKEY` in `server-rs/src/core/config.rs`

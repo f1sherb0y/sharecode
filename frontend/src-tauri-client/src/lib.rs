@@ -1,5 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+mod update_gate;
+use update_gate::set_client_update_locked;
 #[cfg(not(any(windows, target_os = "macos")))]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -170,6 +172,9 @@ fn write_state_with_focus_policy(
     next: StealthState,
     preserve_focus: bool,
 ) -> Result<StealthState, String> {
+    if next.click_through && update_gate::locked() {
+        return Err("Click-through is unavailable while an update is required".into());
+    }
     #[cfg(windows)]
     if next.click_through && !hotkey_windows::can_enable() {
         return Err("Alt+Shift+F is unavailable; click-through was not enabled".into());
@@ -568,16 +573,20 @@ async fn show_client_main(window: WebviewWindow) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or("Client window is unavailable")?;
     on_window_thread(main, |window| {
-        if !window.state::<hotkey_macos::Hotkey>().available() {
-            return Err("Input Monitoring permission is required before opening ShareCode".into());
-        }
-        let (supported, permission) = screen_share_macos::recording_permission()?;
-        if supported && !permission {
-            return Err("Screen Recording permission is required before opening ShareCode".into());
+        if !update_gate::locked() {
+            if !window.state::<hotkey_macos::Hotkey>().available() {
+                return Err("Input Monitoring permission is required before opening ShareCode".into());
+            }
+            let (supported, permission) = screen_share_macos::recording_permission()?;
+            if supported && !permission {
+                return Err("Screen Recording permission is required before opening ShareCode".into());
+            }
         }
         window.unminimize().map_err(|error| error.to_string())?;
         window.show().map_err(|error| error.to_string())?;
-        MAIN_OPENED.store(true, std::sync::atomic::Ordering::Release);
+        if !update_gate::locked() {
+            MAIN_OPENED.store(true, std::sync::atomic::Ordering::Release);
+        }
         if !read_state().click_through {
             let _ = window.set_focus();
         }
@@ -641,6 +650,9 @@ async fn set_meeting_privacy_enabled(
     app: AppHandle,
     enabled: bool,
 ) -> Result<serde_json::Value, String> {
+    if enabled && update_gate::locked() {
+        return Err("Meeting filtering is unavailable while an update is required".into());
+    }
     #[cfg(windows)]
     {
         serde_json::to_value(
@@ -747,6 +759,7 @@ pub fn run() {
         });
     #[cfg(target_os = "macos")]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        set_client_update_locked,
         get_stealth_state,
         set_stealth_state,
         client_is_maximized,
@@ -765,6 +778,7 @@ pub fn run() {
     ]);
     #[cfg(not(target_os = "macos"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        set_client_update_locked,
         get_stealth_state,
         set_stealth_state,
         client_is_maximized,

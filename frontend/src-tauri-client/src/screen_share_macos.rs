@@ -57,6 +57,9 @@ pub async fn client_screen_share(
         _ => return Err("Unknown screen sharing action".into()),
     };
     super::on_window_thread(window, move |_| {
+        if (action == 1 || action == 2) && super::update_gate::locked() {
+            return Err("Screen sharing is unavailable while an update is required".into());
+        }
         let pointer = unsafe {
             sharecode_screen_share_command(
                 action,

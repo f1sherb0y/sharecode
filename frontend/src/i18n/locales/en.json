@@ -1218,15 +1218,23 @@
       "maximize": "Maximize",
       "restore": "Restore",
       "close": "Close",
-      "downloading": "Downloading update",
-      "downloadingUpdate": "Downloading version {{version}}. You can restart to update once it finishes.",
-      "update": "Restart to update",
-      "updating": "Updating...",
-      "updateReady": "Version {{version}} is ready. Restart to finish updating; your room reopens afterwards.",
-      "updateFailed": "The update couldn't be installed. Try again later.",
       "screenCaptureProtectionMacHint": "Requests capture protection; modern macOS recordings may still include this window.",
       "hideFromDock": "Hide from Dock",
       "hideFromDockHint": "No Dock icon, no Cmd+Tab entry."
+    },
+    "updater": {
+      "version": "v{{version}}",
+      "needed": "Update Needed",
+      "checking": "Checking for updates…",
+      "downloading": "Downloading update",
+      "downloaded": "Update downloaded",
+      "restart": "Restart to update",
+      "installing": "Updating…",
+      "retry": "Retry",
+      "checkFailed": "Could not check for updates. Check your connection and retry.",
+      "downloadFailed": "Could not download or verify the update. Please retry.",
+      "installFailed": "Could not install the update. Please retry.",
+      "restartFailed": "The update is installed. Please retry restarting."
     }
   },
   "clientPlatforms": {

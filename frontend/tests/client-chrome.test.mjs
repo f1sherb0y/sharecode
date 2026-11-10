@@ -51,20 +51,25 @@ after(async () => { await browser?.close(); await server?.close() })
 
 // The client is a Windows app in the baseline tests unless a Mac user agent is requested;
 // macOS assertions reuse the same open() with `mac: true`.
-async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en', touch = false, mac = false, hotkeyPhase = 'listening', savedStealth, setup = false, canDrag = true, sharing = false, capturePermission = true, setupRecording = false, setupProgress } = {}) {
+async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en', touch = false, mac = false, hotkeyPhase = 'listening', savedStealth, setup = false, canDrag = true, sharing = false, capturePermission = true, setupRecording = false, setupProgress, updater = false, savedSession } = {}) {
   const context = await browser.newContext({
     viewport: { width, height }, deviceScaleFactor: scale, hasTouch: touch, reducedMotion: 'reduce',
     userAgent: mac ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15'
       : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
   })
-  await context.addInitScript(({ saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag, sharing, capturePermission, setupRecording, setupProgress }) => {
+  await context.addInitScript(({ saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag, sharing, capturePermission, setupRecording, setupProgress, updater, savedSession }) => {
     localStorage.setItem('i18nextLng', locale)
+    if (savedSession) localStorage.setItem('sharecode-client-session', JSON.stringify(savedSession))
     if (setupProgress && !localStorage.getItem('sharecode-macos-permission-setup-v1')) localStorage.setItem('sharecode-macos-permission-setup-v1', setupProgress)
     if (saved && !localStorage.getItem('sharecode-client-window')) localStorage.setItem('sharecode-client-window', JSON.stringify(saved))
     if (savedStealth) localStorage.setItem('sharecode-client-stealth', JSON.stringify({ state: savedStealth, version: 0 }))
     let id = 0
     const callbacks = new Map(), listeners = new Map()
     window.nativeCalls = []
+    window.deferUpdateCheck = updater
+    window.availableUpdate = null
+    window.updateMetadata = { rid: 100, currentVersion: '0.2.6', version: '9.9.9', rawJson: {} }
+    window.updateLocked = true
     window.nativeState = { clickThrough: false, screenCaptureProtection: true, hideFromTaskbar: true }
     window.captureState = { supported: true, permission: capturePermission, running: false,
       phase: capturePermission ? 'idle' : 'permissionRequired', displays: capturePermission ? [{ id: 7, width: 1920, height: 1080 }, { id: 9, width: 1440, height: 900 }] : [] }
@@ -75,9 +80,29 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
     window.__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: setup ? 'input-monitoring' : 'main' }, currentWebview: { label: setup ? 'input-monitoring' : 'main' } },
       transformCallback: handler => { callbacks.set(++id, handler); return id },
+      unregisterCallback: id => callbacks.delete(id),
       invoke: async (command, args = {}) => {
         window.nativeCalls.push({ command, args })
         if (window.nativeFail === command) { window.nativeFail = null; throw new Error(`mock failure: ${command}`) }
+        if (command === 'plugin:updater|check') {
+          if (window.deferUpdateCheck) return new Promise((resolve, reject) => {
+            window.resolveUpdateCheck = resolve
+            window.rejectUpdateCheck = () => reject(new Error('Update server unreachable'))
+          })
+          return window.availableUpdate
+        }
+        if (command === 'plugin:updater|download') return new Promise((resolve, reject) => {
+          window.updateDownload = {
+            event: event => args.onEvent.onmessage(event),
+            finish: () => resolve(200),
+            fail: () => reject(new Error('Invalid update signature')),
+          }
+        })
+        if (command === 'set_client_update_locked') {
+          window.updateLocked = args.locked
+          if (args.locked) { window.nativeState.clickThrough = false; window.captureState.running = false }
+          return null
+        }
         if (command === 'plugin:event|listen') { listeners.set(args.event, args.handler); return args.handler }
         if (['open_client_recording_setup', 'open_client_hotkey_setup'].includes(command)) {
           callbacks.get(listeners.get('sharecode:permission-step'))?.({ payload: command === 'open_client_recording_setup' })
@@ -126,13 +151,14 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
       callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: window.nativeHotkey })
     }
     window.staleHotkeyStatus = status => callbacks.get(listeners.get('sharecode:hotkey-status'))?.({ payload: status })
-  }, { saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag, sharing, capturePermission, setupRecording, setupProgress })
+  }, { saved, locale, mac, hotkeyPhase, savedStealth, setup, canDrag, sharing, capturePermission, setupRecording, setupProgress, updater, savedSession })
   await context.route('**/*', route => new URL(route.request().url()).origin === new URL(base).origin
     ? route.continue() : route.fulfill({ status: 404, body: '' }))
   const page = await context.newPage(), errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(base + 'client.html' + (setup ? '#/input-monitoring' + (setupRecording ? '?recording=1' : '') : ''))
   if (setup) await page.getByTestId('setup-status').waitFor()
+  else if (updater) await page.waitForFunction(() => typeof window.resolveUpdateCheck === 'function')
   else await page.waitForFunction(async () => (await import('/src/client/window.ts')).useStealthPreferences.getState().ready)
   if (sharing) {
     await page.getByRole('button', { name: locale === 'zh' ? '共享画面' : 'Shared screen', exact: true }).click()
@@ -259,32 +285,156 @@ test('macOS shortcut controls fit a minimum-height window and keep in-app input 
   } finally { await context.close() }
 })
 
-test('update download shows progress, then becomes the restart button', async () => {
+test('mandatory update blocks launch and saved-seat restoration, downloads, verifies, then restarts', async () => {
   for (const locale of ['en', 'zh']) {
-    const { page, context, errors } = await open({ locale })
+    const { page, context, errors } = await open({ locale, updater: true, width: 480, height: 360,
+      savedSession: { token: 'saved-seat', roomId: 'ui-room', roomName: 'Saved room' } })
     try {
-      const set = state => page.evaluate(async state => (await import('/src/client/updater.ts')).useUpdateStore.setState(state), state)
+      assert.equal(await page.locator('.client-shell').count(), 0)
+      assert.equal(await page.getByRole('textbox').count(), 0)
+      assert.equal(await page.evaluate(async () => (await import('/src/stores/auth.ts')).useAuthStore.getState().token), null)
+      assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'plugin:updater|check').length), 1)
+      await page.evaluate(() => window.resolveUpdateCheck(window.updateMetadata))
+      await page.getByRole('heading', { name: locale === 'zh' ? '需要下载更新' : 'Update Needed', exact: true }).waitFor()
+      await page.waitForFunction(() => !!window.updateDownload)
       const progress = page.getByRole('progressbar')
-      await set({ downloading: { version: '9.9.9', received: 0, total: null } })
-      await progress.waitFor()
       assert.equal(await progress.getAttribute('aria-valuenow'), null)
-      await progress.filter({ hasText: locale === 'zh' ? '正在下载更新' : 'Downloading update' }).waitFor()
-      await set({ downloading: { version: '9.9.9', received: 420, total: 1000 } })
-      await progress.filter({ hasText: '42%' }).waitFor()
-      assert.equal(await progress.getAttribute('aria-valuenow'), '42')
-      assert.match(await progress.getAttribute('style'), /--update-progress:\s*42%/)
-      await page.screenshot({ path: `.cache/client-chrome-${engine}/update-progress-${locale}.png`, clip: { x: 700, y: 0, width: 400, height: 32 } })
-      await set({ downloading: null, ready: { version: '9.9.9' } })
-      await progress.waitFor({ state: 'detached' })
-      await page.getByRole('button', { name: locale === 'zh' ? '重启以更新' : 'Restart to update', exact: true }).waitFor()
-      // Narrow windows keep the percentage while the label is hidden.
-      await set({ ready: null, downloading: { version: '9.9.9', received: 5, total: 10 } })
-      await page.setViewportSize({ width: 700, height: 500 })
-      assert.equal(await progress.locator('b').textContent(), '50%')
-      assert.equal(await progress.locator('b').isVisible(), true)
+      await page.evaluate(() => {
+        window.updateDownload.event({ event: 'Started', data: { contentLength: 1000 } })
+        window.updateDownload.event({ event: 'Progress', data: { chunkLength: 420 } })
+      })
+      await page.locator('[role="progressbar"][aria-valuenow="42"]').waitFor()
+      assert.equal(await page.locator('.client-title-bar').count(), 0)
+      assert.equal(await page.evaluate(() => window.updateLocked), true)
+      await page.screenshot({ path: `.cache/client-chrome-${engine}/mandatory-update-${locale}.png` })
+      await page.evaluate(() => window.updateDownload.event({ event: 'Finished' }))
+      const restart = page.getByRole('button', { name: locale === 'zh' ? '重启以更新' : 'Restart to update', exact: true })
+      assert.equal(await restart.count(), 0, 'bytes received is not signature verification')
+      await page.evaluate(() => window.updateDownload.finish())
+      await restart.waitFor()
+      assert.equal(await progress.getAttribute('aria-valuenow'), '100')
+      assert.equal(await page.locator('.client-shell').count(), 0)
+      await restart.click()
+      await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'plugin:process|restart'))
+      assert.deepEqual(await page.evaluate(() => window.nativeCalls.filter(c => ['plugin:updater|install', 'plugin:process|restart'].includes(c.command)).map(c => c.command)), ['plugin:updater|install', 'plugin:process|restart'])
+      assert.equal(await page.locator('.client-shell').count(), 0)
       assert.deepEqual(errors, [])
     } finally { await context.close() }
   }
+})
+
+test('mandatory update keeps launch failures blocked and retries on reconnect', async () => {
+  const { page, context, errors } = await open({ updater: true })
+  try {
+    await page.evaluate(() => window.rejectUpdateCheck())
+    await page.getByRole('alert').filter({ hasText: 'Could not check for updates' }).waitFor()
+    assert.equal(await page.locator('.client-shell').count(), 0)
+    await page.getByRole('button', { name: 'Retry', exact: true }).waitFor()
+    await page.evaluate(() => { window.deferUpdateCheck = false; window.dispatchEvent(new Event('online')) })
+    await page.locator('.client-shell').waitFor()
+    assert.equal(await page.locator('.client-update-screen').count(), 0)
+    assert.equal(await page.evaluate(() => window.updateLocked), false)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('mandatory update keeps invalid downloads blocked, releases resources, and retries', async () => {
+  const { page, context, errors } = await open({ updater: true })
+  try {
+    await page.evaluate(() => window.resolveUpdateCheck(window.updateMetadata))
+    await page.waitForFunction(() => !!window.updateDownload)
+    await page.evaluate(() => window.updateDownload.fail())
+    await page.getByRole('alert').filter({ hasText: 'download or verify' }).waitFor()
+    assert.equal(await page.locator('.client-shell').count(), 0)
+    assert.equal(await page.getByRole('button', { name: 'Restart to update' }).count(), 0)
+    await page.waitForFunction(() => window.nativeCalls.some(c => c.command === 'plugin:resources|close' && c.args.rid === 100))
+    await page.evaluate(() => { window.deferUpdateCheck = false; window.availableUpdate = { ...window.updateMetadata, rid: 101 }; window.updateDownload = null })
+    await page.getByRole('button', { name: 'Retry', exact: true }).click()
+    await page.waitForFunction(() => !!window.updateDownload)
+    // Reconnect/retry notifications cannot start duplicate checks or downloads.
+    await page.evaluate(async () => {
+      const { checkForUpdate } = await import('/src/client/updater.ts')
+      await Promise.all([checkForUpdate(), checkForUpdate()])
+    })
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'plugin:updater|download').length), 2)
+    await page.evaluate(() => window.updateDownload.finish())
+    await page.getByRole('button', { name: 'Restart to update', exact: true }).waitFor()
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('mandatory update removes an open room and its portal controls when a later check finds an update', async () => {
+  const { page, context, errors } = await open()
+  try {
+    await enterRoom(page)
+    await page.getByRole('button', { name: 'Window settings', exact: true }).click()
+    await page.getByRole('dialog').waitFor()
+    await page.evaluate(() => { window.availableUpdate = window.updateMetadata; window.dispatchEvent(new Event('online')) })
+    await page.getByRole('heading', { name: 'Update Needed', exact: true }).waitFor()
+    assert.equal(await page.locator('.editor-shell, .editor-toolbar, .client-title-bar, [role="dialog"]').count(), 0)
+    assert.equal(await page.locator('.client-shell').count(), 0)
+    assert.equal(await page.evaluate(() => window.updateLocked), true)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('mandatory update retries install and restart failures without reinstalling consumed bytes', async () => {
+  const { page, context, errors } = await open({ updater: true })
+  try {
+    await page.evaluate(() => window.resolveUpdateCheck(window.updateMetadata))
+    await page.waitForFunction(() => !!window.updateDownload)
+    await page.evaluate(() => { window.updateDownload.finish(); window.nativeFail = 'plugin:updater|install' })
+    const restart = page.getByRole('button', { name: 'Restart to update', exact: true })
+    await restart.click()
+    await page.getByRole('alert').filter({ hasText: 'Could not install' }).waitFor()
+    assert.equal(await page.locator('.client-shell').count(), 0)
+    await page.evaluate(() => { window.nativeFail = 'plugin:process|restart' })
+    await restart.click()
+    await page.getByRole('alert').filter({ hasText: 'retry restarting' }).waitFor()
+    await restart.click()
+    await page.waitForFunction(() => window.nativeCalls.filter(c => c.command === 'plugin:process|restart').length === 2)
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'plugin:updater|install').length), 2)
+    assert.equal(await page.locator('.client-shell').count(), 0)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('mandatory update preserves a verified download through check failures but releases a withdrawn release', async () => {
+  const { page, context, errors } = await open({ updater: true })
+  try {
+    await page.evaluate(() => window.resolveUpdateCheck(window.updateMetadata))
+    await page.waitForFunction(() => !!window.updateDownload)
+    await page.evaluate(() => window.updateDownload.finish())
+    await page.getByRole('button', { name: 'Restart to update', exact: true }).waitFor()
+    await page.evaluate(async () => {
+      window.nativeFail = 'plugin:updater|check'
+      await (await import('/src/client/updater.ts')).checkForUpdate()
+    })
+    assert.equal(await page.getByRole('button', { name: 'Restart to update', exact: true }).isEnabled(), true)
+    assert.equal(await page.locator('.client-shell').count(), 0)
+    await page.evaluate(async () => {
+      window.deferUpdateCheck = false
+      window.availableUpdate = null
+      await (await import('/src/client/updater.ts')).checkForUpdate()
+    })
+    await page.locator('.client-shell').waitFor()
+    assert.equal(await page.evaluate(() => window.updateLocked), false)
+    assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'plugin:resources|close').some(c => c.args.rid === 200)), true)
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('mandatory update on macOS does not wait for permissions or mount permission setup', async () => {
+  const { page, context, errors } = await open({ updater: true, mac: true, hotkeyPhase: 'permissionRequired', capturePermission: false })
+  try {
+    await page.evaluate(() => window.resolveUpdateCheck(window.updateMetadata))
+    await page.waitForFunction(() => !!window.updateDownload)
+    await page.getByRole('heading', { name: 'Update Needed', exact: true }).waitFor()
+    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => ['open_client_hotkey_setup', 'open_client_recording_setup', 'show_client_main'].includes(c.command))), false)
+    await page.evaluate(() => window.updateDownload.finish())
+    await page.getByRole('button', { name: 'Restart to update', exact: true }).waitFor()
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
 })
 
 test('the page never acts on the native Alt+Shift chords but keeps every other key', async () => {

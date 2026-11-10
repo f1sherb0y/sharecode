@@ -1,81 +1,122 @@
+import { invoke } from '@tauri-apps/api/core'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { create } from 'zustand'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-
-// Updates come from the servers' update endpoint (plugins.updater in tauri.conf.json). The first
-// check runs at launch; an update downloads in the background with its progress in the title bar
-// and installs only when the user restarts from there, so a session is never cut off; after the
-// restart the saved seat reopens the room.
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 interface UpdateState {
-  /** An update being downloaded: bytes so far and the total, when the server sent one. */
-  downloading: { version: string; received: number; total: number | null } | null
-  /** A downloaded update, its signature checked, waiting for a restart. */
-  ready: { version: string } | null
-  installing: boolean
-  failed: boolean
+  phase: 'checking' | 'current' | 'downloading' | 'ready' | 'installing' | 'error'
+  version: string | null
+  received: number
+  total: number | null
+  checking: boolean
+  failure: 'check' | 'download' | 'install' | 'restart' | null
 }
 
-export const useUpdateStore = create<UpdateState>()(() => ({ downloading: null, ready: null, installing: false, failed: false }))
+// The first render is blocked, before session restoration or any room can mount.
+// A browser-only development preview has no native updater.
+export const useUpdateStore = create<UpdateState>()(() => ({
+  phase: isTauri ? 'checking' : 'current', version: null,
+  received: 0, total: null, checking: false, failure: null,
+}))
 
 let pending: Update | null = null
-let checking = false
+let installed = false
+let started = false
 
-function setPending(update: Update | null) {
+function discardPending() {
   const previous = pending
-  pending = update
-  if (previous && previous !== update) void previous.close().catch(() => {})
-  useUpdateStore.setState({ ready: update ? { version: update.version } : null, failed: false })
+  pending = null
+  if (previous) void previous.close().catch(() => {})
 }
 
-async function checkForUpdate() {
-  if (checking || useUpdateStore.getState().installing) return
-  checking = true
+/** The same gate applies to launch, retries, reconnects and the six-hour check. */
+export async function checkForUpdate() {
+  const state = useUpdateStore.getState()
+  if (!isTauri || state.checking || state.phase === 'installing' || installed) return
+  useUpdateStore.setState({ checking: true })
+  let candidate: Update | null = null
+  let failure: 'check' | 'download' = 'check'
   try {
-    const update = await check({ timeout: 30_000 })
-    // Nothing newer (a release can also be withdrawn after it downloaded).
-    if (!update) return setPending(null)
-    if (update.version === pending?.version) return void update.close().catch(() => {})
-    // Download verifies the signature; an update that fails it is never offered.
-    const { version } = update
+    if (state.phase !== 'current' && state.phase !== 'ready') {
+      useUpdateStore.setState({ phase: 'checking', failure: null })
+      // Also makes the gate usable before macOS permissions and after click-through.
+      await invoke('set_client_update_locked', { locked: true })
+    }
+    candidate = await check({ timeout: 30_000 })
+    // An explicit no-update response also releases a withdrawn update's gate.
+    // An unreachable server must never be mistaken for that response.
+    if (!candidate) {
+      await invoke('set_client_update_locked', { locked: false })
+      discardPending()
+      useUpdateStore.setState({ phase: 'current', version: null, failure: null, received: 0, total: null })
+      return
+    }
+    if (candidate.version === pending?.version) return
+
+    const { version } = candidate
+    discardPending()
+    useUpdateStore.setState({ phase: 'downloading', version, received: 0, total: null, failure: null })
+    await invoke('set_client_update_locked', { locked: true })
+    failure = 'download'
     let received = 0
     let total: number | null = null
-    useUpdateStore.setState({ downloading: { version, received, total } })
-    await update.download((event) => {
+    await candidate.download((event) => {
       if (event.event === 'Started') total = event.data.contentLength || null
       else if (event.event === 'Progress') received += event.data.chunkLength
       else return
-      useUpdateStore.setState({ downloading: { version, received, total } })
-    })
-    setPending(update)
+      useUpdateStore.setState({ received, total })
+    }, { timeout: 5 * 60_000 })
+    // Finished bytes alone are insufficient: download() must resolve after signature verification.
+    pending = candidate
+    candidate = null
+    useUpdateStore.setState({ phase: 'ready', failure: null })
   } catch (error) {
-    // Offline or no server reachable: the next check tries again.
-    console.warn('Update check failed:', error)
+    console.warn('Update check/download failed:', error)
+    const current = useUpdateStore.getState()
+    // A background check failure cannot invalidate a verified download. At launch or after
+    // discovering an update, errors keep the gate closed and offer retry, never the room.
+    if (current.phase !== 'current' && current.phase !== 'ready') {
+      useUpdateStore.setState({ phase: 'error', failure })
+    }
   } finally {
-    useUpdateStore.setState({ downloading: null })
-    checking = false
+    if (candidate) void candidate.close().catch(() => {})
+    useUpdateStore.setState({ checking: false })
   }
 }
 
 export async function installUpdate() {
-  if (!pending || useUpdateStore.getState().installing) return
-  useUpdateStore.setState({ installing: true, failed: false })
+  const state = useUpdateStore.getState()
+  if (!pending || state.phase !== 'ready' || state.checking) return
+  useUpdateStore.setState({ phase: 'installing', failure: null })
   try {
-    // On Windows the installer closes the app and starts the new version itself.
-    await pending.install()
+    // Windows' installer closes/restarts the app itself. macOS/Linux need relaunch().
+    if (!installed) {
+      await pending.install()
+      installed = true
+    }
     await relaunch()
   } catch (error) {
-    console.error('Update install failed:', error)
-    useUpdateStore.setState({ installing: false, failed: true })
+    console.error('Update install/restart failed:', error)
+    // If installation succeeded but relaunch failed, retry only the restart: its byte resource
+    // was already consumed by Tauri. In either case keep all application features blocked.
+    useUpdateStore.setState({ phase: 'ready', failure: installed ? 'restart' : 'install' })
   }
 }
 
 export function startUpdateChecks(): () => void {
   if (!isTauri) return () => {}
-  void checkForUpdate()
-  const interval = setInterval(checkForUpdate, CHECK_INTERVAL_MS)
-  return () => clearInterval(interval)
+  if (!started) {
+    started = true
+    void checkForUpdate()
+  }
+  const interval = setInterval(() => void checkForUpdate(), CHECK_INTERVAL_MS)
+  const online = () => { void checkForUpdate() }
+  window.addEventListener('online', online)
+  return () => {
+    clearInterval(interval)
+    window.removeEventListener('online', online)
+  }
 }

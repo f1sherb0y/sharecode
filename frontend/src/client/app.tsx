@@ -12,7 +12,8 @@ import { ClientHome, type HomeNotice } from './home'
 import { loadSavedSession, rememberGuestSessions, restoreSavedSession } from './session'
 import { TitleBar } from './title-bar'
 import { EditorToolbarTarget } from '@/components/features/editor-toolbar'
-import { startUpdateChecks } from './updater'
+import { startUpdateChecks, useUpdateStore } from './updater'
+import { UpdateScreen } from './update-screen'
 import { useWindowPreferences } from './window'
 import { InputMonitoringSetup, useInputMonitoringSetup } from './input-monitoring'
 
@@ -128,8 +129,6 @@ function ClientShell() {
 
   useEffect(() => rememberGuestSessions(), [])
 
-  useEffect(() => startUpdateChecks(), [])
-
   return (
     <EditorToolbarTarget.Provider value={toolbarTarget}>
       <div className="client-shell">
@@ -153,6 +152,16 @@ function ClientShell() {
   )
 }
 
+function UpdatedClient() {
+  const blocked = useUpdateStore((state) => state.phase !== 'current')
+  const theme = useThemeStore((state) => state.theme)
+  useEffect(() => { document.documentElement.setAttribute('data-theme', theme) }, [theme])
+  useEffect(() => startUpdateChecks(), [])
+  // Do not mount the shell behind an overlay: it would restore the seat, open sockets and
+  // leave dialogs/shortcuts working. Unmounting it also disconnects an already-open room.
+  return blocked ? <UpdateScreen /> : <><ClientShell /><Toaster /></>
+}
+
 export function ClientApp() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -160,9 +169,8 @@ export function ClientApp() {
         <TooltipProvider>
           <Routes>
             <Route path="/input-monitoring" element={<InputMonitoringSetup />} />
-            <Route path="*" element={<ClientShell />} />
+            <Route path="*" element={<UpdatedClient />} />
           </Routes>
-          <Toaster />
         </TooltipProvider>
       </HashRouter>
     </QueryClientProvider>

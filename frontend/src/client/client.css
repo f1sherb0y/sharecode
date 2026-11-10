@@ -363,7 +363,6 @@ body ::-webkit-scrollbar-button { display: none; }
   .client-toolbar-host .ui-button { height: 1.75rem; min-width: 1.75rem; padding: 0 0.25rem; }
   .client-toolbar-host .ui-button > span { display: none; }
   .client-toolbar-host [role="group"] .ui-button { width: 1.75rem; }
-  .client-window-controls .client-update-button > span { display: none; }
 }
 
 .client-title-button {
@@ -496,82 +495,45 @@ body ::-webkit-scrollbar-button { display: none; }
   transform: translateX(0.75rem);
 }
 
-.client-update-button {
-  display: inline-flex;
+/* The mandatory gate is always opaque and readable, independent of room opacity. */
+.client-update-screen {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--client-base-background);
+  color: var(--client-base-foreground);
+  --color-foreground: var(--client-base-foreground);
+}
+.client-update-drag { display: flex; justify-content: flex-end; flex-shrink: 0; height: 2rem; }
+.client-update-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.25rem;
-  height: 1.375rem;
-  margin-right: 0.375rem;
-  padding: 0 0.5rem;
-  border-radius: 9999px;
-  background-color: var(--client-primary-surface);
-  color: var(--color-primary-foreground);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: filter 120ms;
+  justify-content: center;
+  padding: 24px;
+  gap: 16px;
+  text-align: center;
 }
-
-.client-update-button:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.client-update-button:disabled {
-  cursor: progress;
-  opacity: 0.7;
-}
-
-.client-update-button:focus-visible {
-  outline: 1px solid var(--color-ring);
-  outline-offset: 1px;
-}
-
-/* Downloading: a lighter band fills the pill from the left as the update arrives (the text stays
-   on the solid pill); without a known size the band sweeps across it instead. */
-.client-update-button[data-state='downloading'] {
-  position: relative;
-  overflow: hidden;
-  cursor: default;
-  font-variant-numeric: tabular-nums;
-  isolation: isolate;
-}
-
-.client-update-button[data-state='downloading']::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  width: var(--update-progress, 35%);
-  background-color: color-mix(in srgb, var(--color-primary-foreground) 35%, transparent);
-  transition: width 200ms linear;
-}
-
-.client-update-button[data-state='downloading']:not([style*='--update-progress'])::before {
-  animation: client-update-sweep 1.2s ease-in-out infinite;
-}
-
-.client-update-button[data-state='downloading'] > b {
-  font-weight: 600;
-}
-
-/* Ready: a soft pulse until the user restarts. */
-.client-update-button[data-state='ready'] {
-  animation: client-update-ready 2s ease-in-out infinite;
-}
-
-@keyframes client-update-sweep {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(290%); }
-}
-
-@keyframes client-update-ready {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--client-primary-surface) 60%, transparent); }
-  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--client-primary-surface) 0%, transparent); }
-}
-
+.client-update-icon { color: var(--client-base-primary); }
+.client-update-content h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.client-update-version { color: var(--client-base-muted-foreground); font-size: 12px; margin-top: -8px; }
+.client-update-progress { width: min(100%, 300px); }
+.client-update-track { height: 6px; border-radius: 999px; overflow: hidden; background: var(--client-base-muted); }
+.client-update-track > span { display: block; height: 100%; border-radius: inherit; background: var(--client-base-primary); transition: width 150ms linear; }
+.client-update-track > span[data-indeterminate] { animation: client-update-sweep 1.4s ease-in-out infinite; }
+.client-update-progress p { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--client-base-muted-foreground); }
+.client-update-progress p > span { font-variant-numeric: tabular-nums; }
+.client-update-error { max-width: 320px; font-size: 13px; color: var(--client-base-destructive); }
+.client-update-action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 9px 18px; border-radius: 8px; background: var(--client-base-primary); color: var(--client-base-primary-foreground); font-size: 13px; font-weight: 500; }
+.client-update-action:hover:not(:disabled) { filter: brightness(1.1); }
+.client-update-action:disabled { opacity: .65; cursor: progress; }
+.client-update-action:focus-visible { outline: 2px solid var(--client-base-ring); outline-offset: 3px; }
+@keyframes client-update-sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
 @media (prefers-reduced-motion: reduce) {
-  .client-update-button[data-state] { animation: none; }
-  .client-update-button[data-state='downloading']::before { animation: none; transition: none; }
+  .client-update-track > span { animation: none; transition: none; }
 }
 
 /* The site's pages size themselves to the viewport (h-screen, min-h-screen and the room's

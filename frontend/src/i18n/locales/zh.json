@@ -1217,15 +1217,23 @@
       "maximize": "最大化",
       "restore": "还原",
       "close": "关闭",
-      "downloading": "正在下载更新",
-      "downloadingUpdate": "正在下载新版本 {{version}}，完成后可重启更新。",
-      "update": "重启以更新",
-      "updating": "正在更新...",
-      "updateReady": "新版本 {{version}} 已下载。重启应用即可完成更新，房间会自动重新打开。",
-      "updateFailed": "更新安装失败，请稍后再试。",
       "screenCaptureProtectionMacHint": "请求屏幕捕获保护；新版 macOS 录屏仍可能包含此窗口。",
       "hideFromDock": "程序坞隐藏",
       "hideFromDockHint": "不显示程序坞图标，也不出现在 Cmd+Tab 中。"
+    },
+    "updater": {
+      "version": "v{{version}}",
+      "needed": "需要下载更新",
+      "checking": "正在检查更新…",
+      "downloading": "正在下载更新",
+      "downloaded": "更新已下载",
+      "restart": "重启以更新",
+      "installing": "正在更新…",
+      "retry": "重试",
+      "checkFailed": "无法检查更新，请检查网络后重试。",
+      "downloadFailed": "更新下载或验证失败，请重试。",
+      "installFailed": "更新安装失败，请重试。",
+      "restartFailed": "更新已安装，请重试重启。"
     }
   },
   "clientPlatforms": {
