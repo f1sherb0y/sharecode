@@ -1127,12 +1127,11 @@
       "formatLive": "{{width}} × {{height}} · 30 fps · 无音频"
     },
     "meetingPrivacy": {
-      "label": "隐藏会议共享浮层",
-      "hint": "共享期间每秒检测 WeMeet/VooV，关闭后恢复；任务栏入口本地也会隐藏。录屏端需支持截图排除。",
+      "label": "隐藏会议窗口",
+      "hint": "从录屏和共享画面中排除 WeMeet/VooV 的所有窗口，并隐藏本地任务栏入口；关闭后恢复。录屏端需支持窗口排除。",
       "applying": "正在应用窗口设置…",
       "disabled": "已关闭",
       "waiting": "等待 WeMeet/VooV 启动",
-      "idle": "已检测到会议，未发现可识别的共享窗口",
       "active": "已排除 {{windows}} 个窗口，隐藏 {{taskbar}} 个任务栏入口",
       "partial": "部分会议窗口未能修改",
       "restoring": "正在恢复会议窗口，将自动重试…"

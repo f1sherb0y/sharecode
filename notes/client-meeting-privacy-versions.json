@@ -1,0 +1,1468 @@
+{
+  "method": "Downloaded publisher CDN installers; SHA-256 matched winget manifests; Authenticode Valid; extracted with 7-Zip, no installers executed. Signals are ASCII/UTF-16 literal presence in PE files, not proof of runtime window class names or behavior.",
+  "samples": [
+    {
+      "product": "TencentMeeting",
+      "version": "2.17.7.400",
+      "architecture": "x86",
+      "manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/t/Tencent/TencentMeeting/2.17.7.400/Tencent.TencentMeeting.installer.yaml",
+      "installerUrl": "https://updatecdn.meeting.qq.com/f5f7e919b4aaece90bd83287c6f2d614/TencentMeeting_0300000000_2.17.7.400.publish.exe",
+      "sha256": "2004B0DFC62C17D98A30A55F06C0CC8D956677273FC2F64C3A03E8CA27C54EDD",
+      "bytes": 132064768,
+      "authenticodeStatus": "Valid",
+      "signer": "CN=Tencent Technology(Shenzhen) Company Limited, O=Tencent Technology(Shenzhen) Company Limited, L=Shenzhen, S=Guangdong Province, C=CN",
+      "executables": [
+        {
+          "path": "wemeetapp.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "wemeetapp_new.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$TEMP\\wemeet_install_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\DeltaUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\hw_check.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\outlook_addin_upgrade_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\TBSWebRenderer.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\TxBugReport.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\WeMeetUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\virtualdisplay\\WMVirtualDisplayInstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\virtualdisplay\\WMVirtualDisplayUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_9_\\virtualdisplay\\vda\\x64\\VDAInstaller.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_9_\\virtualdisplay\\vda\\x86\\VDAInstaller.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\DeleteHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpdateSvc.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpgradeHelper.exe",
+          "machine": "0x14c"
+        }
+      ],
+      "binaryStringSignals": {}
+    },
+    {
+      "product": "TencentMeeting",
+      "version": "3.20.5.478",
+      "architecture": "x86",
+      "manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/t/Tencent/TencentMeeting/3.20.5.478/Tencent.TencentMeeting.installer.yaml",
+      "installerUrl": "https://updatecdn.meeting.qq.com/cos/80892fb4d38bfc2a86878a2fad305a6a/TencentMeeting_0300000000_3.20.5.478.publish.exe",
+      "sha256": "07EA0FF527E5864A7E95F3C90C8943C036475F851C254A96ECAC8B17B1E7D918",
+      "bytes": 206414368,
+      "authenticodeStatus": "Valid",
+      "signer": "CN=Tencent Technology(Shenzhen) Company Limited, O=Tencent Technology(Shenzhen) Company Limited, L=Shenzhen, S=Guangdong Province, C=CN",
+      "executables": [
+        {
+          "path": "wemeetapp.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "wemeetapp_new.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$TEMP\\wemeet_install_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\crashpad_handler_extension.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\DeltaUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\outlook_addin_upgrade_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\transcodebridge.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\TxBugReport.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\wemeetcrashhandler.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\WemeetRepair.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\WeMeetUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\wmexternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\xnnexternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\virtualaudio\\devcon.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\WMVirtualDisplayInstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\WMVirtualDisplayUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\vda\\x64\\VDAInstaller.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\vda\\x86\\VDAInstaller.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\modules\\convert_tmr\\convert_tmr_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\DeleteHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpdateSvc.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpgradeHelper.exe",
+          "machine": "0x14c"
+        }
+      ],
+      "binaryStringSignals": {
+        "$_10_\\nxui_app.dll": [
+          "NXWindow"
+        ],
+        "$_10_\\nxui_component.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\nxui_uikit.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Core.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Gui.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Svg.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Widgets.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5WinExtras.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Xml.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_framework.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_uikit.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_ui_framework.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_util.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\WeMeetUninstall.exe": [
+          "Qt5Core"
+        ],
+        "$_10_\\WeMeetWebBroker.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_app_components.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_framework.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_migration.dll": [
+          "screen_share_toolbar_window",
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_qt.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\iconengines\\qsvgicon.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qapng.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qgif.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qico.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qjpeg.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qsvg.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qwebp.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qdirect2d.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qminimal.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qoffscreen.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qwindows.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\styles\\qwindowsvistastyle.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\account\\account_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\activity_space\\activity_space_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\advertisements\\advertisements_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\after_meeting\\after_meeting_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\appbox\\appbox_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\audio\\audio_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\breakout_room\\breakout_room_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\caption\\caption_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\chat\\chat_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\company_contacts\\company_contacts_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\convert_tmr\\convert_tmr_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\docs\\docs_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\historical_meetings\\historical_meetings_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\invite\\invite_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\join_meeting\\join_meeting_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\login\\login_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\media_process\\media_process_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\meeting_dashboard\\meeting_dashboard_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\meeting_live\\meeting_live_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\meeting_room\\meeting_room_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\member\\member_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\misc\\misc_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\operating_activities\\operating_activities_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\question_answer\\question_answer_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\quick_record\\quick_record_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\quick_record_entrance\\quick_record_entrance_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\record\\record_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\rooms_controller\\rooms_controller_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\schedule_meeting\\schedule_meeting_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\screen_share\\screen_share_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\settings\\settings_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\sidebar\\sidebar_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\sim_interpret\\sim_interpret_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\tool_box_timer\\tool_box_timer_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\video\\video_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\voice_activated\\voice_activated_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\web_share\\web_share_module.dll": [
+          "Qt5Core"
+        ]
+      }
+    },
+    {
+      "product": "TencentMeeting",
+      "version": "3.48.0.443",
+      "architecture": "x64",
+      "manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/t/Tencent/TencentMeeting/3.48.0.443/Tencent.TencentMeeting.installer.yaml",
+      "installerUrl": "https://updatecdn.meeting.qq.com/cos/03001aa87c1fdfe02774f25175603db9/TencentMeeting_0300000000_3.48.0.443_x86_64.publish.exe",
+      "sha256": "D365C3102DD4330E92CF8675F8694985D64D3B108B698B7EFE92D18C128FBEB4",
+      "bytes": 304420392,
+      "authenticodeStatus": "Valid",
+      "signer": "CN=Tencent Technology (Shenzhen) Company Limited, O=Tencent Technology (Shenzhen) Company Limited, L=Shenzhen, S=Guangdong Province, C=CN, SERIALNUMBER=9144030071526726XG, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.1=Shenzhen, OID.1.3.6.1.4.1.311.60.2.1.2=Guangdong Province, OID.1.3.6.1.4.1.311.60.2.1.3=CN",
+      "executables": [
+        {
+          "path": "WeMeetApp.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "WeMeetApp_new.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$TEMP\\wemeet_install_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\CrashpadHandlerExtension.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\DeltaUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\OutlookAddinUpgradeHelper.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\TranscodeBridge.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\WeMeetCrashHandler.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\WeMeetRepair.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WeMeetUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WMExternal.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\XnnExternal.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualaudio\\Devcon.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\WMVirtualDisplayInstall.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\WMVirtualDisplayUninstall.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\vda\\x64\\VDAInstaller.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\modules\\cooperation\\convert_tmr\\ConvertTmrHelper.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$WINDIR\\Temp\\DeleteHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpdateSvc.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpgradeHelper.exe",
+          "machine": "0x14c"
+        }
+      ],
+      "binaryStringSignals": {
+        "$PLUGINSDIR\\WeMeetHelper.dll": [
+          "screen_share_toolbar_window",
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Core.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Core5Compat.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Gui.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6OpenGL.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6OpenGLWidgets.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6StateMachine.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Svg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Widgets.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Xml.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\qt_ui_framework.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\WeMeetUninstall.exe": [
+          "Qt6Core"
+        ],
+        "$_22_\\WeMeetWebBroker.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_app_components.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_app_sdk.dll": [
+          "screen_share_native_normal_tracker",
+          "screen_share_native_multi_tracker",
+          "screen_share_partial_tracker"
+        ],
+        "$_22_\\wemeet_framework.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_migration.dll": [
+          "screen_share_toolbar_window",
+          "Qt6Core"
+        ],
+        "$_22_\\XmagicDll.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\iconengines\\qsvgicon.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qapng.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qgif.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qico.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qjpeg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qsvg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qdirect2d.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qminimal.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qoffscreen.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qwindows.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\styles\\qmodernwindowsstyle.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\built_in_apps\\built_in_apps_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\cooperation\\cooperation_group.dll": [
+          "ScreenShareTrackerWindow",
+          "screen_share_tracker",
+          "screen_share_toolbar_window",
+          "screen_share_native_normal_tracker",
+          "screen_share_native_multi_tracker",
+          "screen_share_partial_tracker",
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\home\\home_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\inmeeting\\inmeeting_group.dll": [
+          "screen_share_float_container",
+          "screen_share_toolbar_docker_window",
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\meetlog\\meetlog_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\meetlog_entrance\\meetlog_entrance_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\miscx\\miscx_group.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\relationship\\relationship_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ]
+      }
+    },
+    {
+      "product": "TencentMeeting",
+      "version": "3.48.0.443",
+      "architecture": "x86",
+      "manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/t/Tencent/TencentMeeting/3.48.0.443/Tencent.TencentMeeting.installer.yaml",
+      "installerUrl": "https://updatecdn.meeting.qq.com/cos/6ea283807b18703cbe387f63fc7d463f/TencentMeeting_0300000000_3.48.0.443.publish.exe",
+      "sha256": "6627C4B11331A397919A597338F30935C0B35C76B832022A7B584A967970F165",
+      "bytes": 262559440,
+      "authenticodeStatus": "Valid",
+      "signer": "CN=Tencent Technology (Shenzhen) Company Limited, O=Tencent Technology (Shenzhen) Company Limited, L=Shenzhen, S=Guangdong Province, C=CN, SERIALNUMBER=9144030071526726XG, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.1=Shenzhen, OID.1.3.6.1.4.1.311.60.2.1.2=Guangdong Province, OID.1.3.6.1.4.1.311.60.2.1.3=CN",
+      "executables": [
+        {
+          "path": "WeMeetApp.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "WeMeetApp_new.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$TEMP\\wemeet_install_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\CrashpadHandlerExtension.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\DeltaUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\OutlookAddinUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\TranscodeBridge.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WeMeetCrashHandler.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WeMeetRepair.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WeMeetUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WMExternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\XnnExternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\virtualaudio\\Devcon.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\WMVirtualDisplayInstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\WMVirtualDisplayUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\vda\\x64\\VDAInstaller.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\vda\\x86\\VDAInstaller.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\modules\\cooperation\\convert_tmr\\ConvertTmrHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\DeleteHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpdateSvc.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpgradeHelper.exe",
+          "machine": "0x14c"
+        }
+      ],
+      "binaryStringSignals": {
+        "$PLUGINSDIR\\WeMeetHelper.dll": [
+          "screen_share_toolbar_window",
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Core.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Core5Compat.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Gui.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6OpenGL.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6OpenGLWidgets.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6StateMachine.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Svg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Widgets.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Xml.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\qt_ui_framework.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\WeMeetUninstall.exe": [
+          "Qt6Core"
+        ],
+        "$_22_\\WeMeetWebBroker.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_app_components.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_app_sdk.dll": [
+          "screen_share_native_normal_tracker",
+          "screen_share_native_multi_tracker",
+          "screen_share_partial_tracker"
+        ],
+        "$_22_\\wemeet_framework.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_migration.dll": [
+          "screen_share_toolbar_window",
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\iconengines\\qsvgicon.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qapng.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qgif.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qico.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qjpeg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qsvg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qdirect2d.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qminimal.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qoffscreen.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qwindows.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\styles\\qmodernwindowsstyle.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\built_in_apps\\built_in_apps_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\cooperation\\cooperation_group.dll": [
+          "ScreenShareTrackerWindow",
+          "screen_share_tracker",
+          "screen_share_toolbar_window",
+          "screen_share_native_normal_tracker",
+          "screen_share_native_multi_tracker",
+          "screen_share_partial_tracker",
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\home\\home_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\inmeeting\\inmeeting_group.dll": [
+          "screen_share_float_container",
+          "screen_share_toolbar_docker_window",
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\meetlog\\meetlog_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\meetlog_entrance\\meetlog_entrance_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\miscx\\miscx_group.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\relationship\\relationship_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ]
+      }
+    },
+    {
+      "product": "VooVMeeting",
+      "version": "2.12.5.520",
+      "architecture": "x86",
+      "manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/t/Tencent/VooVMeeting/2.12.5.520/Tencent.VooVMeeting.installer.yaml",
+      "installerUrl": "https://updatecdn.meeting.qq.com/049a70a6a919e7a38fe4fd57948c2a60/VooVMeeting_1410000197_2.12.5.520.publish.exe",
+      "sha256": "7284541FCCA3AB4C0770D4A1D40B1EBE0A2C3DFFB8CE3DF271013576711D06E3",
+      "bytes": 105424688,
+      "authenticodeStatus": "Valid",
+      "signer": "CN=Tencent Technology(Shenzhen) Company Limited, O=Tencent Technology(Shenzhen) Company Limited, L=Shenzhen, S=Guangdong Province, C=CN",
+      "executables": [
+        {
+          "path": "voovmeetingapp.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "voovmeetingapp_new.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$TEMP\\wemeet_install_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_7_\\hw_check.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_7_\\TBSWebRenderer.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_7_\\TxBugReport.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_7_\\VooVMeetingUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_7_\\virtualdisplay\\WMVirtualDisplayInstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_7_\\virtualdisplay\\WMVirtualDisplayUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_7_\\virtualdisplay\\vda\\x64\\VDAInstaller.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_7_\\virtualdisplay\\vda\\x86\\VDAInstaller.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\DeleteHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpdateSvc.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpgradeHelper.exe",
+          "machine": "0x14c"
+        }
+      ],
+      "binaryStringSignals": {}
+    },
+    {
+      "product": "VooVMeeting",
+      "version": "3.23.2.510",
+      "architecture": "x86",
+      "manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/t/Tencent/VooVMeeting/3.23.2.510/Tencent.VooVMeeting.installer.yaml",
+      "installerUrl": "https://updatecdn.meeting.qq.com/cos/871ef31316adfbd07c796ca5d714f366/VooVMeeting_1410000197_3.23.2.510.publish.exe",
+      "sha256": "80B3A28A609DB1A46363A69D06E5C8BC9C5FB529EE1646547B56A7681C546179",
+      "bytes": 217644544,
+      "authenticodeStatus": "Valid",
+      "signer": "CN=Tencent Technology (Shenzhen) Company Limited, O=Tencent Technology (Shenzhen) Company Limited, L=Shenzhen, S=Guangdong Province, C=CN",
+      "executables": [
+        {
+          "path": "voovmeetingapp.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "voovmeetingapp_new.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$TEMP\\wemeet_install_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\crashpad_handler_extension.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\DeltaUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\outlook_addin_upgrade_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\transcodebridge.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\TxBugReport.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\VooVMeetingUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\wemeetcrashhandler.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\WemeetRepair.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\wmexternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\xnnexternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\virtualaudio\\devcon.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\WMVirtualDisplayInstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\WMVirtualDisplayUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\vda\\x64\\VDAInstaller.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_10_\\virtualdisplay\\vda\\x86\\VDAInstaller.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_10_\\modules\\convert_tmr\\convert_tmr_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\DeleteHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpdateSvc.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpgradeHelper.exe",
+          "machine": "0x14c"
+        }
+      ],
+      "binaryStringSignals": {
+        "$_10_\\nxui_app.dll": [
+          "NXWindow"
+        ],
+        "$_10_\\nxui_uikit.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Core.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Gui.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Svg.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Widgets.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5WinExtras.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\Qt5Xml.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_framework.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_uikit.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_ui_framework.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\qt_util.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\VooVMeetingUninstall.exe": [
+          "Qt5Core"
+        ],
+        "$_10_\\WeMeetWebBroker.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_app_components.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_framework.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_migration.dll": [
+          "screen_share_toolbar_window",
+          "Qt5Core"
+        ],
+        "$_10_\\wemeet_qt.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\iconengines\\qsvgicon.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qapng.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qgif.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qico.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qjpeg.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\imageformats\\qsvg.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qdirect2d.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qminimal.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qoffscreen.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\platforms\\qwindows.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\plugins\\styles\\qwindowsvistastyle.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\account\\account_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\activity_space\\activity_space_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\advertisements\\advertisements_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\after_meeting\\after_meeting_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\appbox\\appbox_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\audio\\audio_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\breakout_room\\breakout_room_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\business\\business_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\caption\\caption_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\chat\\chat_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\company_contacts\\company_contacts_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\convert_tmr\\convert_tmr_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\docs\\docs_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\historical_meetings\\historical_meetings_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\invite\\invite_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\join_meeting\\join_meeting_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\login\\login_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\media_process\\media_process_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\meeting_dashboard\\meeting_dashboard_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\meeting_live\\meeting_live_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\meeting_room\\meeting_room_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\member\\member_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\misc\\misc_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\operating_activities\\operating_activities_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\qr_entrance\\qr_entrance_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\question_answer\\question_answer_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\quick_record\\quick_record_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\record\\record_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\rooms_controller\\rooms_controller_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\schedule_meeting\\schedule_meeting_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\screen_share\\screen_share_module.dll": [
+          "NXWindow",
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\settings\\settings_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\sidebar\\sidebar_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\sim_interpret\\sim_interpret_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\tool_box_timer\\tool_box_timer_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\video\\video_module.dll": [
+          "Qt5Core"
+        ],
+        "$_10_\\modules\\voice_activated\\voice_activated_module.dll": [
+          "Qt5Core"
+        ]
+      }
+    },
+    {
+      "product": "VooVMeeting",
+      "version": "3.43.0.510",
+      "architecture": "x86",
+      "manifest": "https://github.com/microsoft/winget-pkgs/blob/master/manifests/t/Tencent/VooVMeeting/3.43.0.510/Tencent.VooVMeeting.installer.yaml",
+      "installerUrl": "https://updatecdn.meeting.qq.com/cos/03fd4df7a79a01239433069387d30479/VooVMeeting_1410000197_3.43.0.510.publish.exe",
+      "sha256": "0D8AB4A3133C05B514556E959B4C0C2A46683DFE61525D1A568021344D2861C9",
+      "bytes": 242720744,
+      "authenticodeStatus": "Valid",
+      "signer": "CN=Tencent Technology (Shenzhen) Company Limited, O=Tencent Technology (Shenzhen) Company Limited, L=Shenzhen, S=Guangdong Province, C=CN, SERIALNUMBER=9144030071526726XG, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.1=Shenzhen, OID.1.3.6.1.4.1.311.60.2.1.2=Guangdong Province, OID.1.3.6.1.4.1.311.60.2.1.3=CN",
+      "executables": [
+        {
+          "path": "VooVMeetingApp.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "voovmeetingapp_new.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$TEMP\\wemeet_install_helper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\CrashpadHandlerExtension.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\DeltaUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\OutlookAddinUpgradeHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\TranscodeBridge.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\VooVMeetingUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WeMeetCrashHandler.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WeMeetRepair.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\WMExternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\XnnExternal.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\virtualaudio\\Devcon.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\WMVirtualDisplayInstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\WMVirtualDisplayUninstall.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\vda\\x64\\VDAInstaller.exe",
+          "machine": "0x8664"
+        },
+        {
+          "path": "$_22_\\virtualdisplay\\vda\\x86\\VDAInstaller.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$_22_\\modules\\cooperation\\convert_tmr\\ConvertTmrHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\DeleteHelper.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpdateSvc.exe",
+          "machine": "0x14c"
+        },
+        {
+          "path": "$WINDIR\\Temp\\WemeetUpgradeHelper.exe",
+          "machine": "0x14c"
+        }
+      ],
+      "binaryStringSignals": {
+        "$PLUGINSDIR\\WeMeetHelper.dll": [
+          "screen_share_toolbar_window",
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Core.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Core5Compat.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Gui.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6OpenGL.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6OpenGLWidgets.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6StateMachine.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Svg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Widgets.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\Qt6Xml.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\qt_ui_framework.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\VooVMeetingUninstall.exe": [
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\WeMeetWebBroker.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_app_components.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_app_sdk.dll": [
+          "screen_share_partial_tracker"
+        ],
+        "$_22_\\wemeet_framework.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\wemeet_migration.dll": [
+          "screen_share_toolbar_window",
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\iconengines\\qsvgicon.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qapng.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qgif.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qico.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qjpeg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\imageformats\\qsvg.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qdirect2d.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qminimal.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qoffscreen.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\platforms\\qwindows.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\plugins\\styles\\qmodernwindowsstyle.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\built_in_apps\\built_in_apps_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\cooperation\\cooperation_group.dll": [
+          "screen_share_tracker",
+          "screen_share_toolbar_window",
+          "screen_share_partial_tracker",
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\home\\home_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\inmeeting\\inmeeting_group.dll": [
+          "screen_share_float_container",
+          "screen_share_toolbar_docker_window",
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\meetlog\\meetlog_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\meetlog_entrance\\meetlog_entrance_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\miscx\\miscx_group.dll": [
+          "Qt6Core"
+        ],
+        "$_22_\\modules\\relationship\\relationship_group.dll": [
+          "NXWindow",
+          "Qt6Core"
+        ]
+      }
+    }
+  ]
+}

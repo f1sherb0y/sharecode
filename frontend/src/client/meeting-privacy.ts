@@ -7,9 +7,8 @@ export const supportsMeetingPrivacy = typeof window !== 'undefined' && '__TAURI_
 
 export interface MeetingPrivacyStatus {
   enabled: boolean
-  state: 'disabled' | 'waiting' | 'idle' | 'active' | 'partial' | 'restoring'
+  state: 'disabled' | 'waiting' | 'active' | 'partial' | 'restoring'
   meetingProcesses: number
-  sharingProcesses: number
   protectedWindows: number
   hiddenTaskbarWindows: number
   error: string | null

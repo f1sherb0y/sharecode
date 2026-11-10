@@ -1,35 +1,36 @@
-//! Opt-in meeting-window privacy. One background worker polls once per second.
-//! Only known screen-share marker windows activate processing. Original values
-//! are stored as HWND properties so recreated windows cannot inherit stale state.
+//! Opt-in capture exclusion for every top-level window belonging to WeMeet/VooV.
+//! Window events trigger updates; a one-second sweep repairs missed events/resets.
+//! Saved HWND properties survive rescans, but never follow a destroyed window.
 use serde::Serialize;
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     fs,
-    path::PathBuf,
+    io::{BufRead, BufReader, Write},
+    os::windows::process::CommandExt,
+    path::{Path, PathBuf},
+    process::{Child, ChildStdin, Command as ProcessCommand, Stdio},
     sync::{mpsc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager};
 use windows::{
-    core::{s, w, BOOL, PCWSTR, PWSTR},
+    core::{w, BOOL, PCWSTR, PWSTR},
     Win32::{
-        Foundation::{
-            CloseHandle, FreeLibrary, HANDLE, HINSTANCE, HMODULE, HWND, LPARAM, WAIT_ABANDONED,
-            WAIT_OBJECT_0, WPARAM,
-        },
+        Foundation::{CloseHandle, HANDLE, HWND, LPARAM, WAIT_ABANDONED, WAIT_OBJECT_0},
         System::{
             Com::{
                 CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
                 COINIT_APARTMENTTHREADED,
             },
-            LibraryLoader::{GetProcAddress, LoadLibraryW},
             Threading::{
-                CreateMutexW, GetCurrentProcess, IsWow64Process2, OpenProcess,
-                QueryFullProcessImageNameW, ReleaseMutex, WaitForSingleObject, PROCESS_NAME_WIN32,
+                CreateMutexW, IsWow64Process2, OpenProcess, QueryFullProcessImageNameW,
+                ReleaseMutex, WaitForSingleObject, PROCESS_NAME_WIN32,
                 PROCESS_QUERY_LIMITED_INFORMATION,
             },
         },
         UI::{
+            Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK},
             Shell::{ITaskbarList, TaskbarList},
             WindowsAndMessaging::*,
         },
@@ -37,12 +38,18 @@ use windows::{
 };
 
 const AFFINITY_PROPERTY: PCWSTR = w!("ShareCode.MeetingPrivacy.Affinity.v1");
+const RESTORE_PROPERTY: PCWSTR = w!("ShareCode.MeetingPrivacy.RestoreAffinity.v1");
 const STYLE_PROPERTY: PCWSTR = w!("ShareCode.MeetingPrivacy.Taskbar.v1");
 const TASKBAR_BITS: u32 = WS_EX_APPWINDOW.0 | WS_EX_TOOLWINDOW.0;
-const DLL: &[u8] = include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/sharecode_meeting_window_hook.dll"
-));
+#[path = "../native/meeting_identity.rs"]
+mod identity;
+const X86_DLL: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/meeting_hook_x86.dll"));
+const X64_DLL: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/meeting_hook_x64.dll"));
+const X86_HOST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/meeting_bridge_x86.exe"));
+const X64_HOST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/meeting_bridge_x64.exe"));
+#[path = "meeting_privacy_events.rs"]
+mod events;
+use events::EventWatch;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +57,6 @@ pub struct Status {
     pub enabled: bool,
     pub state: String,
     pub meeting_processes: usize,
-    pub sharing_processes: usize,
     pub protected_windows: usize,
     pub hidden_taskbar_windows: usize,
     pub error: Option<String>,
@@ -61,7 +67,6 @@ impl Default for Status {
             enabled: false,
             state: "disabled".into(),
             meeting_processes: 0,
-            sharing_processes: 0,
             protected_windows: 0,
             hidden_taskbar_windows: 0,
             error: None,
@@ -91,14 +96,55 @@ impl Monitor {
                     cache,
                     bridge: None,
                     ownership: None,
+                    #[cfg(test)]
+                    test_processes: None,
                 };
                 let mut enabled = false;
+                let mut events: Option<EventWatch> = None;
+                let mut last_scan = Instant::now();
                 loop {
-                    match receive.recv_timeout(Duration::from_secs(1)) {
+                    let changed = events.as_ref().is_some_and(EventWatch::poll);
+                    let restoring = shared.lock().unwrap().state == "restoring";
+                    if (enabled || restoring)
+                        && (changed || last_scan.elapsed() >= Duration::from_secs(1))
+                    {
+                        let mut next_status = worker.tick(enabled);
+                        if enabled && events.is_none() {
+                            match EventWatch::install() {
+                                Ok(watch) => events = Some(watch),
+                                Err(error) => {
+                                    next_status.state = "partial".into();
+                                    next_status.error = Some(error);
+                                }
+                            }
+                        }
+                        publish(&handle, &shared, &next_status);
+                        last_scan = Instant::now();
+                    }
+                    let wait = if enabled {
+                        Duration::from_millis(20)
+                    } else {
+                        Duration::from_secs(1)
+                    };
+                    match receive.recv_timeout(wait) {
                         Ok(Command::Enable(next, answer)) => {
                             enabled = next;
-                            let next_status = worker.tick(enabled);
+                            let mut event_error = None;
+                            if enabled && events.is_none() {
+                                match EventWatch::install() {
+                                    Ok(watch) => events = Some(watch),
+                                    Err(error) => event_error = Some(error),
+                                }
+                            } else if !enabled {
+                                events = None;
+                            }
+                            let mut next_status = worker.tick(enabled);
+                            if let Some(error) = event_error {
+                                next_status.state = "partial".into();
+                                next_status.error = Some(error);
+                            }
                             publish(&handle, &shared, &next_status);
+                            last_scan = Instant::now();
                             let _ = answer.try_send(next_status);
                         }
                         Ok(Command::Stop(answer)) => {
@@ -108,12 +154,6 @@ impl Monitor {
                             }
                             let _ = answer.send(());
                             break;
-                        }
-                        Err(mpsc::RecvTimeoutError::Timeout)
-                            if enabled || shared.lock().unwrap().state == "restoring" =>
-                        {
-                            let next_status = worker.tick(enabled);
-                            publish(&handle, &shared, &next_status);
                         }
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                         Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -169,8 +209,11 @@ struct Ownership(HANDLE);
 impl Ownership {
     fn acquire() -> Result<Self, String> {
         unsafe {
-            let mutex = CreateMutexW(None, false, w!("Local\\ShareCode.MeetingPrivacy.v1"))
-                .map_err(|e| e.to_string())?;
+            #[cfg(not(test))]
+            let name = w!("Local\\ShareCode.MeetingPrivacy.v1");
+            #[cfg(test)]
+            let name = w!("Local\\ShareCode.MeetingPrivacy.Test.v1");
+            let mutex = CreateMutexW(None, false, name).map_err(|e| e.to_string())?;
             let wait = WaitForSingleObject(mutex, 0);
             if wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED {
                 Ok(Self(mutex))
@@ -195,8 +238,6 @@ struct MeetingWindow {
     hwnd: HWND,
     pid: u32,
     thread: u32,
-    class: String,
-    title: String,
     visible: bool,
     style: u32,
 }
@@ -213,16 +254,10 @@ unsafe extern "system" fn collect(hwnd: HWND, data: LPARAM) -> BOOL {
         .entry(pid)
         .or_insert_with(|| meeting_process(pid));
     if is_meeting {
-        let mut class = [0u16; 256];
-        let mut title = [0u16; 512];
-        let class_len = GetClassNameW(hwnd, &mut class).max(0) as usize;
-        let title_len = GetWindowTextW(hwnd, &mut title).max(0) as usize;
         snapshot.windows.push(MeetingWindow {
             hwnd,
             pid,
             thread,
-            class: String::from_utf16_lossy(&class[..class_len]),
-            title: String::from_utf16_lossy(&title[..title_len]),
             visible: IsWindowVisible(hwnd).as_bool(),
             style: GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32,
         });
@@ -246,11 +281,8 @@ fn meeting_process(pid: u32) -> bool {
         if result.is_err() {
             return false;
         }
-        let path = String::from_utf16_lossy(&path[..len as usize]).to_lowercase();
-        matches!(
-            path.rsplit('\\').next(),
-            Some("wemeetapp.exe" | "voovmeeting.exe" | "voovmeetingapp.exe")
-        )
+        let path = String::from_utf16_lossy(&path[..len as usize]);
+        identity::installation_root(Path::new(&path)).is_some()
     }
 }
 fn snapshot() -> Result<Vec<MeetingWindow>, String> {
@@ -262,31 +294,8 @@ fn snapshot() -> Result<Vec<MeetingWindow>, String> {
         .map_err(|e| e.to_string())?;
     Ok(data.windows)
 }
-fn marker(window: &MeetingWindow) -> bool {
-    window.visible
-        && window.class.starts_with("Qt")
-        && matches!(
-            window.title.as_str(),
-            "screen_share_tracker" | "screen_share_float_container"
-        )
-}
-fn app_title(title: &str) -> bool {
-    matches!(
-        title.to_lowercase().as_str(),
-        "腾讯会议" | "voov meeting" | "tencent meeting" | "voov"
-    )
-}
-fn overlay(window: &MeetingWindow) -> bool {
-    marker(window)
-        || (window.visible
-            && window.class.starts_with("Qt")
-            && app_title(&window.title)
-            && window.style & WS_EX_TOPMOST.0 != 0)
-}
 fn taskbar_candidate(window: &MeetingWindow) -> bool {
     window.visible
-        && window.class.starts_with("Qt")
-        && app_title(&window.title)
         && (window.style & WS_EX_APPWINDOW.0 != 0
             || (window.style & WS_EX_TOOLWINDOW.0 == 0
                 && unsafe {
@@ -294,6 +303,11 @@ fn taskbar_candidate(window: &MeetingWindow) -> bool {
                         .unwrap_or_default()
                         .is_invalid()
                 }))
+}
+fn current(window: &MeetingWindow) -> bool {
+    let mut pid = 0;
+    let thread = unsafe { GetWindowThreadProcessId(window.hwnd, Some(&mut pid)) };
+    pid == window.pid && thread == window.thread && thread != 0
 }
 fn property(hwnd: HWND, name: PCWSTR) -> Option<u32> {
     let value = unsafe { GetPropW(hwnd, name) }.0 as usize;
@@ -312,142 +326,16 @@ fn affinity(hwnd: HWND) -> Result<u32, String> {
     Ok(value)
 }
 
-struct Bridge {
-    module: HMODULE,
-    procedure: HOOKPROC,
-    message: u32,
-}
-impl Bridge {
-    fn load(cache: &PathBuf) -> Result<Self, String> {
-        fs::create_dir_all(cache).map_err(|e| e.to_string())?;
-        // Content-addressed name prevents replacing a DLL while Windows still maps it.
-        let hash = DLL.iter().fold(0xcbf29ce484222325u64, |hash, byte| {
-            (hash ^ *byte as u64).wrapping_mul(0x100000001b3)
-        });
-        let path = cache.join(format!("meeting-window-{hash:016x}.dll"));
-        if path.exists() {
-            if fs::read(&path).map_err(|e| e.to_string())? != DLL {
-                return Err("Meeting helper file does not match this build".into());
-            }
-        } else {
-            use std::io::Write;
-            let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
-            let mut file = fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(&temporary)
-                .map_err(|e| e.to_string())?;
-            file.write_all(DLL).map_err(|e| e.to_string())?;
-            file.sync_all().map_err(|e| e.to_string())?;
-            drop(file);
-            fs::rename(&temporary, &path).map_err(|e| e.to_string())?;
-        }
-        let path: Vec<u16> = path
-            .as_os_str()
-            .to_string_lossy()
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
-        unsafe {
-            let module = LoadLibraryW(PCWSTR(path.as_ptr())).map_err(|e| e.to_string())?;
-            let Some(proc) = GetProcAddress(module, s!("ShareCodeMeetingWindowHook")) else {
-                let _ = FreeLibrary(module);
-                return Err("Meeting helper entrypoint is missing".into());
-            };
-            let message = RegisterWindowMessageW(w!("ShareCode.MeetingCaptureAffinity.v1"));
-            if message == 0 {
-                let _ = FreeLibrary(module);
-                return Err("Cannot register meeting-window command".into());
-            }
-            Ok(Self {
-                module,
-                procedure: Some(std::mem::transmute(proc)),
-                message,
-            })
-        }
-    }
-    fn set_affinity(&self, window: &MeetingWindow, value: u32) -> Result<(), String> {
-        let mut pid = 0;
-        let thread = unsafe { GetWindowThreadProcessId(window.hwnd, Some(&mut pid)) };
-        if thread != window.thread || pid != window.pid {
-            return Err("Meeting window changed before update".into());
-        }
-        unsafe {
-            use windows::Win32::System::SystemInformation::IMAGE_FILE_MACHINE;
-            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-                .map_err(|e| e.to_string())?;
-            let mut target_machine = IMAGE_FILE_MACHINE::default();
-            let mut native_machine = IMAGE_FILE_MACHINE::default();
-            let checked = IsWow64Process2(process, &mut target_machine, Some(&mut native_machine));
-            let _ = CloseHandle(process);
-            checked.map_err(|e| e.to_string())?;
-            let target_machine = if target_machine.0 == 0 {
-                native_machine
-            } else {
-                target_machine
-            };
-            let mut own_machine = IMAGE_FILE_MACHINE::default();
-            IsWow64Process2(
-                GetCurrentProcess(),
-                &mut own_machine,
-                Some(&mut native_machine),
-            )
-            .map_err(|e| e.to_string())?;
-            let own_machine = if own_machine.0 == 0 {
-                native_machine
-            } else {
-                own_machine
-            };
-            if own_machine != target_machine {
-                return Err(
-                    "Meeting and ShareCode CPU architectures differ; helper was not attached"
-                        .into(),
-                );
-            }
-        }
-        // A thread-specific hook runs this one bounded command in the owning process,
-        // where Windows permits display-affinity changes. Never install a global hook.
-        let hook = unsafe {
-            SetWindowsHookExW(
-                WH_CALLWNDPROC,
-                self.procedure,
-                Some(HINSTANCE(self.module.0)),
-                thread,
-            )
-        }
-        .map_err(|e| format!("Meeting window helper could not attach: {e}"))?;
-        let delivered = unsafe {
-            SendMessageTimeoutW(
-                window.hwnd,
-                self.message,
-                WPARAM(0x53434d31),
-                LPARAM(value as isize),
-                SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
-                300,
-                None,
-            )
-        }
-        .0 != 0;
-        let _ = unsafe { UnhookWindowsHookEx(hook) };
-        if !delivered {
-            return Err("Meeting window did not answer; retrying later".into());
-        }
-        if affinity(window.hwnd)? != value {
-            return Err("Meeting window did not accept capture exclusion (permissions or architecture may differ)".into());
-        }
-        Ok(())
-    }
-}
-impl Drop for Bridge {
-    fn drop(&mut self) {
-        unsafe {
-            let _ = FreeLibrary(self.module);
-        }
-    }
-}
+#[path = "meeting_privacy_bridge.rs"]
+mod bridge;
+use bridge::Bridge;
 
-fn taskbar(window: &MeetingWindow, hide: bool, original: u32) -> Result<(), String> {
+fn taskbar(
+    window: &MeetingWindow,
+    hide: bool,
+    original: u32,
+    bridge: &mut Bridge,
+) -> Result<(), String> {
     unsafe {
         let mut pid = 0;
         if GetWindowThreadProcessId(window.hwnd, Some(&mut pid)) != window.thread
@@ -459,17 +347,7 @@ fn taskbar(window: &MeetingWindow, hide: bool, original: u32) -> Result<(), Stri
         let bits = if hide { WS_EX_TOOLWINDOW.0 } else { original };
         let wanted = (current & !TASKBAR_BITS) | bits;
         if current != wanted {
-            SetWindowLongPtrW(window.hwnd, GWL_EXSTYLE, wanted as isize);
-            SetWindowPos(
-                window.hwnd,
-                None,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED,
-            )
-            .map_err(|e| e.to_string())?;
+            bridge.set_taskbar_bits(window, bits)?;
         }
         if GetWindowLongPtrW(window.hwnd, GWL_EXSTYLE) as u32 & TASKBAR_BITS != bits {
             return Err("Meeting taskbar state could not be changed".into());
@@ -492,33 +370,56 @@ struct Worker {
     cache: PathBuf,
     bridge: Option<Bridge>,
     ownership: Option<Ownership>,
+    #[cfg(test)]
+    test_processes: Option<HashSet<u32>>,
 }
 impl Worker {
-    fn bridge(&mut self) -> Result<&Bridge, String> {
+    fn bridge(&mut self) -> Result<&mut Bridge, String> {
         if self.bridge.is_none() {
             self.bridge = Some(Bridge::load(&self.cache)?);
         }
-        Ok(self.bridge.as_ref().unwrap())
+        Ok(self.bridge.as_mut().unwrap())
     }
     fn restore(&mut self, window: &MeetingWindow) -> Result<(), String> {
-        // Restore independently: a capture failure must not prevent the taskbar returning.
-        let capture = (|| -> Result<(), String> {
-            if let Some(original) = property(window.hwnd, AFFINITY_PROPERTY) {
-                if affinity(window.hwnd)? == WDA_EXCLUDEFROMCAPTURE.0 {
-                    self.bridge()?.set_affinity(window, original)?;
-                }
-                unsafe { RemovePropW(window.hwnd, AFFINITY_PROPERTY) }
-                    .map_err(|e| e.to_string())?;
+        // Decide before changing styles (which can reset affinity), then restore
+        // capture last. Keep the target on this HWND if a restore needs retrying.
+        let capture_target = (|| -> Result<Option<u32>, String> {
+            if let Some(target) = property(window.hwnd, RESTORE_PROPERTY) {
+                return Ok(Some(target));
             }
-            Ok(())
+            let Some(original) = property(window.hwnd, AFFINITY_PROPERTY) else {
+                return Ok(None);
+            };
+            let current = affinity(window.hwnd)?;
+            let target = if current == WDA_EXCLUDEFROMCAPTURE.0 {
+                original
+            } else {
+                current
+            };
+            remember(window.hwnd, RESTORE_PROPERTY, target)?;
+            Ok(Some(target))
         })();
+        // Restore independently: a capture failure must not prevent the taskbar returning.
         let taskbar_result = (|| -> Result<(), String> {
             if let Some(original) = property(window.hwnd, STYLE_PROPERTY) {
                 let current = unsafe { GetWindowLongPtrW(window.hwnd, GWL_EXSTYLE) as u32 };
                 if current & TASKBAR_BITS == WS_EX_TOOLWINDOW.0 {
-                    taskbar(window, false, original)?;
+                    taskbar(window, false, original, self.bridge()?)?;
                 }
                 unsafe { RemovePropW(window.hwnd, STYLE_PROPERTY) }.map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        })();
+        let capture = (|| -> Result<(), String> {
+            if let Some(target) = capture_target? {
+                if affinity(window.hwnd)? != target {
+                    self.bridge()?.set_affinity(window, target)?;
+                }
+                if property(window.hwnd, AFFINITY_PROPERTY).is_some() {
+                    unsafe { RemovePropW(window.hwnd, AFFINITY_PROPERTY) }
+                        .map_err(|e| e.to_string())?;
+                }
+                unsafe { RemovePropW(window.hwnd, RESTORE_PROPERTY) }.map_err(|e| e.to_string())?;
             }
             Ok(())
         })();
@@ -534,50 +435,88 @@ impl Worker {
                 self.ownership = Some(Ownership::acquire()?);
             }
             let windows = snapshot()?;
-            status.meeting_processes = windows.iter().map(|w| w.pid).collect::<HashSet<_>>().len();
-            let sharing: HashSet<u32> = windows
-                .iter()
-                .filter(|w| marker(w))
-                .map(|w| w.pid)
+            #[cfg(test)]
+            let windows: Vec<_> = windows
+                .into_iter()
+                .filter(|window| {
+                    self.test_processes
+                        .as_ref()
+                        .map_or(true, |pids| pids.contains(&window.pid))
+                })
                 .collect();
-            status.sharing_processes = sharing.len();
+            status.meeting_processes = windows.iter().map(|w| w.pid).collect::<HashSet<_>>().len();
             let mut errors = Vec::new();
+            let mut blocked_threads: HashMap<(u32, u32), String> = HashMap::new();
             for window in &windows {
-                let active = enabled && sharing.contains(&window.pid);
-                if !active {
-                    if let Err(error) = self.restore(window) {
-                        errors.push(error);
+                if !current(window) {
+                    continue;
+                }
+                if let Some(error) = blocked_threads.get(&(window.pid, window.thread)) {
+                    if window.visible || !enabled {
+                        errors.push(error.clone());
                     }
                     continue;
                 }
-                if overlay(window) {
-                    let result = (|| -> Result<(), String> {
-                        let current = affinity(window.hwnd)?;
-                        if current != WDA_EXCLUDEFROMCAPTURE.0 {
-                            remember(window.hwnd, AFFINITY_PROPERTY, current)?;
-                            self.bridge()?
-                                .set_affinity(window, WDA_EXCLUDEFROMCAPTURE.0)?;
-                        }
-                        status.protected_windows += 1;
-                        Ok(())
-                    })();
-                    if let Err(error) = result {
-                        errors.push(error);
-                    }
-                } else if property(window.hwnd, AFFINITY_PROPERTY).is_some() {
+                if !enabled {
                     if let Err(error) = self.restore(window) {
-                        errors.push(error);
+                        if current(window) {
+                            blocked_threads.insert((window.pid, window.thread), error.clone());
+                            errors.push(error);
+                        }
                     }
+                    continue;
                 }
+                // Save before touching styles, then apply capture exclusion last:
+                // a style/visibility transition can reset display affinity.
+                let capture_original = affinity(window.hwnd).and_then(|value| {
+                    remember(window.hwnd, AFFINITY_PROPERTY, value)?;
+                    // Re-enabling cancels a pending restoration, retaining
+                    // the original value for the next explicit disable.
+                    if property(window.hwnd, RESTORE_PROPERTY).is_some() {
+                        unsafe { RemovePropW(window.hwnd, RESTORE_PROPERTY) }
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Ok(())
+                });
                 if taskbar_candidate(window) || property(window.hwnd, STYLE_PROPERTY).is_some() {
                     let result = (|| -> Result<(), String> {
                         remember(window.hwnd, STYLE_PROPERTY, window.style & TASKBAR_BITS)?;
-                        taskbar(window, true, window.style & TASKBAR_BITS)?;
+                        taskbar(window, true, window.style & TASKBAR_BITS, self.bridge()?)?;
                         status.hidden_taskbar_windows += 1;
                         Ok(())
                     })();
                     if let Err(error) = result {
-                        errors.push(error);
+                        if current(window) {
+                            blocked_threads.insert((window.pid, window.thread), error.clone());
+                            if window.visible {
+                                errors.push(error);
+                            }
+                        }
+                    }
+                }
+                {
+                    let result = (|| -> Result<(), String> {
+                        capture_original?;
+                        let current = affinity(window.hwnd)?;
+                        if current != WDA_EXCLUDEFROMCAPTURE.0 {
+                            self.bridge()?
+                                .set_affinity(window, WDA_EXCLUDEFROMCAPTURE.0)?;
+                        }
+                        if window.visible {
+                            status.protected_windows += 1;
+                        }
+                        Ok(())
+                    })();
+                    if let Err(error) = result {
+                        if current(window) {
+                            blocked_threads.insert((window.pid, window.thread), error.clone());
+                            // Sandboxed renderers can own invisible housekeeping
+                            // HWNDs that refuse hooks. Retry them on show/the next
+                            // sweep; report a protection failure if they are visible.
+                            if window.visible {
+                                errors.push(error);
+                            }
+                        }
                     }
                 }
             }
@@ -594,8 +533,6 @@ impl Worker {
                 "disabled"
             } else if status.meeting_processes == 0 {
                 "waiting"
-            } else if status.sharing_processes == 0 {
-                "idle"
             } else {
                 "active"
             }
@@ -608,3 +545,7 @@ impl Worker {
         status
     }
 }
+
+#[cfg(test)]
+#[path = "meeting_privacy_tests.rs"]
+mod tests;

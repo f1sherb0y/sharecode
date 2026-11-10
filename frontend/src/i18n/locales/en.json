@@ -1128,12 +1128,11 @@
       "formatLive": "{{width}} × {{height}} · 30 fps · no audio"
     },
     "meetingPrivacy": {
-      "label": "Hide meeting share overlays",
-      "hint": "Auto-detect sharing every second; off restores changes. Also hides the local taskbar entry. Requires a recorder that honors Windows capture exclusion.",
+      "label": "Hide meeting windows",
+      "hint": "Exclude all WeMeet/VooV windows from recordings and screen sharing, and hide their local taskbar entries. Turning off restores changes. Requires a recorder that honors window exclusion.",
       "applying": "Applying window changes…",
       "disabled": "Off",
       "waiting": "Waiting for WeMeet/VooV",
-      "idle": "Meeting detected; no recognized sharing windows",
       "active": "{{windows}} windows excluded; {{taskbar}} taskbar entries hidden",
       "partial": "Some meeting windows could not be changed",
       "restoring": "Restoring meeting windows; retrying…"

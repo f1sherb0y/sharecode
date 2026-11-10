@@ -19,6 +19,8 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
 ### Windows
 - Visual Studio 2022 Build Tools with "Desktop development with C++" workload
 - WebView2 (pre-installed on Windows 10/11)
+- Customer client: both Rust MSVC targets for the meeting-window helpers:
+  `rustup target add i686-pc-windows-msvc x86_64-pc-windows-msvc`
 
 ```powershell
 winget install Microsoft.VisualStudio.2022.BuildTools

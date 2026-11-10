@@ -11,30 +11,71 @@ fn main() {
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         build_screen_share();
     }
-    println!("cargo:rerun-if-changed=native/meeting_window_hook.rs");
+    for file in [
+        "meeting_window_hook.rs",
+        "meeting_window_bridge.rs",
+        "meeting_identity.rs",
+    ] {
+        println!("cargo:rerun-if-changed=native/{file}");
+    }
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        let output = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"))
-            .join("sharecode_meeting_window_hook.dll");
-        let status = Command::new(env::var_os("RUSTC").expect("RUSTC"))
-            .args([
-                "--edition=2021",
-                "--crate-type=cdylib",
-                "--crate-name=sharecode_meeting_window_hook",
-                "-C",
-                "opt-level=s",
-                "-C",
-                "panic=abort",
-                "--target",
-            ])
-            .arg(env::var("TARGET").expect("TARGET"))
-            .arg("native/meeting_window_hook.rs")
-            .arg("-o")
-            .arg(output)
-            .status()
-            .expect("Build meeting window helper");
-        assert!(status.success(), "Meeting window helper failed to build");
+        // Meeting clients still ship x86 builds, even on x64 Windows. A hook DLL
+        // and its host must have the target application's architecture.
+        let output = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
+        for (arch, target) in [
+            ("x86", "i686-pc-windows-msvc"),
+            ("x64", "x86_64-pc-windows-msvc"),
+        ] {
+            let library = output.join(format!("meeting_hook_{arch}.dll"));
+            compile_meeting_helper(
+                "native/meeting_window_hook.rs",
+                "cdylib",
+                target,
+                &library,
+                None,
+            );
+            compile_meeting_helper(
+                "native/meeting_window_bridge.rs",
+                "bin",
+                target,
+                &output.join(format!("meeting_bridge_{arch}.exe")),
+                Some(&library),
+            );
+        }
     }
     tauri_build::build()
+}
+
+fn compile_meeting_helper(
+    source: &str,
+    kind: &str,
+    target: &str,
+    output: &std::path::Path,
+    library: Option<&std::path::Path>,
+) {
+    let mut command = Command::new(env::var_os("RUSTC").expect("RUSTC"));
+    command
+        .args([
+            "--edition=2021",
+            "--crate-type",
+            kind,
+            "-C",
+            "opt-level=s",
+            "-C",
+            "panic=abort",
+            "-C",
+            "target-feature=+crt-static",
+            "--target",
+            target,
+        ])
+        .arg(source)
+        .arg("-o")
+        .arg(output);
+    if let Some(library) = library {
+        command.env("MEETING_HOOK_PATH", library);
+    }
+    let status = command.status().expect("Build meeting window helper");
+    assert!(status.success(), "Meeting helper failed for {target}. Install both Rust targets: rustup target add i686-pc-windows-msvc x86_64-pc-windows-msvc");
 }
 
 fn build_screen_share() {
