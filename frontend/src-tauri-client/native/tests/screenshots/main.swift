@@ -174,3 +174,74 @@ awaitCondition { !queued.isEmpty }
 asyncCapture.stop();queued.removeFirst()(sample(),nil);drain()
 precondition(delivered == 5, "Late completion after stop must not be presented")
 print("Frame deadline scheduler: delayed GPU work resumes automatically and stays bounded")
+
+var motionCadence = ScreenshotCadence()
+for frame in 0..<8 {
+    precondition(!motionCadence.skipsComparison, "The first changed frames are all compared")
+    _ = motionCadence.interval(changed: true, now: Double(frame) / 30)
+}
+var skipped = 0
+for frame in 8..<16 {
+    if motionCadence.skipsComparison { skipped += 1 }
+    _ = motionCadence.interval(changed: true, now: Double(frame) / 30)
+}
+precondition(skipped == 6, "Steady motion compares one frame in four")
+_ = motionCadence.interval(changed: false, now: 1)
+precondition(!motionCadence.skipsComparison, "An unchanged frame ends the motion")
+print("Steady motion compares one frame in four, and an unchanged frame ends it")
+
+// Unchanged frames are not delivered again (the output already shows them), but
+// still reach the watchdog; steady motion is delivered without comparing every frame.
+var answers: [(Bool) -> Void] = []
+var asked: [ScreenshotCapture.Completion] = []
+var shown = 0, idle = 0
+func economyCapture(_ economy: Bool) -> ScreenshotCapture {
+    ScreenshotCapture(economy: economy, comparison: { _, _, done in
+        DispatchQueue.main.async { answers.append(done) }
+    }, request: { _, _, done in asked.append(done) })
+}
+var compared = 0
+// One screenshot; `equal` answers the comparison if the capture asks for one.
+func frame(_ capture: ScreenshotCapture, equal: Bool) {
+    capture.tick()
+    awaitCondition { !asked.isEmpty }
+    let before = shown + idle
+    asked.removeFirst()(sample(), nil)
+    awaitCondition { !answers.isEmpty || shown + idle == before + 1 }
+    if !answers.isEmpty { compared += 1; answers.removeFirst()(equal) }
+    awaitCondition { shown + idle == before + 1 }
+}
+let economical = economyCapture(true)
+economical.start(filter: filter, configuration: configuration, frame: { _ in shown += 1 }, idle: { idle += 1 }, failure: { _ in preconditionFailure() })
+frame(economical, equal: true) // the first frame has nothing to compare with
+precondition(shown == 1 && idle == 0 && compared == 0)
+for _ in 0..<3 { frame(economical, equal: true) }
+precondition(shown == 1 && idle == 3 && economical.unchangedFrames == 3, "Unchanged frames were shown again")
+frame(economical, equal: false)
+precondition(shown == 2, "A changed frame was withheld")
+economical.update(filter: filter)
+awaitCondition { !asked.isEmpty }
+asked.removeFirst()(sample(), nil)
+awaitCondition { shown == 3 }
+precondition(idle == 3, "The first frame of a new allow-list must be shown, whatever it equals")
+RunLoop.main.run(until: Date().addingTimeInterval(ScreenshotCapture.refreshInterval + 0.1))
+frame(economical, equal: true)
+precondition(shown == 4, "A long-unchanged output must be refreshed")
+frame(economical, equal: true)
+precondition(shown == 4 && idle == 4)
+compared = 0
+for _ in 0..<8 { frame(economical, equal: false) }
+precondition(economical.skippedComparisons == 0 && compared == 8)
+for _ in 0..<8 { frame(economical, equal: false) }
+economical.stop()
+precondition(shown == 20 && economical.skippedComparisons == 6 && compared == 10, "Steady motion must deliver every frame and compare one in four")
+answers.removeAll()
+let previousBehaviour = economyCapture(false)
+shown = 0; idle = 0
+previousBehaviour.start(filter: filter, configuration: configuration, frame: { _ in shown += 1 }, idle: { idle += 1 }, failure: { _ in preconditionFailure() })
+frame(previousBehaviour, equal: true)
+for _ in 0..<3 { frame(previousBehaviour, equal: true) }
+for _ in 0..<12 { frame(previousBehaviour, equal: false) }
+previousBehaviour.stop()
+precondition(shown == 16 && idle == 0 && previousBehaviour.skippedComparisons == 0, "The measurement baseline must deliver and compare every frame")
+print("Economy: unchanged frames stay off the output, the output is refreshed every 2 s, steady motion compares one frame in four")
