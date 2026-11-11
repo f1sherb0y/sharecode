@@ -34,7 +34,7 @@ MyGo Windows client (`frontend/src-mygo-client`, branch work, not released): a G
 - **WebSocket**: Yjs sync on ygo (`github.com/f1sherb0y/ygo`, pinned in `go.mod` by a `replace` of `github.com/Deln0r/ygo`), Hocuspocus wire protocol
 - **Database**: PostgreSQL
 - **Queries**: pgx v5, plain SQL; migrations in `server-go/migrations` (embedded, recorded in `_sqlx_migrations` the way sqlx did, so existing databases carry on)
-- **Previous server**: `server-rs` (Rust/Axum/SQLx/yrs) stays in the tree for reference; `server-go/PORTING.md` records how each module was carried over. Paths below such as `routes/client_releases.rs` or `core/permissions.rs` name the Rust modules; the Go files are `routes_client_releases.go`, `permissions.go` and so on
+- **Previous server**: `server-rs` (Rust/Axum/SQLx/yrs) stays in the tree for reference; `server-go/PORTING.md` records how each module was carried over, `notes/server-go-migration.md` what is verified, what is not, and what to do before deploying. Paths below such as `routes/client_releases.rs` or `core/permissions.rs` name the Rust modules; the Go files are `routes_client_releases.go`, `permissions.go` and so on
 - **Authentication**: JWT + bcrypt
 - **Deployment**: Docker + Docker Compose
 
