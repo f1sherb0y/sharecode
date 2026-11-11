@@ -14,6 +14,10 @@ import (
 	"sharecode/client/nativewin"
 )
 
+const showWhenReady = true
+
+func platformWindowOptions(*mygo.WindowOptions) {}
+
 type windowsClient struct {
 	desktop   *Desktop
 	native    *nativewin.Window

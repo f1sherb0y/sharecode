@@ -22,13 +22,13 @@ var updateNodes = []string{"https://kode666.com", "https://collabcode.cc"}
 type updater struct {
 	mu        sync.Mutex
 	found     map[string]*foundUpdate
-	installed bool // an installer is running; it restarts the client
+	installed bool // an installer is running, or the app was replaced (macOS)
 }
 
 type foundUpdate struct {
 	release updates.Release
 	dir     string // temporary directory of the download
-	path    string // the verified installer, once downloaded
+	path    string // the verified installer or app archive, once downloaded
 }
 
 func updateClient() *updates.Client {
@@ -72,7 +72,11 @@ func (d *Desktop) updateCommand(ctx context.Context, command string, args map[st
 		if !installed {
 			return nil, errors.New("no update has been installed")
 		}
-		// The installer waits for this process to exit and starts the new one.
+		// The installer waits for this process to exit and starts the new one;
+		// on macOS a detached helper opens the replaced app once it has.
+		if err := updates.Relaunch(); err != nil {
+			return nil, err
+		}
 		mygo.RunOnMain(d.beginShutdown)
 		return nil, nil
 	}

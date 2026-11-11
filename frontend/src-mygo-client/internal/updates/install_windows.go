@@ -4,6 +4,8 @@ package updates
 
 import "os/exec"
 
+const downloadPattern = "sharecode-update-*.exe"
+
 // Install starts a downloaded installer and returns once it is running. The
 // flags are the ones the Tauri updater passed and installer.nsi reads:
 // passive, updating, and restarting the client when done. The installer waits
@@ -15,3 +17,6 @@ func Install(path string) error {
 	}
 	return cmd.Process.Release()
 }
+
+// Relaunch has nothing to do: the installer restarts the client (/R).
+func Relaunch() error { return nil }

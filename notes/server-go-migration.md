@@ -93,12 +93,13 @@ PostgreSQL 17 containers.
   Remove it once the Go server has run in production for a while.
 - `frontend/src-tauri` (staff app) and `frontend/src-tauri-client` (customer
   client): Tauri, with Rust and Swift native code. The MyGo host replaces Tauri on
-  Windows today and is not released (`notes/client-mygo-migration.md`); macOS
-  support for it is planned (stated 2026-11-11, not started), which would retire
-  the customer client's Rust on both platforms. The Swift code (capture, virtual
-  display, pinning, permission guide) stays native either way; the Rust around it
-  (`hotkey_macos.rs`, `main_window_macos.rs`, `screen_share_macos.rs`,
-  `stealth_macos.rs`, `update_gate.rs`) is what a macOS MyGo host has to replace.
+  Windows and, since 2026-11-11, on macOS, and is not released
+  (`notes/client-mygo-migration.md`); releasing it retires the customer client's
+  Rust on both platforms. The Swift code (capture, virtual display, pinning,
+  permission guide) stays native and is built from `src-tauri-client/native`; the
+  Rust around it (`hotkey_macos.rs`, `main_window_macos.rs`,
+  `screen_share_macos.rs`, `stealth_macos.rs`, `update_gate.rs`) has its
+  counterpart in `src-mygo-client` (`platform_darwin.go`, `nativemac`).
 
 ## Before deploying
 

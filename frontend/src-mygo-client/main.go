@@ -52,6 +52,19 @@ type platformClient interface {
 	close()
 }
 
+// A platform with pages besides the main one (the macOS permission guide)
+// answers their commands itself.
+type guestPages interface {
+	guestInvoke(page *mygo.Page, command string, args map[string]any) (any, error)
+}
+
+// A platform that reacts to the update gate itself, on the UI thread, after
+// the window was made interactive and shown.
+type updateGate interface{ gateChanged(locked bool) }
+
+// A platform where opening the app again goes through its own checks.
+type reopener interface{ reopen() }
+
 func main() {
 	mygo.App.SetName(applicationName)
 	mygo.App.SetVersion(applicationVersion)
@@ -61,7 +74,8 @@ func main() {
 		frontend = os.DirFS(dir)
 	}
 	// The page keeps the Tauri client's origin (http://tauri.localhost on
-	// Windows): the server allows it, and saved sessions are stored under it.
+	// Windows, tauri://localhost on macOS): the server allows it, and saved
+	// sessions are stored under it.
 	if err := mygo.Protocol.Handle("tauri", mygo.FileServer(frontend)); err != nil {
 		log.Fatal(err)
 	}
@@ -80,60 +94,83 @@ func main() {
 		return
 	}
 	mygo.App.OnSecondInstance(func([]string, string) {
-		if desktop.main != nil {
-			desktop.main.Show()
-			desktop.focus()
-		}
+		mygo.RunOnMain(func() {
+			if again, ok := desktop.platform.(reopener); ok {
+				again.reopen()
+			} else if desktop.main != nil {
+				desktop.main.Show()
+				desktop.focus()
+			}
+		})
 	})
 	mygo.App.WhenReady(func() {
-		if _, err := fs.Stat(frontend, "client.html"); err != nil {
-			log.Fatal("The customer frontend is not built: run build-windows.ps1")
+		if err := desktop.open(frontend); err != nil {
+			log.Fatal(err)
 		}
-		view, err := clientview.New(mygo.WindowOptions{
-			Title: "ShareCode", URL: "tauri://localhost/client.html", Width: 1100, Height: 760,
-			MinWidth: 480, MinHeight: 360, Hidden: true, Frameless: true, CornerRadius: 10,
-			DisableFullScreen: true, SkipTaskbar: true,
-		})
-		if err != nil {
-			log.Fatalf("Client window: %v", err)
-		}
-		w := view.Window
-		desktop.main, desktop.view = w, view
-		desktop.platform, err = attachPlatform(desktop, w)
-		if err != nil {
-			log.Printf("Native client: %v", err)
-		}
-		// A reloaded page starts over, like a launch: interactive, no update found yet.
-		view.Page().OnDidNavigate(func(string) {
-			desktop.locked.Store(false)
-			go desktop.updates.closeAll()
-			if desktop.platform != nil {
-				if err := desktop.platform.lock(); err != nil {
-					log.Printf("Navigation: %v", err)
-				}
-			}
-		})
-		w.OnResize(func() {
-			bounds := w.Bounds()
-			desktop.emit("tauri://resize", map[string]int{"width": bounds.Width, "height": bounds.Height})
-		})
-		view.Page().OnDOMReady(w.Show)
-		w.OnClose(func(event *mygo.CloseEvent) {
-			if !desktop.shutdownReady.Load() {
-				event.PreventDefault()
-				mygo.App.Quit()
-				return
-			}
-			// Styles and hooks detach before the window is destroyed.
-			if desktop.platform != nil {
-				desktop.platform.close()
-			}
-		})
-		w.OnClosed(mygo.App.Quit)
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// pageOptions are the options of the client's pages. Tests give them a
+// session of their own; the client uses the default one, where the saved guest
+// seat and settings are.
+var pageOptions mygo.PageOptions
+
+// open creates the hidden client window with its page and attaches the native
+// side. UI thread.
+func (d *Desktop) open(frontend fs.FS) error {
+	if _, err := fs.Stat(frontend, "client.html"); err != nil {
+		return errors.New("The customer frontend is not built: run build-windows.ps1 or build-macos.sh")
+	}
+	options := mygo.WindowOptions{
+		Title: "ShareCode", URL: "tauri://localhost/client.html", Width: 1100, Height: 760,
+		MinWidth: 480, MinHeight: 360, Hidden: true, Frameless: true, CornerRadius: 10,
+		DisableFullScreen: true, SkipTaskbar: true, Page: pageOptions,
+	}
+	platformWindowOptions(&options)
+	view, err := clientview.New(options)
+	if err != nil {
+		return fmt.Errorf("Client window: %w", err)
+	}
+	w := view.Window
+	d.main, d.view = w, view
+	d.platform, err = attachPlatform(d, w)
+	if err != nil {
+		log.Printf("Native client: %v", err)
+	}
+	// A reloaded page starts over, like a launch: interactive, no update found yet.
+	view.Page().OnDidNavigate(func(string) {
+		d.locked.Store(false)
+		go d.updates.closeAll()
+		if d.platform != nil {
+			if err := d.platform.lock(); err != nil {
+				log.Printf("Navigation: %v", err)
+			}
+		}
+	})
+	w.OnResize(func() {
+		bounds := w.Bounds()
+		d.emit("tauri://resize", map[string]int{"width": bounds.Width, "height": bounds.Height})
+	})
+	// Without its native side the client is still a window to join from.
+	if showWhenReady || d.platform == nil {
+		view.Page().OnDOMReady(w.Show)
+	}
+	w.OnClose(func(event *mygo.CloseEvent) {
+		if !d.shutdownReady.Load() {
+			event.PreventDefault()
+			mygo.App.Quit()
+			return
+		}
+		// Styles and hooks detach before the window is destroyed.
+		if d.platform != nil {
+			d.platform.close()
+		}
+	})
+	w.OnClosed(mygo.App.Quit)
+	return nil
 }
 
 // beginShutdown makes the window interactive, then restores the meeting
@@ -178,11 +215,18 @@ func (d *Desktop) emit(event string, payload any) {
 // Invoke runs one command of the page. Window commands run on the UI thread;
 // updates and meeting filtering wait for the network or helper processes.
 func (d *Desktop) Invoke(ctx context.Context, command string, args map[string]any) (result any, err error) {
-	if d.view == nil || mygo.CallerPage(ctx) != d.view.Page() {
+	caller := mygo.CallerPage(ctx)
+	if d.view == nil || caller == nil {
 		return nil, errors.New("Desktop commands are for the client page")
 	}
 	if d.shutdownStarted.Load() {
 		return nil, errors.New("The client is closing")
+	}
+	if caller != d.view.Page() {
+		if guests, ok := d.platform.(guestPages); ok {
+			return guests.guestInvoke(caller, command, args)
+		}
+		return nil, errors.New("Desktop commands are for the client page")
 	}
 	if isUpdateCommand(command) {
 		return d.updateCommand(ctx, command, args)
@@ -244,6 +288,9 @@ func (d *Desktop) windowCommand(command string, args map[string]any) (any, error
 			}
 			w.Show()
 			d.focus()
+		}
+		if gate, ok := d.platform.(updateGate); ok {
+			gate.gateChanged(locked)
 		}
 		return nil, nil
 	case "set_stealth_state":
