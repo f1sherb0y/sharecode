@@ -2,8 +2,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { isDesktopClient } from './host'
 
-export const supportsMeetingPrivacy = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window && navigator.userAgent.includes('Windows')
+export const supportsMeetingPrivacy = isDesktopClient && navigator.userAgent.includes('Windows')
 
 export interface MeetingPrivacyStatus {
   enabled: boolean

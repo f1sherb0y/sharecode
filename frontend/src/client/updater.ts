@@ -2,8 +2,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { create } from 'zustand'
+import { isDesktopClient } from './host'
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 interface UpdateState {
@@ -18,7 +18,7 @@ interface UpdateState {
 // The first render is blocked, before session restoration or any room can mount.
 // A browser-only development preview has no native updater.
 export const useUpdateStore = create<UpdateState>()(() => ({
-  phase: isTauri ? 'checking' : 'current', version: null,
+  phase: isDesktopClient ? 'checking' : 'current', version: null,
   received: 0, total: null, checking: false, failure: null,
 }))
 
@@ -35,7 +35,7 @@ function discardPending() {
 /** The same gate applies to launch, retries, reconnects and the six-hour check. */
 export async function checkForUpdate() {
   const state = useUpdateStore.getState()
-  if (!isTauri || state.checking || state.phase === 'installing' || installed) return
+  if (!isDesktopClient || state.checking || state.phase === 'installing' || installed) return
   useUpdateStore.setState({ checking: true })
   let candidate: Update | null = null
   let failure: 'check' | 'download' = 'check'
@@ -107,7 +107,7 @@ export async function installUpdate() {
 }
 
 export function startUpdateChecks(): () => void {
-  if (!isTauri) return () => {}
+  if (!isDesktopClient) return () => {}
   if (!started) {
     started = true
     void checkForUpdate()

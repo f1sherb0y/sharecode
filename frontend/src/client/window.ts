@@ -3,28 +3,28 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { isDesktopClient } from './host'
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-export const isMacOSClient = isTauri && navigator.userAgent.includes('Macintosh')
+export const isMacOSClient = isDesktopClient && navigator.userAgent.includes('Macintosh')
 
-// No-ops outside Tauri so the client UI can also be developed in a plain browser.
+// No-ops outside a desktop host so the client UI can also be developed in a plain browser.
 export const appWindow = {
-  minimize: () => (isTauri ? getCurrentWindow().minimize() : Promise.resolve()),
+  minimize: () => (isDesktopClient ? getCurrentWindow().minimize() : Promise.resolve()),
   // The macOS client is not maximizable (a zoomed borderless translucent window loses
   // its rounded frame and can disappear), so toggling is a no-op there.
-  toggleMaximize: () => (isTauri && !isMacOSClient ? getCurrentWindow().toggleMaximize() : Promise.resolve()),
-  close: () => (isTauri ? getCurrentWindow().close() : Promise.resolve()),
+  toggleMaximize: () => (isDesktopClient && !isMacOSClient ? getCurrentWindow().toggleMaximize() : Promise.resolve()),
+  close: () => (isDesktopClient ? getCurrentWindow().close() : Promise.resolve()),
   // The native macOS query avoids Tao's borderless style-mask/resize feedback loop; on
   // macOS it is constant false because the window can never be maximized.
-  isMaximized: () => (isTauri && !isMacOSClient ? invoke<boolean>('client_is_maximized') : Promise.resolve(false)),
-  setAlwaysOnTop: (onTop: boolean) => (isTauri ? invoke<void>('client_set_pinned', { pinned: onTop }) : Promise.resolve()),
-  setFocus: () => (isTauri ? getCurrentWindow().setFocus() : Promise.resolve()),
+  isMaximized: () => (isDesktopClient && !isMacOSClient ? invoke<boolean>('client_is_maximized') : Promise.resolve(false)),
+  setAlwaysOnTop: (onTop: boolean) => (isDesktopClient ? invoke<void>('client_set_pinned', { pinned: onTop }) : Promise.resolve()),
+  setFocus: () => (isDesktopClient ? getCurrentWindow().setFocus() : Promise.resolve()),
   setTitle: (title: string) => {
     document.title = title
-    return isTauri ? getCurrentWindow().setTitle(title) : Promise.resolve()
+    return isDesktopClient ? getCurrentWindow().setTitle(title) : Promise.resolve()
   },
   onResized: (handler: () => void): Promise<() => void> =>
-    isTauri ? getCurrentWindow().onResized(handler) : Promise.resolve(() => {}),
+    isDesktopClient ? getCurrentWindow().onResized(handler) : Promise.resolve(() => {}),
 }
 
 // Text and background fade independently: a see-through background keeps what is behind the
@@ -167,7 +167,7 @@ export const useStealthPreferences = create<StealthPreferences>()(
       apply: async (changedField) => {
         if (get().busy) return
         set({ busy: true, error: null })
-        if (!isTauri) {
+        if (!isDesktopClient) {
           if (get().clickThrough) useWindowPreferences.setState({ pinned: true })
           set({ ready: true, busy: false })
           return
@@ -194,7 +194,7 @@ export const useStealthPreferences = create<StealthPreferences>()(
       },
 
       sync: async () => {
-        if (!isTauri) {
+        if (!isDesktopClient) {
           set({ ready: true })
           return
         }
@@ -227,7 +227,7 @@ export const useStealthPreferences = create<StealthPreferences>()(
  * It changes the window itself and reports the result here; the store forwards that to the switch.
  */
 export function watchStealthShortcut(): () => void {
-  if (!isTauri) {
+  if (!isDesktopClient) {
     void useStealthPreferences.getState().apply()
     return () => {}
   }

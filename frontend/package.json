@@ -13,7 +13,10 @@
     "tauri:build": "tauri build",
     "client:dev": "vite --config vite.client.config.ts",
     "client:build": "tsc -b && vite build --config vite.client.config.ts",
-    "client:tauri": "cd src-tauri-client && tauri"
+    "client:tauri": "cd src-tauri-client && tauri",
+    "client:mygo:frontend": "tsc -b && vite build --config vite.client-mygo.config.ts",
+    "client:mygo:test": "pwsh -NoProfile -File src-mygo-client/test-windows.ps1",
+    "client:mygo:package": "pwsh -NoProfile -File src-mygo-client/build-windows.ps1"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.18.1",

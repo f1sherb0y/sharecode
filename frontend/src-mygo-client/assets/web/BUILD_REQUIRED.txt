@@ -1,0 +1,1 @@
+The embedded customer frontend goes here: build-windows.ps1 copies the Vite build in. Only this file is tracked.

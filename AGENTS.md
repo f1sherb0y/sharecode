@@ -8,6 +8,8 @@ macOS shared-output capture: on macOS 14+, `native/ScreenshotCapture.swift` feed
 
 macOS pinning lifecycle: `frontend/src-tauri-client/src/main_window_macos.rs` creates the hidden native main window, installs its layout-checked NSPanel, then attaches WebKit using the same label and auto-resize. This avoids modifying WebKit's KVO wrapper. macOS uses Tauri's `unstable` child-WebView API; other platforms keep ordinary creation. `frontend/scripts/test-pinning-macos.sh --visible` covers the real Tauri/WebKit lifecycle with optimized native code and an isolated, local-only identity. Do not replace it with only a synthetic NSWindow test.
 
+MyGo Windows client (`frontend/src-mygo-client`, branch work, not released): a Go/MyGo host for the same customer page, replacing Tauri on Windows only. `vite.client-mygo.config.ts` aliases the Tauri packages to `src/lib/mygo-*.ts`, which call one Go method (`Desktop.Invoke`) with the Tauri command names. The page keeps the `http://tauri.localhost` origin and the release build opens the Tauri client's WebView2 profile in place, so saved sessions carry over. `build-windows.ps1` builds (development identity by default, `-Release` for the real one), `test-windows.ps1` tests; see that directory's README and `notes/client-mygo-migration.md`.
+
 ## Project Overview
 
 **ShareCode** is a real-time collaborative code editing platform built with modern web technologies. The project enables multiple users to simultaneously edit code with real-time synchronization, complete with session playback capabilities.

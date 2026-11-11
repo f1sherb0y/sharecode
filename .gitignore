@@ -18,6 +18,10 @@ Caddyfile.production
 # Build outputs
 dist/
 build/
+frontend/dist-client-mygo/
+frontend/src-mygo-client/bindings.generated.ts
+frontend/src-mygo-client/assets/web/*
+!frontend/src-mygo-client/assets/web/BUILD_REQUIRED.txt
 *.log
 *.tsbuildinfo
 

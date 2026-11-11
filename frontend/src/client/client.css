@@ -1,3 +1,9 @@
+/* MyGo's document-start bridge owns native drag/double-click handling. Unlike an
+   inherited drag region, only the same explicitly marked targets used by Tauri drag;
+   embedded editor controls and unmarked descendants remain interactive. */
+:root[data-mygo-client] [data-tauri-drag-region] { --app-region: drag; }
+:root[data-mygo-client] [data-tauri-drag-region] :not([data-tauri-drag-region]) { --app-region: no-drag; }
+
 /* The permission helper is its own opaque window, unaffected by room opacity settings. */
 .input-monitoring-setup {
   height: 100dvh;
