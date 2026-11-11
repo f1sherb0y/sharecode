@@ -10,8 +10,9 @@ import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import * as Y from 'yjs'
+import { testPort } from './test-ports.mjs'
 
-const API = 'http://127.0.0.1:55460', WEB = 'http://127.0.0.1:55461'
+const API = 'http://127.0.0.1:' + testPort(1), WEB = 'http://127.0.0.1:' + testPort(2)
 const password = 'LocalAudit#2026Strong'
 const temp = await mkdtemp(join(tmpdir(), 'sharecode-browser-sessions-'))
 const sql = query => execFileSync('docker', ['exec', process.env.SHARECODE_TEST_CONTAINER, 'psql', '-U', 'runner_test', '-d', 'runner_test', '-At', '-v', 'ON_ERROR_STOP=1', '-c', query], { encoding: 'utf8' }).trim()
@@ -64,7 +65,7 @@ await refresh(first.cookie, { token: guest.token, status: 401 })
 let server, context
 const peers = []
 try {
-  server = await createServer({ cacheDir: join(temp, 'vite'), optimizeDeps: { include: ['@fingerprintjs/fingerprintjs'] }, server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, ws: true } } }, logLevel: 'error' })
+  server = await createServer({ cacheDir: join(temp, 'vite'), optimizeDeps: { include: ['@fingerprintjs/fingerprintjs'] }, server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, ws: true } } }, logLevel: 'error' })
   await server.listen()
   for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
     if (process.env.ENGINE && process.env.ENGINE !== name) continue

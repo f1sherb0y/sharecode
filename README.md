@@ -27,10 +27,9 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 - React Router for navigation
 
 ### Backend
-- Rust (Tokio)
-- Axum (REST API)
-- Custom Yjs sync server (yrs)
-- SQLx
+- Go (`net/http` REST API)
+- Yjs sync server on [ygo](https://github.com/f1sherb0y/ygo) (Hocuspocus protocol)
+- pgx
 - PostgreSQL database
 - JWT authentication
 - bcrypt for password hashing
@@ -39,7 +38,7 @@ A real-time collaborative code editing platform built with React, Monaco/CodeMir
 
 ### For Local Development
 - Bun installed (frontend)
-- Rust toolchain (backend)
+- Go 1.26+ (backend)
 - PostgreSQL database running
 
 ### For Docker Deployment
@@ -121,7 +120,7 @@ docker compose exec postgres psql -U sharecode_app -d sharecode
 
 ### Option 2: Local Development
 
-With [just](https://github.com/casey/just), Docker Compose, Rust, Bun, and Node.js installed:
+With [just](https://github.com/casey/just), Docker Compose, Go, Bun, and Node.js installed:
 
 ```bash
 just install
@@ -137,7 +136,7 @@ Open http://localhost:5173. On a fresh development database, sign in with
 `SHARECODE_DEV_ADMIN_USERNAME`, `SHARECODE_DEV_ADMIN_PASSWORD`, and
 `SHARECODE_DEV_DATABASE_URL`. The database URL defaults to the credentials in
 `docker-compose.dev.yml`. `just` does not load `.env` files; the server still reads
-`server-rs/.env` for settings not explicitly supplied by the recipe.
+`server-go/.env` for settings not explicitly supplied by the recipe.
 
 ```bash
 just                     # List commands
@@ -147,8 +146,8 @@ just test-ui firefox      # Firefox UI tests
 just test-ui-all          # Chromium, Firefox, and WebKit
 just test-editor          # Collaboration and Markdown regression tests
 just test-i18n            # Translation keys, parameters, and untranslated labels
-just test-server          # Rust unit tests
-just check               # TypeScript and Rust checks
+just test-server          # Go server unit tests
+just check               # TypeScript and Go checks
 just build               # Production frontend build
 just predeploy           # Required release checks; failure blocks deployment
 just postdeploy          # Public read-only smoke checks after deployment
@@ -158,7 +157,7 @@ just db-stop             # Stop PostgreSQL and keep its data
 Stop the API and frontend with Ctrl+C in their terminals. UI test screenshots
 are written to `/tmp/sharecode-ui-review/<browser>/`. For the full disposable
 database integration suite, use `just test-integration`; it needs the `psql`
-client, cached Rust dependencies from `just install`, and either local
+client, the Go modules from `just install`, and either local
 PostgreSQL server binaries (`initdb`, `pg_ctl`, and `createdb`; set `PG_BIN` if
 they are outside the paths the script detects) or Docker with the
 `postgres:17-alpine` image, which it uses for a throwaway database otherwise.
@@ -167,7 +166,7 @@ Alternatively, start each service manually:
 
 ### 1. Database Setup
 
-Make sure PostgreSQL is running. Update the connection string in `server-rs/.env`:
+Make sure PostgreSQL is running. Update the connection string in `server-go/.env`:
 
 ```env
 DATABASE_URL="postgresql://postgres:password@localhost:5432/sharecode?schema=public"
@@ -176,13 +175,13 @@ DATABASE_URL="postgresql://postgres:password@localhost:5432/sharecode?schema=pub
 ### 2. Server Setup
 
 ```bash
-cd server-rs
+cd server-go
 
 # Build (optional)
-cargo build
+go build ./cmd/sharecode-server
 
 # Start the server
-cargo run
+go run ./cmd/sharecode-server
 ```
 
 The server will start on port 3001:
@@ -207,7 +206,7 @@ The frontend will be available at http://localhost:5173
 
 ### Server (.env)
 
-For local development, create `server-rs/.env` with the following values:
+For local development, create `server-go/.env` with the following values:
 
 ```env
 # Database
@@ -327,7 +326,7 @@ Every `/api/admin/*` endpoint answers 404 to agents and techs.
 The role alone decides what an account can do; there are no per-account
 permission flags. Customers (客户) have no account: a share link decides whether
 a guest can edit. Rules are enforced identically on the REST and WebSocket paths
-(`server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`).
+(`server-go/internal/server/permissions.go` and the SQL function `room_is_visible`).
 
 | Capability | Tech (技术) | Agent (管理) | Admin (超级管理员) |
 | --- | --- | --- | --- |
@@ -524,13 +523,12 @@ sharecode/
 │   │   ├── App.tsx
 │   │   └── main.tsx
 │   └── package.json
-├── server-rs/                 # Backend server (Rust/Axum)
-│   ├── src/
-│   │   ├── routes/           # REST API routes
-│   │   ├── ws/               # WebSocket protocol + sync
-│   │   ├── core/             # Auth/config/state
-│   │   └── main.rs
-│   └── Cargo.toml
+├── server-go/                 # Backend server (Go, ygo)
+│   ├── cmd/sharecode-server/ # Entry point
+│   ├── internal/server/      # routes_*.go (REST), ws_*.go (sync), auth, permissions
+│   ├── migrations/           # SQL migrations (embedded)
+│   └── go.mod
+├── server-rs/                 # Previous Rust backend, kept for reference
 └── README.md
 ```
 

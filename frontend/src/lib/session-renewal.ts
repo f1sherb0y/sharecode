@@ -4,6 +4,7 @@ import type { AuthResponse } from '@/types'
 
 const RENEW_WINDOW_SECONDS = 2 * 60
 let pending: { token: string; request: Promise<string> } | undefined
+let denied: { token: string; status: number } | undefined
 
 export function tokenIdentity(token: string): { type?: string; userId?: string; sessionId?: string } {
   try { return JSON.parse(atob(token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/'))) }
@@ -39,6 +40,9 @@ export async function ensureFreshSession(options: { throwOnFailure?: boolean } =
   const expiry = tokenExpiry(token)
   if (expiry === null || expiry - Date.now() / 1000 > RENEW_WINDOW_SECONDS) return token
   const result = (request: Promise<string>) => options.throwOnFailure ? request : request.catch(() => token)
+  // The server's refusal of this credential is final: asking again with it (every API
+  // call and poll would) cannot succeed. A new login brings another token.
+  if (denied?.token === token) return result(Promise.reject(Object.assign(new Error('Could not restore login session'), { status: denied.status })))
   if (pending?.token === token) return result(pending.request)
   const request = (async () => {
     try {
@@ -46,6 +50,10 @@ export async function ensureFreshSession(options: { throwOnFailure?: boolean } =
       if (typeof data.token !== 'string' || tokenExpiry(data.token) === null) return token
       useAuthStore.getState().renewToken(token, data.token, data.browserSessionId)
       return useAuthStore.getState().token ?? token
+    } catch (error) {
+      const status = (error as { status?: number })?.status
+      if (status === 401 || status === 403) denied = { token, status }
+      throw error
     } finally { if (pending?.token === token) pending = undefined }
   })()
   pending = { token, request }

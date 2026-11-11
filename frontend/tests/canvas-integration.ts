@@ -7,7 +7,8 @@ import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
 import { CanvasSync, orderedCanvasElements } from '../src/lib/canvas-sync.ts'
 import { DocumentReplay } from '../src/lib/document-replay.ts'
-const API='http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API='http://127.0.0.1:' + testPort(1)
 async function request(path:string, method='GET', body?:unknown, token?:string) {
   const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined})
   const data=await r.json();assert.ok(r.ok,JSON.stringify(data));return data
@@ -59,7 +60,7 @@ try {
    if(!id.endsWith('/components/features/canvas-view.tsx')) return
    return source.replace('excalidrawAPI={setApi}', 'excalidrawAPI={instance => { setApi(instance); (window as any).__testCanvasApi = instance }}')
   },
- }],cacheDir:'node_modules/.vite-canvas-tests',server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},define:{'import.meta.env.VITE_API_URL':JSON.stringify(API),'import.meta.env.VITE_WS_URL':JSON.stringify(API.replace('http','ws'))},logLevel:'error'})
+ }],cacheDir:'node_modules/.vite-canvas-tests',server:{host:'127.0.0.1',port:testPort(2),strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},define:{'import.meta.env.VITE_API_URL':JSON.stringify(API),'import.meta.env.VITE_WS_URL':JSON.stringify(API.replace('http','ws'))},logLevel:'error'})
  await web.listen()
  try {
   for(const [engine,type] of Object.entries({chromium,firefox,webkit})) {
@@ -73,7 +74,7 @@ try {
     page.on('console',m=>{if(m.type()==='error') console.error(engine,'CONSOLE',m.text())})
     // Excalidraw fonts are self-hosted; only the pinned Sarasa editor subsets use the CDN (SARASA_CDN_BASE).
     page.on('request',r=>{if(r.url().includes('.woff')&&!r.url().startsWith('http://127.0.0.1')&&!r.url().startsWith('https://cdn.jsdelivr.net/npm/sarasa-mono-web@0.1.0/fonts/SarasaMonoCL-Regular/'))remoteFonts.push(r.url())})
-    await page.goto('http://127.0.0.1:55461/room/'+room.id)
+    await page.goto('http://127.0.0.1:' + testPort(2) + '/room/'+room.id)
     await page.locator('.monaco-editor').waitFor()
     assert.equal(await page.locator('.excalidraw').count(),0)
     await page.getByRole('button',{name:'Canvas',exact:true}).click()
@@ -197,7 +198,7 @@ try {
     const readContext=await browser.newContext()
     await readContext.addInitScript(token=>{sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}));localStorage.setItem('i18nextLng','en');localStorage.setItem('theme-storage',JSON.stringify({state:{theme:'light'},version:0}))},viewer)
     const readonlyPage=await readContext.newPage()
-    await readonlyPage.goto('http://127.0.0.1:55461/room/'+room.id+'?view=canvas')
+    await readonlyPage.goto('http://127.0.0.1:' + testPort(2) + '/room/'+room.id+'?view=canvas')
     await readonlyPage.locator('.excalidraw canvas').first().waitFor()
     assert.equal(await readonlyPage.locator('.excalidraw [data-testid="toolbar-rectangle"]').count(),0)
     await readContext.close()
@@ -219,7 +220,7 @@ try {
  replay.seek(Infinity);assert.equal(orderedCanvasElements(replay.doc)[0].x,240)
  replay.destroy()
  console.log('PASS room close -> compressed replay API -> complete canvas/background/code restoration; backward seek; no unauthorized data')
- const playbackWeb=await createServer({cacheDir:'node_modules/.vite-canvas-tests',server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
+ const playbackWeb=await createServer({cacheDir:'node_modules/.vite-canvas-tests',server:{host:'127.0.0.1',port:testPort(2),strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
  await playbackWeb.listen()
  const browser=await chromium.launch()
  try {
@@ -227,7 +228,7 @@ try {
    await context.addInitScript(token=>{sessionStorage.setItem('sharecode-tab-auth',JSON.stringify({state:{token},version:0}));localStorage.setItem('i18nextLng','en');localStorage.setItem('theme-storage',JSON.stringify({state:{theme:'light'},version:0}))},root)
    const page=await context.newPage(),errors:string[]=[]
    page.on('pageerror',e=>errors.push(e.message))
-   await page.goto('http://127.0.0.1:55461/playback/'+room.id+'?view=canvas')
+   await page.goto('http://127.0.0.1:' + testPort(2) + '/playback/'+room.id+'?view=canvas')
    await page.locator('.excalidraw canvas').first().waitFor()
    await page.getByRole('button',{name:'Go to end',exact:true}).click()
    await page.getByRole('button',{name:'Go to start',exact:true}).click()

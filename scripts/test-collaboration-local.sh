@@ -29,6 +29,8 @@ for port in 55439 55440 55441 55442 55443; do
     exit 1
   fi
 done
+# Git Bash on Windows sets USERNAME, not USER.
+export USER="${USER:-${USERNAME:-$(id -un)}}"
 work_dir="$(mktemp -d /tmp/sharecode-local-tests.XXXXXX)"
 container_name="sharecode-collab-test-$$"
 api_pid=''
@@ -61,14 +63,25 @@ else
   createdb -h 127.0.0.1 -p 55439 sharecode_sync_test
 fi
 cd "$project_dir"
-cargo test --manifest-path server-rs/Cargo.toml --offline
-cargo build --manifest-path server-rs/Cargo.toml --offline
+# The Go server (server-go) is the one under test; SHARECODE_SERVER=rust runs the
+# same suite against the previous Rust server (server-rs) for comparison.
+if [[ "${SHARECODE_SERVER:-go}" == rust ]]; then
+  cargo test --manifest-path server-rs/Cargo.toml --offline
+  cargo build --manifest-path server-rs/Cargo.toml --offline
+  server_bin="$project_dir/server-rs/target/debug/sharecode-server"
+else
+  exe=''; [[ "${OS:-}" == Windows_NT ]] && exe=.exe
+  (cd server-go && go vet ./... && go test ./... && go build -o "$work_dir/sharecode-server$exe" ./cmd/sharecode-server)
+  server_bin="$work_dir/sharecode-server$exe"
+fi
+# Tests that start a server of their own (restarts, the inactivity sweep) use the same binary.
+export SHARECODE_SERVER_BIN="$server_bin"
 env DATABASE_URL="postgresql://${USER}@127.0.0.1:55439/sharecode_sync_test" \
   BIND_ADDRESS=127.0.0.1 PORT=55440 JWT_SECRET=local-sync-test-key-not-production \
   ADMIN_USERNAME=audit_admin ADMIN_PASSWORD='LocalAudit#2026Strong' \
   ADMIN_EMAIL=audit@example.invalid FRONTEND_URL=http://127.0.0.1:55441 \
   APP_URL=http://127.0.0.1:55441 TRUSTED_PROXY_CIDRS='' \
-  "$project_dir/server-rs/target/debug/sharecode-server" >"$work_dir/api.log" 2>&1 &
+  "$server_bin" >"$work_dir/api.log" 2>&1 &
 api_pid=$!
 cd frontend
 env VITE_API_URL=http://127.0.0.1:55440 node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 55441 >"$work_dir/vite.log" 2>&1 &

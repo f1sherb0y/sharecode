@@ -38,7 +38,7 @@ services:
   # ===========================
   server:
     build:
-      context: ./server-rs
+      context: ./server-go
     restart: unless-stopped
     depends_on:
       postgres:

@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
   const shouldAnalyze = process.env.ANALYZE === 'true'
 
   return {
+    // Test suites running side by side each name a dependency cache of their own.
+    cacheDir: process.env.SHARECODE_VITE_CACHE_DIR || undefined,
+
     plugins: [
       sessionPlayerPlugin(),
       canvasFontPlugin(),

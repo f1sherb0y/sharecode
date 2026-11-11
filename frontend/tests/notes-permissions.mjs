@@ -9,8 +9,9 @@ import { gunzipSync } from 'node:zlib'
 import * as Y from 'yjs'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
+import { testPort } from './test-ports.mjs'
 
-const API = 'http://127.0.0.1:55460'
+const API = 'http://127.0.0.1:' + testPort(1)
 const password = 'LocalAudit#2026Strong'
 const container = process.env.SHARECODE_TEST_CONTAINER
 assert(container?.startsWith('sharecode-runner-test-'), 'Use the disposable test runner')
@@ -169,7 +170,7 @@ await share(uiRoom, true, 'writer')
 const uiGuest = await guest(uiRoom, false)
 await add(uiRoom, actors.owner.token, 'Visible note for every room reader')
 const artifacts = await mkdtemp(join(tmpdir(), 'sharecode-notes-'))
-const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, logLevel: 'error' })
+const web = await createServer({ server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, logLevel: 'error' })
 await web.listen()
 try {
   for (const [engine, type] of Object.entries({ chromium, firefox, webkit })) {
@@ -185,7 +186,7 @@ try {
           const page = await context.newPage(), errors = []
           page.setDefaultTimeout(30_000)
           page.on('pageerror', e => errors.push(e.message))
-          await page.goto(`http://127.0.0.1:55461/room/${uiRoom.id}?runner=bottom`)
+          await page.goto(`http://127.0.0.1:${testPort(2)}/room/${uiRoom.id}?runner=bottom`)
           await page.locator('.monaco-editor').waitFor()
           await page.getByText('Code Runner', { exact: true }).click()
           await page.getByRole('button', { name: 'Notes', exact: true }).click()
@@ -203,11 +204,15 @@ try {
             assert.equal(await page.getByRole('button', { name: 'Delete', exact: true }).count(), 0)
           }
           if (actor === actors.reader || actor === actors.agent) {
-            await page.goto(`http://127.0.0.1:55461/playback/${room.id}`)
+            // Leaving a page aborts the lazy modules it is still loading (the editor's languages and
+            // styles), which Firefox reports as a page error; let the page finish loading first.
+            await page.waitForLoadState('networkidle')
+            await page.goto(`http://127.0.0.1:${testPort(2)}/playback/${room.id}`)
             await page.getByRole('button', { name: 'Notes', exact: true }).click()
             await page.getByText(note.text, { exact: true }).waitFor()
             assert.equal(await input.count(), 0)
-            await page.goto('http://127.0.0.1:55461/rooms')
+            await page.waitForLoadState('networkidle')
+            await page.goto('http://127.0.0.1:' + testPort(2) + '/rooms')
             await page.getByRole('button', { name: new RegExp(room.name) }).click()
             const downloaded = page.waitForEvent('download')
             await page.getByRole('menuitem', { name: 'Export session', exact: true }).click()

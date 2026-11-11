@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const API='http://127.0.0.1:55460',WEB='http://127.0.0.1:55461',password='LocalAudit#2026Strong'
+import { testPort } from './test-ports.mjs'
+const API='http://127.0.0.1:' + testPort(1),WEB='http://127.0.0.1:' + testPort(2),password='LocalAudit#2026Strong'
 const deviceA=randomUUID(),deviceB=randomUUID(),fp='fp5:'+'a'.repeat(32)
 const headers=id=>({'X-Device-Id':id,'X-Device-Fingerprint':fp,'User-Agent':'Audit Browser/1.0'})
 async function request(path,method='GET',body,token,status=200,extra={}) {
@@ -102,7 +103,7 @@ sql('DROP TRIGGER reject_test_audit ON "AuditEvent"; DROP FUNCTION reject_test_a
 console.log('PASS timestamp/ID ordering, page boundaries, snapshot stability, timezone/range/device filters, audit transaction rollback')
 await request('/api/notifications/read-all','POST',{},token)
 await request('/api/notifications/read-all','POST',{},agentAuth.token)
-const web=await createServer({server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
+const web=await createServer({server:{host:'127.0.0.1',port:testPort(2),strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
 await web.listen()
 try {
  for(const [engine,type] of Object.entries({chromium,firefox,webkit})) {

@@ -155,7 +155,7 @@ update page before permissions, while the normal UI still requires the permissio
 See `notes/client-mandatory-update.md` for the test scope.
 
 Updates are signed with a minisign key pair. The public key is `plugins.updater.pubkey` in
-`src-tauri-client/tauri.conf.json` and `CLIENT_UPDATER_PUBKEY` in `server-rs/src/core/config.rs`
+`src-tauri-client/tauri.conf.json` and `ClientUpdaterPubkeyDefault` in `server-go/internal/server/config.go`
 (a server test keeps them equal). The private key and its password never go in the repository:
 they live in `~/.tauri/sharecode-client.key` and `~/.tauri/sharecode-client.key.password` on the
 machine that builds releases. Back both up somewhere safe. If they are lost, installed clients can

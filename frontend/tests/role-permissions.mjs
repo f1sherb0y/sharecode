@@ -6,7 +6,8 @@ import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const API = 'http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API = 'http://127.0.0.1:' + testPort(1)
 const password = 'LocalAudit#2026Strong'
 const container = process.env.SHARECODE_TEST_CONTAINER
 assert(container?.startsWith('sharecode-runner-test-'), 'Use the disposable test runner')
@@ -299,7 +300,7 @@ assert.match(agentInvite.code, /^[2-9A-HJ-NP-Z]{12}$/)
 assert.equal(agentInvite.note, 'For the new tech')
 assert.equal(agentInvite.createdBy.username, 'agent_owner')
 assert.equal(agentInvite.isUsed || agentInvite.isExpired, false)
-assert.equal(agentInvite.inviteUrl, 'http://127.0.0.1:55461/register?invite=' + agentInvite.code)
+assert.equal(agentInvite.inviteUrl, 'http://127.0.0.1:' + testPort(2) + '/register?invite=' + agentInvite.code)
 assert(Math.abs(Date.parse(agentInvite.expiresAt) - Date.now() - 7 * 864e5) < 60e3, 'invites last 7 days')
 const peerInvite = await invite('agent_peer'), adminInvite = (await request('/api/invites', 'POST', {}, root, 201)).invite
 // Agents see the invites they issued; admins see everyone's.
@@ -386,7 +387,7 @@ sql(`UPDATE "User" SET "usernameChangedAt" = NOW() - INTERVAL '8 days' WHERE use
 assert.equal((await request('/api/auth/username', 'PUT', { username: 'tech_peer' }, as('tech_peer'))).username, 'tech_peer')
 console.log('PASS usernames: once a week, unique whatever the case, trimmed, signing in by the new name')
 
-const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
+const web = await createServer({ server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
 const openPage = async (browser, token, { mobile = false, lng = 'en' } = {}) => {
   const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1440, height: 900 }, deviceScaleFactor: mobile ? 3 : 1, hasTouch: mobile })
@@ -401,7 +402,7 @@ try {
     try {
       for (const mobile of [false, true]) {
         const lng = mobile ? 'zh' : 'en', { context, page, errors } = await openPage(browser, as('admin_peer'), { mobile, lng })
-        await page.goto('http://127.0.0.1:55461/rooms')
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/rooms')
         await page.getByRole('button', { name: mobile ? '创建新房间' : 'Create New Room', exact: true }).click()
         const check = page.getByRole('checkbox', { name: mobile ? '设为私密房间' : 'Make room private' })
         assert.equal(await check.isChecked(), false)
@@ -429,7 +430,7 @@ try {
       // filter rooms by owner and invite techs.
       for (const [actor, ownerFilter, roleLabel] of [['agent_owner', 1, 'Manager'], ['tech_peer', 0, 'Tech']]) {
         const { context, page, errors } = await openPage(browser, as(actor))
-        await page.goto('http://127.0.0.1:55461/rooms')
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/rooms')
         await page.getByRole('combobox', { name: 'Activeness', exact: true }).waitFor()
         assert.equal(await page.getByRole('combobox', { name: 'Owner', exact: true }).count(), ownerFilter, `${actor} owner filter`)
         await page.getByRole('button', { name: 'Create New Room', exact: true }).click()
@@ -442,10 +443,10 @@ try {
         assert.equal(await page.getByRole('menuitem', { name: 'Invite techs', exact: true }).count(), actor === 'agent_owner' ? 1 : 0)
         await page.keyboard.press('Escape')
         // Typing the admin URLs does not open them either.
-        await page.goto('http://127.0.0.1:55461/admin')
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/admin')
         await page.waitForURL('**/rooms')
         await page.getByRole('combobox', { name: 'Activeness', exact: true }).waitFor()
-        await page.goto('http://127.0.0.1:55461/admin/audit')
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/admin/audit')
         await page.getByRole('alert').getByText('Super admin access required.', { exact: true }).waitFor()
         assert.deepEqual(errors, [])
         await context.close()
@@ -454,7 +455,7 @@ try {
       {
         const { context, page, errors } = await openPage(browser, as('agent_owner'))
         await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
-        await page.goto('http://127.0.0.1:55461/rooms')
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/rooms')
         await page.getByRole('button', { name: 'Account menu', exact: true }).click()
         await page.getByRole('menuitem', { name: 'Invite techs', exact: true }).click()
         const dialog = page.getByRole('dialog', { name: 'Invite techs' })
@@ -475,9 +476,9 @@ try {
         await guest.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
         const tab = await guest.newPage(), tabErrors = []
         tab.on('pageerror', e => tabErrors.push(e.message))
-        await tab.goto('http://127.0.0.1:55461/login')
+        await tab.goto('http://127.0.0.1:' + testPort(2) + '/login')
         await tab.getByRole('link', { name: 'Register', exact: true }).waitFor()
-        await tab.goto('http://127.0.0.1:55461/register?invite=' + uiInvite.code)
+        await tab.goto('http://127.0.0.1:' + testPort(2) + '/register?invite=' + uiInvite.code)
         assert.equal(await tab.locator('#inviteCode').inputValue(), displayedCode)
         await tab.locator('#username').fill('ui_tech_' + engine)
         await tab.locator('#password').fill(password)
@@ -490,7 +491,7 @@ try {
         const again = await browser.newContext()
         await again.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
         const retry = await again.newPage()
-        await retry.goto('http://127.0.0.1:55461/register?invite=' + uiInvite.code)
+        await retry.goto('http://127.0.0.1:' + testPort(2) + '/register?invite=' + uiInvite.code)
         await retry.locator('#username').fill('ui_retry_' + engine)
         await retry.locator('#password').fill(password)
         await retry.locator('#register-form button[type=submit]').click()

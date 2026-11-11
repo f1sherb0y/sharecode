@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const API = 'http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API = 'http://127.0.0.1:' + testPort(1)
 async function request(path, method = 'GET', body, token) {
   const response = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined })
   const data = await response.json(); assert(response.ok, JSON.stringify(data)); return data
@@ -19,7 +20,7 @@ async function shareReadOnly(room) {
 const web = await createServer({ plugins: [{ name: 'capture-blink-test-editor', enforce: 'pre', transform(source, id) {
   if (id.endsWith('/hooks/use-monaco-editor.ts')) return source.replace('editorInstanceRef.current = editor', 'editorInstanceRef.current = editor; (window as any).__blinkTest = { editor, ytext, provider, monaco }')
   if (id.endsWith('/features/markdown-editor.tsx')) return source.replace('collabService.connect()', 'collabService.connect(); (window as any).__markdownBlinkTest = { view: ctx.get(editorViewCtx), provider, ydoc, TextSelection }')
-} }], cacheDir: 'node_modules/.vite-blink-tests', server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
+} }], cacheDir: 'node_modules/.vite-blink-tests', server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
 const pulse = page => page.evaluate(() => window.__blinkTest.editor.getModel().getAllDecorations().filter(d => d.options.className?.includes('selection-blink')).map(d => ({ range: d.range, className: d.options.className, wholeLine: d.options.isWholeLine })))
 const waitPulse = page => page.waitForFunction(() => window.__blinkTest?.editor.getModel().getAllDecorations().some(d => d.options.className?.includes('selection-blink')))
@@ -35,7 +36,7 @@ try {
         const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
         await context.addInitScript(token => { sessionStorage.setItem('sharecode-tab-auth', JSON.stringify({ state: { token }, version: 0 })); localStorage.setItem('i18nextLng', 'en') }, token)
         const page = await context.newPage(); pages.push(page); page.on('pageerror', e => errors.push(e.message))
-        await page.goto('http://127.0.0.1:55461/room/' + room.id)
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/room/' + room.id)
         await page.waitForFunction(() => !!window.__blinkTest && window.__blinkTest.provider.synced)
         await page.getByRole('button', { name: 'Blink Selection', exact: true }).waitFor()
       }
@@ -96,7 +97,7 @@ try {
       // Visible toolbar controls must fit narrow touch layouts, including 3x DPI.
       const mobile = await browser.newContext({ viewport: { width: 320, height: 700 }, hasTouch: true, deviceScaleFactor: 3, ...(name !== 'firefox' ? { isMobile: true } : {}) })
       await mobile.addInitScript(token => { sessionStorage.setItem('sharecode-tab-auth', JSON.stringify({ state: { token }, version: 0 })); localStorage.setItem('i18nextLng', 'en') }, admin)
-      const phone = await mobile.newPage(); await phone.goto('http://127.0.0.1:55461/room/' + room.id)
+      const phone = await mobile.newPage(); await phone.goto('http://127.0.0.1:' + testPort(2) + '/room/' + room.id)
       for (const width of [320, 360, 390, 767]) {
         await phone.setViewportSize({ width, height: 700 }); await phone.getByRole('button', { name: 'Blink Selection', exact: true }).waitFor()
         const boxes = await phone.locator('header button').evaluateAll(buttons => buttons.filter(b => b.getBoundingClientRect().width > 0).map(b => { const r = b.getBoundingClientRect(); return { name: b.getAttribute('aria-label'), left: r.left, right: r.right, top: r.top, bottom: r.bottom } }))
@@ -107,7 +108,7 @@ try {
       const markdownRoom = (await request('/api/rooms', 'POST', { name: 'Markdown blink', language: 'python' }, admin)).room
       await shareReadOnly(markdownRoom)
       for (const page of pages) {
-        await page.goto('http://127.0.0.1:55461/room/' + markdownRoom.id)
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/room/' + markdownRoom.id)
         await page.waitForFunction(() => window.__blinkTest?.provider.synced)
       }
       await sender.evaluate(() => window.__blinkTest.ytext.insert(0, 'Legacy code converted to Markdown'))

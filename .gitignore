@@ -68,3 +68,7 @@ data/
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Go server binary built in place (just build-server)
+server-go/sharecode-server
+server-go/sharecode-server.exe

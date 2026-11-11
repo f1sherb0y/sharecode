@@ -4,7 +4,8 @@ import * as Y from 'yjs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { HocuspocusProvider } from '@hocuspocus/provider'
-const API = process.env.RUNNER_TEST_API || 'http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API = process.env.RUNNER_TEST_API || 'http://127.0.0.1:' + testPort(1)
 assert.equal(new URL(API).hostname, '127.0.0.1')
 const request = async (path, method = 'GET', body, token) => {
   const response = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined })
@@ -82,7 +83,7 @@ try {
     console.log('PASS diagnostics:', language_id, result.status)
   }
   assert.equal((await request('/api/code/execute','POST',{source_code:'print(1)',language_id:'python'})).status,401)
-  const web = await createServer({ server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}}, define:{'import.meta.env.VITE_API_URL':JSON.stringify(API), 'import.meta.env.VITE_WS_URL':JSON.stringify(API.replace('http','ws'))}, logLevel:'error' })
+  const web = await createServer({ server:{host:'127.0.0.1',port:testPort(2),strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}}, define:{'import.meta.env.VITE_API_URL':JSON.stringify(API), 'import.meta.env.VITE_WS_URL':JSON.stringify(API.replace('http','ws'))}, logLevel:'error' })
   await web.listen()
   const browser = await chromium.launch()
   try {
@@ -94,7 +95,7 @@ try {
       },actors[actor].token)
       const page = await context.newPage(), errors=[]
       page.on('pageerror',e=>errors.push(e.message))
-      await page.goto('http://127.0.0.1:55461/room/'+room.id)
+      await page.goto('http://127.0.0.1:' + testPort(2) + '/room/'+room.id)
       await page.locator('.monaco-editor').waitFor()
       const picker=page.getByRole('combobox',{name:'Language',exact:true})
       if(actor==='readonly'||actor==='guestReader') assert.equal(await picker.count(),0)

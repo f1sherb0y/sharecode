@@ -6,8 +6,9 @@ import { execFileSync } from 'node:child_process'
 import * as Y from 'yjs'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
+import { testPort } from './test-ports.mjs'
 assert.ok(process.env.SHARECODE_TEST_CONTAINER?.startsWith('sharecode-runner-test-'), 'Use the disposable database runner')
-const API = 'http://127.0.0.1:55460', base = 'http://127.0.0.1:55461'
+const API = 'http://127.0.0.1:' + testPort(1), base = 'http://127.0.0.1:' + testPort(2)
 const out = '/tmp/sharecode-reconnect-recovery'
 await mkdir(out, { recursive: true })
 const request = async (path, method = 'GET', body, token) => {
@@ -21,7 +22,7 @@ const expiredToken = token => {
   const data = header + '.' + Buffer.from(JSON.stringify(claims)).toString('base64url')
   return data + '.' + createHmac('sha256', 'local-runner-test-key-not-production').update(data).digest('base64url')
 }
-const server = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, ws: true } } }, logLevel: 'error', plugins: [{ name: 'observe-real-provider', enforce: 'pre', transform(code, id) {
+const server = await createServer({ server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, ws: true } } }, logLevel: 'error', plugins: [{ name: 'observe-real-provider', enforce: 'pre', transform(code, id) {
   if (id.endsWith('/src/hooks/use-yjs-provider.ts')) return code.replace('const identityMatches =', 'window.__collab = { provider, ydoc, isConnected, isSynced, isAuthenticated, protocolReady, hasPending, serverPending, syncError, storageFailed }; const identityMatches =')
 } }] })
 await server.listen()

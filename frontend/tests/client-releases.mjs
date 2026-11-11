@@ -7,9 +7,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
+import { testPort } from './test-ports.mjs'
 
-const API = 'http://127.0.0.1:55460'
-const WEB = 'http://127.0.0.1:55461'
+const API = 'http://127.0.0.1:' + testPort(1)
+const WEB = 'http://127.0.0.1:' + testPort(2)
 const password = 'LocalAudit#2026Strong'
 
 // `tauri signer sign` output (the .sig files' content) for each payload.
@@ -243,7 +244,7 @@ const setupName = 'ShareCode Client_0.4.0_x64-setup.exe'
 writeFileSync(join(fixtures, setupName), WINDOWS_030)
 writeFileSync(join(fixtures, `${setupName}.sig`), WINDOWS_030_SIG)
 
-const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, logLevel: 'error' })
+const web = await createServer({ server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, logLevel: 'error' })
 await web.listen()
 try {
   const browser = await chromium.launch()

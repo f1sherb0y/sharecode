@@ -1,0 +1,4 @@
+-- New supported languages: markdown, verilog.
+-- As the Room table's language column is currently a string (VARCHAR),
+-- no strict schema change is required to support these new strings.
+-- This file serves to record the expansion of support for March 17, 2026.

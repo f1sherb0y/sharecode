@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const API='http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API='http://127.0.0.1:' + testPort(1)
 async function request(path,method='GET',body,token) {
  const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined})
  const data=await r.json();assert.ok(r.ok,JSON.stringify(data));return data
@@ -15,7 +16,7 @@ async function switchLanguage(page, language) {
  await page.waitForFunction(language=>document.querySelector('.editor-statusbar [role=combobox]')?.textContent===language,language)
 }
 const token=(await request('/api/auth/login','POST',{username:'audit_admin',password:'LocalAudit#2026Strong'})).token
-const web=await createServer({cacheDir:'node_modules/.vite-markdown-switch',server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
+const web=await createServer({cacheDir:'node_modules/.vite-markdown-switch',server:{host:'127.0.0.1',port:testPort(2),strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
 await web.listen()
 try {
  for(const [engine,type] of Object.entries({chromium,firefox,webkit})) {
@@ -33,7 +34,7 @@ try {
     if(route.request().method() !== 'PUT') return route.continue()
     const response=await route.fetch();await new Promise(r=>setTimeout(r,750));await route.fulfill({response})
    })
-   await page.goto('http://127.0.0.1:55461/room/'+room.id)
+   await page.goto('http://127.0.0.1:' + testPort(2) + '/room/'+room.id)
    await page.locator('.monaco-editor').waitFor()
    await page.waitForFunction(()=>document.querySelector('.editor-statusbar')?.textContent.includes('Saved'))
    await page.evaluate(async()=>{const {loadMonaco}=await import('/src/lib/monaco-loader.ts');const m=await loadMonaco();m.editor.getModels()[0].setValue('const greeting = "hello";\nconsole.log(greeting);')})

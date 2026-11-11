@@ -6,7 +6,8 @@ import { execFileSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const API = 'http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API = 'http://127.0.0.1:' + testPort(1)
 const password = 'LocalAudit#2026Strong'
 const container = process.env.SHARECODE_TEST_CONTAINER
 assert(container?.startsWith('sharecode-runner-test-'), 'Use the disposable test runner')
@@ -338,11 +339,12 @@ const pastRoom = (await request(`/api/appointments/${pastSession.id}/room`, 'POS
 sql(`UPDATE "Room" SET "updatedAt" = NOW() - INTERVAL '7 hours' WHERE id IN (${literal(idle.id)}, ${literal(pastRoom.id)})`)
 const ended = roomId => sql(`SELECT "isEnded" FROM "Room" WHERE id = ${literal(roomId)}`) === 't'
 // fileURLToPath, not .pathname: on Windows a URL path reads /D:/… (the .exe is found anyway).
-const sweeper = spawn(fileURLToPath(new URL('../../server-rs/target/debug/sharecode-server', import.meta.url)), [], {
+// The scripts name the server under test; the default is the Rust debug build.
+const sweeper = spawn(process.env.SHARECODE_SERVER_BIN || fileURLToPath(new URL('../../server-rs/target/debug/sharecode-server', import.meta.url)), [], {
   stdio: 'ignore',
-  env: { ...process.env, DATABASE_URL: 'postgresql://runner_test:local_runner_test@127.0.0.1:55459/runner_test', BIND_ADDRESS: '127.0.0.1', PORT: '55462',
+  env: { ...process.env, DATABASE_URL: 'postgresql://runner_test:local_runner_test@127.0.0.1:' + testPort(0) + '/runner_test', BIND_ADDRESS: '127.0.0.1', PORT: String(testPort(3)),
     JWT_SECRET: 'local-runner-test-key-not-production', ADMIN_USERNAME: 'audit_admin', ADMIN_PASSWORD: password, ADMIN_EMAIL: 'audit@example.invalid',
-    FRONTEND_URL: 'http://127.0.0.1:55461', APP_URL: 'http://127.0.0.1:55461', TRUSTED_PROXY_CIDRS: '' },
+    FRONTEND_URL: 'http://127.0.0.1:' + testPort(2), APP_URL: 'http://127.0.0.1:' + testPort(2), TRUSTED_PROXY_CIDRS: '' },
 })
 try {
   for (let i = 0; i < 150 && !ended(idle.id); i++) await new Promise(resolve => setTimeout(resolve, 100))
@@ -412,9 +414,9 @@ console.log('PASS tours: once per account, unknown tours rejected')
 // sessions, look at one tech's week, and keep customers and their sessions in the
 // 场次 tab; techs read their own and open the room; phones get the list. The device
 // clock is set far from Shanghai on purpose.
-const web = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
+const web = await createServer({ server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
-const WEB = 'http://127.0.0.1:55461'
+const WEB = 'http://127.0.0.1:' + testPort(2)
 const openPage = async (browser, token, { mobile = false, lng = 'en' } = {}) => {
   const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1440, height: mobile ? 844 : 900 }, deviceScaleFactor: mobile ? 3 : 1, hasTouch: mobile, timezoneId: 'America/Los_Angeles' })
   await context.addInitScript(({ token, lng }) => { sessionStorage.setItem('sharecode-tab-auth', JSON.stringify({ state: { token }, version: 0 })); localStorage.setItem('i18nextLng', lng) }, { token, lng })
@@ -907,6 +909,9 @@ try {
         await request('/api/admin/users', 'POST', { username, role: 'agent', password }, root, 201)
         const token = (await login(username)).token
         const { context, page, errors } = await openPage(browser, token, { mobile, lng })
+        // The page marks the tour seen when it opens; WebKit on Windows sends that request about
+        // a second late, after a quick Skip, so wait for the page's own request.
+        const marked = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/api/tours/schedule'))
         await page.goto(`${WEB}/schedule/full?date=${day}`)
         const card = page.locator('.ui-tour-card')
         const spotlit = async target => {
@@ -951,6 +956,7 @@ try {
         await card.waitFor({ state: 'detached' })
         const params = new URL(page.url()).searchParams
         assert.deepEqual([params.get('tab'), params.get('view'), params.get('customer'), params.get('date')], [null, null, null, day], 'the page is back where it was')
+        assert.equal((await marked).status(), 200)
         assert.deepEqual(await request('/api/tours', 'GET', undefined, token), { seen: ['schedule'] })
         // Shown once: reloading does not bring it back.
         const tours = page.waitForResponse(response => response.url().endsWith('/api/tours'))

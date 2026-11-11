@@ -11,10 +11,10 @@ export dev_admin_password := env("SHARECODE_DEV_ADMIN_PASSWORD", "LocalTest#2026
 default:
     @just --list
 
-# Install frontend packages and fetch Rust dependencies.
+# Install frontend packages and fetch the server's Go modules.
 install:
     cd frontend && bun install
-    cargo fetch --manifest-path server-rs/Cargo.toml
+    cd server-go && go mod download
 
 # Start PostgreSQL, the API, and the frontend together; Ctrl+C stops both apps.
 up: db-up
@@ -47,7 +47,7 @@ test-runner:
 
 # Start the database and local API on port 3001 (terminal 1).
 server: db-up
-    @cd server-rs && env \
+    @cd server-go && env \
         DATABASE_URL="$dev_database_url" \
         JWT_SECRET='local-development-secret-change-before-deployment' \
         BIND_ADDRESS=127.0.0.1 PORT=3001 \
@@ -55,24 +55,24 @@ server: db-up
         ADMIN_USERNAME="$dev_admin_username" ADMIN_PASSWORD="$dev_admin_password" \
         ADMIN_EMAIL=local-admin@example.invalid ADMIN_UPDATE_PASSWORD=false \
         TRUSTED_PROXY_CIDRS='' PISTON_URL=http://127.0.0.1:2000 \
-        cargo run
+        go run ./cmd/sharecode-server
 
 # Start the frontend at http://localhost:5173 with hot reload (terminal 2).
 dev:
     cd frontend && VITE_API_URL=http://127.0.0.1:3001 bun dev
 
-# Check TypeScript and Rust without creating release bundles.
+# Check TypeScript and Go without creating release bundles.
 check:
     cd frontend && bunx tsc --noEmit
-    cargo check --manifest-path server-rs/Cargo.toml
+    cd server-go && go vet ./...
 
 # Build the production frontend bundle.
 build:
     cd frontend && bun run build
 
-# Build the Rust server in release mode.
+# Build the Go server (server-go/sharecode-server).
 build-server:
-    cargo build --release --manifest-path server-rs/Cargo.toml
+    cd server-go && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "sharecode-server$(go env GOEXE)" ./cmd/sharecode-server
 
 # Install browser engines and their system dependencies for UI tests.
 browsers:
@@ -97,9 +97,9 @@ test-editor:
 test-i18n:
     cd frontend && node --test tests/i18n.test.mjs
 
-# Run Rust unit tests.
+# Run the Go server's unit tests.
 test-server:
-    cargo test --manifest-path server-rs/Cargo.toml
+    cd server-go && go vet ./... && go test ./...
 
 # Run the full integration suite with disposable PostgreSQL (local initdb/pg_ctl, or Docker).
 test-integration:

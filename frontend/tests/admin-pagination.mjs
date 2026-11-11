@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const API = 'http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API = 'http://127.0.0.1:' + testPort(1)
 async function request(path, method = 'GET', body, token) {
   const response = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined })
   return { status: response.status, body: await response.json() }
@@ -49,7 +50,7 @@ assert.deepEqual((await get('/api/admin/storage/playback?roomIds='+ids.join(',')
 assert.equal((await request('/api/admin/storage/playback?roomIds=invalid','GET',undefined,token)).status,400)
 assert.equal((await request('/api/admin/storage/playback?roomIds='+Array(101).fill(ids[0]).join(','),'GET',undefined,token)).status,400)
 console.log('PASS API pagination, stable ordering, caps, combined filters, literal search, empty/out-of-range pages, scoped playback and auth')
-const web=await createServer({server:{host:'127.0.0.1',port:55461,strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
+const web=await createServer({server:{host:'127.0.0.1',port:testPort(2),strictPort:true,proxy:{'/api':{target:API,changeOrigin:true,ws:true}}},logLevel:'error'})
 await web.listen()
 try {
  for(const [engine,browserType] of Object.entries({chromium,firefox,webkit})) {
@@ -60,7 +61,7 @@ try {
    const page=await context.newPage(),requests=[],errors=[]
    page.on('request',r=>{if(r.url().includes('/api/admin/'))requests.push(new URL(r.url()))})
    page.on('pageerror',e=>errors.push(e.message))
-   await page.goto('http://127.0.0.1:55461/admin')
+   await page.goto('http://127.0.0.1:' + testPort(2) + '/admin')
    await page.locator('tbody tr').nth(24).waitFor()
    assert.equal(await page.locator('tbody tr').count(),25)
    assert.equal(requests.some(u=>u.pathname.includes('/rooms')||u.pathname.includes('/storage')),false)

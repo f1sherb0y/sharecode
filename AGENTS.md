@@ -29,11 +29,12 @@ MyGo Windows client (`frontend/src-mygo-client`, branch work, not released): a G
 - **Desktop**: Tauri 2.0 (Rust backend)
 
 ### Backend
-- **Runtime**: Rust (Tokio)
-- **Framework**: Axum
-- **WebSocket**: Custom Yjs sync (yrs)
+- **Runtime**: Go 1.26 (`server-go`, one package `internal/server`: `routes_*.go`, `ws_*.go`, `auth.go`, `permissions.go`)
+- **Framework**: `net/http` (`ServeMux` patterns)
+- **WebSocket**: Yjs sync on ygo (`github.com/f1sherb0y/ygo`, pinned in `go.mod` by a `replace` of `github.com/Deln0r/ygo`), Hocuspocus wire protocol
 - **Database**: PostgreSQL
-- **ORM**: SQLx (query builder)
+- **Queries**: pgx v5, plain SQL; migrations in `server-go/migrations` (embedded, recorded in `_sqlx_migrations` the way sqlx did, so existing databases carry on)
+- **Previous server**: `server-rs` (Rust/Axum/SQLx/yrs) stays in the tree for reference; `server-go/PORTING.md` records how each module was carried over. Paths below such as `routes/client_releases.rs` or `core/permissions.rs` name the Rust modules; the Go files are `routes_client_releases.go`, `permissions.go` and so on
 - **Authentication**: JWT + bcrypt
 - **Deployment**: Docker + Docker Compose
 
@@ -51,7 +52,7 @@ MyGo Windows client (`frontend/src-mygo-client`, branch work, not released): a G
 - **Landing page** (`/`, `LandingPage` in `pages/login.tsx`): the login page for anyone not signed in (share guests included); signed-in accounts see the logo, **进入房间** and the desktop client download; the navbar logo leads back to it
 - **Renaming**: anyone signed in changes their own username in Settings once a week (`PUT /api/auth/username`, `User.usernameChangedAt`); every new or changed name is trimmed and must be 2–32 characters without spaces or control characters (`utils/usernames.rs`, also on registration, admin-created accounts and new work tables) and unique whatever its case; everything refers to accounts by ID, so nothing else changes
 - **Role-based access control**: Three account roles: admin (超级管理员, shown as Super admin), agent (管理, shown as Manager) and tech (技术); the UI calls both staff roles 管理. Customers (客户) join through share links without an account
-- **Role-only permissions**: No per-account flags; rules live in `server-rs/src/core/permissions.rs` and the SQL function `room_is_visible`
+- **Role-only permissions**: No per-account flags; rules live in `server-go/internal/server/permissions.go` and the SQL function `room_is_visible`
 - **Invite-only registration**: Agents and admins issue single-use codes (valid 7 days) from the account menu; registering with one always creates a tech. Admins also create accounts of any role directly
 - **JWT tokens**: Secure authentication with 7-day expiration
 - **User profiles**: Color-coded users for easy identification
@@ -448,7 +449,7 @@ monacoModelRef.current?.setValue(ytext.toString())
 - Before every deployment, run `just predeploy` against the exact source being
   released. A failing check blocks deployment; fix the cause and rerun affected
   checks. Do not silently skip a browser or replace assertions with weaker ones.
-- The gate is maintained in `scripts/predeploy.sh`: Rust tests, production
+- The gate is maintained in `scripts/predeploy.sh`: Go server tests, production
   frontend build, real Chromium/Firefox/WebKit process-restart login tests,
   session renewal while editing, three-browser reconnect/durability recovery,
   all three workspace UI suites (including mobile
@@ -459,6 +460,12 @@ monacoModelRef.current?.setValue(ytext.toString())
   on desktop and phone), three-browser
   follow opt-out pause/resume and reload persistence across code/Markdown/Canvas rooms,
   Sarasa font/CDN fallback checks, and standalone replay export.
+- The gate tests and builds the server once, then runs the suites side by side
+  (four at a time by default, `SHARECODE_PREDEPLOY_JOBS` to change; eight made the
+  timing-sensitive suites fail on a 24-thread machine). Each suite with a server gets
+  its own disposable database and port block (`SHARECODE_TEST_PORT_BASE`,
+  `frontend/tests/test-ports.mjs`); new suites take their ports from `testPort()`.
+  Every suite runs to its end and the failures are listed together.
 - Prerequisites: `just install`, `just browsers`, Docker running, and the
   `postgres:17-alpine` image available. Font/export checks require network access
   to the pinned CDN dependencies. Session tests use disposable databases only;
@@ -479,8 +486,8 @@ monacoModelRef.current?.setValue(ytext.toString())
 docker-compose up postgres
 
 # Terminal 2: Start server
-cd server-rs
-cargo run
+cd server-go
+go run ./cmd/sharecode-server
 
 # Terminal 3: Start frontend
 cd frontend

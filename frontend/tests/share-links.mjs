@@ -1,7 +1,8 @@
 // Disposable localhost database/API only; see scripts/test-runner-local.sh.
 import assert from 'node:assert/strict'
+import { testPort } from './test-ports.mjs'
 
-const API = 'http://127.0.0.1:55460'
+const API = 'http://127.0.0.1:' + testPort(1)
 async function request(path, method = 'GET', body, token, status = 200) {
   const response = await fetch(API + path, {
     method,

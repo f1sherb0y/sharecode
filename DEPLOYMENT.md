@@ -5,7 +5,7 @@ This guide explains how to deploy ShareCode with HTTPS/SSL support using Docker 
 ## Required release checks
 
 Run `just predeploy` on the exact source before each deployment. It runs the
-production build, Rust tests, persistent-login and renewal regressions,
+production build, Go server tests, persistent-login and renewal regressions,
 reconnect/durability recovery in Chromium/Firefox/WebKit, three browser UI suites, font loading/fallback and standalone replay checks. Install
 dependencies with `just install` and browsers with `just browsers`; Docker must
 be running. Tests use disposable databases. A failure blocks the release.

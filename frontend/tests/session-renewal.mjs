@@ -6,7 +6,8 @@ import { HocuspocusProvider } from '@hocuspocus/provider'
 import * as Y from 'yjs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
-const API = 'http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API = 'http://127.0.0.1:' + testPort(1)
 const password = 'LocalAudit#2026Strong'
 const cookies = new Map()
 const wait = async (fn, message, timeout = 20000) => {
@@ -70,7 +71,7 @@ try {
   console.log('PASS database auth outage retries automatically without login or permission bypass')
 
 
-  server = await createServer({ server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, ws: true } } }, logLevel: 'error' })
+  server = await createServer({ server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, ws: true } } }, logLevel: 'error' })
   await server.listen(); browser = await chromium.launch()
   const context = await browser.newContext()
   const [name, value] = cookies.get(first.browserSessionId).split('=')
@@ -79,12 +80,12 @@ try {
   await context.route('https://cdn.jsdelivr.net/**', route => route.abort())
   const page = await context.newPage()
   const errors = []; page.on('pageerror', e => errors.push(e.message))
-  await page.goto('http://127.0.0.1:55461/login')
+  await page.goto('http://127.0.0.1:' + testPort(2) + '/login')
   await page.evaluate(token => {
     sessionStorage.setItem('sharecode-tab-auth', JSON.stringify({ state: { token }, version: 0 }))
     localStorage.setItem('i18nextLng', 'en')
   }, first.token)
-  await page.goto('http://127.0.0.1:55461/room/' + room.id)
+  await page.goto('http://127.0.0.1:' + testPort(2) + '/room/' + room.id)
   await page.locator('.monaco-editor').waitFor()
   await page.waitForFunction(() => document.body.textContent.includes('Saved'))
   await page.evaluate(async () => {

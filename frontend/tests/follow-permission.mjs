@@ -4,7 +4,8 @@ import * as Y from 'yjs'
 import { HocuspocusProvider } from '@hocuspocus/provider'
 import { chromium, firefox, webkit } from 'playwright'
 import { createServer } from 'vite'
-const API = 'http://127.0.0.1:55460'
+import { testPort } from './test-ports.mjs'
+const API = 'http://127.0.0.1:' + testPort(1)
 async function request(path, method = 'GET', body, token) {
   const response = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined })
   const data = await response.json(); assert(response.ok, JSON.stringify(data)); return data
@@ -32,7 +33,7 @@ async function seededRoom(name, language) {
 const web = await createServer({ plugins: [{ name: 'capture-follow-test-editors', enforce: 'pre', transform(source, id) {
   if (id.endsWith('/hooks/use-monaco-editor.ts')) return source.replace('editorInstanceRef.current = editor', 'editorInstanceRef.current = editor; (window as any).__followTest = { editor, provider }')
   if (id.endsWith('/components/features/canvas-view.tsx')) return source.replace('excalidrawAPI={setApi}', 'excalidrawAPI={instance => { setApi(instance); (window as any).__testCanvasApi = instance }}')
-} }], cacheDir: 'node_modules/.vite-follow-tests', server: { host: '127.0.0.1', port: 55461, strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
+} }], cacheDir: 'node_modules/.vite-follow-tests', server: { host: '127.0.0.1', port: testPort(2), strictPort: true, proxy: { '/api': { target: API, changeOrigin: true, ws: true } } }, define: { 'import.meta.env.VITE_API_URL': JSON.stringify(API), 'import.meta.env.VITE_WS_URL': JSON.stringify(API.replace('http', 'ws')) }, logLevel: 'error' })
 await web.listen()
 
 const allowFollow = page => page.getByRole('checkbox', { name: 'Allow follow', exact: true })
@@ -91,7 +92,7 @@ try {
       }
       const [presenter, follower] = pages
       const openCode = async (page, query = '') => {
-        await page.goto('http://127.0.0.1:55461/room/' + codeRoom.id + query)
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/room/' + codeRoom.id + query)
         if (!query) await page.waitForFunction(() => window.__followTest?.provider.synced && window.__followTest.editor.getModel().getLineCount() > 500)
       }
 
@@ -149,7 +150,7 @@ try {
 
       // Markdown rooms (Milkdown).
       for (const page of pages) {
-        await page.goto('http://127.0.0.1:55461/room/' + markdownRoom.id)
+        await page.goto('http://127.0.0.1:' + testPort(2) + '/room/' + markdownRoom.id)
         await page.waitForFunction(() => (document.querySelector('.ProseMirror')?.textContent ?? '').includes('line 300'))
       }
       await follow(follower)
@@ -226,7 +227,7 @@ try {
         const guest = await guestContext.newPage(), guestName = 'follow_guest_' + engine
         guest.setDefaultTimeout(20000)
         guest.on('pageerror', e => { errors.push(e.message); console.error(engine, 'GUEST PAGE ERROR', e.stack) })
-        await guest.goto('http://127.0.0.1:55461/s/' + shareLink.token)
+        await guest.goto('http://127.0.0.1:' + testPort(2) + '/s/' + shareLink.token)
         await guest.getByLabel('Display name', { exact: true }).fill(guestName)
         await guest.getByRole('button', { name: 'Join room', exact: true }).click()
         await guest.waitForURL('**/room/' + codeRoom.id + '*')
