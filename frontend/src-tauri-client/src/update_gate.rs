@@ -4,7 +4,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 use tauri::{Emitter, WebviewWindow};
 
-static LOCKED: AtomicBool = AtomicBool::new(true);
+// Unlocked at launch: the page checks in the background and locks once it finds an update.
+static LOCKED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn locked() -> bool {
     LOCKED.load(Ordering::Acquire)

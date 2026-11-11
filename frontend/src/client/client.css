@@ -251,7 +251,23 @@ body ::-webkit-scrollbar-button { display: none; }
   background-color: transparent;
 }
 
+/* Sticky scroll is see-through too. The code scrolling under it is clipped at its lower edge
+   instead of being covered (lib/monaco-sticky-scroll.ts measures it; the gutter moves with
+   the text, so its edge does as well). */
+.client-content .monaco-editor .sticky-widget .sticky-widget-line-numbers,
+.client-content .monaco-editor .sticky-widget .sticky-widget-lines-scrollable {
+  background-color: transparent;
+}
+.client-content .monaco-editor .editor-scrollable {
+  clip-path: inset(var(--sticky-scroll-height, 0px) 0 0 0);
+}
+.client-content .monaco-editor .margin {
+  clip-path: inset(var(--sticky-scroll-margin-top, 0px) 0 0 0);
+}
+
 .client-content .monaco-editor .view-lines,
+.client-content .monaco-editor .sticky-widget-lines,
+.client-content .monaco-editor .sticky-line-number,
 .client-content .monaco-editor .line-numbers,
 .client-content .monaco-editor .cursors-layer,
 .client-content img {
@@ -294,7 +310,10 @@ body ::-webkit-scrollbar-button { display: none; }
   gap: 0.25rem;
   background: transparent;
 }
-.client-toolbar-host .editor-room-navigation { flex: 1 1 0; }
+/* The view switch sits in the middle of the window, not of what the window buttons leave:
+   each side of it grows from the width the other side's neighbours take (title-bar.tsx). */
+.client-toolbar-host .editor-room-navigation { flex: 1 1 var(--client-toolbar-lead, 0px); }
+.client-toolbar-host .editor-toolbar-actions { flex: 1 0 var(--client-toolbar-trail, 0px); justify-content: flex-end; }
 .client-toolbar-host .editor-room-navigation > span { max-width: none; }
 .client-window-controls { padding-left: 0.25rem; }
 .client-title-bar:has(.editor-toolbar) .client-window-controls {

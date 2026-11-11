@@ -69,7 +69,7 @@ async function open({ width = 1100, height = 760, scale = 1, saved, locale = 'en
     window.deferUpdateCheck = updater
     window.availableUpdate = null
     window.updateMetadata = { rid: 100, currentVersion: '0.2.6', version: '9.9.9', rawJson: {} }
-    window.updateLocked = true
+    window.updateLocked = false
     window.nativeState = { clickThrough: false, screenCaptureProtection: true, hideFromTaskbar: true }
     window.captureState = { supported: true, permission: capturePermission, running: false,
       phase: capturePermission ? 'idle' : 'permissionRequired', displays: capturePermission ? [{ id: 7, width: 1920, height: 1080 }, { id: 9, width: 1440, height: 900 }] : [] }
@@ -181,6 +181,23 @@ async function enterRoom(page) {
   await page.locator('.client-title-bar .editor-toolbar').waitFor()
 }
 
+test('the view switch is centred in the window, not in what the window buttons leave', async () => {
+  for (const [mac, width] of [[false, 1100], [true, 1100], [false, 760]]) {
+    const { page, context, errors } = await open({ mac, width })
+    try {
+      await enterRoom(page)
+      const offset = () => page.evaluate(() => {
+        const bar = document.querySelector('.client-title-bar').getBoundingClientRect()
+        const group = document.querySelector('.client-title-bar .editor-toolbar > [role=group]').getBoundingClientRect()
+        return (group.left + group.right) / 2 - (bar.left + bar.right) / 2
+      })
+      await page.waitForFunction(() => document.querySelector('.client-title-bar').style.getPropertyValue('--client-toolbar-lead') !== '')
+      assert.ok(Math.abs(await offset()) <= 1, `off centre by ${await offset()}px (mac=${mac}, width=${width})`)
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  }
+})
+
 test('opacity defaults, old-default migration and custom preferences', async () => {
   for (const [saved, expected] of [
     [undefined, ['0.9', '0.65']],
@@ -285,14 +302,13 @@ test('macOS shortcut controls fit a minimum-height window and keep in-app input 
   } finally { await context.close() }
 })
 
-test('mandatory update blocks launch and saved-seat restoration, downloads, verifies, then restarts', async () => {
+test('the client opens while the launch check runs; a found update replaces it, downloads, verifies, then restarts', async () => {
   for (const locale of ['en', 'zh']) {
-    const { page, context, errors } = await open({ locale, updater: true, width: 480, height: 360,
-      savedSession: { token: 'saved-seat', roomId: 'ui-room', roomName: 'Saved room' } })
+    const { page, context, errors } = await open({ locale, updater: true, width: 480, height: 360 })
     try {
-      assert.equal(await page.locator('.client-shell').count(), 0)
-      assert.equal(await page.getByRole('textbox').count(), 0)
-      assert.equal(await page.evaluate(async () => (await import('/src/stores/auth.ts')).useAuthStore.getState().token), null)
+      await page.locator('.client-shell').waitFor()
+      assert.equal(await page.locator('.client-update-screen').count(), 0)
+      assert.equal(await page.evaluate(() => window.updateLocked), false)
       assert.equal(await page.evaluate(() => window.nativeCalls.filter(c => c.command === 'plugin:updater|check').length), 1)
       await page.evaluate(() => window.resolveUpdateCheck(window.updateMetadata))
       await page.getByRole('heading', { name: locale === 'zh' ? '需要下载更新' : 'Update Needed', exact: true }).waitFor()
@@ -323,17 +339,18 @@ test('mandatory update blocks launch and saved-seat restoration, downloads, veri
   }
 })
 
-test('mandatory update keeps launch failures blocked and retries on reconnect', async () => {
+test('a failed launch check leaves the client open, and a later check still finds the update', async () => {
   const { page, context, errors } = await open({ updater: true })
   try {
     await page.evaluate(() => window.rejectUpdateCheck())
-    await page.getByRole('alert').filter({ hasText: 'Could not check for updates' }).waitFor()
-    assert.equal(await page.locator('.client-shell').count(), 0)
-    await page.getByRole('button', { name: 'Retry', exact: true }).waitFor()
-    await page.evaluate(() => { window.deferUpdateCheck = false; window.dispatchEvent(new Event('online')) })
     await page.locator('.client-shell').waitFor()
+    await page.waitForFunction(async () => !(await import('/src/client/updater.ts')).useUpdateStore.getState().checking)
     assert.equal(await page.locator('.client-update-screen').count(), 0)
     assert.equal(await page.evaluate(() => window.updateLocked), false)
+    await page.evaluate(() => { window.deferUpdateCheck = false; window.availableUpdate = window.updateMetadata; window.dispatchEvent(new Event('online')) })
+    await page.getByRole('heading', { name: 'Update Needed', exact: true }).waitFor()
+    assert.equal(await page.locator('.client-shell').count(), 0)
+    assert.equal(await page.evaluate(() => window.updateLocked), true)
     assert.deepEqual(errors, [])
   } finally { await context.close() }
 })
@@ -424,13 +441,13 @@ test('mandatory update preserves a verified download through check failures but 
   } finally { await context.close() }
 })
 
-test('mandatory update on macOS does not wait for permissions or mount permission setup', async () => {
+test('an update found on macOS shows without waiting for the missing permissions', async () => {
   const { page, context, errors } = await open({ updater: true, mac: true, hotkeyPhase: 'permissionRequired', capturePermission: false })
   try {
     await page.evaluate(() => window.resolveUpdateCheck(window.updateMetadata))
     await page.waitForFunction(() => !!window.updateDownload)
     await page.getByRole('heading', { name: 'Update Needed', exact: true }).waitFor()
-    assert.equal(await page.evaluate(() => window.nativeCalls.some(c => ['open_client_hotkey_setup', 'open_client_recording_setup', 'show_client_main'].includes(c.command))), false)
+    assert.equal(await page.evaluate(() => window.updateLocked), true)
     await page.evaluate(() => window.updateDownload.finish())
     await page.getByRole('button', { name: 'Restart to update', exact: true }).waitFor()
     assert.deepEqual(errors, [])

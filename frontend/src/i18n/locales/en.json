@@ -1225,7 +1225,6 @@
     "updater": {
       "version": "v{{version}}",
       "needed": "Update Needed",
-      "checking": "Checking for updates…",
       "downloading": "Downloading update",
       "downloaded": "Update downloaded",
       "restart": "Restart to update",

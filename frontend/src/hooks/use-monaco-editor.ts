@@ -7,6 +7,7 @@ import { fontFamilyStack } from '@/stores/font'
 import { generateUserColor } from '@/lib/utils'
 import { MonacoBinding } from '@/lib/monaco-binding'
 import { MonacoSelectionBlink } from '@/lib/monaco-selection-blink'
+import { trackStickyScroll } from '@/lib/monaco-sticky-scroll'
 import { createMonacoEditorOptions, resolveMonacoLanguage } from '@/lib/monaco-config'
 import { loadMonaco } from '@/lib/monaco-loader'
 import { loadEditorFont, watchEditorFontMetrics } from '@/lib/editor-font'
@@ -140,6 +141,7 @@ export function useMonacoEditor({
           }),
         )
         editorInstanceRef.current = editor
+        trackStickyScroll(editor)
 
         // If fonts.ready timed out above, the real font may still arrive
         // afterwards; remeasure then so metrics match the displayed glyphs.

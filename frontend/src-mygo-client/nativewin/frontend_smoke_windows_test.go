@@ -55,7 +55,11 @@ func (d *Desktop) Invoke(ctx context.Context, command string, args map[string]an
 		}
 		return nil, nil
 	case "client_update_check":
-		return nil, errors.New("isolated smoke fixture: updater network intentionally unavailable")
+		return map[string]any{"id": "fixture", "currentVersion": "0.0.1", "version": "9.9.9"}, nil
+	case "client_update_download":
+		return nil, errors.New("isolated smoke fixture: no download")
+	case "client_update_close":
+		return nil, nil
 	case "fixture_probe":
 		nonce, ok := args["nonce"].(string)
 		if !ok || nonce == "" {
@@ -140,8 +144,8 @@ func TestMyGoRealFrontendSchemeBridgeAndStorage(t *testing.T) {
 		return apiError("SetWindowPos offscreen frontend", r, e)
 	})
 	t.Cleanup(func() { w.Destroy(); embeddedSmokeViews.Delete(w.ID()) })
-	// Error UI is intentional: a real client request must reach the strict Go
-	// service and receive its rejection, leaving the mandatory gate closed.
+	// The fixture offers an update whose download fails, so the page's requests
+	// reach the Go service and the update gate closes with an error.
 	smokeWait(t, w, "document.querySelector('.client-update-error') !== null")
 	smokeOnMain(t, func() error { showWindow.Call(w.NativeHandle(), 4); return nil })
 	identity := smokeEval(t, w, "({href:location.href,origin:location.origin,bridge:typeof window.mygo?.call,tauri:typeof window.__TAURI_INTERNALS__,boot:window.__smokeBoot,network:window.__smokeNetworkAttempts,body:document.body.innerText})")
@@ -152,7 +156,7 @@ func TestMyGoRealFrontendSchemeBridgeAndStorage(t *testing.T) {
 	}
 	// MyGo Windows maps custom schemes through WebResourceRequested at the
 	// secure-context localhost origin, matching Tauri's default non-HTTPS scheme.
-	if m["href"] != "http://tauri.localhost/client.html" || m["origin"] != "http://tauri.localhost" || m["bridge"] != "function" || m["tauri"] != "undefined" {
+	if m["href"] != "http://tauri.localhost/client.html#/" || m["origin"] != "http://tauri.localhost" || m["bridge"] != "function" || m["tauri"] != "undefined" {
 		t.Fatalf("unexpected native origin/bridge: %#v", identity)
 	}
 	fixtureDesktop.mu.Lock()

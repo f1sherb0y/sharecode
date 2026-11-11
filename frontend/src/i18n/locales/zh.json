@@ -1224,7 +1224,6 @@
     "updater": {
       "version": "v{{version}}",
       "needed": "需要下载更新",
-      "checking": "正在检查更新…",
       "downloading": "正在下载更新",
       "downloaded": "更新已下载",
       "restart": "重启以更新",

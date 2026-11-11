@@ -30,8 +30,9 @@ type Desktop struct {
 	view     *clientview.View
 	platform platformClient
 	updates  updater
-	// The mandatory-update gate: while locked, the window stays interactive and
-	// click-through and meeting filtering are refused. The page unlocks it.
+	// The mandatory-update gate. The page locks it once it finds an update; while
+	// locked, the window stays interactive and click-through and meeting
+	// filtering are refused.
 	locked          atomic.Bool
 	shutdownStarted atomic.Bool
 	shutdownReady   atomic.Bool
@@ -68,7 +69,6 @@ func main() {
 		log.Fatal(err)
 	}
 	desktop := &Desktop{}
-	desktop.locked.Store(true)
 	mygo.Bind(desktop)
 	mygo.App.OnBeforeQuit(func(event *mygo.QuitEvent) {
 		if !desktop.shutdownReady.Load() {
@@ -103,19 +103,14 @@ func main() {
 		if err != nil {
 			log.Printf("Native client: %v", err)
 		}
-		// A reloaded page starts behind the update gate, like a launch.
+		// A reloaded page starts over, like a launch: interactive, no update found yet.
 		view.Page().OnDidNavigate(func(string) {
-			desktop.locked.Store(true)
+			desktop.locked.Store(false)
 			go desktop.updates.closeAll()
-			if platform := desktop.platform; platform != nil {
-				if err := platform.lock(); err != nil {
+			if desktop.platform != nil {
+				if err := desktop.platform.lock(); err != nil {
 					log.Printf("Navigation: %v", err)
 				}
-				go func() {
-					if err := platform.stopFeatures(); err != nil {
-						log.Printf("Navigation: %v", err)
-					}
-				}()
 			}
 		})
 		w.OnResize(func() {

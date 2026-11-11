@@ -1,4 +1,4 @@
-import { useEffect, useState, type Ref } from 'react'
+import { useEffect, useRef, useState, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ScreenShare } from 'lucide-react'
@@ -134,10 +134,30 @@ export function TitleBar({ title, toolbarRef }: { title: string; toolbarRef?: Re
     return () => { void unlisten.then((stop) => stop()) }
   }, [])
 
+  // What sits beside the room toolbar (window buttons, traffic lights) is uneven, so tell
+  // the toolbar how much wider each side is; client.css centres the view switch with it.
+  const barRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const bar = barRef.current
+    const host = bar?.querySelector<HTMLElement>('.client-toolbar-host')
+    if (!bar || !host) return
+    const measure = () => {
+      const outer = bar.getBoundingClientRect()
+      const inner = host.getBoundingClientRect()
+      const extra = (outer.right - inner.right) - (inner.left - outer.left)
+      bar.style.setProperty('--client-toolbar-lead', `${Math.max(0, extra)}px`)
+      bar.style.setProperty('--client-toolbar-trail', `${Math.max(0, -extra)}px`)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(bar)
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
+
   const hiddenCount = [screenCaptureProtection, hideFromTaskbar, clickThrough].filter(Boolean).length
 
   return (
-    <div data-tauri-drag-region data-macos={isMacOSClient ? 'true' : undefined} className="client-title-bar">
+    <div ref={barRef} data-tauri-drag-region data-macos={isMacOSClient ? 'true' : undefined} className="client-title-bar">
       {/* Keep the macOS controls in their native order and position. The custom title bar is
           borderless, so these three controls provide the familiar red/yellow/green affordance. */}
       {isMacOSClient && (

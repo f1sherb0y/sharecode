@@ -7,7 +7,7 @@ import { isDesktopClient } from './host'
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 interface UpdateState {
-  phase: 'checking' | 'current' | 'downloading' | 'ready' | 'installing' | 'error'
+  phase: 'current' | 'downloading' | 'ready' | 'installing' | 'error'
   version: string | null
   received: number
   total: number | null
@@ -15,10 +15,10 @@ interface UpdateState {
   failure: 'check' | 'download' | 'install' | 'restart' | null
 }
 
-// The first render is blocked, before session restoration or any room can mount.
-// A browser-only development preview has no native updater.
+// The client opens straight away and checks in the background. Only a found update
+// blocks it (every phase but 'current'), until that update is installed or withdrawn.
 export const useUpdateStore = create<UpdateState>()(() => ({
-  phase: isDesktopClient ? 'checking' : 'current', version: null,
+  phase: 'current', version: null,
   received: 0, total: null, checking: false, failure: null,
 }))
 
@@ -32,7 +32,7 @@ function discardPending() {
   if (previous) void previous.close().catch(() => {})
 }
 
-/** The same gate applies to launch, retries, reconnects and the six-hour check. */
+/** Runs at launch, on retry, on reconnect and every six hours. */
 export async function checkForUpdate() {
   const state = useUpdateStore.getState()
   if (!isDesktopClient || state.checking || state.phase === 'installing' || installed) return
@@ -40,16 +40,12 @@ export async function checkForUpdate() {
   let candidate: Update | null = null
   let failure: 'check' | 'download' = 'check'
   try {
-    if (state.phase !== 'current' && state.phase !== 'ready') {
-      useUpdateStore.setState({ phase: 'checking', failure: null })
-      // Also makes the gate usable before macOS permissions and after click-through.
-      await invoke('set_client_update_locked', { locked: true })
-    }
+    if (state.phase === 'error') useUpdateStore.setState({ failure: null })
     candidate = await check({ timeout: 30_000 })
     // An explicit no-update response also releases a withdrawn update's gate.
     // An unreachable server must never be mistaken for that response.
     if (!candidate) {
-      await invoke('set_client_update_locked', { locked: false })
+      if (useUpdateStore.getState().phase !== 'current') await invoke('set_client_update_locked', { locked: false })
       discardPending()
       useUpdateStore.setState({ phase: 'current', version: null, failure: null, received: 0, total: null })
       return
@@ -76,8 +72,8 @@ export async function checkForUpdate() {
   } catch (error) {
     console.warn('Update check/download failed:', error)
     const current = useUpdateStore.getState()
-    // A background check failure cannot invalidate a verified download. At launch or after
-    // discovering an update, errors keep the gate closed and offer retry, never the room.
+    // A failed check changes nothing: an open client stays open and a verified download
+    // stays ready. Once an update is known, errors keep the gate closed and offer retry.
     if (current.phase !== 'current' && current.phase !== 'ready') {
       useUpdateStore.setState({ phase: 'error', failure })
     }

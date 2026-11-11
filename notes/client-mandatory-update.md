@@ -1,7 +1,8 @@
 # Mandatory client updates (0.2.7)
 
-The first client render is the update gate. No home page, room, session restore or
-permission setup mounts until the native updater returns no newer release. An
+The client opens straight away and checks for an update in the background (since
+the MyGo branch; 0.2.7 blocked the first render on that check). Nothing is shown
+while the check runs or when it fails. An
 available release replaces all client UI (including title-bar tools and portals),
 downloads automatically, and shows a progress bar. Unknown lengths use an
 indeterminate bar. Only successful completion of Tauri's signature-verifying
@@ -12,8 +13,8 @@ open session unmounts the room, whose provider cleanup disconnects collaboration
 The saved guest seat remains in storage for the new version. No install occurs
 until the restart button is clicked.
 
-Startup-check, download and signature errors keep features blocked with retry.
-An ordinary background check error leaves an already-current session alone, and
+Once an update is known, download and signature errors keep features blocked with
+retry. A failed check leaves a client without a known update alone, and
 a verified download remains installable if a recheck fails. An explicit no-update
 response discards the downloaded release and reopens the app (release withdrawal).
 Installation errors allow retry; if installation succeeded but restart failed,

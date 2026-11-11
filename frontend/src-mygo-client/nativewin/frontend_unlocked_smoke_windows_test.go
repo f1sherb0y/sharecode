@@ -169,7 +169,7 @@ func TestMyGoUnlockedCustomerFrontend(t *testing.T) {
 		t.Run(variant.language+"-"+variant.theme, func(t *testing.T) {
 			foreground := user32.NewProc("GetForegroundWindow")
 			before, _, _ := foreground.Call()
-			fixture := &unlockedFrontendFixture{locked: true, calls: map[string]int{}, failures: map[string]int{}}
+			fixture := &unlockedFrontendFixture{calls: map[string]int{}, failures: map[string]int{}}
 			preload := frontendPreload + fmt.Sprintf(`
 if(!localStorage.getItem('__unlockedFixtureSeeded')){
  localStorage.clear();localStorage.setItem('__unlockedFixtureSeeded','1');
@@ -222,8 +222,9 @@ window.addEventListener('unhandledrejection',e=>window.__unlockedErrors.push(Str
 			gate := append([]string(nil), fixture.gate...)
 			locked := fixture.locked
 			fixture.mu.Unlock()
-			if locked || len(gate) != 3 || gate[0] != "locked" || gate[1] != "checked-null" || gate[2] != "unlocked" {
-				t.Fatalf("ordinary UI bypassed real update protocol: %v locked=%v", gate, locked)
+			// The client opens without the gate: one check, answered "no update".
+			if locked || len(gate) != 1 || gate[0] != "checked-null" {
+				t.Fatalf("unexpected update gate calls: %v locked=%v", gate, locked)
 			}
 			if got := smokeEval(t, w, "document.querySelector('.client-update-error')===null&&document.querySelector('form button[type=submit]').disabled"); got != true {
 				t.Fatal("unexpected gate or enabled empty invite submission")
@@ -309,7 +310,7 @@ window.addEventListener('unhandledrejection',e=>window.__unlockedErrors.push(Str
 			if errs := smokeEval(t, w, "window.__unlockedErrors").([]any); len(errs) != 0 {
 				t.Fatalf("unhandled renderer errors: %#v", errs)
 			}
-			for _, command := range []string{"client_update_check", "set_client_update_locked", "get_hotkey_status", "get_stealth_state", "set_stealth_state", "client_set_pinned", "client_window_set_title", "client_is_maximized", "get_meeting_privacy_status"} {
+			for _, command := range []string{"client_update_check", "get_hotkey_status", "get_stealth_state", "set_stealth_state", "client_set_pinned", "client_window_set_title", "client_is_maximized", "get_meeting_privacy_status"} {
 				if fixture.count(command) < 1 {
 					t.Fatalf("actual transport alias never invoked %s", command)
 				}

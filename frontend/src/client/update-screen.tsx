@@ -10,7 +10,6 @@ export function UpdateScreen() {
   const ready = phase === 'ready' || phase === 'installing'
   const percent = ready ? 100 : total ? Math.min(100, Math.floor(received / total * 100)) : null
   const downloading = phase === 'downloading'
-  const title = version ? t('client.updater.needed') : t('client.updater.checking')
 
   return (
     <div className="client-update-screen">
@@ -20,9 +19,9 @@ export function UpdateScreen() {
           <X size={16} />
         </button>
       </div>
-      <main className="client-update-content" aria-labelledby="client-update-heading" aria-busy={phase === 'checking' || downloading || phase === 'installing'}>
+      <main className="client-update-content" aria-labelledby="client-update-heading" aria-busy={checking || downloading || phase === 'installing'}>
         <ArrowDownToLine className="client-update-icon" size={28} aria-hidden="true" />
-        <h1 id="client-update-heading">{title}</h1>
+        <h1 id="client-update-heading">{t('client.updater.needed')}</h1>
         {version && <p className="client-update-version">{t('client.updater.version', { version })}</p>}
         {(downloading || ready) && (
           <div className="client-update-progress">
@@ -39,7 +38,7 @@ export function UpdateScreen() {
         )}
         {failure && <p className="client-update-error" role="alert">{t(`client.updater.${failure}Failed`)}</p>}
         {phase === 'error' && (
-          <button type="button" className="client-update-action" onClick={() => void checkForUpdate()}>
+          <button type="button" className="client-update-action" disabled={checking} onClick={() => void checkForUpdate()}>
             <RotateCw size={16} aria-hidden="true" />{t('client.updater.retry')}
           </button>
         )}

@@ -31,7 +31,7 @@ async function open({ mac = false, setup = false, update = false } = {}) {
     window.nativeState = { clickThrough: false, hideFromTaskbar: true, screenCaptureProtection: true }
     window.hotkey = { revision: 0, phase: 'listening', ready: true, received: 0, testing: false, lastAction: null, error: null }
     window.updateResult = update ? { id: 'update-1', version: '9.9.9', currentVersion: '0.2.7' } : null
-    window.locked = true
+    window.locked = false
     window.failCommand = null
     window.emitNative = (event, payload) => { for (const handler of [...listeners]) handler({ event, payload }) }
     window.nativeListenerCount = () => listeners.size

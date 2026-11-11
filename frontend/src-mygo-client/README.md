@@ -53,12 +53,13 @@ also opens the Tauri client's WebView2 profile in place
 (`%LOCALAPPDATA%\dev.sharecode.client`), so the guest seat and settings carry
 over with no migration step.
 
-**Updates.** Mandatory, as in the Tauri client, and driven by the same page code:
-check both nodes' `/api/client/update/...` feed, download, verify the minisign
+**Updates.** Mandatory, as in the Tauri client, and driven by the same page code.
+The client opens and checks in the background; a found update replaces the whole
+page until it is installed: check both nodes' `/api/client/update/...` feed, download, verify the minisign
 signature against the client's key, then run the installer with `/P /R /UPDATE`
-and quit; the installer restarts the client. The page holds the gate
-(`set_client_update_locked`); while it is locked the host refuses click-through
-and meeting filtering.
+and quit; the installer restarts the client. The page locks the gate
+(`set_client_update_locked`) when it finds an update; while it is locked the host
+refuses click-through and meeting filtering.
 
 **Installer.** `packaging/installer.nsi` keeps the Tauri installer's registry key,
 install directory and command line, so an installed Tauri client updates into
