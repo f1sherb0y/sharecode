@@ -5,6 +5,7 @@
 //   node run.mjs --vms Win10-22H2,Win11-24H2       some of them
 //   node run.mjs --vms Win10-22H2 --checkpoint patched
 //   node run.mjs --vms Win10-22H2 --soak 50        also repeat the held arrow keys 100 times
+//   node run.mjs --vms Win10-22H2 --release        the released identity (build-windows.ps1 -Release)
 //   node run.mjs --vms Win11-25H2 --keep           leave the VM running afterwards (probe.mjs)
 //   node run.mjs --vms Win11-25H2 --attach         a VM left running by --keep: no restore, no install
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
@@ -26,30 +27,43 @@ function newest(directory, pattern) {
 
 // The development identity: its own name, install directory and WebView2 profile, so it never
 // touches a released client (src-mygo-client/build-windows.ps1 without -Release).
-const CLIENT = {
-  label: 'MyGo client (src-mygo-client), development identity',
-  installer: () => newest(join(frontend, '..', 'build', 'mygo-client'), /^sharecode-client-mygo-dev_.*-setup.exe$/),
+const identity = ({ label, setup, name, exe, id }) => ({
+  label,
+  installer: () => newest(join(frontend, '..', 'build', 'mygo-client'), setup),
   // Installed for the machine, under Program Files.
-  installDir: 'ShareCode Client (MyGo Development)',
-  exe: 'sharecode-client-mygo-dev.exe',
-  // Part of the command line of the client's own WebView2 processes.
-  webviewMatch: 'sharecode-client-mygo-dev',
+  installDir: name,
+  exe: `${exe}.exe`,
+  // Part of the command line of the client's own WebView2 processes: its profile folder.
+  webviewMatch: id === 'dev.sharecode.client' ? id : exe,
   // What an installation consists of besides its directory: gone again after uninstalling.
   installed: [
-    'C:/Program Files/ShareCode Client (MyGo Development)/sharecode-client-mygo-dev.exe',
-    'C:/ProgramData/Microsoft/Windows/Start Menu/Programs/ShareCode Client (MyGo Development).lnk',
-    'HKLM:/SOFTWARE/Microsoft/Windows/CurrentVersion/Uninstall/dev.sharecode.client.mygo-dev_is1',
+    `C:/Program Files/${name}/${exe}.exe`,
+    `C:/ProgramData/Microsoft/Windows/Start Menu/Programs/${name}.lnk`,
+    `HKLM:/SOFTWARE/Microsoft/Windows/CurrentVersion/Uninstall/${id}_is1`,
   ],
+})
+const CLIENTS = {
+  development: identity({
+    label: 'MyGo client (src-mygo-client), development identity',
+    setup: /^sharecode-client-mygo-dev_.*-setup.exe$/, name: 'ShareCode Client (MyGo Development)', exe: 'sharecode-client-mygo-dev', id: 'dev.sharecode.client.mygo-dev',
+  }),
+  // --release: the installer customers get (build-windows.ps1 -Release). On a test VM only: it
+  // is the real client, with the real name, profile and update feed.
+  release: identity({
+    label: 'MyGo client (src-mygo-client), released identity',
+    setup: /^ShareCode Client_.*-setup.exe$/, name: 'ShareCode Client', exe: 'sharecode-client', id: 'dev.sharecode.client',
+  }),
 }
 
 function parseArguments(argv) {
-  const options = { vms: ALL_VMS, checkpoint: 'clean', keep: false, attach: false, out: null, soak: 0 }
+  const options = { vms: ALL_VMS, checkpoint: 'clean', keep: false, attach: false, out: null, soak: 0, release: false }
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i]
     if (name === '--vms') options.vms = argv[++i].split(',').map((vm) => vm.trim()).filter(Boolean)
     else if (name === '--checkpoint') options.checkpoint = argv[++i]
     else if (name === '--out') options.out = argv[++i]
     else if (name === '--soak') options.soak = Number(argv[++i])
+    else if (name === '--release') options.release = true
     else if (name === '--keep') options.keep = true
     else if (name === '--attach') options.attach = options.keep = true
     else throw new Error(`Unknown argument ${name}`)
@@ -188,7 +202,7 @@ function summarize(reports, options, client, installer) {
 }
 
 const options = parseArguments(process.argv.slice(2))
-const client = CLIENT
+const client = options.release ? CLIENTS.release : CLIENTS.development
 const installer = client.installer()
 if (!installer) throw new Error('No installer: run src-mygo-client\build-windows.ps1 first')
 const out = options.out ?? join(TOOLS, 'results', stamp())

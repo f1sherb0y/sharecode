@@ -15,6 +15,7 @@ Start-Process pwsh -Verb RunAs -ArgumentList '-NoProfile','-File','D:\VirtualMac
 node run.mjs                                          # every VM, checkpoint clean
 node run.mjs --vms Win10-22H2 --checkpoint patched    # one VM, another checkpoint
 node run.mjs --vms Win10-22H2 --soak 50               # also repeat the held arrow keys 100 times
+node run.mjs --vms Win10-22H2 --release               # the released identity (build-windows.ps1 -Release)
 node run.mjs --vms Win11-25H2 --keep                  # leave the VM running; then probe.mjs or --attach
 ```
 
