@@ -4,6 +4,8 @@ package updates
 
 import "os/exec"
 
+const downloadPattern = "sharecode-update-*.exe"
+
 // Install starts a downloaded installer and returns once it is running, with
 // the switches of packaging/installer.iss: a progress window only, and the
 // client started again when done. The installer is elevated like this
@@ -16,3 +18,6 @@ func Install(path string) error {
 	}
 	return cmd.Process.Release()
 }
+
+// Relaunch has nothing to do: the installer starts the client again (/LAUNCH).
+func Relaunch() error { return nil }

@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package main
 
@@ -8,8 +8,12 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// Only Windows has a native side so far; macOS stays on the Tauri client.
+// Windows and macOS have a native side; elsewhere the client is a plain window.
 type unsupportedPlatform struct{}
+
+const showWhenReady = true
+
+func platformWindowOptions(*mygo.WindowOptions) {}
 
 var errUnsupported = errors.New("This platform's native features are not available in the MyGo client")
 

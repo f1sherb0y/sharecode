@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -23,13 +22,13 @@ var updateNodes = []string{"https://kode666.com", "https://collabcode.cc"}
 type updater struct {
 	mu        sync.Mutex
 	found     map[string]*foundUpdate
-	installed bool // an installer is running; it restarts the client
+	installed bool // an installer is running, or the app was replaced (macOS)
 }
 
 type foundUpdate struct {
 	release updates.Release
-	dir     string // the download's own directory under updatesDir
-	path    string // the verified installer, once downloaded
+	dir     string // the download's own directory (newUpdateDir)
+	path    string // the verified installer or app archive, once downloaded
 }
 
 func updateClient() *updates.Client {
@@ -73,7 +72,11 @@ func (d *Desktop) updateCommand(ctx context.Context, command string, args map[st
 		if !installed {
 			return nil, errors.New("no update has been installed")
 		}
-		// The installer waits for this process to exit and starts the new one.
+		// The installer waits for this process to exit and starts the new one;
+		// on macOS a detached helper opens the replaced app once it has.
+		if err := updates.Relaunch(); err != nil {
+			return nil, err
+		}
 		mygo.RunOnMain(d.beginShutdown)
 		return nil, nil
 	}
@@ -104,14 +107,7 @@ func (u *updater) download(ctx context.Context, id string, progress func(updates
 	if found == nil {
 		return errors.New("update is closed")
 	}
-	base, err := updatesDir()
-	if err != nil {
-		return err
-	}
-	if err = os.MkdirAll(base, 0o700); err != nil {
-		return err
-	}
-	dir, err := os.MkdirTemp(base, "sharecode-update-")
+	dir, err := newUpdateDir()
 	if err != nil {
 		return err
 	}
@@ -150,26 +146,6 @@ func (u *updater) install(id string) error {
 	u.installed = true
 	delete(u.found, id) // the running installer keeps its file
 	return nil
-}
-
-// updatesDir is where installers are downloaded to, verified and started
-// from: beside the executable, under Program Files. This process is elevated
-// and so is the installer it starts; in the user's temporary folder a process
-// without administrator rights could replace the file after it was verified.
-func updatesDir() (string, error) {
-	executable, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(filepath.Dir(executable), "updates"), nil
-}
-
-// clearUpdates removes the installers of earlier updates, at launch: an
-// installer cannot remove the file it runs from.
-func clearUpdates() {
-	if dir, err := updatesDir(); err == nil {
-		os.RemoveAll(dir)
-	}
 }
 
 func (u *updater) close(id string) {

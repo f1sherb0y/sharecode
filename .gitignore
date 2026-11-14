@@ -22,6 +22,7 @@ frontend/dist-client-mygo/
 frontend/src-mygo-client/bindings.generated.ts
 frontend/src-mygo-client/assets/web/*
 !frontend/src-mygo-client/assets/web/BUILD_REQUIRED.txt
+frontend/src-mygo-client/resources/
 *.log
 *.tsbuildinfo
 

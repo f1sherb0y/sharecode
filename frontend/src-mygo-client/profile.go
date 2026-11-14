@@ -9,7 +9,8 @@ import (
 // the Tauri client it replaces, %LOCALAPPDATA%\dev.sharecode.client, so the
 // guest seat and settings carry over: invitations are single-use. The page is
 // served from the same origin (see main). Other builds keep MyGo's own
-// folder, named after the application.
+// folder, named after the application. macOS needs no such step: WebKit keeps
+// the default store by bundle identifier, which the released build shares.
 func useInstalledProfile() error {
 	if applicationID != productionID {
 		return nil

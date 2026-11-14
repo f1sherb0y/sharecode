@@ -104,6 +104,9 @@ final class ScreenshotMetalComparison {
             withExtendedLifetime((a, b, ta, tb)) {
                 completion(command.status == .completed ? result.contents().load(as: UInt32.self) == 0 : nil)
             }
+            // The cache otherwise keeps the wrappers, and with them the frames'
+            // IOSurfaces, until some later flush.
+            CVMetalTextureCacheFlush(cache, 0)
         }
         command.commit()
     }
@@ -113,12 +116,19 @@ final class ScreenshotMetalComparison {
 
 struct ScreenshotCadence {
     private var lastChange: TimeInterval?
-    mutating func reset() { lastChange = nil }
+    private var changedRun = 0
+    mutating func reset() { lastChange = nil; changedRun = 0 }
     mutating func interval(changed: Bool, now: TimeInterval) -> TimeInterval {
         if changed || lastChange == nil { lastChange = now }
+        changedRun = changed ? changedRun + 1 : 0
         let quiet = now - (lastChange ?? now)
         return quiet >= 1 ? 1.0 / 5 : quiet >= 0.25 ? 1.0 / 15 : 1.0 / 30
     }
+
+    /// In steady motion every frame differs, and comparing each one only loads the
+    /// GPU: three of four go uncompared, as changed. The end of the motion is
+    /// noticed at most 100 ms later.
+    var skipsComparison: Bool { changedRun >= 8 && changedRun % 4 != 0 }
 }
 
 // A bounded sequence of ScreenCaptureKit screenshots retains application allow-list
@@ -137,6 +147,7 @@ final class ScreenshotCapture {
     private var revision: UInt64 = 0
     private var pending = false
     private let adaptive: Bool
+    private let economy: Bool
     private let useMetal: Bool
     private(set) var metalComparisons = 0
     private(set) var cpuComparisons = 0
@@ -149,11 +160,25 @@ final class ScreenshotCapture {
     private var cadence = ScreenshotCadence()
     private var interval: TimeInterval = 1.0 / 30
     private var requestStarted: TimeInterval = 0
+    private var idle: (() -> Void)?
+    private var lastDelivered: TimeInterval = 0
+    private let deliverUnchanged: Bool
+    private(set) var skippedComparisons = 0
+    private(set) var unchangedFrames = 0
 
-    init(adaptive: Bool = true, useMetal: Bool = true, comparison: Comparison? = nil, request: Request? = nil) {
+    /// An unchanged frame is delivered again after this long, in case the output
+    /// lost its picture without telling.
+    static let refreshInterval: TimeInterval = 2
+
+    /// `economy: false` is the earlier behaviour, for measurements: every frame is
+    /// compared and delivered.
+    init(adaptive: Bool = true, useMetal: Bool = true, economy: Bool = true,
+         comparison: Comparison? = nil, request: Request? = nil) {
         self.useMetal = useMetal
         self.comparison = comparison
         self.adaptive = adaptive
+        self.deliverUnchanged = !economy
+        self.economy = economy
         self.request = request ?? { filter, config, completion in
             if #available(macOS 14.0, *) {
                 SCScreenshotManager.captureSampleBuffer(contentFilter: filter, configuration: config, completionHandler: completion)
@@ -164,13 +189,17 @@ final class ScreenshotCapture {
         }
     }
 
+    /// `frame` gets every frame that differs from the one before; `idle` is called
+    /// instead for one that does not, which the output already shows.
     func start(filter: SCContentFilter, configuration: SCStreamConfiguration,
-               frame: @escaping (CMSampleBuffer) -> Void, failure: @escaping (String) -> Void) {
+               frame: @escaping (CMSampleBuffer) -> Void, idle: (() -> Void)? = nil,
+               failure: @escaping (String) -> Void) {
         precondition(Thread.isMainThread)
         stop()
         self.filter = filter
         self.configuration = configuration
         self.frame = frame
+        self.idle = idle
         self.failure = failure
         schedule(interval: 1.0 / 30)
         tick()
@@ -207,9 +236,17 @@ final class ScreenshotCapture {
         filter = nil
         configuration = nil
         frame = nil
+        idle = nil
         failure = nil
         previous = nil
         cadence.reset()
+        // The pipeline, command queue and texture cache are a session's: a client
+        // that is not sharing holds no GPU resources. A comparison still in
+        // flight keeps its own reference until it completes.
+        comparisonQueue.async { [weak self] in
+            self?.metal = nil
+            self?.metalInitialized = false
+        }
         // SCScreenshotManager has no cancel API. Keep the pending slot occupied
         // across stop/restart until its completion arrives; never pile up requests.
     }
@@ -239,6 +276,7 @@ final class ScreenshotCapture {
                     self.pending = false; self.schedule(interval: 1.0 / 30); self.frame?(buffer); return
                 }
                 let previous = self.previous
+                let skip = self.economy && previous != nil && self.cadence.skipsComparison
                 self.comparisonQueue.async { [weak self] in
                     guard let self else { return }
                     let deliver: (Bool, Bool) -> Void = { [weak self] equal, gpu in
@@ -249,16 +287,26 @@ final class ScreenshotCapture {
                                 if self.filter != nil { self.schedule(interval: self.interval) }
                                 return
                             }
-                            if previous != nil {
+                            if skip { self.skippedComparisons += 1 }
+                            else if previous != nil {
                                 if gpu { self.metalComparisons += 1 } else { self.cpuComparisons += 1 }
                             }
                             self.previous = pixels
-                            self.schedule(interval: self.cadence.interval(changed: !equal, now: ProcessInfo.processInfo.systemUptime))
-                            // Idle frames also serve the controller's liveness watchdog.
+                            let now = ProcessInfo.processInfo.systemUptime
+                            self.schedule(interval: self.cadence.interval(changed: !equal, now: now))
+                            // The output already shows an unchanged frame: showing it again
+                            // would have the virtual display composited, and whoever
+                            // captures that display handed a new frame, for nothing.
+                            if equal && !self.deliverUnchanged && now - self.lastDelivered < Self.refreshInterval {
+                                self.unchangedFrames += 1
+                                self.idle?() // still proof of life for the controller's watchdog
+                                return
+                            }
+                            self.lastDelivered = now
                             self.frame?(buffer)
                         }
                     }
-                    guard let previous else { deliver(false, false); return }
+                    guard let previous, !skip else { deliver(false, false); return }
                     if let comparison = self.comparison { comparison(previous, pixels) { deliver($0, false) }; return }
                     if self.useMetal && !self.metalInitialized {
                         self.metalInitialized = true

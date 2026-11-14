@@ -166,7 +166,7 @@ func (c *Client) publicKey() (minisign.PublicKey, error) {
 	return key, key.UnmarshalText(text)
 }
 
-// Download streams the installer into dir and returns its path only after the
+// Download streams the update (an installer, or an app archive on macOS) into dir and returns its path only after the
 // signature verifies. A failed download leaves no file behind.
 func (c *Client) Download(ctx context.Context, release Release, dir string, progress func(Progress)) (path string, err error) {
 	if err = c.validURL(release.URL); err != nil {
@@ -195,7 +195,7 @@ func (c *Client) Download(ctx context.Context, release Release, dir string, prog
 	if res.ContentLength > maxDownload {
 		return "", errors.New("Update exceeds size limit")
 	}
-	file, err := os.CreateTemp(dir, "sharecode-update-*.exe")
+	file, err := os.CreateTemp(dir, downloadPattern)
 	if err != nil {
 		return "", err
 	}

@@ -94,6 +94,9 @@ private final class ScreenShare: NSObject, NSWindowDelegate, SCStreamOutput, SCS
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var identities: [String] = []
+    private var lastOwners: Set<pid_t> = []
+    private var lastEnumeration: TimeInterval = 0
+    static let enumerationInterval: TimeInterval = 5
     private var lastFrame = Date()
     private var selectedDisplay: CGDirectDisplayID?
     private var receiving = false
@@ -189,8 +192,42 @@ private final class ScreenShare: NSObject, NSWindowDelegate, SCStreamOutput, SCS
                 self.fail(self.tr("画面已中断，请重新开始共享。", "Capture interrupted. Start sharing again."))
                 return
             }
-            self.refreshCapture()
+            self.refreshIfNeeded()
         }
+        refreshCapture()
+    }
+
+    // The processes that own windows, on or off screen: the same set of
+    // applications ScreenCaptureKit lists, for about a tenth of the work.
+    private func windowOwners() -> Set<pid_t> {
+        guard let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return [] }
+        return Set(windows.compactMap { $0[kCGWindowOwnerPID as String] as? pid_t })
+    }
+
+    private func sourceUnchanged() -> Bool {
+        guard let source = selectedDisplay, let pixels = sourcePixels, CGDisplayIsOnline(source) != 0,
+              let mode = CGDisplayCopyDisplayMode(source) else { return false }
+        return CGSize(width: mode.pixelWidth, height: mode.pixelHeight) == pixels && CGDisplayBounds(source) == sourceBounds
+    }
+
+    // The allow-list is rebuilt when an application gains its first window or
+    // loses its last one, and every few seconds regardless. Listing every
+    // application and window each second was a fifth of an idle share's work.
+    // A process missing from the list is never captured, so a late refresh
+    // can only show a new application late, never a meeting window.
+    private func refreshIfNeeded() {
+        let owners = windowOwners()
+        let now = ProcessInfo.processInfo.systemUptime
+        if (usingScreenshots || stream != nil) && !owners.isEmpty && owners == lastOwners
+            && now - lastEnumeration < Self.enumerationInterval {
+            // What the full refresh also checks every second: the source display.
+            if !sourceUnchanged() {
+                fail(tr("来源屏幕已变化，请重新开始共享。", "The source display changed. Start sharing again."))
+            }
+            return
+        }
+        lastOwners = owners
+        lastEnumeration = now
         refreshCapture()
     }
 
@@ -260,16 +297,18 @@ private final class ScreenShare: NSObject, NSWindowDelegate, SCStreamOutput, SCS
                 guard self.showOutput(), let virtual = self.virtualDisplay else { self.refreshing = false; return }
                 let apps = content.applications.filter(self.allowed)
                 let identities = apps.map { "\($0.processID):\($0.bundleIdentifier)" }.sorted()
+                if self.usingScreenshots && identities == self.identities {
+                    self.refreshing = false
+                    return
+                }
                 // Include the approved application set instead of excluding a snapshot of PIDs.
                 // A newly launched meeting/helper process is therefore never admitted by default.
                 // Empty exceptingWindows is essential: no excluded window is re-included.
                 let filter = SCContentFilter(display: display, including: apps, exceptingWindows: [])
                 if self.usingScreenshots {
-                    if identities != self.identities {
-                        self.screenshots.update(filter: filter)
-                        self.identities = identities
-                        self.surface?.clear()
-                    }
+                    self.screenshots.update(filter: filter)
+                    self.identities = identities
+                    self.surface?.clear()
                     self.refreshing = false
                     return
                 }
@@ -304,6 +343,10 @@ private final class ScreenShare: NSObject, NSWindowDelegate, SCStreamOutput, SCS
                     self.screenshots.start(filter: filter, configuration: config, frame: { [weak self] buffer in
                         guard let self, self.wanted, ticket == self.generation else { return }
                         self.present(buffer)
+                    }, idle: { [weak self] in
+                        // An unchanged screen: nothing to show, but capture is alive.
+                        guard let self, self.wanted, ticket == self.generation else { return }
+                        self.lastFrame = Date()
                     }, failure: { [weak self] message in
                         guard let self, self.wanted, ticket == self.generation else { return }
                         self.fail(message)

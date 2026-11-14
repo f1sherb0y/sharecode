@@ -34,6 +34,11 @@ final class Bench: NSObject, SCStreamOutput, SCStreamDelegate {
     let video = AVSampleBufferDisplayLayer()
     var screenshots = ScreenshotCapture()
     var stream: SCStream?
+    // Stands in for a meeting app sharing the output display: counts the frames
+    // WindowServer reports as new there.
+    var consumer: SCStream?
+    var outputFilter: SCContentFilter?
+    var consumed = 0
     var filter: SCContentFilter?
     var mode = "waiting", motion = "static", width = 1920, height = 1080
     var ticket = 0, frames = 0, enqueued = 0, duplicates = 0, invalid = 0, errors = 0, ticks = 0
@@ -58,6 +63,7 @@ final class Bench: NSObject, SCStreamOutput, SCStreamDelegate {
         SCShareableContent.getExcludingDesktopWindows(false,onScreenWindowsOnly:false) { content,error in DispatchQueue.main.async {
             guard let content, let d=content.displays.first(where:{$0.displayID==self.displays[0].id}) else { self.mode="content-error";return }
             self.filter=SCContentFilter(display:d,including:content.applications.filter{$0.processID==ProcessInfo.processInfo.processIdentifier},exceptingWindows:[])
+            if let o=content.displays.first(where:{$0.displayID==self.displays[1].id}) { self.outputFilter=SCContentFilter(display:o,excludingWindows:[]) }
             self.ready=true;self.mode="idle"
         }}
     }
@@ -71,12 +77,20 @@ final class Bench: NSObject, SCStreamOutput, SCStreamDelegate {
         guard fields.count>=3, ready else { return }
         ticket += 1; let generation=ticket
         screenshots.stop(); let old=stream;stream=nil;old?.stopCapture{_ in};video.flushAndRemoveImage()
+        let oldConsumer=consumer;consumer=nil;oldConsumer?.stopCapture{_ in};consumed=0
         mode=fields[0]; motion=fields[1];width=Int(fields[2])!;height=width*9/16
         frames=0;enqueued=0;duplicates=0;invalid=0;errors=0;gaps=[];latency=[];lastCounter = -1; lastFrame=0;begin=now()
         guard mode != "idle" else { return }
         let c=SCStreamConfiguration();c.width=width;c.height=height;c.minimumFrameInterval=CMTime(value:1,timescale:30);c.queueDepth=3;c.pixelFormat=kCVPixelFormatType_32BGRA;c.showsCursor=true
+        if mode.hasPrefix("snapshot"), let outputFilter {
+            let oc=SCStreamConfiguration();oc.width=1280;oc.height=720;oc.minimumFrameInterval=CMTime(value:1,timescale:30);oc.pixelFormat=kCVPixelFormatType_32BGRA
+            let viewer=SCStream(filter:outputFilter,configuration:oc,delegate:nil);consumer=viewer
+            try? viewer.addStreamOutput(self,type:.screen,sampleHandlerQueue:.main);viewer.startCapture{_ in}
+        }
         if mode.hasPrefix("snapshot") {
-            screenshots = ScreenshotCapture(adaptive: mode != "snapshot-fixed", useMetal: mode != "snapshot-cpu")
+            // snapshot-old: every frame compared and delivered, as before the economy changes.
+            screenshots = ScreenshotCapture(adaptive: mode != "snapshot-fixed", useMetal: mode != "snapshot-cpu",
+                economy: mode == "snapshot")
             screenshots.start(filter:filter!,configuration:c,frame:{[weak self] b in guard let self,self.ticket==generation else{return};self.consume(b)},failure:{[weak self] e in self?.errors += 1;self?.requestStats=e})
         } else {
             let s=SCStream(filter:filter!,configuration:c,delegate:self);stream=s
@@ -103,6 +117,10 @@ final class Bench: NSObject, SCStreamOutput, SCStreamDelegate {
         }
     }
     func stream(_ stream:SCStream,didOutputSampleBuffer b:CMSampleBuffer,of type:SCStreamOutputType) {
+        if stream === consumer {
+            if let a=CMSampleBufferGetSampleAttachmentsArray(b,createIfNecessary:false) as? [[SCStreamFrameInfo:Any]],let raw=a.first?[.status] as? Int,SCFrameStatus(rawValue:raw) == .complete {consumed += 1}
+            return
+        }
         guard self.stream === stream,type == .screen else{return}
         guard let a=CMSampleBufferGetSampleAttachmentsArray(b,createIfNecessary:false) as? [[SCStreamFrameInfo:Any]],let raw=a.first?[.status] as? Int,SCFrameStatus(rawValue:raw) == .complete else{return}
         consume(b)
@@ -114,12 +132,12 @@ final class Bench: NSObject, SCStreamOutput, SCStreamDelegate {
         if motion=="blink", ticks % 15 == 0 {source.spot.toggle();source.needsDisplay=true}
         if motion=="dynamic" {source.counter=(source.counter+1)&65535;generationTimes[source.counter]=now();source.needsDisplay=true}
         if ticks%30==0 {
-            let state:[String:Any]=["metalComparisons":screenshots.metalComparisons,"cpuComparisons":screenshots.cpuComparisons,"pid":ProcessInfo.processInfo.processIdentifier,"ready":ready,"mode":mode,"motion":motion,"width":width,"height":height,"frames":frames,"enqueued":enqueued,"duplicates":duplicates,"invalid":invalid,"errors":errors,"error":requestStats,"elapsed":now()-begin,"lastFrameAge":lastFrame==0 ? -1:now()-lastFrame,"gapMs":gaps,"latencyMs":latency,"displays":displays.map{["id":Int($0.id),"width":$0.width,"height":$0.height]},"thermal":ProcessInfo.processInfo.thermalState.rawValue,"timestamp":Date().timeIntervalSince1970]
+            let state:[String:Any]=["consumed":consumed,"metalComparisons":screenshots.metalComparisons,"skippedComparisons":screenshots.skippedComparisons,"unchangedFrames":screenshots.unchangedFrames,"cpuComparisons":screenshots.cpuComparisons,"pid":ProcessInfo.processInfo.processIdentifier,"ready":ready,"mode":mode,"motion":motion,"width":width,"height":height,"frames":frames,"enqueued":enqueued,"duplicates":duplicates,"invalid":invalid,"errors":errors,"error":requestStats,"elapsed":now()-begin,"lastFrameAge":lastFrame==0 ? -1:now()-lastFrame,"gapMs":gaps,"latencyMs":latency,"displays":displays.map{["id":Int($0.id),"width":$0.width,"height":$0.height]},"thermal":ProcessInfo.processInfo.thermalState.rawValue,"timestamp":Date().timeIntervalSince1970]
             if let data=try? JSONSerialization.data(withJSONObject:state) {try? data.write(to:root.appendingPathComponent("status.json"),options:.atomic)}
             gaps=[];latency=[]
         }
     }
-    func stop() {screenshots.stop();stream?.stopCapture{_ in};stream=nil;for w in windows {w.orderOut(nil);w.close()};windows=[];displays=[];preparations=[]}
+    func stop() {consumer?.stopCapture{_ in};consumer=nil;screenshots.stop();stream?.stopCapture{_ in};stream=nil;for w in windows {w.orderOut(nil);w.close()};windows=[];displays=[];preparations=[]}
 }
 let bench=Bench();var command=""
 let timer=Timer.scheduledTimer(withTimeInterval:1.0/30,repeats:true){_ in
