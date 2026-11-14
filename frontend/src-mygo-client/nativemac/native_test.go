@@ -148,7 +148,8 @@ func TestStepsStopAtTheWorkAreaEdges(t *testing.T) {
 
 func TestTheRunningBundleIsFoundAndCopiesNeedInstalling(t *testing.T) {
 	for _, root := range []string{"/Applications/ShareCode Client.app", "/Users/test/Applications/ShareCode Hotkey Test.app"} {
-		if got := BundleForExecutable(root + "/Contents/MacOS/sharecode-client"); got != root || !CanDragBundle(got) {
+		// ToSlash: the tests also run on Windows, where filepath answers with backslashes.
+		if got := BundleForExecutable(root + "/Contents/MacOS/sharecode-client"); filepath.ToSlash(got) != root || !CanDragBundle(got) {
 			t.Fatalf("%s: %q", root, got)
 		}
 	}
