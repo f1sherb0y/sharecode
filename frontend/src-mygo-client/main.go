@@ -70,6 +70,7 @@ func main() {
 	}
 	desktop := &Desktop{}
 	mygo.Bind(desktop)
+	go clearUpdates()
 	mygo.App.OnBeforeQuit(func(event *mygo.QuitEvent) {
 		if !desktop.shutdownReady.Load() {
 			event.PreventDefault()
@@ -89,9 +90,10 @@ func main() {
 		if _, err := fs.Stat(frontend, "client.html"); err != nil {
 			log.Fatal("The customer frontend is not built: run build-windows.ps1")
 		}
+		width, height := initialSize(mygo.Screen.PrimaryDisplay().WorkArea)
 		view, err := clientview.New(mygo.WindowOptions{
-			Title: "ShareCode", URL: "tauri://localhost/client.html", Width: 1100, Height: 760,
-			MinWidth: 480, MinHeight: 360, Hidden: true, Frameless: true, CornerRadius: 10,
+			Title: "ShareCode", URL: "tauri://localhost/client.html", Width: width, Height: height,
+			MinWidth: minWindowWidth, MinHeight: minWindowHeight, Hidden: true, Frameless: true, CornerRadius: 10,
 			DisableFullScreen: true, SkipTaskbar: true,
 		})
 		if err != nil {
@@ -134,6 +136,23 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+const (
+	windowWidth, windowHeight       = 1100, 760
+	minWindowWidth, minWindowHeight = 480, 360
+)
+
+// initialSize is the size of a new window: its usual size, or the work area
+// where that is smaller. On a 1366×768 screen 728 px are left above the
+// taskbar; a centered 760 px window would open with its title bar cut off.
+func initialSize(workArea mygo.Rectangle) (width, height int) {
+	width, height = windowWidth, windowHeight
+	if workArea.Width > 0 && workArea.Height > 0 {
+		width = max(minWindowWidth, min(width, workArea.Width))
+		height = max(minWindowHeight, min(height, workArea.Height))
+	}
+	return width, height
 }
 
 // beginShutdown makes the window interactive, then restores the meeting

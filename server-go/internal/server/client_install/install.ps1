@@ -1,10 +1,11 @@
-# ShareCode Client for Windows: installs the newest version for this user, or updates or repairs
+# ShareCode Client for Windows: installs the newest version on this PC, or updates or repairs
 # an existing install. The download page's command runs it in Windows PowerShell 5.1, which
 # every Windows 10 and 11 has (PowerShell 7 works too); paste it into Win+R, cmd or PowerShell:
 #   powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=3072;irm -UseBasicParsing {{ORIGIN}}/api/client/install.ps1|iex"
-# The server fills in the release below. The installer runs passively (/P): it closes a running
-# client, needs no administrator rights and starts the client again (/R). The client then updates
-# itself.
+# The server fills in the release below. The installer (Inno Setup) asks for administrator rights
+# once (UAC), then runs with a progress window only (/SILENT): it closes a running client, installs
+# or updates WebView2 when the page needs a newer one and starts the client (/LAUNCH). The client
+# then updates itself.
 
 & {
   $ErrorActionPreference = 'Stop'
@@ -43,8 +44,8 @@
     if ($hash -ne $sha256) { throw 'Download was incomplete. Try again.' }
 
     # The installer closes a running client. Wait for the installer only: the client it starts
-    # again (/R) keeps running.
-    $installer = [Diagnostics.Process]::Start($file, '/P /R')
+    # (/LAUNCH) keeps running.
+    $installer = [Diagnostics.Process]::Start($file, '/SILENT /NORESTART /LAUNCH')
     $installer.WaitForExit()
     if ($installer.ExitCode -ne 0) { throw "The installer failed (code $($installer.ExitCode))." }
 

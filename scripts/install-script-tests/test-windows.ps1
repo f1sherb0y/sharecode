@@ -28,7 +28,7 @@ function Check([string]$name, [bool]$ok, [string]$output) {
 try {
   Start-Sleep -Seconds 2
   $out = Run 55470
-  Check 'installs passively and restarts the client' ((Get-Content $record -ErrorAction SilentlyContinue) -eq '/P /R' -and $out -match 'Installed ShareCode Client 9\.9\.9\.') $out
+  Check 'installs silently and starts the client' ((Get-Content $record -ErrorAction SilentlyContinue) -eq '/SILENT /NORESTART /LAUNCH' -and $out -match 'Installed ShareCode Client 9\.9\.9\.') $out
   $out = Run 55471
   Check 'refuses a corrupted download' (-not (Test-Path $record) -and $out -match 'Download was incomplete') $out
   $env:FAKE_EXIT = '2'

@@ -49,9 +49,13 @@ type hotkeys struct {
 var hookOwner atomic.Pointer[hotkeys]
 var keyboardCallback = windows.NewCallback(keyboardProc)
 var keyboardState keyState // dedicated locked hook thread only
+var keyboardSeen keyTimes  // dedicated locked hook thread only
 func keyboardProc(code, wp uintptr, lp unsafe.Pointer) uintptr {
 	if int32(code) >= 0 && (wp == wmKeyDown || wp == wmKeyUp || wp == wmSysKeyDown || wp == wmSysKeyUp) && lp != nil {
 		e := (*keyboardEvent)(lp)
+		if e.VK < uint32(len(keyboardSeen)) {
+			keyboardSeen[e.VK] = time.Now()
+		}
 		if keyboardState.update(e.VK, e.Scan, e.Flags&llkhfExtended != 0, e.Flags&llkhfUp != 0) {
 			if h := hookOwner.Load(); h != nil {
 				h.queue(actionFor(e.VK))
@@ -237,7 +241,7 @@ func (h *hotkeys) run(ready chan<- error) {
 	h.thread.Store(windows.GetCurrentThreadId())
 	var msg winMessage
 	peekMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0, 0)
-	keyboardState = keyState{}
+	keyboardState, keyboardSeen = keyState{}, keyTimes{}
 	hook, _, e := setWindowsHook.Call(whKeyboardLL, keyboardCallback, 0, 0)
 	if err := apiError("SetWindowsHookEx", hook, e); err != nil {
 		ready <- err
@@ -295,14 +299,18 @@ func (h *hotkeys) run(ready chan<- error) {
 	// waits on a UI callback even during unexpected exit.
 	h.notify()
 }
+
+// reconcile polls the keyboard on the heartbeat: it clears keys whose key-up
+// the hook missed and, when trigger is set, acts on chords the hook missed.
 func (h *hotkeys) reconcile(trigger bool) {
 	down := func(v uint32) bool { r, _, _ := getAsyncKeyState.Call(uintptr(v)); return uint16(r)&0x8000 != 0 }
-	physical := keyState{altLeft: down(vkLAlt), altRight: down(vkRAlt), shiftLeft: down(vkLShift), shiftRight: down(vkRShift)}
+	polled := keyState{altLeft: down(vkLAlt), altRight: down(vkRAlt), shiftLeft: down(vkLShift), shiftRight: down(vkRShift)}
 	for _, v := range chordKeys {
-		physical.down[v] = down(v)
-		if trigger && physical.chord() && physical.down[v] && !keyboardState.down[v] {
+		polled.down[v] = down(v)
+	}
+	for _, v := range keyboardState.reconcile(polled, &keyboardSeen, time.Now()) {
+		if trigger {
 			h.queue(actionFor(v))
 		}
 	}
-	keyboardState = physical
 }

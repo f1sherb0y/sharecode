@@ -3,6 +3,8 @@
 // window or generates input. Callbacks are marshalled through Options.Dispatch.
 package nativewin
 
+import "time"
+
 type Action string
 
 const (
@@ -153,6 +155,56 @@ func (s *keyState) update(vk, scan uint32, extended, released bool) bool {
 		}
 	}
 	return false
+}
+
+// hookGrace is how long what the keyboard hook reported about a key stands
+// against a poll of the keyboard. Windows calls the hook before it updates the
+// state GetAsyncKeyState reads, so a poll right after a key-down still finds
+// the key up. Taken at its word, that poll erased the key-down, and the next
+// poll found the key held and acted on it a second time: a toggle switched and
+// switched back, an arrow moved one step more. A poll right after a key-up
+// could act once more in the same way.
+const hookGrace = 100 * time.Millisecond
+
+// keyTimes holds when the hook last reported each key.
+type keyTimes [256]time.Time
+
+func (t *keyTimes) fresh(now time.Time, keys ...uint32) bool {
+	for _, vk := range keys {
+		if since := now.Sub(t[vk]); since >= 0 && since < hookGrace {
+			return true
+		}
+	}
+	return false
+}
+
+// reconcile takes a poll of the keyboard into the hook's state and returns the
+// chord keys to act on: those held with the chord that the hook never
+// reported (Windows silently removes a hook that answered too slowly). A key
+// the hook reported within hookGrace keeps the hook's state.
+func (s *keyState) reconcile(polled keyState, seen *keyTimes, now time.Time) (missed []uint32) {
+	if seen.fresh(now, vkLAlt, vkAlt) {
+		polled.altLeft = s.altLeft
+	}
+	if seen.fresh(now, vkRAlt, vkAlt) {
+		polled.altRight = s.altRight
+	}
+	if seen.fresh(now, vkLShift, vkShift) {
+		polled.shiftLeft = s.shiftLeft
+	}
+	if seen.fresh(now, vkRShift, vkShift) {
+		polled.shiftRight = s.shiftRight
+	}
+	for _, vk := range chordKeys {
+		if seen.fresh(now, vk) {
+			polled.down[vk] = s.down[vk]
+		}
+		if polled.chord() && polled.down[vk] && !s.down[vk] {
+			missed = append(missed, vk)
+		}
+	}
+	*s = polled
+	return missed
 }
 
 // clampMove steps one axis like the Tauri client's step_axis: a window already

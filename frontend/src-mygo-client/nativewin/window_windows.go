@@ -266,13 +266,16 @@ func (w *Window) IsPinned() (bool, error) {
 }
 
 // ToggleVisibility hides or shows the window without activating it and
-// reports whether it is now visible.
+// reports whether it is now visible. A minimized window is out of sight
+// already, and has no taskbar button to come back from: the shortcut restores
+// it. It is never hidden while minimized, because MyGo stops presenting a
+// minimized window and a window shown again from that state stays empty.
 func (w *Window) ToggleVisibility() (bool, error) {
 	if err := w.check(); err != nil {
 		return false, err
 	}
 	command := uintptr(swShowNoActivate)
-	if visible(w.hwnd) {
+	if minimized, _, _ := isIconic.Call(w.hwnd); visible(w.hwnd) && minimized == 0 {
 		command = swHide
 	}
 	showWindow.Call(w.hwnd, command)

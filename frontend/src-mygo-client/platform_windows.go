@@ -43,13 +43,16 @@ func attachPlatform(d *Desktop, w *mygo.Window) (platformClient, error) {
 	if err = p.native.StartHotkeys(); err != nil {
 		log.Printf("Windows hotkeys: %v", err)
 	}
-	cache, err := os.UserCacheDir()
+	// The helpers are unpacked beside the executable, under Program Files:
+	// this process is elevated, and what it starts must not sit where a
+	// process without administrator rights can replace it.
+	executable, err := os.Executable()
 	if err != nil {
 		p.native.Close()
 		return nil, err
 	}
 	p.monitor, err = nativewin.NewMeetingMonitor(nativewin.MeetingOptions{
-		CacheDir: filepath.Join(cache, applicationName, "meeting-helpers"),
+		CacheDir: filepath.Join(filepath.Dir(executable), "meeting-helpers"),
 		Assets:   nativewin.DefaultHelperAssets,
 		OnStatus: func(status nativewin.MeetingStatus) { d.emit("sharecode:meeting-privacy", status) },
 	})

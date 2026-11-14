@@ -5,7 +5,7 @@
 # Run build-windows.ps1 first: the WebView tests load the embedded frontend.
 # Pinning is covered only when this runs from the focused terminal, because
 # Windows makes a window topmost only for a process with foreground rights.
-param([string]$MakeNSIS = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe")
+param([string]$ISCC = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")
 $ErrorActionPreference = 'Stop'
 function Assert-Success([string]$step) { if ($LASTEXITCODE -ne 0) { throw "$step failed (exit $LASTEXITCODE)" } }
 
@@ -27,7 +27,7 @@ try {
     $env:SHARECODE_MYGO_NATIVE_SMOKE = '1'
     & go test -tags mygo_smoke -run TestMyGo -count=1 ./nativewin
     Assert-Success 'WebView tests'
-    & "$PSScriptRoot\packaging\test-installer.ps1" -MakeNSIS $MakeNSIS
+    & "$PSScriptRoot\packaging\test-installer.ps1" -ISCC $ISCC
     Assert-Success 'Installer tests'
 } finally {
     Remove-Item Env:SHARECODE_MYGO_NATIVE_SMOKE -ErrorAction SilentlyContinue

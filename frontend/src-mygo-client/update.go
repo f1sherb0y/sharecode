@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -27,7 +28,7 @@ type updater struct {
 
 type foundUpdate struct {
 	release updates.Release
-	dir     string // temporary directory of the download
+	dir     string // the download's own directory under updatesDir
 	path    string // the verified installer, once downloaded
 }
 
@@ -103,7 +104,14 @@ func (u *updater) download(ctx context.Context, id string, progress func(updates
 	if found == nil {
 		return errors.New("update is closed")
 	}
-	dir, err := os.MkdirTemp("", "sharecode-update-")
+	base, err := updatesDir()
+	if err != nil {
+		return err
+	}
+	if err = os.MkdirAll(base, 0o700); err != nil {
+		return err
+	}
+	dir, err := os.MkdirTemp(base, "sharecode-update-")
 	if err != nil {
 		return err
 	}
@@ -142,6 +150,26 @@ func (u *updater) install(id string) error {
 	u.installed = true
 	delete(u.found, id) // the running installer keeps its file
 	return nil
+}
+
+// updatesDir is where installers are downloaded to, verified and started
+// from: beside the executable, under Program Files. This process is elevated
+// and so is the installer it starts; in the user's temporary folder a process
+// without administrator rights could replace the file after it was verified.
+func updatesDir() (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(executable), "updates"), nil
+}
+
+// clearUpdates removes the installers of earlier updates, at launch: an
+// installer cannot remove the file it runs from.
+func clearUpdates() {
+	if dir, err := updatesDir(); err == nil {
+		os.RemoveAll(dir)
+	}
 }
 
 func (u *updater) close(id string) {
