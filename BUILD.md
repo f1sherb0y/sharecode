@@ -164,9 +164,11 @@ them, plus an admin account, can ship code to every customer.
 
 To release a version:
 
-1. Raise `version` in `src-tauri-client/Cargo.toml` (a semantic version above the last one; it is
-   the only version, `tauri.conf.json` has none) and merge it to `master`.
-2. Tag that commit `client-v<version>` and push the tag. An annotated tag's message becomes the
+1. Choose the version: a semantic version above the last one. The tag carries it; the Windows
+   client (the Go/MyGo host, `src-mygo-client`) is built as that version. Raise the default in
+   `src-mygo-client` too (`build-windows.ps1`, `identity.go`, `mygo.config.ts`), so that
+   development builds are not older than the release.
+2. Tag the commit `client-v<version>` and push the tag. An annotated tag's message becomes the
    draft's notes, which the updater shows:
 
    ```bash
@@ -174,11 +176,12 @@ To release a version:
    git push origin client-v0.1.2
    ```
 
-   The release workflow (`.github/workflows/client-release.yml`) checks the tag against
-   Cargo.toml, builds the Windows installer and the universal macOS DMG with signed updates, opens
-   the version's draft on the server and uploads the files (the DMG and the `.app.tar.gz` under
-   both macOS entries). Rerunning it replaces the draft's files. A hotfix is tagged on a branch
-   made from the last release tag.
+   The release workflow (`.github/workflows/client-release.yml`) takes the version from the
+   tag, builds the Windows installer (`src-mygo-client/build-windows.ps1 -Release`, Inno Setup)
+   with its signed update, opens the version's draft on the server and uploads the installer.
+   Rerunning it replaces the draft's file. It no longer builds the Tauri client: a macOS DMG
+   comes from `client-macos.yml`, run by hand, and is added to the draft by hand. A hotfix is
+   tagged on a branch made from the last release tag.
 3. In 管理后台 → 客户端发布, check the draft and publish it. The server checks every signature
    against the client's public key, so a wrong or stale `.sig` is refused at upload instead of
    breaking updates later.

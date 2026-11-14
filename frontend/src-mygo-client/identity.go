@@ -6,7 +6,7 @@ package main
 var (
 	applicationID      = "dev.sharecode.client.mygo-dev"
 	applicationName    = "sharecode-client-mygo-dev"
-	applicationVersion = "0.2.7"
+	applicationVersion = "0.2.8"
 )
 
 const productionID = "dev.sharecode.client"

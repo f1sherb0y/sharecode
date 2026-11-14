@@ -61,5 +61,5 @@ or published.
 - The server's `install.ps1` passes the new installer's switches: deploy it with the
   first MyGo release, not before.
 - Code signing: unsigned, each UAC prompt names an unknown publisher.
-- CI: `.github/workflows/client-release.yml` still builds the Windows installer with
-  Tauri.
+- CI: since 0.2.8 `.github/workflows/client-release.yml` builds this client for a
+  `client-v<version>` tag and uploads it to the draft; it builds nothing for macOS.

@@ -1,10 +1,11 @@
 name: Client release
 
-# A client-v<version> tag builds the customer client for Windows and macOS, signs its updates and
-# uploads the files to that version's draft in 管理后台 → 客户端发布. Publishing stays a manual
-# click there: the CI token can open drafts and add files to them, nothing else.
-# Run by hand, it omits minisign updater artifacts and uploads nothing to the release server.
-# macOS app code signatures always use the fixed certificate.
+# A client-v<version> tag builds the Windows customer client (the Go/MyGo host in
+# frontend/src-mygo-client) as that version, signs its update and uploads the installer to that
+# version's draft in 管理后台 → 客户端发布. Publishing stays a manual click there: the CI token
+# can open drafts and add files to them, nothing else.
+# Run by hand, it builds the development client and uploads nothing to the release server.
+# The Tauri client is not built here any more; client-macos.yml still builds its macOS DMG by hand.
 on:
   push:
     tags: ['client-v*']
@@ -26,14 +27,16 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - id: version
-        name: Check the tag against Cargo.toml
+        name: Read the version from the tag
         run: |
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("frontend/src-tauri-client/Cargo.toml", "rb"))["package"]["version"])')
-          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "client-v$version" ]]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in src-tauri-client/Cargo.toml"
-            exit 1
+          version=''
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            version=${GITHUB_REF_NAME#client-v}
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME is not client-v<major>.<minor>.<patch>"
+              exit 1
+            fi
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -46,59 +49,44 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: '1.3.14'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: frontend/src-mygo-client/go.mod
+          cache-dependency-path: frontend/src-mygo-client/go.sum
       - name: Install frontend dependencies
         working-directory: frontend
         run: bun install --frozen-lockfile
       - name: Install meeting helper targets
         run: rustup target add i686-pc-windows-msvc x86_64-pc-windows-msvc
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup could not be installed' }
+          }
       - name: Build the installer
-        working-directory: frontend
-        shell: bash
+        working-directory: frontend/src-mygo-client
+        shell: pwsh
         env:
+          VERSION: ${{ needs.version.outputs.version }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         run: |
-          updates=${{ github.event_name == 'push' }}
-          bun run client:tauri build --ci --bundles nsis \
-            --config "{\"bundle\":{\"createUpdaterArtifacts\":$updates}}" -- --locked
+          # A tag builds the released identity with a signed update; by hand, the development client.
+          if ($env:VERSION) { .\build-windows.ps1 -Release -Version $env:VERSION } else { .\build-windows.ps1 }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: client-windows
           path: |
-            frontend/src-tauri-client/target/release/bundle/nsis/*-setup.exe
-            frontend/src-tauri-client/target/release/bundle/nsis/*-setup.exe.sig
-          if-no-files-found: error
-          retention-days: 7
-
-  macos:
-    needs: version
-    runs-on: macos-15
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: '1.3.14'
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: '3.13'
-      - name: Build the universal DMG
-        env:
-          SHARECODE_MACOS_CERTIFICATE_BASE64: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_BASE64 }}
-          SHARECODE_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.SHARECODE_MACOS_CERTIFICATE_PASSWORD }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
-        run: scripts/build-client-macos.sh ${{ github.event_name == 'push' && '--signed-updates' || '' }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: client-macos
-          path: build/macos-dist/**
+            build/mygo-client/*-setup.exe
+            build/mygo-client/*-setup.exe.sig
           if-no-files-found: error
           retention-days: 7
 
   upload:
     if: github.event_name == 'push'
-    needs: [version, windows, macos]
+    needs: [version, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -141,12 +129,5 @@ jobs:
           }
           shopt -s nullglob
           setup=$(one dist/client-windows/*_x64-setup.exe)
-          dmg=$(one dist/client-macos/*/*_universal.dmg)
-          bundle=$(one dist/client-macos/*/*_universal.app.tar.gz)
           upload windows-x86_64 installer "$setup"
-          # The universal build runs on both chips.
-          for platform in darwin-aarch64 darwin-x86_64; do
-            upload "$platform" installer "$dmg"
-            upload "$platform" update "$bundle"
-          done
           echo "Draft $VERSION is ready: 管理后台 → 客户端发布"

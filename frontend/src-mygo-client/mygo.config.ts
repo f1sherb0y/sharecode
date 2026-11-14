@@ -6,7 +6,7 @@ export default {
   name: release ? 'sharecode-client' : 'sharecode-client-mygo-dev',
   slug: release ? 'sharecode-client' : 'sharecode-client-mygo-dev',
   identifier: release ? 'dev.sharecode.client' : 'dev.sharecode.client.mygo-dev',
-  version: process.env.SHARECODE_MYGO_VERSION || '0.2.7',
+  version: process.env.SHARECODE_MYGO_VERSION || '0.2.8',
   publisher: 'ShareCode',
   buildCommand: 'bun run --cwd .. client:mygo:frontend && node prepare-frontend.mjs',
   bindings: 'bindings.generated.ts',

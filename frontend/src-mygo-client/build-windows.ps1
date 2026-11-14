@@ -4,7 +4,7 @@
 #   .\build-windows.ps1                          development client, installs beside a real one
 #   .\build-windows.ps1 -Release -Version 0.2.8  the released identity, with a signed update
 param(
-    [string]$Version = '0.2.7',
+    [string]$Version = '0.2.8',
     [switch]$Release,
     [string]$ISCC = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 )
